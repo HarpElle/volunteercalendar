@@ -8,16 +8,22 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "./config";
-import type { UserProfile, UserRole } from "@/lib/types";
+import type { UserProfile } from "@/lib/types";
 
 export async function signUp(email: string, password: string, displayName: string) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const profile: Omit<UserProfile, "id"> = {
     email,
     display_name: displayName,
+    phone: null,
+    default_church_id: null,
     church_id: "",
     role: "admin",
     ministry_ids: [],
+    global_availability: {
+      blockout_dates: [],
+      recurring_unavailable: [],
+    },
     created_at: new Date().toISOString(),
   };
   await setDoc(doc(db, "users", credential.user.uid), profile);

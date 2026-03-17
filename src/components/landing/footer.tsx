@@ -20,7 +20,7 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-2 max-w-xs text-sm text-vc-text-secondary">
-              Flexible scheduling for multi-ministry churches and teams.
+              Flexible volunteer scheduling for churches, nonprofits, and organizations.
             </p>
           </div>
 

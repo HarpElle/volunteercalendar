@@ -160,7 +160,7 @@ export function MinistryReviewPanel({
                   <div className="flex flex-wrap gap-1.5">
                     {dateAssigns.map((a) => {
                       const vol = volunteerMap.get(a.volunteer_id);
-                      const service = serviceMap.get(a.service_id);
+                      const service = a.service_id ? serviceMap.get(a.service_id) : null;
                       return (
                         <span
                           key={a.id}

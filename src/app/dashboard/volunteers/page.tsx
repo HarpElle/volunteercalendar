@@ -109,6 +109,8 @@ export default function VolunteersPage() {
           no_show_count: 0,
         },
         imported_from: "manual",
+        status: "active" as const,
+        membership_id: null,
         created_at: new Date().toISOString(),
       };
 
@@ -204,6 +206,8 @@ export default function VolunteersPage() {
             no_show_count: 0,
           },
           imported_from: "csv",
+          status: "active" as const,
+          membership_id: null,
           created_at: new Date().toISOString(),
         };
 

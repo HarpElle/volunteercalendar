@@ -204,6 +204,8 @@ export function generateDraftSchedule(
             schedule_id: scheduleId,
             church_id: churchId,
             service_id: service.id,
+            event_id: null,
+            signup_type: "scheduled" as const,
             service_date: date,
             volunteer_id: bestVolunteer.id,
             role_id: role.role_id,
@@ -320,7 +322,7 @@ function detectConflicts(
     if (monthCount > vol.availability.max_roles_per_month) {
       conflicts.push({
         type: "overbooked",
-        service_id: a.service_id,
+        service_id: a.service_id || "",
         service_date: a.service_date,
         volunteer_id: vol.id,
         message: `${vol.name} is scheduled ${monthCount}× in ${monthKey} (max: ${vol.availability.max_roles_per_month})`,
@@ -389,7 +391,7 @@ function trySwap(
     if (!canServeInMinistry(toVol, a.ministry_id)) continue;
     if (isBlockedOut(toVol, a.service_date)) continue;
     if (isRecurringUnavailable(toVol, new Date(a.service_date).getDay())) continue;
-    if (hasHouseholdConflict(toVol, a.service_date, a.service_id, households, assignments)) continue;
+    if (hasHouseholdConflict(toVol, a.service_date, a.service_id || "", households, assignments)) continue;
     if (assignments.some(
       (other) => other.volunteer_id === toId && other.service_date === a.service_date
     )) continue;

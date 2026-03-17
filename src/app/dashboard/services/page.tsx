@@ -48,6 +48,8 @@ export default function ServicesPage() {
   const [recurrence, setRecurrence] = useState<RecurrencePattern>("weekly");
   const [dayOfWeek, setDayOfWeek] = useState("0");
   const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:30");
+  const [allDay, setAllDay] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("90");
   const [roles, setRoles] = useState<ServiceRole[]>([
     { role_id: crypto.randomUUID(), title: "", count: 1 },
@@ -78,6 +80,8 @@ export default function ServicesPage() {
     setRecurrence("weekly");
     setDayOfWeek("0");
     setStartTime("09:00");
+    setEndTime("10:30");
+    setAllDay(false);
     setDurationMinutes("90");
     setRoles([{ role_id: crypto.randomUUID(), title: "", count: 1 }]);
     setEditingId(null);
@@ -90,6 +94,8 @@ export default function ServicesPage() {
     setRecurrence(s.recurrence);
     setDayOfWeek(String(s.day_of_week));
     setStartTime(s.start_time);
+    setEndTime(s.end_time || "");
+    setAllDay(s.all_day || false);
     setDurationMinutes(String(s.duration_minutes));
     setRoles(s.roles.length > 0 ? s.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }]);
     setEditingId(s.id);
@@ -100,7 +106,7 @@ export default function ServicesPage() {
     setRoles((prev) => [...prev, { role_id: crypto.randomUUID(), title: "", count: 1 }]);
   }
 
-  function updateRole(index: number, field: keyof ServiceRole, value: string | number) {
+  function updateRole(index: number, field: string, value: string | number | null) {
     setRoles((prev) =>
       prev.map((r, i) => (i === index ? { ...r, [field]: value } : r))
     );
@@ -123,7 +129,9 @@ export default function ServicesPage() {
         ministry_id: ministryId,
         recurrence,
         day_of_week: Number(dayOfWeek),
-        start_time: startTime,
+        start_time: allDay ? "00:00" : startTime,
+        end_time: allDay ? null : (endTime || null),
+        all_day: allDay,
         duration_minutes: Number(durationMinutes),
         roles: filteredRoles,
         ...(editingId ? {} : { created_at: new Date().toISOString() }),
@@ -206,27 +214,12 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Select
                 label="Day"
                 options={DAYS}
                 value={dayOfWeek}
                 onChange={(e) => setDayOfWeek(e.target.value)}
-              />
-              <Input
-                label="Start Time"
-                type="time"
-                required
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-              />
-              <Input
-                label="Duration (min)"
-                type="number"
-                required
-                min={15}
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(e.target.value)}
               />
               <Select
                 label="Recurrence"
@@ -234,7 +227,42 @@ export default function ServicesPage() {
                 value={recurrence}
                 onChange={(e) => setRecurrence(e.target.value as RecurrencePattern)}
               />
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 rounded-lg border border-vc-border px-3 py-2.5 text-sm cursor-pointer hover:bg-vc-bg-warm transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={allDay}
+                    onChange={(e) => setAllDay(e.target.checked)}
+                    className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral/30"
+                  />
+                  <span className="text-vc-text">All day</span>
+                </label>
+              </div>
             </div>
+
+            {!allDay && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Default Start Time"
+                  type="time"
+                  required
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+                <Input
+                  label="Default End Time"
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            )}
+
+            <p className="text-xs text-vc-text-muted -mt-2">
+              {allDay
+                ? "No specific times — roles can still have their own time windows below."
+                : "Default times for the service. Individual roles can override these below."}
+            </p>
 
             {/* Roles */}
             <div>
@@ -250,32 +278,73 @@ export default function ServicesPage() {
                   + Add role
                 </button>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {roles.map((role, i) => (
-                  <div key={role.role_id} className="flex items-center gap-2">
-                    <input
-                      className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                      placeholder="Role title (e.g., Lead Vocalist)"
-                      value={role.title}
-                      onChange={(e) => updateRole(i, "title", e.target.value)}
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-20 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                      value={role.count}
-                      onChange={(e) => updateRole(i, "count", Number(e.target.value))}
-                    />
-                    {roles.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeRole(i)}
-                        className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                  <div key={role.role_id} className="rounded-lg border border-vc-border-light bg-vc-bg/50 p-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                        placeholder="Role title (e.g., Producer, Editor, Camera)"
+                        value={role.title}
+                        onChange={(e) => updateRole(i, "title", e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-20 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                        placeholder="Qty"
+                        value={role.count}
+                        onChange={(e) => updateRole(i, "count", Number(e.target.value))}
+                      />
+                      {roles.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeRole(i)}
+                          className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {/* Per-role time override */}
+                    {role.title.trim() && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-vc-text-muted shrink-0">Custom times:</span>
+                        <input
+                          type="time"
+                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
+                          placeholder="Start"
+                          value={role.start_time || ""}
+                          onChange={(e) => updateRole(i, "start_time", e.target.value || null)}
+                        />
+                        <span className="text-xs text-vc-text-muted">to</span>
+                        <input
+                          type="time"
+                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
+                          placeholder="End"
+                          value={role.end_time || ""}
+                          onChange={(e) => updateRole(i, "end_time", e.target.value || null)}
+                        />
+                        {(role.start_time || role.end_time) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateRole(i, "start_time", null as unknown as string);
+                              updateRole(i, "end_time", null as unknown as string);
+                            }}
+                            className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
+                        {!role.start_time && !role.end_time && (
+                          <span className="text-xs text-vc-text-muted italic">
+                            {allDay ? "No times set" : "Using service default"}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -317,7 +386,7 @@ export default function ServicesPage() {
                 <div>
                   <h3 className="font-semibold text-vc-indigo">{s.name}</h3>
                   <p className="mt-1 text-sm text-vc-text-muted">
-                    {getDayName(s.day_of_week)} at {s.start_time} · {s.duration_minutes} min · {getMinistryName(s.ministry_id)}
+                    {getDayName(s.day_of_week)}{s.all_day ? " · All day" : ` · ${s.start_time}${s.end_time ? `–${s.end_time}` : ` · ${s.duration_minutes} min`}`} · {getMinistryName(s.ministry_id)}
                   </p>
                 </div>
                 <span className="rounded-full bg-vc-bg-warm px-3 py-1 text-xs font-medium text-vc-text-secondary capitalize">
@@ -326,14 +395,20 @@ export default function ServicesPage() {
               </div>
               {s.roles.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {s.roles.map((r) => (
-                    <span
-                      key={r.role_id}
-                      className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo"
-                    >
-                      {r.title} ×{r.count}
-                    </span>
-                  ))}
+                  {s.roles.map((r) => {
+                    const hasCustomTime = r.start_time || r.end_time;
+                    const timeStr = hasCustomTime
+                      ? ` (${r.start_time || "?"}–${r.end_time || "?"})`
+                      : "";
+                    return (
+                      <span
+                        key={r.role_id}
+                        className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo"
+                      >
+                        {r.title} ×{r.count}{timeStr}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
               <div className="mt-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

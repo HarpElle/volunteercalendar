@@ -110,7 +110,7 @@ export default function DashboardPage() {
           .filter((a) => a.service_date >= todayStr && a.service_date <= twoWeeksStr)
           .reduce<Map<string, { serviceId: string; date: string; count: number }>>((acc, a) => {
             const key = `${a.service_id}:${a.service_date}`;
-            if (!acc.has(key)) acc.set(key, { serviceId: a.service_id, date: a.service_date, count: 0 });
+            if (!acc.has(key)) acc.set(key, { serviceId: a.service_id || "", date: a.service_date, count: 0 });
             acc.get(key)!.count++;
             return acc;
           }, new Map());

@@ -22,7 +22,7 @@ const CURRENT_TOOL_OPTIONS = [
   { value: "signupgenius", label: "SignUpGenius" },
   { value: "email", label: "Email / text messages" },
   { value: "other", label: "Other" },
-  { value: "none", label: "Nothing \u2014 it's chaos" },
+  { value: "none", label: "Nothing yet" },
 ];
 
 export function WaitlistForm() {
@@ -125,7 +125,7 @@ export function WaitlistForm() {
                   Have Questions?
                 </p>
                 <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
-                  Tell us about your church
+                  Tell us about your organization
                 </h2>
                 <p className="mx-auto mt-4 max-w-md text-center text-lg text-vc-text-secondary">
                   Not ready to dive in yet? Share your info and we&apos;ll reach out to help you get started.
@@ -159,7 +159,7 @@ export function WaitlistForm() {
                         name="email"
                         type="email"
                         required
-                        placeholder="you@church.org"
+                        placeholder="you@example.org"
                         className={inputClasses}
                       />
                     </div>
@@ -168,13 +168,13 @@ export function WaitlistForm() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label htmlFor="church_name" className="mb-1.5 block text-sm font-medium text-vc-indigo">
-                        Church Name
+                        Organization Name
                       </label>
                       <input
                         id="church_name"
                         name="church_name"
                         required
-                        placeholder="Anchor Falls Church"
+                        placeholder="Anchor Falls Church, Habitat for Humanity, etc."
                         className={inputClasses}
                       />
                     </div>

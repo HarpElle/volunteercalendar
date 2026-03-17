@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const { signIn, error, clearError, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +19,7 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       await signIn(email, password);
-      router.push("/dashboard");
+      router.push(redirectTo || "/dashboard");
     } catch {
       // error is set in context
     }
@@ -95,7 +97,7 @@ export default function LoginPage() {
         <p className="mt-6 text-center text-sm text-vc-text-muted">
           Don&apos;t have an account?{" "}
           <Link
-            href="/register"
+            href={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : "/register"}
             className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
           >
             Create one

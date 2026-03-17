@@ -1,6 +1,6 @@
 # VolunteerCal
 
-Flexible volunteer scheduling SaaS for multi-ministry churches. MVP targets 1-2 beta churches with centralized draft-review-approve-publish workflow.
+Flexible volunteer scheduling SaaS for churches, nonprofits, and volunteer-driven organizations. MVP targets 1-2 beta churches with centralized draft-review-approve-publish workflow.
 
 ## Workflow
 - Do not use worktrees. Make changes directly in the working directory.

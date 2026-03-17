@@ -7,7 +7,7 @@ const steps = [
     number: "01",
     title: "Setup",
     description:
-      "Define your ministries and volunteers. Import from Planning Center, upload a CSV, or add manually. Choose your workflow.",
+      "Define your teams and volunteers. Import from Planning Center, upload a CSV, or add manually. Choose your workflow.",
     accent: "vc-coral",
     accentBg: "bg-vc-coral",
   },
@@ -15,7 +15,7 @@ const steps = [
     number: "02",
     title: "Auto-Draft",
     description:
-      "One click generates a fair schedule across all ministries for 4-8 weeks. Respects availability, households, and frequency limits.",
+      "One click generates a fair schedule across all teams for 4\u20138 weeks. Respects availability, households, and frequency limits.",
     accent: "vc-sage",
     accentBg: "bg-vc-sage",
   },
@@ -23,7 +23,7 @@ const steps = [
     number: "03",
     title: "Review",
     description:
-      "Team leaders see their ministry schedule and tweak as needed. Approve globally or publish independently.",
+      "Team leaders see their schedule and tweak as needed. Approve globally or let each team publish independently.",
     accent: "vc-sand",
     accentBg: "bg-vc-sand",
   },
@@ -51,7 +51,7 @@ export function HowItWorks() {
             How It Works
           </p>
           <h2 className="mt-3 text-center font-display text-4xl text-vc-text-on-dark sm:text-5xl">
-            Four steps to sanity
+            Four steps to a better schedule
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-indigo-muted/80">
             From setup to published schedule — no spreadsheets, no back-and-forth emails.

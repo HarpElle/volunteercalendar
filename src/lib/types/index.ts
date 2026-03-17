@@ -2,16 +2,60 @@
 
 // --- Auth & Users ---
 
+/** @deprecated Use OrgRole on Membership instead */
 export type UserRole = "admin" | "team_lead" | "volunteer";
 
 export interface UserProfile {
   id: string;
   email: string;
   display_name: string;
-  church_id: string;
-  role: UserRole;
-  ministry_ids: string[];
+  phone: string | null;
+  /** Primary/last-used org. Null if not yet joined any org. */
+  default_church_id: string | null;
+  /** @deprecated Use Membership.role instead. Kept for backward compat during migration. */
+  church_id?: string;
+  /** @deprecated Use Membership.role instead. Kept for backward compat during migration. */
+  role?: UserRole;
+  /** @deprecated Use Membership ministry_scope instead. */
+  ministry_ids?: string[];
+  /** Blockout dates shared across all orgs */
+  global_availability: GlobalAvailability;
   created_at: string;
+}
+
+export interface GlobalAvailability {
+  blockout_dates: string[];
+  recurring_unavailable: string[];
+}
+
+// --- Memberships (Multi-Org Identity) ---
+
+export type OrgRole = "owner" | "admin" | "scheduler" | "volunteer";
+
+export type MembershipStatus =
+  | "pending_volunteer_approval" // org invited volunteer, awaiting their acceptance
+  | "pending_org_approval"       // volunteer self-registered, awaiting admin approval
+  | "active"
+  | "inactive";
+
+export interface Membership {
+  id: string;
+  user_id: string;
+  church_id: string;
+  role: OrgRole;
+  /** For scheduler role: which ministry IDs they can manage. Empty array = all. */
+  ministry_scope: string[];
+  status: MembershipStatus;
+  /** User ID of whoever sent the invite, or null for self-registration */
+  invited_by: string | null;
+  /** Link to the church's volunteer record once activated */
+  volunteer_id: string | null;
+  /** Per-org reminder preferences */
+  reminder_preferences: {
+    channels: ReminderChannel[];
+  };
+  created_at: string;
+  updated_at: string;
 }
 
 // --- Churches (Tenants) ---
@@ -63,15 +107,36 @@ export interface Ministry {
   created_at: string;
 }
 
-// --- Services ---
+// --- Role Slots (shared by Services and Events) ---
 
-export type RecurrencePattern = "weekly" | "biweekly" | "monthly" | "custom";
+export interface RoleSlot {
+  role_id: string;
+  title: string;
+  count: number;
+  /** Which ministry this role belongs to (null = general/org-wide) */
+  ministry_id: string | null;
+  /** Can volunteers self-signup for this slot? */
+  allow_signup: boolean;
+  /** Per-role start time override (HH:mm). Null = inherits from service/event. */
+  start_time: string | null;
+  /** Per-role end time override (HH:mm). Null = inherits from service/event. */
+  end_time: string | null;
+}
 
+/** @deprecated Use RoleSlot instead. Kept as alias for backward compat. */
 export interface ServiceRole {
   role_id: string;
   title: string;
   count: number;
+  /** Per-role start time (HH:mm). Null = same as service start_time. */
+  start_time?: string | null;
+  /** Per-role end time (HH:mm). Null = derived from service duration. */
+  end_time?: string | null;
 }
+
+// --- Services ---
+
+export type RecurrencePattern = "weekly" | "biweekly" | "monthly" | "custom";
 
 export interface Service {
   id: string;
@@ -80,9 +145,54 @@ export interface Service {
   name: string;
   recurrence: RecurrencePattern;
   day_of_week: number;
+  /** Default start time for the service (HH:mm). Roles may override. */
   start_time: string;
+  /** Default end time for the service (HH:mm). Null = use duration_minutes. */
+  end_time: string | null;
+  /** @deprecated Prefer end_time. Kept for backward compat. */
   duration_minutes: number;
+  /** Whether this is an all-day service (no specific times). */
+  all_day: boolean;
   roles: ServiceRole[];
+  created_at: string;
+}
+
+// --- Events ---
+
+export type EventType = "one_time" | "recurring";
+export type EventVisibility = "internal" | "public";
+export type SignupMode = "open" | "scheduled" | "hybrid";
+
+export interface EventPromotion {
+  send_email_blast: boolean;
+  send_sms_blast: boolean;
+  qr_code_url: string | null;
+  signup_url: string | null;
+}
+
+export interface Event {
+  id: string;
+  church_id: string;
+  name: string;
+  description: string;
+  event_type: EventType;
+  visibility: EventVisibility;
+  signup_mode: SignupMode;
+  date: string;
+  /** Default start time (HH:mm). Null if all_day. Roles may override. */
+  start_time: string | null;
+  /** Default end time (HH:mm). Null if all_day. Roles may override. */
+  end_time: string | null;
+  /** Whether this is an all-day event (no specific times). */
+  all_day: boolean;
+  /** @deprecated Prefer end_time. */
+  duration_minutes: number;
+  recurrence: RecurrencePattern | null;
+  day_of_week: number | null;
+  roles: RoleSlot[];
+  ministry_ids: string[];
+  promotion: EventPromotion;
+  created_by: string;
   created_at: string;
 }
 
@@ -94,7 +204,11 @@ export type ImportSource =
   | "planning_center"
   | "breeze"
   | "rock"
-  | "manual";
+  | "manual"
+  | "self_signup"
+  | "invite";
+
+export type VolunteerStatus = "active" | "inactive" | "pending";
 
 export interface VolunteerAvailability {
   blockout_dates: string[];
@@ -117,6 +231,9 @@ export interface Volunteer {
   email: string;
   phone: string | null;
   user_id: string | null;
+  /** Link to the membership doc for logged-in volunteers */
+  membership_id: string | null;
+  status: VolunteerStatus;
   ministry_ids: string[];
   role_ids: string[];
   household_id: string | null;
@@ -182,17 +299,23 @@ export type AssignmentStatus =
   | "no_show"
   | "substitute_requested";
 
+export type SignupType = "scheduled" | "self_signup";
+
 export interface Assignment {
   id: string;
   schedule_id: string;
   church_id: string;
-  service_id: string;
+  /** Null for event-only assignments */
+  service_id: string | null;
+  /** Null for service-only assignments */
+  event_id: string | null;
   service_date: string;
   volunteer_id: string;
   role_id: string;
   role_title: string;
   ministry_id: string;
   status: AssignmentStatus;
+  signup_type: SignupType;
   confirmation_token: string;
   responded_at: string | null;
   reminder_sent_at: string[];
@@ -252,6 +375,27 @@ export interface SchedulingResult {
     fill_rate: number;
     fairness_score: number;
   };
+}
+
+// --- Event Signups ---
+
+export type SignupStatus = "confirmed" | "waitlisted" | "cancelled";
+
+export interface EventSignup {
+  id: string;
+  event_id: string;
+  church_id: string;
+  role_id: string;
+  role_title: string;
+  volunteer_id: string;
+  /** User ID of the volunteer (for logged-in self-signup) */
+  user_id: string | null;
+  volunteer_name: string;
+  volunteer_email: string;
+  status: SignupStatus;
+  signed_up_at: string;
+  /** Admin who approved, or null for auto-approved open signups */
+  approved_by: string | null;
 }
 
 /** A service occurrence on a specific date */

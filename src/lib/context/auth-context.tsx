@@ -5,10 +5,11 @@ import {
   useContext,
   useEffect,
   useReducer,
+  useCallback,
   type ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
-import type { UserProfile } from "@/lib/types";
+import type { UserProfile, Membership } from "@/lib/types";
 import {
   signUp as fbSignUp,
   signIn as fbSignIn,
@@ -17,12 +18,15 @@ import {
   getUserProfile,
   onAuthChange,
 } from "@/lib/firebase/auth";
+import { getUserMemberships } from "@/lib/firebase/firestore";
 
 // --- State ---
 
 interface AuthState {
   user: User | null;
   profile: UserProfile | null;
+  memberships: Membership[];
+  activeMembership: Membership | null;
   loading: boolean;
   error: string | null;
 }
@@ -30,6 +34,8 @@ interface AuthState {
 const initialState: AuthState = {
   user: null,
   profile: null,
+  memberships: [],
+  activeMembership: null,
   loading: true,
   error: null,
 };
@@ -37,10 +43,18 @@ const initialState: AuthState = {
 // --- Actions ---
 
 type AuthAction =
-  | { type: "AUTH_STATE_CHANGED"; user: User | null; profile: UserProfile | null }
+  | {
+      type: "AUTH_STATE_CHANGED";
+      user: User | null;
+      profile: UserProfile | null;
+      memberships: Membership[];
+      activeMembership: Membership | null;
+    }
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_ERROR"; error: string }
-  | { type: "CLEAR_ERROR" };
+  | { type: "CLEAR_ERROR" }
+  | { type: "SWITCH_ORG"; membership: Membership }
+  | { type: "MEMBERSHIPS_UPDATED"; memberships: Membership[]; activeMembership: Membership | null };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
@@ -49,6 +63,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         user: action.user,
         profile: action.profile,
+        memberships: action.memberships,
+        activeMembership: action.activeMembership,
         loading: false,
         error: null,
       };
@@ -58,6 +74,14 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return { ...state, error: action.error, loading: false };
     case "CLEAR_ERROR":
       return { ...state, error: null };
+    case "SWITCH_ORG":
+      return { ...state, activeMembership: action.membership };
+    case "MEMBERSHIPS_UPDATED":
+      return {
+        ...state,
+        memberships: action.memberships,
+        activeMembership: action.activeMembership,
+      };
   }
 }
 
@@ -69,9 +93,39 @@ interface AuthContextValue extends AuthState {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   clearError: () => void;
+  switchOrg: (churchId: string) => void;
+  refreshMemberships: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// --- Helpers ---
+
+/**
+ * Pick the best active membership to use by default.
+ * Priority: default_church_id from profile, then first active membership.
+ */
+function pickActiveMembership(
+  memberships: Membership[],
+  profile: UserProfile | null,
+): Membership | null {
+  const active = memberships.filter((m) => m.status === "active");
+  if (active.length === 0) return null;
+
+  // Prefer the user's stored default church
+  if (profile?.default_church_id) {
+    const preferred = active.find((m) => m.church_id === profile.default_church_id);
+    if (preferred) return preferred;
+  }
+
+  // Fall back to legacy church_id
+  if (profile?.church_id) {
+    const legacy = active.find((m) => m.church_id === profile.church_id);
+    if (legacy) return legacy;
+  }
+
+  return active[0];
+}
 
 // --- Provider ---
 
@@ -81,10 +135,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
-        const profile = await getUserProfile(user.uid);
-        dispatch({ type: "AUTH_STATE_CHANGED", user, profile });
+        const [profile, memberships] = await Promise.all([
+          getUserProfile(user.uid),
+          getUserMemberships(user.uid),
+        ]);
+        const activeMembership = pickActiveMembership(memberships, profile);
+        dispatch({
+          type: "AUTH_STATE_CHANGED",
+          user,
+          profile,
+          memberships,
+          activeMembership,
+        });
       } else {
-        dispatch({ type: "AUTH_STATE_CHANGED", user: null, profile: null });
+        dispatch({
+          type: "AUTH_STATE_CHANGED",
+          user: null,
+          profile: null,
+          memberships: [],
+          activeMembership: null,
+        });
       }
     });
     return unsubscribe;
@@ -139,9 +209,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "CLEAR_ERROR" });
   }
 
+  const switchOrg = useCallback(
+    (churchId: string) => {
+      const membership = state.memberships.find(
+        (m) => m.church_id === churchId && m.status === "active",
+      );
+      if (membership) {
+        dispatch({ type: "SWITCH_ORG", membership });
+      }
+    },
+    [state.memberships],
+  );
+
+  const refreshMemberships = useCallback(async () => {
+    if (!state.user) return;
+    const memberships = await getUserMemberships(state.user.uid);
+    const activeMembership = state.activeMembership
+      ? memberships.find((m) => m.id === state.activeMembership!.id && m.status === "active") ||
+        pickActiveMembership(memberships, state.profile)
+      : pickActiveMembership(memberships, state.profile);
+    dispatch({ type: "MEMBERSHIPS_UPDATED", memberships, activeMembership });
+  }, [state.user, state.activeMembership, state.profile]);
+
   return (
     <AuthContext.Provider
-      value={{ ...state, signUp, signIn, signOut, resetPassword, clearError }}
+      value={{
+        ...state,
+        signUp,
+        signIn,
+        signOut,
+        resetPassword,
+        clearError,
+        switchOrg,
+        refreshMemberships,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -156,7 +257,7 @@ export function useAuth() {
   return ctx;
 }
 
-// --- Helpers ---
+// --- Error mapping ---
 
 function firebaseErrorMessage(err: unknown): string {
   const code = (err as { code?: string }).code;

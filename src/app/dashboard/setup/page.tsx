@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import { setDocument, updateDocument } from "@/lib/firebase/firestore";
+import { setDocument, updateDocument, createMembership } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -66,9 +66,25 @@ export default function ChurchSetupPage() {
       const churchId = user.uid;
       await setDocument("churches", churchId, churchData);
 
-      // Link user profile to their church
+      // Create owner membership
+      const now = new Date().toISOString();
+      await createMembership({
+        user_id: user.uid,
+        church_id: churchId,
+        role: "owner",
+        ministry_scope: [],
+        status: "active",
+        invited_by: null,
+        volunteer_id: null,
+        reminder_preferences: { channels: ["email"] },
+        created_at: now,
+        updated_at: now,
+      });
+
+      // Link user profile to their church (legacy fields for backward compat)
       await updateDocument("users", user.uid, {
         church_id: churchId,
+        default_church_id: churchId,
         role: "admin",
       });
 

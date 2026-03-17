@@ -3,53 +3,134 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Assignments — collection group query for token-based volunteer confirmation
-    // Security: confirmation_token is a UUID — knowing it IS the authorization
-    // Only status + responded_at can be changed via unauthenticated update
+    // ─── Helpers ───
+    // Membership doc ID is {userId}_{churchId} (deterministic)
+    function membershipRef(churchId) {
+      return /databases/$(database)/documents/memberships/$(request.auth.uid + '_' + churchId);
+    }
+
+    function getMembership(churchId) {
+      return get(membershipRef(churchId));
+    }
+
+    function isActiveMember(churchId) {
+      return request.auth != null
+        && exists(membershipRef(churchId))
+        && getMembership(churchId).data.status == 'active';
+    }
+
+    function memberRole(churchId) {
+      return getMembership(churchId).data.role;
+    }
+
+    function isOrgAdmin(churchId) {
+      return isActiveMember(churchId)
+        && memberRole(churchId) in ['admin', 'owner'];
+    }
+
+    function isOrgOwner(churchId) {
+      return isActiveMember(churchId)
+        && memberRole(churchId) == 'owner';
+    }
+
+    function isSchedulerOrAbove(churchId) {
+      return isActiveMember(churchId)
+        && memberRole(churchId) in ['scheduler', 'admin', 'owner'];
+    }
+
+    // ─── Assignments (collection group) ───
+    // Token-based volunteer confirmation: anyone who knows the token can update status
     match /{path=**}/assignments/{assignId} {
       allow read: if true;
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status', 'responded_at']);
     }
 
-    // Waitlist — anyone can write, only admins can read
+    // ─── Waitlist ───
     match /waitlist/{docId} {
       allow create: if true;
       allow read, update, delete: if false;
     }
 
-    // Users — authenticated users can read/write their own profile
+    // ─── User Profiles ───
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Churches — members can read, admins can write
-    match /churches/{churchId} {
-      allow read: if request.auth != null &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
-      // Allow church creation when churchId matches the user's UID (setup bootstrap)
-      allow create: if request.auth != null && request.auth.uid == churchId;
-      allow update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // ─── Memberships ───
+    // Doc ID format: {userId}_{churchId}
+    match /memberships/{membershipId} {
+      // Users can read their own memberships
+      allow read: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
 
-      // Church subcollections — same church-level access
+      // Org admins can read any membership for their church
+      allow read: if request.auth != null
+        && isOrgAdmin(resource.data.church_id);
+
+      // Users can create their own membership (self-registration → pending_org_approval)
+      allow create: if request.auth != null
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.status == 'pending_org_approval'
+        && request.resource.data.role == 'volunteer';
+
+      // Org admins can create memberships (inviting someone → pending_volunteer_approval)
+      allow create: if request.auth != null
+        && isOrgAdmin(request.resource.data.church_id)
+        && request.resource.data.status == 'pending_volunteer_approval';
+
+      // Users can accept their own pending invite
+      allow update: if request.auth != null
+        && resource.data.user_id == request.auth.uid
+        && resource.data.status == 'pending_volunteer_approval'
+        && request.resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updated_at']);
+
+      // Users can update their own reminder preferences
+      allow update: if request.auth != null
+        && resource.data.user_id == request.auth.uid
+        && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['reminder_preferences', 'updated_at']);
+
+      // Org admins can update memberships (approve, change role, deactivate)
+      allow update: if request.auth != null
+        && isOrgAdmin(resource.data.church_id);
+
+      // Org owners can delete memberships; users can leave (delete own)
+      allow delete: if request.auth != null
+        && (resource.data.user_id == request.auth.uid
+            || isOrgOwner(resource.data.church_id));
+    }
+
+    // ─── Churches ───
+    match /churches/{churchId} {
+      // Any active member can read their church
+      allow read: if isActiveMember(churchId);
+
+      // Bootstrap: user can create a church doc with their UID as the ID
+      allow create: if request.auth != null && request.auth.uid == churchId;
+
+      // Admins and owners can update church settings
+      allow update: if isOrgAdmin(churchId);
+
+      // Only owner can delete a church
+      allow delete: if isOrgOwner(churchId);
+
+      // ─── Church subcollections ───
       match /{subcollection}/{docId} {
-        allow read: if request.auth != null &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
-        allow write: if request.auth != null &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_lead'];
+        // Active members can read all subcollection data
+        allow read: if isActiveMember(churchId);
+
+        // Schedulers, admins, and owners can write
+        allow write: if isSchedulerOrAbove(churchId);
       }
 
-      // Nested subcollections (e.g., schedules/{id}/assignments/{id})
+      // ─── Nested subcollections (schedules/{id}/assignments/{id}) ───
       match /{subcollection}/{docId}/{nestedSub}/{nestedDocId} {
-        allow read: if request.auth != null &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
-        allow write: if request.auth != null &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_lead'];
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
       }
     }
   }

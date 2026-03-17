@@ -37,7 +37,7 @@ export function Hero() {
           Scheduling that serves{" "}
           <br className="hidden sm:block" />
           <span className="relative inline-block">
-            <span className="relative z-10">your whole church</span>
+            <span className="relative z-10">your whole organization</span>
             {/* Hand-drawn underline effect */}
             <svg
               className="absolute -bottom-2 left-0 w-full"
@@ -63,9 +63,9 @@ export function Hero() {
           transition={{ duration: 0.6, delay: 0.5 }}
           className="mx-auto mt-8 max-w-2xl text-center text-lg leading-relaxed text-vc-text-secondary sm:text-xl"
         >
-          Auto-generate fair rosters across worship, kids, tech, and greeters.
-          Team leaders review in a shared draft. Volunteers confirm and sync to
-          their personal calendar.
+          Auto-generate fair rosters across every team — worship, outreach, events,
+          and more. Team leaders review in a shared draft. Volunteers confirm and
+          sync to their personal calendar.
         </motion.p>
 
         {/* CTAs */}
@@ -106,7 +106,7 @@ export function Hero() {
           className="mt-16 flex flex-col items-center gap-3"
         >
           <p className="text-sm font-medium text-vc-text-muted">
-            Built for churches like yours
+            Thoughtfully built for churches, nonprofits, and volunteer-driven organizations
           </p>
           <div className="flex items-center gap-6 text-sm text-vc-text-muted">
             <span className="flex items-center gap-1.5">

@@ -608,3 +608,186 @@ VolunteerCal · Thoughtfully built by HarpElle`;
 
   return { subject, html, text };
 }
+
+// ─── Invite Email ─────────────────────────────────────────────────────────
+
+interface InviteEmailData {
+  inviteeName: string;
+  churchName: string;
+  inviterName: string;
+  role: string;
+  acceptUrl: string;
+}
+
+export function buildInviteEmail(data: InviteEmailData): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const firstName = data.inviteeName.split(" ")[0] || "there";
+
+  const subject = `You've been invited to join ${data.churchName} on VolunteerCal`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FEFCF9;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FEFCF9;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E8E4DE;">
+          <tr>
+            <td style="background-color:#2D2B55;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
+                You're Invited
+              </h1>
+              <p style="margin:6px 0 0;font-size:14px;color:rgba(255,255,255,0.65);">
+                ${data.churchName}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                Hi ${firstName},
+              </p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                <strong style="color:#2D2B55;">${data.inviterName}</strong> has invited you to join <strong style="color:#2D2B55;">${data.churchName}</strong> on VolunteerCal as a <strong style="color:#2D2B55;">${data.role}</strong>.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                VolunteerCal makes it simple to see when you're scheduled, confirm your availability, and stay in the loop — all in one place.
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:16px;">
+                    <a href="${data.acceptUrl}" style="display:inline-block;background-color:#E87461;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
+                      Accept Invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#9A9BB5;text-align:center;">
+                If you weren't expecting this invitation, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px;border-top:1px solid #E8E4DE;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#9A9BB5;">
+                Sent by <span style="color:#E87461;">VolunteerCal</span> on behalf of ${data.churchName}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = `You've Been Invited to ${data.churchName}
+
+Hi ${firstName},
+
+${data.inviterName} has invited you to join ${data.churchName} on VolunteerCal as a ${data.role}.
+
+VolunteerCal makes it simple to see when you're scheduled, confirm your availability, and stay in the loop — all in one place.
+
+Accept your invitation: ${data.acceptUrl}
+
+If you weren't expecting this invitation, you can safely ignore this email.
+
+—
+Sent by VolunteerCal on behalf of ${data.churchName}`;
+
+  return { subject, html, text };
+}
+
+// ─── Membership Approved Email ────────────────────────────────────────────
+
+interface MembershipApprovedData {
+  userName: string;
+  churchName: string;
+  dashboardUrl: string;
+}
+
+export function buildMembershipApprovedEmail(data: MembershipApprovedData): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const firstName = data.userName.split(" ")[0] || "there";
+
+  const subject = `You've been approved to join ${data.churchName}`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FEFCF9;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FEFCF9;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E8E4DE;">
+          <tr>
+            <td style="background-color:#2D2B55;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
+                You're In!
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                Hi ${firstName},
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                Great news — your request to join <strong style="color:#2D2B55;">${data.churchName}</strong> has been approved. You can now view your schedule, set your availability, and more.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:16px;">
+                    <a href="${data.dashboardUrl}" style="display:inline-block;background-color:#E87461;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
+                      Go to Dashboard
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px;border-top:1px solid #E8E4DE;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#9A9BB5;">
+                Sent by <span style="color:#E87461;">VolunteerCal</span> on behalf of ${data.churchName}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = `You've Been Approved — ${data.churchName}
+
+Hi ${firstName},
+
+Great news — your request to join ${data.churchName} has been approved. You can now view your schedule, set your availability, and more.
+
+Go to your dashboard: ${data.dashboardUrl}
+
+—
+Sent by VolunteerCal on behalf of ${data.churchName}`;
+
+  return { subject, html, text };
+}

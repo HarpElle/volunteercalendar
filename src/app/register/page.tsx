@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,12 @@ import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
+  const prefillEmail = searchParams.get("email") || "";
   const { signUp, error, clearError, loading } = useAuth();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
@@ -37,7 +40,7 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email }),
       }).catch(() => {});
-      router.push("/dashboard");
+      router.push(redirectTo || "/dashboard");
     } catch {
       // error is set in context
     }
@@ -135,7 +138,7 @@ export default function RegisterPage() {
         <p className="mt-6 text-center text-sm text-vc-text-muted">
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"}
             className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
           >
             Sign in

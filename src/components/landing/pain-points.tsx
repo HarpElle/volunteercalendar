@@ -14,7 +14,7 @@ const painPoints = [
       </svg>
     ),
     title: "Siloed tools cause double-books & burnout",
-    quote: "Our volunteers were scheduled in both worship AND kids on the same Sunday. We had no visibility across teams.",
+    quote: "Our volunteers were double-booked across two teams on the same day. We had no visibility across departments.",
   },
   {
     borderColor: "border-vc-sand/20",
@@ -39,8 +39,8 @@ const painPoints = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
       </svg>
     ),
-    title: "No-shows scramble your Sundays",
-    quote: "We had a 30% no-show rate. Finally found a tool that tracks and alerts us before it\u2019s too late.",
+    title: "No-shows leave your team short-handed",
+    quote: "We had a 30% no-show rate. We needed a tool that tracks responses and alerts us before it\u2019s too late.",
   },
 ];
 
@@ -56,7 +56,7 @@ export function PainPoints() {
             Sound familiar?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-text-secondary">
-            Churches with multiple volunteer teams face the same scheduling challenges every week.
+            Organizations with multiple volunteer teams face the same scheduling challenges every week.
           </p>
         </AnimateIn>
 

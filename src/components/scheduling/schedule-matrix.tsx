@@ -145,8 +145,9 @@ export function ScheduleMatrix({
           {byDate.map(([date, dateAssignments]) => {
             const byService: Record<string, Assignment[]> = {};
             for (const a of dateAssignments) {
-              if (!byService[a.service_id]) byService[a.service_id] = [];
-              byService[a.service_id].push(a);
+              const svcId = a.service_id || "";
+              if (!byService[svcId]) byService[svcId] = [];
+              byService[svcId].push(a);
             }
 
             return (
