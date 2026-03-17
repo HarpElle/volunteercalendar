@@ -91,7 +91,7 @@ export function Features() {
         <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature, i) => (
             <AnimateIn key={feature.title} delay={0.05 + i * 0.08}>
-              <div className="group rounded-2xl border border-vc-border-light bg-white p-7 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/[0.03]">
+              <div className="group flex h-full flex-col rounded-2xl border border-vc-border-light bg-white p-7 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/[0.03]">
                 <div className={`mb-5 inline-flex h-10 w-10 items-center justify-center rounded-xl ${feature.accent}`}>
                   {feature.icon}
                 </div>

@@ -15,7 +15,6 @@ const painPoints = [
     ),
     title: "Siloed tools cause double-books & burnout",
     quote: "Our volunteers were scheduled in both worship AND kids on the same Sunday. We had no visibility across teams.",
-    attribution: "Sarah M., Worship Coordinator",
   },
   {
     borderColor: "border-vc-sand/20",
@@ -29,7 +28,6 @@ const painPoints = [
     ),
     title: "Manual rotations waste 5-10 hours weekly",
     quote: "I was copying spreadsheets, emailing people manually, chasing down confirmations. No one was happy.",
-    attribution: "Mike D., Volunteer Coordinator",
   },
   {
     borderColor: "border-vc-indigo/5",
@@ -43,7 +41,6 @@ const painPoints = [
     ),
     title: "No-shows scramble your Sundays",
     quote: "We had a 30% no-show rate. Finally found a tool that tracks and alerts us before it\u2019s too late.",
-    attribution: "Pastor Rebecca L.",
   },
 ];
 
@@ -67,7 +64,7 @@ export function PainPoints() {
           {painPoints.map((point, i) => (
             <AnimateIn key={point.title} delay={0.1 + i * 0.15}>
               <div
-                className={`group relative overflow-hidden rounded-2xl border ${point.borderColor} bg-white p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/5`}
+                className={`group relative flex h-full flex-col overflow-hidden rounded-2xl border ${point.borderColor} bg-white p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/5`}
               >
                 <div className={`absolute -right-8 -top-8 h-24 w-24 rounded-full ${point.bgGlow} opacity-0 blur-2xl transition-opacity group-hover:opacity-100`} />
 
@@ -79,15 +76,11 @@ export function PainPoints() {
                   {point.title}
                 </h3>
 
-                <div className="pull-quote relative">
+                <div className="pull-quote relative mt-auto">
                   <p className="text-sm leading-relaxed text-vc-text-secondary italic">
                     &ldquo;{point.quote}&rdquo;
                   </p>
                 </div>
-
-                <p className="relative mt-4 text-xs font-medium text-vc-text-muted">
-                  — {point.attribution}
-                </p>
               </div>
             </AnimateIn>
           ))}
