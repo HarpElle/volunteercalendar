@@ -123,7 +123,7 @@ export default function SettingsPage() {
 
       {/* Calendar Feeds Section */}
       <section className="mb-10">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-vc-indigo">Calendar Feeds</h2>
             <p className="text-sm text-vc-text-muted">

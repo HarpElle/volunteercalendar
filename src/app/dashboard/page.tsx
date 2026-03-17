@@ -372,7 +372,7 @@ export default function DashboardPage() {
                   />
                 )}
               </div>
-              <div className="mt-2 flex gap-6 text-xs">
+              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-vc-sage" /> Confirmed ({stats.confirmed})
                 </span>

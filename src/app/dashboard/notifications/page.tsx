@@ -218,7 +218,7 @@ export default function NotificationsPage() {
       {tab === "history" && (
         <div>
           {/* Stats bar */}
-          <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
             <div className="rounded-xl border border-vc-border-light bg-white px-4 py-3 text-center">
               <p className="text-2xl font-bold text-vc-indigo">{emailCount}</p>
               <p className="text-xs text-vc-text-muted">Emails Sent</p>

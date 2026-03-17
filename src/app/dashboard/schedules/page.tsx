@@ -371,7 +371,7 @@ export default function SchedulesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">Schedules</h1>
           <p className="mt-1 text-vc-text-secondary">
@@ -584,7 +584,7 @@ export default function SchedulesPage() {
                 const total = activeAssignments.length;
                 return (
                   <div className="space-y-2">
-                    <div className="flex gap-4 text-sm">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                       <span className="text-vc-sage font-medium">{confirmed} confirmed</span>
                       <span className="text-vc-danger font-medium">{declined} declined</span>
                       <span className="text-vc-text-muted">{pending} awaiting</span>
@@ -674,7 +674,7 @@ export default function SchedulesPage() {
             <div className="space-y-3">
               {schedules.map((s) => (
                 <div key={s.id} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => viewSchedule(s)}
@@ -686,7 +686,7 @@ export default function SchedulesPage() {
                         {s.status.replace("_", " ")}
                       </Badge>
                     </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => viewSchedule(s)} className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">View</button>
                       {s.status === "draft" && (
                         <button onClick={() => handleDeleteSchedule(s.id)} disabled={deleting === s.id} className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors">

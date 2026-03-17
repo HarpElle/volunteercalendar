@@ -134,7 +134,7 @@ export default function MinistriesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">{terms.plural}</h1>
           <p className="mt-1 text-vc-text-secondary">
@@ -243,7 +243,7 @@ export default function MinistriesPage() {
                   )}
                 </div>
               </div>
-              <div className="mt-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => startEdit(m)}
                   className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"

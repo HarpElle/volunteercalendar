@@ -1,0 +1,12 @@
+# VolunteerCal.com robots.txt
+
+User-agent: *
+Allow: /
+
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /confirm/
+Disallow: /join/
+Disallow: /invites/
+
+Sitemap: https://volunteercal.com/sitemap.xml
