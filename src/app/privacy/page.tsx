@@ -162,10 +162,10 @@ export default function PrivacyPolicyPage() {
               your account and associated data, you may do so from your account
               settings or by contacting us at{" "}
               <a
-                href="mailto:privacy@volunteercal.com"
+                href="mailto:info@volunteercal.com"
                 className="text-vc-coral transition-colors hover:text-vc-coral-dark"
               >
-                privacy@volunteercal.com
+                info@volunteercal.com
               </a>
               . We will process deletion requests within 30 days.
             </p>
@@ -211,10 +211,10 @@ export default function PrivacyPolicyPage() {
             <p className="mt-3">
               To exercise any of these rights, please contact us at{" "}
               <a
-                href="mailto:privacy@volunteercal.com"
+                href="mailto:info@volunteercal.com"
                 className="text-vc-coral transition-colors hover:text-vc-coral-dark"
               >
-                privacy@volunteercal.com
+                info@volunteercal.com
               </a>
               . We will respond to verified requests within 30 days.
             </p>
@@ -259,10 +259,10 @@ export default function PrivacyPolicyPage() {
               <p className="mt-1">
                 Email:{" "}
                 <a
-                  href="mailto:privacy@volunteercal.com"
+                  href="mailto:info@volunteercal.com"
                   className="text-vc-coral transition-colors hover:text-vc-coral-dark"
                 >
-                  privacy@volunteercal.com
+                  info@volunteercal.com
                 </a>
               </p>
             </div>

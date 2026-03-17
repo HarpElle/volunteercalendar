@@ -305,10 +305,10 @@ export default function TermsOfServicePage() {
               <p className="mt-1">
                 Email:{" "}
                 <a
-                  href="mailto:legal@volunteercal.com"
+                  href="mailto:info@volunteercal.com"
                   className="text-vc-coral transition-colors hover:text-vc-coral-dark"
                 >
-                  legal@volunteercal.com
+                  info@volunteercal.com
                 </a>
               </p>
             </div>
