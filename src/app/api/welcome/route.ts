@@ -25,6 +25,7 @@ export async function POST(request: Request) {
 
     await resend.emails.send({
       from: "VolunteerCal <noreply@harpelle.com>",
+      replyTo: "info@volunteercal.com",
       to: [email],
       subject,
       html,

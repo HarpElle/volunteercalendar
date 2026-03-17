@@ -204,6 +204,7 @@ export async function POST(request: Request) {
         try {
           const result = await resend.emails.send({
             from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+            replyTo: "info@volunteercal.com",
             to: [email],
             subject,
             html,

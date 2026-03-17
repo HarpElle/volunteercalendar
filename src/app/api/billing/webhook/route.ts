@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
             });
             resend.emails.send({
               from: "VolunteerCal <noreply@harpelle.com>",
+              replyTo: "info@volunteercal.com",
               to: [session.customer_email],
               subject,
               html,

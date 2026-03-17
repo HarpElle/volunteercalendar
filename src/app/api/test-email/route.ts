@@ -88,6 +88,7 @@ export async function POST(request: Request) {
 
     const sendResult = await resend.emails.send({
       from: "VolunteerCal Test <noreply@harpelle.com>",
+      replyTo: "info@volunteercal.com",
       to: [email],
       subject,
       html,

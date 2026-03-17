@@ -67,6 +67,17 @@ export function Footer() {
           <p>
             &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
           </p>
+          <p>
+            Created by{" "}
+            <a
+              href="https://harpelle.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+            >
+              HarpElle
+            </a>
+          </p>
         </div>
       </div>
     </footer>
