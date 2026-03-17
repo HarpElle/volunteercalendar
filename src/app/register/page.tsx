@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
@@ -67,7 +75,7 @@ export default function RegisterPage() {
         <div className="rounded-2xl border border-vc-border-light bg-white p-8 shadow-xl shadow-black/[0.03]">
           <h1 className="font-display text-2xl text-vc-indigo">Create your account</h1>
           <p className="mt-1 text-sm text-vc-text-secondary">
-            Start scheduling your church&apos;s volunteers in minutes.
+            Start scheduling your organization&apos;s volunteers in minutes.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -89,7 +97,7 @@ export default function RegisterPage() {
               type="email"
               required
               autoComplete="email"
-              placeholder="you@church.org"
+              placeholder="you@example.org"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);

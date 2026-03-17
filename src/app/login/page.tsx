@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
@@ -44,7 +52,7 @@ export default function LoginPage() {
         <div className="rounded-2xl border border-vc-border-light bg-white p-8 shadow-xl shadow-black/[0.03]">
           <h1 className="font-display text-2xl text-vc-indigo">Welcome back</h1>
           <p className="mt-1 text-sm text-vc-text-secondary">
-            Sign in to manage your church&apos;s volunteer schedule.
+            Sign in to manage your volunteer schedule.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -53,7 +61,7 @@ export default function LoginPage() {
               type="email"
               required
               autoComplete="email"
-              placeholder="you@church.org"
+              placeholder="you@example.org"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);

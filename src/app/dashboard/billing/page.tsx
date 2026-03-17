@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
@@ -12,6 +12,14 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
 export default function BillingPage() {
+  return (
+    <Suspense>
+      <BillingContent />
+    </Suspense>
+  );
+}
+
+function BillingContent() {
   const { profile } = useAuth();
   const searchParams = useSearchParams();
   const churchId = profile?.church_id;
