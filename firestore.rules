@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Waitlist — anyone can write, only admins can read
+    match /waitlist/{docId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
+    // Users — authenticated users can read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Churches — members can read, admins can write
+    match /churches/{churchId} {
+      allow read: if request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // Church subcollections — same church-level access
+      match /{subcollection}/{docId} {
+        allow read: if request.auth != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
+        allow write: if request.auth != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_lead'];
+      }
+
+      // Nested subcollections (e.g., schedules/{id}/assignments/{id})
+      match /{subcollection}/{docId}/{nestedSub}/{nestedDocId} {
+        allow read: if request.auth != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId;
+        allow write: if request.auth != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.church_id == churchId &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'team_lead'];
+      }
+    }
+  }
+}

@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* VolunteerCalendar — Warm Editorial Brand */
+:root {
+  /* Indigo — deep trust, authority */
+  --vc-indigo: #2D3047;
+  --vc-indigo-light: #3D4063;
+  --vc-indigo-muted: #6B6E8A;
+
+  /* Coral — warm energy, inviting CTAs */
+  --vc-coral: #E07A5F;
+  --vc-coral-light: #F4A68E;
+  --vc-coral-dark: #C4603F;
+  --vc-coral-glow: #E07A5F1A;
+
+  /* Sage — calm, growth, success */
+  --vc-sage: #81B29A;
+  --vc-sage-light: #A8D5BA;
+  --vc-sage-dark: #5E8F76;
+  --vc-sage-glow: #81B29A1A;
+
+  /* Sand — warm supporting tone */
+  --vc-sand: #F2CC8F;
+  --vc-sand-light: #F7DDB5;
+  --vc-sand-glow: #F2CC8F1A;
+
+  /* Semantic */
+  --vc-success: #5E8F76;
+  --vc-warning: #D4913D;
+  --vc-danger: #C4603F;
+
+  /* Surfaces — warm ivory, not cold white */
+  --vc-bg: #FEFCF9;
+  --vc-bg-warm: #FBF7F0;
+  --vc-bg-cream: #F5EDE0;
+  --vc-surface: #FFFFFF;
+  --vc-border: #E8DFD1;
+  --vc-border-light: #F0E9DD;
+
+  /* Text — rich charcoal on warm backgrounds */
+  --vc-text: #2D3047;
+  --vc-text-secondary: #5C5F7A;
+  --vc-text-muted: #9A9BB5;
+  --vc-text-on-dark: #FEFCF9;
+  --vc-text-on-coral: #FFFFFF;
+}
+
+@theme inline {
+  --color-vc-indigo: var(--vc-indigo);
+  --color-vc-indigo-light: var(--vc-indigo-light);
+  --color-vc-indigo-muted: var(--vc-indigo-muted);
+
+  --color-vc-coral: var(--vc-coral);
+  --color-vc-coral-light: var(--vc-coral-light);
+  --color-vc-coral-dark: var(--vc-coral-dark);
+  --color-vc-coral-glow: var(--vc-coral-glow);
+
+  --color-vc-sage: var(--vc-sage);
+  --color-vc-sage-light: var(--vc-sage-light);
+  --color-vc-sage-dark: var(--vc-sage-dark);
+  --color-vc-sage-glow: var(--vc-sage-glow);
+
+  --color-vc-sand: var(--vc-sand);
+  --color-vc-sand-light: var(--vc-sand-light);
+  --color-vc-sand-glow: var(--vc-sand-glow);
+
+  --color-vc-success: var(--vc-success);
+  --color-vc-warning: var(--vc-warning);
+  --color-vc-danger: var(--vc-danger);
+
+  --color-vc-bg: var(--vc-bg);
+  --color-vc-bg-warm: var(--vc-bg-warm);
+  --color-vc-bg-cream: var(--vc-bg-cream);
+  --color-vc-surface: var(--vc-surface);
+  --color-vc-border: var(--vc-border);
+  --color-vc-border-light: var(--vc-border-light);
+
+  --color-vc-text: var(--vc-text);
+  --color-vc-text-secondary: var(--vc-text-secondary);
+  --color-vc-text-muted: var(--vc-text-muted);
+  --color-vc-text-on-dark: var(--vc-text-on-dark);
+  --color-vc-text-on-coral: var(--vc-text-on-coral);
+
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-dm-serif-display), Georgia, "Times New Roman", serif;
+}
+
+/* Noise texture overlay for sections */
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+.bg-noise > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Decorative calendar grid pattern */
+.bg-calendar-grid {
+  background-image:
+    linear-gradient(var(--vc-border-light) 1px, transparent 1px),
+    linear-gradient(90deg, var(--vc-border-light) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--vc-bg);
+  color: var(--vc-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editorial pull-quote styling */
+.pull-quote {
+  position: relative;
+  padding-left: 1.5rem;
+}
+.pull-quote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--vc-coral), var(--vc-sage));
+  border-radius: 2px;
+}
+
+/* Focus ring for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--vc-coral);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom selection color */
+::selection {
+  background: var(--vc-coral-glow);
+  color: var(--vc-indigo);
+}

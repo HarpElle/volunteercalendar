@@ -1,0 +1,291 @@
+# VC Quick-Start Checklist: Week 1 (March 16–22, 2026)
+
+**Goal**: Validate demand, lock 1–2 beta churches, launch landing page, initiate LLM research, establish GitHub repo.
+
+**Success by Sunday**: 50+ waitlist signups, 5+ interviews booked, 1–2 beta churches interested, GitHub public, first LLM threads initiated.
+
+---
+
+## Monday, March 16 (Day 1): Setup & Planning
+
+### Morning (1–2 hours)
+- [x] Re-read VC-Executive-Summary (updated version)
+- [ ] Review Strategic Plan sections 1–3 (positioning, features, landing page)
+- [ ] Identify 5 church friends / local pastors to interview (names + phone numbers)
+- [ ] Create GitHub repo `volunteercalendar-mvp` (README.md, .gitignore, basic structure)
+
+### Afternoon (2 hours)
+- [ ] Figma: Create basic wireframes (dashboard, draft UI, team review screen)
+- [ ] Create landing page outline (Carrd or Framer template)
+- [ ] Design waitlist form fields: name, email, church name, team size, current tool, **workflow preference** (dropdown: centralized, ministry-independent, hybrid, self-service), phone
+
+### Evening (30 min)
+- [ ] Push GitHub repo (README with project overview)
+- [ ] Announcement to 2–3 close friends: "Building a scheduling tool for churches. Early beta. Know anyone?"
+
+**End-of-Day Success**: 5 interview targets identified, GitHub live, wireframes drafted.
+
+---
+
+## Tuesday, March 17 (Day 2): Landing Page Launch
+
+### Morning (3 hours)
+- [ ] **Landing page goes LIVE**:
+  - Hero section (headline, subheadline, video GIF of workflow, CTA: "Start Free Today")
+  - Pain points (3 cards: siloed tools, manual work, no-shows)
+  - How it works (4 steps: setup, auto-draft, review, confirm)
+  - Features (6 cards: flexible workflows, multi-ministry, household awareness, self-contained, calendar feeds, reminders)
+  - Pricing (5 tiers: Free, Starter, Growth, Pro, Enterprise with updated structure)
+  - Social proof (placeholder for beta testimonials)
+  - Footer CTA + contact
+- [ ] Waitlist form live (Typeform or Carrd form)
+- [ ] Email capture + Zapier to Google Sheets (backup)
+- [ ] Test form submission yourself
+
+### Afternoon (2 hours)
+- [ ] Schedule 5 interviews (text/email/LinkedIn to church friends)
+  - "Hey [Pastor/Coordinator name], I'm building a scheduling tool for multi-ministry churches. Would you have 30 min this week for feedback? [Calendly link]"
+- [ ] Post in 3 Facebook groups:
+  - Church Tech Leaders
+  - Worship Leaders
+  - Volunteer Management / Nonprofit Leadership
+- [ ] Post on Reddit (r/worshipleaders, r/volunteer, r/church_tech, r/webdev):
+  - Title: "Building a flexible scheduling tool for multi-ministry churches. Early beta. Feedback welcome."
+  - Link to landing page + mention free tier option
+
+### Evening (30 min)
+- [ ] LinkedIn post (personal + church tech angles)
+- [ ] Check waitlist (screenshot signups)
+
+**End-of-Day Success**: Landing page live, 10–15 initial signups, 3+ interviews scheduled, socials posted.
+
+---
+
+## Wednesday, March 18 (Day 3): Research Initiation & Interview Prep
+
+### Morning (1.5 hours)
+- [ ] **Initiate 4 LLM Research Threads** (see VC-LLM-Research-Guide for full prompts):
+  - [ ] **Claude Code Prompt 1**: "Full-stack architecture & tech stack validation for VolunteerCalendar" (architecture, tech choices, database principles)
+  - [ ] **SuperGrok Heavy Prompt**: "Market sizing & competitive strategy for church volunteer scheduling" (TAM, competitive landscape, GTM themes)
+  - [ ] **ChatGPT Pro Prompt 1**: "Customer personas for volunteer coordinators & team leads" (detailed buyer personas, pain points, motivations)
+  - [ ] **Gemini Ultra Prompt**: "SEO keywords & content strategy for 'church volunteer scheduling'" (target keywords, content calendar outlines, blog topics)
+- [ ] Collect all 4 outputs into `docs/` folder on GitHub (tag with date + LLM platform)
+
+### Afternoon (2 hours)
+- [ ] **Prepare interview guide**:
+  - Opening: "Walk me through your current scheduling process"
+  - Pain: "What's the biggest challenge? (Scale 1–10)"
+  - Workflow: "Would you prefer one global approval, or independent ministry scheduling?" (key new question)
+  - Reminders: "Email, SMS, calendar invites, or a mix? What matters most?"
+  - Pricing: "For 50 volunteers / 15 ministries, what would you pay?" (test $49/mo Growth tier)
+  - Adoption: "If I built this, would you beta test? When?"
+  - Close: "Anyone else I should talk to?"
+- [ ] Create Calendly link (30 min slots, 2–3 per day, through Sunday)
+- [ ] Send Calendly to 5 interview targets
+
+### Evening (30 min)
+- [ ] Check survey setup (Google Form or Typeform ready for Thursday launch)
+- [ ] Review LLM outputs; capture key themes into 1-pager
+
+**End-of-Day Success**: 4 LLM threads initiated, interview guide ready, 2–3 interviews confirmed, GitHub updated with research outputs.
+
+---
+
+## Thursday, March 19 (Day 4): Interviews + Survey Launch
+
+### Morning (2 hours)
+- [ ] **Conduct 2 interviews** (30 min each)
+- [ ] **Take notes** on:
+  - Current workflow (5–10 min)
+  - Pain points + frequency (5 min)
+  - Workflow preference (centralized vs. independent)
+  - Reminder preference (email/SMS/calendar)
+  - Pricing acceptance ("Would you pay $49/mo?")
+  - Beta willingness ("When could you start?")
+- [ ] **Record permission**: "Mind if I record for my notes?" (optional but helpful)
+
+### Afternoon (1 hour)
+- [ ] **Survey goes LIVE** (Google Form, 2 min duration):
+  - "Church Scheduling Pain Points & Tool Preferences"
+  - Workflow Q: "How would you prefer scheduling to work?" (radio: centralized, independent, hybrid, self-service)
+  - Reminder Q: "Which reminder channels matter?" (checkboxes: email, SMS, calendar, in-app, none)
+  - Pricing Q: "For your church size, what would you pay?" (radio: free, $9, $19, $49, $99+)
+  - ChMS Q: "Do you use Planning Center, Breeze, Rock, or another?" (dropdown)
+  - Beta Q: "Would you beta test if free?" (yes/no)
+- [ ] Share survey link:
+  - Email to waitlist (Zapier / Mailchimp)
+  - Reddit comments (r/worshipleaders, r/volunteer)
+  - Facebook groups (3–5 comments per group)
+  - Slack communities (church tech, volunteer management)
+
+### Evening (1 hour)
+- [ ] Review interview notes; extract themes (workflow preferences, pain patterns)
+- [ ] **First blog post draft**: "Why Churches Still Fight Scheduling in 2026" (500 words, use ChatGPT + your insights)
+  - Pain points from interviews
+  - Stats on burnout + no-shows
+  - Intro to VC approach
+  - Publish on Medium or LinkedIn (link back to landing page)
+
+**End-of-Day Success**: 2 interviews completed + notes captured, survey live + shared (50+ responses by Friday expected), blog post drafted.
+
+---
+
+## Friday, March 20 (Day 5): Beta Outreach + Analytics Review
+
+### Morning (1.5 hours)
+- [ ] **Conduct 2 more interviews** (30 min each)
+- [ ] Identify 1–2 beta churches from interviews:
+  - "Would you want to partner with me to launch this?" (offer: free until month 6, then month-to-month pricing)
+  - Discuss: Go-live date (next week?), team lead count, estimated volunteer count
+  - Get sign-off from pastor/board if needed
+
+### Afternoon (2 hours)
+- [ ] **Analytics Review**:
+  - Waitlist signups YTD: (target 30–40 by Friday EOD)
+  - Workflow preference breakdown: (which modes most requested?)
+  - Reminder preference breakdown: (email/SMS split?)
+  - Survey responses: (target 50+ by Friday)
+  - Interview themes: (common pain points + acceptance of pricing)
+- [ ] Create 1-pager: "Week 1 Validation Summary" (signups, demand signals, beta churches, workflow feedback)
+
+### Evening (30 min)
+- [ ] Publish blog post (Medium, LinkedIn, or Medium + link from landing page)
+- [ ] Share link in Reddit/Facebook groups
+- [ ] Update GitHub repo with Week 1 summary + interview notes (anonymized)
+
+**End-of-Day Success**: 4 interviews completed, 1–2 beta churches LOI'd, 50+ survey responses, blog post published, analytics dashboard created.
+
+---
+
+## Saturday, March 21 (Day 6): Dashboard Setup + Content Planning
+
+### Morning (2 hours)
+- [ ] **Admin dashboard mockup** (Figma or paper sketch):
+  - Current schedule matrix (4-week view)
+  - Fill rate by role (gauge charts)
+  - Workflow status: "Pending approvals: 2/5 team leads" (if centralized mode)
+  - Publish button + history
+  - Notes for team leads (edit form)
+- [ ] **Database schema sketch** (PostgreSQL, basic tables):
+  - users (id, email, role, church_id)
+  - churches (id, name, num_volunteers, workflow_mode)
+  - ministries (id, church_id, name, color, lead_email)
+  - services (id, ministry_id, date, time, duration)
+  - roles (id, service_id, title, count)
+  - volunteers (id, church_id, name, email, phone, ministry_ids, households)
+  - schedules (id, service_id, volunteer_id, role_id, status: draft/confirmed/declined)
+
+### Afternoon (1.5 hours)
+- [ ] **Content calendar** (3-month preview):
+  - Blog post 1 (Published): "Why Churches Still Fight Scheduling"
+  - Blog post 2 (Draft due Sunday): "The Cost of Manual Volunteer Scheduling" (burnout stats, time savings)
+  - Blog post 3 (Plan): "How to Set Up Fair Rotations" (tutorial-style, SEO)
+  - Blog post 4 (Plan): "Multi-Ministry Coordination Done Right" (use case)
+  - Email seq 1: "Waitlist welcome" + link to demo video
+  - Email seq 2: "Beta testing" (case study + pricing)
+  - Email seq 3: "Launch day" (celebrate first paying customers)
+- [ ] Start Email Seq 1 (draft in Google Docs or Mailchimp)
+
+### Evening (30 min)
+- [ ] Relax. Review the week. You've done great.
+
+**End-of-Day Success**: Dashboard mockup created, DB schema sketched, content calendar planned, Email Seq 1 drafted.
+
+---
+
+## Sunday, March 22 (Day 7): Review + Planning Week 2
+
+### Morning (2 hours)
+- [ ] **Weekly Review**:
+  - Waitlist total: ___ (target ≥50)
+  - Interview count: ___ (target 5)
+  - Beta churches locked: ___ (target 1–2)
+  - Survey responses: ___ (target 100+)
+  - Blog posts published: ___ (target 1)
+  - GitHub commits: ___ (target ≥3)
+
+### Afternoon (1.5 hours)
+- [ ] **Week 2 Planning**:
+  - Conduct remaining 1 interview (if scheduled)
+  - Onboard 1–2 beta churches (intro call, walkthrough, set expectations)
+  - Finalize blog post 2 + publish
+  - Build Phase 1: Auth + import (Supabase Auth, Planning Center OAuth, CSV upload)
+  - Set up email automation (Zapier)
+- [ ] Create Week 2 checklist (template in GitHub `WEEK2_CHECKLIST.md`)
+
+### Evening (30 min)
+- [ ] Celebrate the wins! Take a screenshot of landing page + waitlist. Share with a friend.
+- [ ] REST.
+
+**End-of-Day Success**: Week 1 fully reviewed, Week 2 planned, celebration complete.
+
+---
+
+## Success Markers (End of Week 1)
+
+**Quantitative**:
+- [ ] 50+ waitlist signups
+- [ ] 5+ completed interviews (notes captured)
+- [ ] 1–2 beta churches identified (LOI or verbal commitment)
+- [ ] 100+ survey responses
+- [ ] 1 blog post published (50+ views by Friday)
+- [ ] GitHub repo public + ≥3 commits
+
+**Qualitative**:
+- [ ] Workflow flexibility validated (multiple modes mentioned in interviews)
+- [ ] Reminder preferences captured (email + SMS mix confirmed as valuable)
+- [ ] Pricing feedback: ≥40% of interviewed churches say $49/mo acceptable for Growth tier
+- [ ] Calendar feeds resonated (≥3 mentions "iCal integration would help")
+- [ ] Self-contained operation valued (≥2 churches mention "prefer not to push back to Planning Center")
+
+**Narrative**:
+- [ ] You have clear positioning: "Flexible scheduling for multi-ministry churches"
+- [ ] You have identified 1–2 customers ready to go: "Beta testing starts [DATE]"
+- [ ] You have LLM research threads initiated: "Architecture + market sizing + personas + SEO strategy underway"
+- [ ] You have a blog platform: "Publishing weekly on volunteer scheduling, multi-ministry burnout, fair rotations"
+
+---
+
+## Week 2 Preview
+
+**Monday–Tuesday**: Intensive interviews + beta church onboarding intro calls
+
+**Wednesday**: LLM research synthesis; Claude Code Prompts 1–2 review (architecture + database)
+
+**Thursday**: First auth + import build session (Supabase + Planning Center OAuth)
+
+**Friday**: Mid-build checkpoint + beta church demo walkthrough
+
+---
+
+## Key Resources
+
+- **Interview guide**: Use template from VC-Strategic-Plan.md section 4.2
+- **Landing page template**: Carrd (easiest), Framer (more control), or Next.js (dev-friendly)
+- **Waitlist form**: Typeform, Carrd form, or custom Next.js form
+- **Survey**: Google Forms (free) or Typeform
+- **Blog platform**: Medium (easy reach), LinkedIn (your network), or dev.to (tech-friendly)
+- **GitHub templates**: README, WEEK2_CHECKLIST, /docs folder structure
+- **Calendly**: Free tier, perfect for scheduling interviews
+
+---
+
+## Notes for Success
+
+1. **Do not over-engineer yet.** Landing page can be simple (Carrd MVP). Focus on demand signals.
+2. **Interviews are gold.** 5 good conversations teach you more than 5 days of coding.
+3. **Workflow flexibility is your edge.** Ask everyone: "Centralized or independent scheduling?" and listen to the answer.
+4. **Calendar feeds matter.** Mention iCal subscriptions to volunteers in interviews; gauge reaction.
+5. **Reminders are customizable.** Email/SMS/calendar/none split per volunteer; this reduces unsubscribes and improves engagement.
+6. **Blog creates inbound.** 1 published post per week = 50+ views by week 4, 100+ by week 8. This builds credibility.
+7. **Rest on Sunday.** You're building something sustainable. Pace yourself.
+
+---
+
+## Document Version
+
+- **Created**: March 16, 2026
+- **Updated**: March 16, 2026, 5:30 PM CDT (incorporated workflow flexibility, reminders, pricing feedback)
+- **Project**: VolunteerCalendar.org
+- **Status**: Ready for execution
+

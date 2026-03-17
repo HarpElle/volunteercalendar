@@ -1,0 +1,376 @@
+# VC-LLM-Research-Guide: Coordinate Your 4 Subscriptions (UPDATED)
+
+**Project**: VolunteerCalendar.org (Church Volunteer Scheduling SaaS)  
+**Purpose**: Map your 4 LLM subscriptions to specific research + design work, maximizing ROI.  
+**Timeline**: Weeks 1–12 (MVP build + GTM parallel)  
+**Updated**: March 16, 2026 (incorporated workflow flexibility, pricing confidence, reminder configurability)
+
+---
+
+## Your 4 Subscriptions & Mapped Work
+
+### 1. Claude (Pro Subscription)
+**Best for**: Technical architecture, code design, algorithm design, testing, security, monitoring
+
+**Assigned work**:
+- VC-Claude-Code-Prompts (all 16 prompts)
+- Architecture validation
+- Database design + RLS policies
+- Scheduling algorithm pseudocode
+- Error handling + testing strategy
+- Monitoring + observability
+- Security review
+
+**Expected output**: 2,000–3,000 lines of pseudocode, SQL, TypeScript stubs, implementation guides
+
+**Time investment**: 15–20 hours over 8 weeks (2–3 prompts/week)
+
+**ROI**: Saves 80–100 hours of manual architecture + design work
+
+---
+
+### 2. SuperGrok Heavy (Enterprise Subscription)
+**Best for**: Market sizing, competitive intelligence, GTM strategy, unit economics
+
+**Assigned work**:
+- Market sizing: TAM / SAM / SOM (church scheduling market, volunteer management space)
+- Competitive analysis: Planning Center vs. SignUpGenius vs. Ministry Scheduler Pro
+- GTM strategy: Sales channels, messaging angles, partnership opportunities
+- Unit economics: LTV / CAC / payback period for different tiers
+- Pricing validation: Test $49/mo acceptance for 250-volunteer churches
+- Revenue projections: 12-month forecast (conservative, aggressive, realistic)
+
+**Expected output**: 10–15 pages of analysis, financial models, competitive positioning matrix
+
+**Time investment**: 5–8 hours over 4 weeks (1 comprehensive prompt per week, then iterations)
+
+**ROI**: Saves 40–60 hours of manual market research + analysis
+
+**Sample prompts**:
+```
+Prompt 1 (Week 1): "Market sizing for church volunteer scheduling. What's the TAM?"
+Prompt 2 (Week 2): "Competitive positioning: Planning Center vs. VolunteerCalendar"
+Prompt 3 (Week 3): "Unit economics: LTV/CAC for $19, $49, $99 pricing tiers"
+Prompt 4 (Week 4): "GTM strategy: How should I sell VolunteerCalendar to churches?"
+```
+
+---
+
+### 3. ChatGPT Pro (Premium Subscription)
+**Best for**: Customer personas, interview guides, landing page copy, email sequences, objection handling
+
+**Assigned work**:
+- Customer personas: Volunteer coordinators, pastors, team leads (pain points, motivation, objections)
+- Interview guide: 15–20 questions to ask churches about scheduling pain + workflow preferences
+- Landing page copy: Headline, subheadline, pain points, benefits, CTA variants (A/B test)
+- Email sequences: Welcome email, "Try for free", "Ready to launch?", "Success story"
+- Objection handling: "How is this different from Planning Center?" → Counter-script
+- FAQ: 20–30 common questions + answers
+- Social media: Twitter, LinkedIn, Reddit post templates
+
+**Expected output**: 50–100 pages of copywriting, 20 interview questions, 3 email sequences
+
+**Time investment**: 8–12 hours over 8 weeks (1–2 prompts/week)
+
+**ROI**: Saves 60–80 hours of manual copywriting + messaging work
+
+**Sample prompts**:
+```
+Prompt 1 (Week 1): "Customer persona: Volunteer coordinator at 300-person church"
+Prompt 2 (Week 1): "Interview guide: 15 questions about multi-ministry scheduling pain"
+Prompt 3 (Week 2): "Landing page headline + subheadline for VolunteerCalendar"
+Prompt 4 (Week 2): "Pain points copy: 'Why churches still fight scheduling'"
+Prompt 5 (Week 3): "Email sequence 1: Welcome to VolunteerCalendar"
+Prompt 6 (Week 4): "Objection handling: 'How is this different from Planning Center?'"
+```
+
+---
+
+### 4. Gemini Ultra (Subscription)
+**Best for**: SEO keywords, content strategy, blog topics, link-building, viral angles
+
+**Assigned work**:
+- SEO keyword research: "Church volunteer scheduling", "multi-ministry coordination", "volunteer calendar"
+- Content calendar: 12-month blog plan (4 posts/month = 48 posts/year)
+- Blog topics: "Why Churches Fight Scheduling", "Fair Rotations", "Household Awareness", "Burnout Prevention"
+- Outlines: 500–1000 word blog post outlines (you or ChatGPT write the actual post)
+- Viral angles: Reddit AMAs, Hacker News posts, indie founder angles
+- Link-building targets: Church tech blogs, pastor communities, nonprofit tech resources
+
+**Expected output**: 50 blog outlines, viral angle ideas, link-building list (50+ targets)
+
+**Time investment**: 5–8 hours over 8 weeks (1 prompt per week, then refresh)
+
+**ROI**: Saves 40–60 hours of manual SEO research + content planning
+
+**Sample prompts**:
+```
+Prompt 1 (Week 1): "SEO keywords for 'church volunteer scheduling'"
+Prompt 2 (Week 2): "12-month blog content calendar for church volunteer scheduling SaaS"
+Prompt 3 (Week 3): "Blog topic: 'How Fair Rotations Prevent Burnout' (outline)"
+Prompt 4 (Week 4): "50 websites for link-building outreach (church tech, pastor blogs, nonprofits)"
+```
+
+---
+
+## Synthesis Workflow (Weeks 1–12)
+
+### Week 1–2: Foundational Research (All 4 LLMs)
+**Goal**: Lock positioning, messaging, technical approach
+
+| Platform | Task | Output | Deadline |
+|----------|------|--------|----------|
+| Claude | Prompt 1: Architecture validation | Tech stack recommendations | Tue, March 23 |
+| SuperGrok | Market sizing + competitive analysis | TAM ($600M+), competitive matrix | Wed, March 24 |
+| ChatGPT | Personas + interview guide | 3 personas, 15 interview questions | Wed, March 24 |
+| Gemini | SEO keywords + content calendar | 50 keywords, 48-post content calendar | Thu, March 25 |
+
+**Synthesis**: By Friday EOD, compile into 1-pager:
+- "VolunteerCalendar is positioned for [TAM] churches [pain] via [messaging] with [tech stack]"
+- Use for landing page, first blog post, interview framing
+
+---
+
+### Week 3–4: Messaging & Design Validation (ChatGPT + Gemini)
+**Goal**: Landing page copy locked, interview guide tested, first content published
+
+| Platform | Task | Output | Deadline |
+|----------|------|--------|----------|
+| ChatGPT | Landing page variants (3 headline options) | 3x "Hero" sections | Mon, March 30 |
+| ChatGPT | Pain points copy (5 versions) | 5 variations to A/B test | Tue, March 31 |
+| Claude | Database schema (Prompt 2) | DDL + RLS policies | Tue, March 31 |
+| Gemini | Blog post 1: "Why Churches Fight Scheduling" (outline + tips) | 1000-word outline | Wed, April 1 |
+| ChatGPT | Write blog post 1 (from Gemini outline) | Full 1000-word post | Thu, April 2 |
+
+**Synthesis**: Landing page + first blog post live by Friday
+
+---
+
+### Week 5–8: MVP Build + Parallel Marketing (All 4 LLMs, 1–2 new prompts/week)
+**Goal**: MVP architecture + code scaffolding done; GTM content pipeline running
+
+| Week | Claude | SuperGrok | ChatGPT | Gemini |
+|------|--------|-----------|---------|--------|
+| **5** | Prompt 3–4: ChMS API + Scheduling algorithm | (skip) | Email Seq 1: Welcome | Blog post 2 outline |
+| **6** | Prompt 5–6: Auth + State machine | LTV/CAC analysis | Email Seq 2: 48hr before MVP launch | Blog post 3 outline |
+| **7** | Prompt 7–8: Reminders + Responses | (skip) | Objection handling: "Cost?" | Blog post 4 outline |
+| **8** | Prompt 9–10: Error handling + Testing | GTM strategy check | Email Seq 3: Beta launch | Blog post 5 outline |
+
+**Output**: 
+- 4 Claude prompts done (Prompts 3–6 API, auth, reminders, responses logic)
+- Email sequences (3x) ready to send
+- 4 blog posts published (50+ views each by end of week 8)
+- Competitive messaging locked (SuperGrok analysis + ChatGPT objection handling)
+
+---
+
+### Week 9–12: Beta Launch + Optimization (All 4 LLMs, Final Prompts)
+**Goal**: Beta churches live; LLM prompts wrap up; content flywheel established
+
+| Week | Claude | SuperGrok | ChatGPT | Gemini |
+|------|--------|-----------|---------|--------|
+| **9** | Prompt 11–12: Monitoring + Security | (skip) | Beta customer testimonials (draft) | Blog post 6–7 outlines |
+| **10** | Prompt 13–14: Scalability + Billing | Revenue projection check | Email Seq 4: "Join our beta" | Blog post 8 outline |
+| **11** | Prompt 15–16: Analytics + Onboarding | (skip) | FAQ (20 questions) | Blog post 9 outline + viral angles |
+| **12** | (Wrap-up architecture) | $18k ARR forecast validation | Pricing page copy | Blog post 10 outline |
+
+**Output**:
+- All 16 Claude prompts done (full-stack architecture)
+- Financial model validated (SuperGrok)
+- Beta cohort email sequences ready
+- 10 blog posts published
+- 48 blog post outlines in queue for months 2–12
+
+---
+
+## LLM Prompt Templates (Copy-Paste Ready)
+
+### Template 1: Claude (Architecture)
+```
+I'm building VolunteerCalendar.org, a volunteer scheduling SaaS for multi-ministry churches.
+
+## Requirements
+[List 5–10 technical requirements]
+
+## Questions
+[List 3–5 questions to answer]
+
+## Deliverables Requested
+1. Architecture diagram
+2. Tech stack recommendation
+3. Implementation roadmap
+4. [etc.]
+
+Please be concise but specific. I want to move fast.
+```
+
+### Template 2: SuperGrok (Market Intelligence)
+```
+Research task: Market sizing for church volunteer scheduling software.
+
+## Context
+[Explain the problem, market, competitive landscape]
+
+## Questions
+1. What is the TAM (Total Addressable Market)?
+2. Who are the top 5 competitors?
+3. What are the key GTM strategies?
+
+## Deliverables
+1. TAM/SAM/SOM analysis
+2. Competitive positioning matrix
+3. Pricing benchmarking (market rates for $19/mo, $49/mo, $99/mo tiers)
+
+Use data from market reports, G2, competitor websites, etc.
+```
+
+### Template 3: ChatGPT (Copy + Messaging)
+```
+Task: Create customer persona for VolunteerCalendar.org.
+
+## Context
+We're building scheduling software for volunteer coordinators at churches with 150–500 attenders.
+
+## Persona Requested: [Name]
+- Job title: [Coordinator/Pastor/Team Lead]
+- Pain points: [List 3–5 pains]
+- Motivations: [Why they'd want this tool]
+- Objections: [What might stop them from buying]
+
+Deliverables:
+1. Detailed persona (500 words)
+2. 3 objections + counter-arguments
+3. Email subject lines they'd click
+
+Be specific and actionable.
+```
+
+### Template 4: Gemini (SEO + Content)
+```
+Task: Content strategy for church volunteer scheduling SaaS.
+
+## Keywords to target
+[List 5–10 keywords: "church volunteer scheduling", "multi-ministry coordination", etc.]
+
+## Questions
+1. What are the most relevant long-tail keywords?
+2. Which blogs/sites should we build links from?
+3. What content types (blog, pillar pages, guides) would rank?
+
+## Deliverables
+1. 50 SEO keywords (volume, difficulty, intent)
+2. 12-month content calendar (48 posts)
+3. Link-building target list (50+ websites)
+4. Viral angles (Reddit, Hacker News, indie founder communities)
+
+Focus on high-intent keywords (church coordinators actively searching).
+```
+
+---
+
+## Weekly Execution Checklist (Weeks 1–12)
+
+### Every Monday
+- [ ] Review last week's LLM outputs
+- [ ] Compile new prompts (copy into drafts)
+- [ ] Queue 4 new LLM sessions (one per platform)
+
+### Every Wednesday
+- [ ] LLM outputs arrive
+- [ ] Synthesize into 1-pager (key findings + action items)
+- [ ] Apply to landing page, blog, interview guide, code
+
+### Every Friday
+- [ ] Publish blog post (from Gemini outline + ChatGPT draft)
+- [ ] Send email (from ChatGPT template)
+- [ ] Commit Claude code outputs to GitHub `/docs` folder
+
+---
+
+## Expected Outcomes by Week 12
+
+### Claude Output
+- 16 prompts answered
+- 2,000–3,000 lines of pseudocode, SQL, TypeScript stubs
+- Full-stack architecture locked + ready to code
+
+### SuperGrok Output
+- TAM confirmed ($600M+)
+- Competitive positioning matrix (vs. Planning Center, Breeze, SignUpGenius)
+- Unit economics validated ($49/mo Growth tier gets 30%+ conversion)
+- Revenue projections ($18k ARR year 1 is realistic)
+
+### ChatGPT Output
+- 3 customer personas (detailed, specific)
+- Landing page messaging (tested with 5 headline variants)
+- 3+ email sequences ready to send
+- FAQ (20 common questions)
+- Objection handling scripts
+
+### Gemini Output
+- 50+ blog post outlines (48 queued for year 1+)
+- 10–12 blog posts published (50–100+ views each by EOW12)
+- Link-building target list (50 websites identified)
+- Viral angles for Reddit, Hacker News, indie communities
+
+---
+
+## Time Investment Summary
+
+| Platform | Time Investment | ROI |
+|----------|-----------------|-----|
+| Claude | 15–20 hours | 80–100 hours (architecture + design) |
+| SuperGrok | 5–8 hours | 40–60 hours (market research + analysis) |
+| ChatGPT | 8–12 hours | 60–80 hours (copywriting + messaging) |
+| Gemini | 5–8 hours | 40–60 hours (SEO + content planning) |
+| **Total** | **33–48 hours** | **220–300 hours saved** |
+
+**Multiplier: 2–3x productivity boost** by coordinating across 4 subscriptions
+
+---
+
+## Integration Points (Where LLMs Feed Each Other)
+
+1. **SuperGrok market sizing** → Claude architecture (who are users? what scale?) → ChatGPT personas
+2. **ChatGPT personas** → Gemini content strategy (what do personas search for?)
+3. **Claude architecture** → ChatGPT copy (technical story → customer-friendly narrative)
+4. **Gemini keywords** → ChatGPT landing page (optimize for high-intent searches)
+5. **ChatGPT messaging** → Gemini blog (expand messaging into long-form content)
+
+---
+
+## When NOT to Use LLMs
+
+❌ Don't use LLM for:
+- Coding entire features (too risky, needs your judgment)
+- Financial projections without validation (always sanity-check)
+- Customer interviews (talk to humans directly)
+- Final copy without your review (brand voice matters)
+- Database schema without security review (RLS policies are critical)
+
+✅ DO use LLMs for:
+- Initial brainstorming + options (faster to iterate)
+- Pseudocode + structure (foundation for your code)
+- Messaging angles + variants (A/B test later)
+- Blog outlines + research summaries (you write final post)
+- Market analysis + competitive intel (synthesize data)
+
+---
+
+## Optimization Tips
+
+1. **Batch similar prompts**: Multiple ChatGPT email templates in one session
+2. **Iterate fast**: If first Claude output isn't right, refine + re-prompt
+3. **Share context**: Include previous output in follow-up prompts (better continuity)
+4. **Review for accuracy**: Always validate financial numbers, market data, competitive claims
+5. **Version-control everything**: Save LLM outputs to GitHub `/docs` folder with timestamps
+
+---
+
+## Document Version
+
+- **Created**: March 16, 2026
+- **Updated**: March 16, 2026, 5:30 PM CDT (incorporated workflow flexibility, pricing confidence, reminder research angles)
+- **Project**: VolunteerCalendar.org
+- **Status**: Ready for execution
+

@@ -1,0 +1,293 @@
+# VolunteerCalendar.org: Quick Start Checklist
+
+**Your 7-Day Launch Sprint** (March 16–22, 2026)
+
+---
+
+## Day 1 (Monday, March 16)
+
+**Morning (1 hour)**:
+- [ ] Read VC-Executive-Summary.md (project overview)
+- [ ] Read VC-Strategic-Plan.md (full roadmap overview)
+
+**Afternoon (2 hours)**:
+- [ ] Create GitHub repo: `volunteercalendar-mvp` (public, init with README.md)
+- [ ] Add to README:
+  ```markdown
+  # VolunteerCalendar.org
+  
+  Centralized scheduling engine for multi-ministry churches.
+  
+  ## Quick Start
+  - [Strategic Plan](./docs/STRATEGIC_PLAN.md)
+  - [Tech Stack](./docs/ARCHITECTURE.md) (in progress)
+  - [Roadmap](./docs/ROADMAP.md)
+  - [Blog](./blog/)
+  
+  ## Status
+  - Week 1: Validation & landing page launch
+  - MVP Timeline: 12 weeks
+  ```
+
+**Evening (1.5 hours)**:
+- [ ] Domain check: VolunteerCalendar.org (verify DNS, point to temporary landing page if needed)
+- [ ] Copy DNS provider login to LastPass / 1Password for future reference
+
+---
+
+## Day 2 (Tuesday, March 17)
+
+**Morning (2 hours)**:
+- [ ] Create landing page (Carrd or Framer):
+  - Hero section (headline, subheadline, "Join Waitlist" CTA)
+  - Pain points (3 icons, quotes)
+  - How it works (4-step flow)
+  - Pricing tease (Free, $19, $49, $99)
+  - Social proof (placeholder, fill later)
+  - Footer (Contact, Privacy, Terms links)
+- [ ] Set up Typeform for waitlist collection (or Google Form):
+  - Fields: First name, email, church name, team size, current tool
+  - Save responses to Google Sheet
+- [ ] Link Carrd/Framer to VolunteerCalendar.org domain
+
+**Afternoon (1.5 hours)**:
+- [ ] Create privacy policy + terms of service (use Termly or similar template, customize for church context)
+- [ ] Add links to Carrd footer
+
+**Evening (1 hour)**:
+- [ ] Test landing page (mobile, desktop, form submission)
+- [ ] Screenshot for portfolio
+
+---
+
+## Day 3 (Wednesday, March 18)
+
+**Morning (1.5 hours)**:
+- [ ] Open 4 LLM windows in parallel (Claude Code, SuperGrok, ChatGPT Pro, Gemini Ultra):
+  - [ ] Claude Code: Paste Prompt 1 (Architecture Validation)
+  - [ ] SuperGrok: Paste Market Analysis Prompt
+  - [ ] ChatGPT Pro: Paste Prompt A (Interview Guide) + Prompt B (Personas)
+  - [ ] Gemini Ultra: Paste Content & SEO Prompt
+
+**Afternoon (2 hours)**:
+- [ ] Monitor LLM responses as they generate (in parallel)
+- [ ] While waiting, draft your church friend outreach message (text/email to 5 people):
+  ```
+  Hi [Name],
+
+  I'm building VolunteerCalendar, a tool to end scheduling chaos at 
+  multi-ministry churches. I'd love 30 min of your time to understand 
+  how you currently schedule volunteers (or wish you could).
+
+  No sales pitch, just want to hear about your pain. 
+
+  Free coffee if in-person, or Zoom?
+
+  Thanks, Jason
+  ```
+
+**Evening (1.5 hours)**:
+- [ ] Send outreach to 5 church friends (schedule for week 1–2)
+- [ ] Post landing page link to Reddit r/worshipleaders + r/volunteer + r/church_tech (brief, authentic pitch)
+- [ ] Share in Facebook groups (Church Tech, Worship Leaders, Kids Ministry)
+
+---
+
+## Day 4 (Thursday, March 19)
+
+**Morning (1.5 hours)**:
+- [ ] Review Claude Code responses (Prompt 1 output should be ready)
+  - Copy architecture diagram + tech stack justification into `docs/ARCHITECTURE.md`
+  - Note any questions or follow-ups
+
+**Midday (1 hour)**:
+- [ ] Review SuperGrok output (market analysis)
+  - Extract TAM, competitive positioning, GTM roadmap
+  - Copy into `docs/MARKET_ANALYSIS.md`
+
+**Afternoon (1.5 hours)**:
+- [ ] Review ChatGPT responses (personas + interview guide)
+  - Save personas as `docs/PERSONAS.md`
+  - Save interview guide as `docs/INTERVIEW_GUIDE.md`
+  - Use interview guide for your calls (days 5–7)
+
+**Evening (1 hour)**:
+- [ ] Review Gemini output (keywords + content calendar)
+  - Prioritize top 5 SEO keywords (quick wins: low difficulty, decent volume)
+  - Pick first blog post topic (highest priority)
+  - Copy calendar to `marketing/CONTENT_CALENDAR.md`
+
+---
+
+## Day 5 (Friday, March 19)
+
+**Morning (2 hours)**:
+- [ ] Create Figma workspace (or Excalidraw):
+  - Sketch dashboard (4-week schedule matrix, fill rates)
+  - Sketch draft review UI (ministry lead view, approve/tweak/reject)
+  - Sketch publish + confirm flow
+  - Sketch volunteer response page
+
+**Midday (1.5 hours)**:
+- [ ] Write first blog post (from Gemini outline + ChatGPT messaging insights):
+  - Headline: SEO keyword #1 optimized
+  - 800–1200 words
+  - Include 2–3 quotes/stats (cite from research docs)
+  - CTA: "Get early access to VolunteerCalendar" → link to waitlist
+  - Save to `blog/` folder in GitHub
+
+**Afternoon (1 hour)**:
+- [ ] Set up simple blog publishing:
+  - Create `blog/index.md` (list of posts)
+  - Add blog link to landing page + GitHub README
+  - Plan: publish 1–2/week
+
+**Evening (1 hour)**:
+- [ ] Schedule interviews with 3–5 church friends (book Zoom slots for next week)
+- [ ] Prepare interview script (from ChatGPT interview guide)
+
+---
+
+## Day 6 (Saturday, March 20)
+
+**Morning (1.5 hours)**:
+- [ ] Create Notion or Markdown dashboard to track:
+  - Waitlist signups (auto-update from Typeform)
+  - Interview pipeline (scheduled, completed, themes)
+  - Blog posts (published, in progress, planned)
+  - GitHub stars / traffic
+  - Landing page metrics (views, conversion %)
+
+**Afternoon (1.5 hours)**:
+- [ ] Launch Typeform survey: "Church Scheduling Pain Points" (2 min, 8 questions)
+  - Post in Reddit r/worshipleaders, r/volunteer, Facebook church groups
+  - Aim: 100+ responses by end of week 2
+
+**Evening (1 hour)**:
+- [ ] Review week 1 progress (checklist, hit targets?)
+- [ ] Preview week 2 priorities
+
+---
+
+## Day 7 (Sunday, March 21)
+
+**REST DAY** ☕ (or light work)
+- [ ] Review all 3 documents (Strategic Plan, Claude Prompts, LLM Research Guide)
+- [ ] Think through what excites you + what concerns you
+- [ ] Prep for week 2 interviews (review ChatGPT interview guide, practice opening)
+
+---
+
+## End of Week 1: Success Criteria
+
+- [ ] Landing page live (volunteercalendar.org)
+- [ ] Waitlist form live (Typeform)
+- [ ] 20+ waitlist signups (goal: 50 by Friday EOD)
+- [ ] 3–5 interviews scheduled (for next week)
+- [ ] Survey live (posted in 3+ communities)
+- [ ] GitHub repo created (README, docs structure)
+- [ ] First blog post published (shared on LinkedIn, Reddit)
+- [ ] LLM research outputs captured (docs created)
+- [ ] Figma wireframes sketched
+- [ ] Project added to HarpElle (or portfolio plan documented)
+
+---
+
+## Week 2 Preview (March 23–29)
+
+**Priority actions**:
+1. **Conduct interviews** (5 calls, 30 min each, recorded + notes)
+2. **Finalize feature set** (based on interviews + research)
+3. **Lock tech stack** (Claude Code Prompts 2–5: schema, auth, algorithm, API)
+4. **Validate demand** (survey results, competitive teardown)
+5. **Publish blog #2** (second SEO keyword target)
+6. **Identify beta churches** (1–2 ready to test weeks 4–5)
+
+---
+
+## Week 3–4 Preview (April 6–19)
+
+**Priority actions**:
+1. **MVP build begins** (backend scaffolding, database, auth)
+2. **Beta church #1 data imported** (25+ volunteers in system)
+3. **Landing page A/B test** (ChatGPT copy variants)
+4. **Blog #3–4 published** (SEO authority building)
+5. **FAQ page live** (objection handling)
+6. **First customer objection test** (interview insights applied)
+
+---
+
+## Tools to Install / Configure
+
+**Now** (This week):
+- [ ] GitHub Desktop or command-line git
+- [ ] Code editor (VS Code)
+- [ ] Figma (design)
+- [ ] Typeform or Google Forms (surveys)
+- [ ] Notion or markdown editor (docs)
+
+**Later** (Week 2–3):
+- [ ] Supabase account (backend + database)
+- [ ] Vercel account (frontend hosting)
+- [ ] Stripe account (payments)
+- [ ] Twilio account (SMS)
+- [ ] Resend or SendGrid account (email)
+- [ ] Sentry account (error tracking)
+
+---
+
+## Key Contacts to Reach Out
+
+**This week**:
+- [ ] 5 church friends (for interviews)
+- [ ] Volunteer coordinator at your church (potential beta)
+- [ ] Worship pastor (potential beta)
+- [ ] 2 pastors/ops managers from other churches (network intro)
+
+**Later**:
+- [ ] Church tech community leaders (Reddit, Facebook groups)
+- [ ] Denominational networks (for white-label later)
+- [ ] Planning Center, Breeze customer success teams (partnership potential, future pivot)
+
+---
+
+## Budget for Week 1
+
+- [ ] Domain: Already purchased (volunteercalendar.org)
+- [ ] Landing page: Free (Carrd tier) or $12–20 (Framer paid, optional)
+- [ ] Email/survey: Free (Typeform or Google Forms)
+- [ ] GitHub: Free
+- [ ] Figma: Free tier
+- [ ] **Total: $0–30** (minimal spend, maximum learning)
+
+---
+
+## Quick Wins (To Celebrate)
+
+✅ **50+ waitlist signups by Friday** = Market wants this
+✅ **First blog post published** = SEO authority starts
+✅ **5 interviews completed** = Demand confirmed
+✅ **1–2 beta churches identified** = Real users lined up
+✅ **GitHub repo public** = Portfolio visible
+
+---
+
+## Stay Grounded
+
+**Remember**:
+- Ship > Perfect. MVP is ugly but works.
+- Validation > Assumption. Talk to real churches weekly.
+- Iterate > Predict. You will learn things that surprise you.
+- Focus > Add. Multi-ministry coordination is your wedge; don't chase shiny features.
+- Sustainability > Burnout. Set weekly boundaries (X hours/week max).
+
+---
+
+## Document Version
+
+- **Created**: March 16, 2026
+- **Type**: Quick Start Checklist (7-day sprint)
+- **Status**: Ready to Execute
+
+Good luck, Jason. You've got this. 🚀
+

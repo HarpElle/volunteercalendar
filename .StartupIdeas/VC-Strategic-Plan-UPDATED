@@ -1,0 +1,692 @@
+# VolunteerCalendar.org: Strategic Plan & Execution Guide (UPDATED)
+
+**Project**: VolunteerCalendar.org (Church Volunteer Scheduling SaaS)  
+**Domain**: volunteercalendar.org  
+**Portfolio**: HarpElle Incubator Project  
+**Target**: Churches 150–500 attenders, 3+ ministries  
+**Timeline**: MVP in 12 weeks, beta launch week 13–16
+
+---
+
+## 1. Positioning Statement (UPDATED)
+
+**VolunteerCalendar**: Flexible scheduling for multi-ministry churches and teams. Auto-generate fair, conflict-free schedules across worship, kids, tech, greeters—or let ministries run independently. Team leaders review and tweak in a shared draft state, then either approve globally or publish per-ministry (your choice). Works standalone with CSV/manual entry, or syncs with Planning Center, Breeze, Rock. Calendar feeds for personal/team views. Email and SMS reminders (or neither). Generous free tier.
+
+**Target Customer**: Ministry coordinators, pastors, and ops managers at churches with 150–500 attenders running 3+ volunteer-led teams who need flexible, cross-ministry scheduling without replacing their entire ChMS.
+
+**Core Problems Solved**:
+- Siloed scheduling across teams → double-books, burnout, no-shows
+- Manual rotations → 5–10 hours/week lost to spreadsheets
+- No household awareness → parents/kids scheduled simultaneously
+- Fragmented approval workflow → some leaders never finalize schedules
+- Limited flexibility → one workflow doesn't fit all churches
+- Locked into ChMS scheduling UI → clunky, slow, scattered
+
+**Key Differentiators**:
+1. **Flexible workflow modes**: Centralized (draft-review-approve-publish) OR ministry-independent (each team publishes) OR self-service (volunteer signups)
+2. **Standalone + ChMS agnostic**: Works with Planning Center/Breeze/Rock via API, or totally self-contained (CSV/manual)
+3. **Calendar feeds**: Personal, team, ministry calendars with privacy controls; iCal subscriptions for Google Calendar/Outlook
+4. **Generous free tier**: Unlimited volunteers, 1 ministry (perfect for worship team only)
+5. **Reminder flexibility**: Email + SMS + calendar invites + none (user choice per volunteer)
+
+**Why It Wins**:
+- Planning Center users get it but find scheduling clunky and scattered per-ministry.
+- Generic signup tools are too simple for recurring ministry rotations.
+- VolunteerCalendar bridges gap: hyper-focused, flexible, works standalone AND integrated.
+
+**Pricing** (Updated):
+- **Free**: Unlimited volunteers, 1 ministry, email reminders, basic analytics
+- **Starter** ($19/mo): 100 volunteers, 5 ministries, SMS + email, advanced rotations
+- **Growth** ($49/mo): 250 volunteers, 15 ministries, full features, analytics, integrations ← Your church fits here
+- **Pro** ($99/mo): 500 volunteers, unlimited ministries, analytics + API access
+- **Enterprise** ($199+/mo): Custom, multi-site, white-label, dedicated support
+- **Annual discount**: 20% off all paid tiers
+
+---
+
+## 2. Feature Roadmap (UPDATED)
+
+### MVP (Weeks 1–12: Validate Core Loop)
+**Goal**: Prove that flexible scheduling (your choice of workflow) solves multi-ministry chaos with 1–2 beta churches. Self-contained operation or ChMS integration.
+
+#### 2.1 People Import & Initial Setup
+- **ChMS API integrations** (optional):
+  - Planning Center Services: OAuth → pull volunteers, teams, roles, household relationships
+  - Breeze: API key → same data pull
+  - Rock RMS: API → same data pull
+  - Fallback: CSV upload (name, email, phone, ministry, role, household ID)
+- **Standalone setup**: Manual entry form (no ChMS needed)
+- **Data ownership**: All data stays in VC, nothing required to push back to ChMS
+
+#### 2.2 Ministries & Services Config
+- **Admin creates ministry** (e.g., "Worship", "Kids", "Greeters", "Tech"):
+  - Display name, color code, description, team lead email
+- **Admin creates recurring services** under ministry (e.g., "Sunday 9am", "Sunday 11am", "Wed 7pm"):
+  - Frequency (weekly, monthly, custom pattern)
+  - Time slot (start, duration)
+  - Roles/positions with needed counts (e.g., "2x Band", "1x Sound Tech")
+  - Can copy previous service as template
+- **Zero ChMS sync required** if using standalone
+
+#### 2.3 Volunteer Availability & Constraints
+- **Volunteer portal** (web & PWA):
+  - Set blockout dates ("Never available Jan 20–27")
+  - Recurring time slot prefs ("Never 8am", "Only weekends")
+  - Preferred frequency (e.g., "2x/month", "Max 3 roles/month")
+  - Household link ("Serve with spouse", "Never schedule while my kid is in another ministry")
+  - Skills/roles available for
+- **Admin bulk actions**: Upload 50 volunteers, auto-assign to teams, set default availability
+
+#### 2.4 Workflow Mode Selection (NEW - Your Request)
+- **Admin configures preferred workflow** (one-time setup):
+  ```
+  Mode 1: "Centralized" (Recommended for multi-ministry)
+  - Admin auto-drafts entire org schedule (all ministries at once)
+  - All team leads review/approve their ministry in parallel
+  - Global publish when all approved → all volunteers get emails
+  
+  Mode 2: "Ministry-First" (Traditional)
+  - Each ministry lead generates their own schedule
+  - Admin reviews for conflicts only
+  - Individual ministry publishes (no global coordination)
+  
+  Mode 3: "Hybrid"
+  - Auto-draft creates ministry templates
+  - Leaders tweak independently
+  - Admin dashboard shows cross-ministry conflicts (alerts only)
+  
+  Mode 4: "Self-Service" (SignUpGenius style)
+  - Volunteers self-signup for open slots
+  - No approval workflow
+  ```
+- **Default to Mode 1** for MVP; others added week 8–12 if needed
+
+#### 2.5 Auto-Draft Engine (Core Magic)
+- **One-click "Auto-Draft Schedule"**:
+  - User selects date range (e.g., "Next 8 weeks", "April–May")
+  - Engine runs scheduling algorithm:
+    - Respects availability & blockouts
+    - Honors frequency caps & household conflicts
+    - Tries fair distribution (no burnout, no idle volunteers)
+    - Prevents skill mismatches
+    - Returns draft schedule with conflict flags
+- **Flags for review**:
+  - Unfilled roles (gaps)
+  - Over-booked volunteers
+  - Low-confidence assignments
+- **Draft matrix view** (rows = volunteers, columns = services, cells = role or blank)
+
+#### 2.6 Team Lead Review & Approval (Flexible)
+- **Mode 1 (Centralized)**:
+  - Admin sends draft to all team leads (email with deep link)
+  - Each lead sees only their ministry's schedule
+  - Buttons: "Approve as-is", "Tweak", or "Reject"
+  - Can swap volunteers, add someone, remove someone
+  - All must approve before admin publishes
+- **Mode 2 (Ministry-First)**:
+  - Each lead generates independently, publishes individually
+  - Admin dashboard shows when conflicts arise
+  - Manual conflict resolution
+
+#### 2.7 Global Publish & Volunteer Response (Flexible)
+- **Centralized mode**: Admin clicks "Publish" (all leads approved) → bulk email to all volunteers
+- **Ministry-first mode**: Each lead publishes independently
+- **Volunteer response options**:
+  - Web/PWA link: "Accept", "Decline", "Request Substitute"
+  - Calendar invite with RSVP (iCal)
+  - SMS link (if opted in)
+  - In-app response
+
+#### 2.8 Calendar Feeds (NEW - Your Request)
+- **Calendar types** (each volunteer/leader can subscribe):
+  - Personal: "My Schedule" (volunteer sees only their assignments)
+  - Team: "Worship Team Schedule" (lead + team members)
+  - Ministry: "Kids Ministry Schedule" (admin + leaders only)
+  - Org-wide: "All Ministries" (admin only)
+- **iCal feed URLs** (unique per person/team/ministry):
+  - Auto-updates on schedule changes
+  - Works with Google Calendar, Outlook, Apple Calendar
+  - Privacy: public (team), password-protected, invite-only, or private
+- **Import path**: Volunteer subscribes to their personal iCal → auto-syncs to phone/calendar
+
+#### 2.9 Reminders (NEW - Your Request - Flexible)
+- **Automated reminders** (configurable per volunteer):
+  ```
+  Email: 48hr + 24hr before service
+  SMS: 48hr + 24hr (opt-in, charges Twilio usage)
+  Calendar invite: Auto-RSVP request
+  In-app: Push notification (PWA)
+  None: Opt-out entirely
+  ```
+- **Admin can configure per role**:
+  - Critical roles (sound tech, nursery lead): SMS + email + calendar
+  - Regular roles (greeters, ushers): Email only or calendar only
+  - Optional roles: No reminders (opt-in only)
+- **Volunteer choice**: Can override role defaults in their preferences
+
+#### 2.10 Dashboard & Export
+- **Admin dashboard**:
+  - Current schedule matrix (4-week rolling view)
+  - Fill rate by role (e.g., "Greeters 85% filled")
+  - No-show tracker (if ChMS check-ins imported)
+  - Declined/pending actions
+  - Workflow status (if centralized mode): "Pending approvals: 2/5 team leads"
+- **Exports**:
+  - CSV (full schedule, volunteer/role)
+  - PDF (printable schedule)
+  - iCal (personal + team feeds)
+
+#### 2.11 Basic Analytics & Reporting
+- **Automated reminders**:
+  - 48hr + 24hr before service (configurable)
+  - Auto-count responses in real-time
+  - Follow-up reminders for non-responders
+- **Simple stats**:
+  - Total volunteers scheduled
+  - Fill rates by role
+  - Average times per volunteer
+  - No-show rate (if ChMS check-ins available)
+  - Response rate (% confirmed after publish)
+
+#### 2.12 MVP Tech Stack
+- **Frontend**: React/Next.js (TypeScript), Tailwind CSS, PWA (service workers for offline)
+- **Backend**: Node.js/Express or Supabase (PostgreSQL + edge functions)
+- **Auth**: Supabase Auth (OAuth for Planning Center/Breeze/Rock, email/password fallback)
+- **APIs**: 
+  - Planning Center Services API (optional)
+  - Breeze API (optional)
+  - Rock RMS API (optional)
+  - Twilio for SMS
+  - iCal generation (native)
+- **Hosting**: Vercel (frontend) + Supabase (backend)
+- **Database**: PostgreSQL (Supabase)
+
+**MVP Success Metrics**:
+- ≥1 beta church live, scheduling 2+ services/week
+- ≥100 volunteers in system
+- ≥80% auto-draft schedules fixable in <10% manual work
+- ≥95% of published schedules get volunteer responses within 24hr
+- ≤5% no-show rate (vs. baseline ~15–20%)
+- All 4 workflow modes testable (at least 1 working end-to-end)
+
+---
+
+### V1.0 (Weeks 13–20: Polish, Expand, Launch Beta Cohort)
+**Goal**: Add depth, improve UX, stabilize APIs. Launch to 5–10 beta churches.
+
+#### 2.13 Household & Multi-Ministry Smarts
+- **Household view**: Show full volunteer load across all ministries
+- **Burnout prevention**: Flag if household members combined exceed thresholds
+- **Auto-suggest splits**: "Maria and John both want to serve; schedule them on different weekends"
+
+#### 2.14 Advanced Rotations
+- **2-on/4-off pattern**: "Serve 2 weeks straight, then off 4"
+- **Seasonal roles**: "Kids rotation changes in summer"
+- **Skill-based assignment**: Roles tagged, volunteers matched to compatible roles
+
+#### 2.15 Mobile App (PWA)
+- **Volunteer experience**: View schedule, set blockouts, accept/decline, see household members' schedules
+- **Leader experience**: Approve/tweak ministry schedule, manage last-minute subs
+
+#### 2.16 Integrations & Sync
+- **Planning Center**: Push final schedule back to PCO Events; read updated check-ins
+- **Breeze & Rock**: Similar read/write loops
+- **Google Calendar**: Volunteer iCal feeds auto-sync
+- **Zapier**: Trigger on schedule changes (email leadership team, Slack alerts)
+
+#### 2.17 Admin UX Improvements
+- **Bulk actions**: Upload 50 volunteers, auto-assign to teams
+- **Conflict resolution UI**: Visual "swap suggester"
+- **Audit log**: See who changed what, when
+- **Role templates**: Save recurring ministry setups
+
+#### 2.18 Analytics & Insights
+- **Dashboards**: Fill rate trends, no-show patterns, volunteer equity, team lead approval times
+- **Exportable reports** (PDF/CSV)
+
+#### 2.19 Notifications & Comms
+- **Multi-channel**: Email (primary), SMS (opt-in), in-app
+- **Customizable templates**: Church can white-label reminder text
+
+#### 2.20 Paid Plans & Billing
+- **Stripe integration**: Checkout, recurring billing, invoice
+- **Freemium gating**: 
+  - Free: <unlimited vols, 1 ministry, no SMS, basic analytics
+  - Starter: <100 vols, 5 ministries, SMS, advanced features
+  - Growth: <250 vols, 15 ministries, all features
+  - Pro: <500 vols, unlimited ministries, API access
+
+**V1.0 Success Metrics**:
+- ≥5 paying churches (Starter tier or higher)
+- ≥500 total volunteers across cohort
+- ≥85% auto-draft quality
+- ≥90% publish-to-confirm rate
+- NPS ≥40 from team leads
+- Churn ≤10%, free→paid conversion ≥20%
+
+---
+
+### V1.5+ (Months 6–12: Scale, Enterprise, Horizontal)
+**Goal**: Multi-site support, enterprise features, horizontal expansion prep.
+
+#### 2.21 Multi-Site Support
+- **Per-campus services**: Same volunteer pool, overlapping services
+- **Cross-site leadership**: "Diana leads worship at both campuses; can't serve same Sunday"
+- **Per-site analytics** or combined org view
+
+#### 2.22 What-If Scheduler
+- **Sandbox mode**: Test changes without publishing
+- **Simulate impacts**: See fill rate, conflicts, fairness before committing
+
+#### 2.23 White-Label & Custom Rules
+- **Custom availability rules**: "Tech roles—max 2x/month, must have 48hr notice"
+- **Custom notification templates**: Church branding
+- **Embed in ChMS**: API widget for Planning Center/Rock
+
+#### 2.24 Horizontal Pivot
+- **Generic domains**: Subdomain (app.volunteercalendar.org) or new domain
+- **Schools**: Teachers, substitutes, event volunteers
+- **Nonprofits**: General volunteer rotations
+- **Rebranding**: Marketing variants for each vertical
+
+#### 2.25 AI Assists (Nice-to-Have)
+- **Smart suggestions**: "Based on past no-shows, recommend backup"
+- **Burnout alerts**: "This volunteer's trend shows declining enthusiasm"
+
+---
+
+## 3. Landing Page Wireframe (Updated Pricing)
+
+```
+═══════════════════════════════════════════════════════════════════
+                        HERO SECTION
+                     [Full‑width video/GIF]
+               (30sec: Dashboard → Auto‑Draft → Leaders Approve → 
+                Volunteers Confirm on mobile)
+
+    Headline (H1): "Flexible Scheduling for Multi-Ministry Churches"
+    Subheadline: "Auto-generate fair rosters or let ministries run 
+                  independently. Team leaders review. Volunteers confirm. 
+                  Works standalone or with Planning Center/Breeze/Rock."
+    
+    [Primary CTA Button: "Start Free Today"]
+    [Secondary CTA: "Watch 2‑Minute Demo"]
+
+═══════════════════════════════════════════════════════════════════
+                      PAIN POINTS SECTION
+                   (3 columns, icon + copy)
+
+    ❌ "Siloed Tools Cause Double‑Books & Burnout"
+    Quote: "Our volunteers were scheduled in both worship AND kids 
+             on the same Sunday. We had no visibility."
+    — Sarah M., Worship Coordinator
+
+    ❌ "Manual Rotations Waste 5–10 Hours Weekly"
+    Quote: "I was copying spreadsheets, emailing people manually, 
+             chasing down confirmations. No one was happy."
+    — Mike D., Volunteer Coordinator
+
+    ❌ "No‑Shows Scramble Your Sundays"
+    Quote: "We had 30% no‑show rate. Finally found a tool that 
+             tracks and alerts us early."
+    — Pastor Rebecca L.
+
+═══════════════════════════════════════════════════════════════════
+                       HOW IT WORKS
+              (4‑step visual flow with icons/short text)
+
+    1. SETUP
+       Define your ministries & volunteers (import from Planning Center/Breeze 
+       or add manually). Choose your workflow: centralized approval, 
+       ministry-independent, or self-service signups.
+
+    2. AUTO‑DRAFT
+       One click. Schedule generates fairly across your ministries 
+       (or per-ministry) for the next 4–8 weeks, respecting every constraint.
+
+    3. REVIEW & APPROVE
+       Team leaders see their ministry schedule, tweak as needed. 
+       Either approve globally (all at once) or publish independently.
+
+    4. PUBLISH & CONFIRM
+       Volunteers get one email: "You're scheduled. Accept or decline?" 
+       95% confirm in 24 hours. Subscribe to calendar feeds for auto-sync.
+
+    [Beneath: "Learn more in Features" link]
+
+═══════════════════════════════════════════════════════════════════
+                    FEATURE HIGHLIGHTS
+              (6 cards: Icons + short copy, no jargon)
+
+    ✅ Flexible Workflows
+       Centralized approval, ministry-independent, or self-service signups. 
+       Choose what fits your church.
+
+    ✅ Multi‑Ministry Coordination
+       Prevents conflicts across worship, kids, tech, greeters—all in one view.
+
+    ✅ Household Awareness
+       Never schedule a parent + kid simultaneously across different ministries.
+
+    ✅ Self-Contained or Integrated
+       Works standalone with CSV/manual entry, or syncs with Planning Center, 
+       Breeze, Rock.
+
+    ✅ Calendar Feeds
+       Volunteers subscribe to personal/team calendars. Auto-syncs to 
+       Google Calendar, Outlook, Apple Calendar.
+
+    ✅ Email + SMS Reminders (Your Choice)
+       Each volunteer picks: email, SMS, calendar invite, or none. 
+       Totally configurable.
+
+═══════════════════════════════════════════════════════════════════
+                     SOCIAL PROOF / TESTIMONIALS
+                  (3 testimonials from beta users)
+
+    "We cut scheduling time by 70%. No more missed assignments."
+    — Alex T., Kids Ministry Lead, Springfield Community Church
+
+    "Multi‑ministry visibility was a game‑changer. Sarah isn't burned 
+     out anymore."
+    — Pastor James W., Eastside Church
+
+    "It's honestly simple and just works. Highly recommend."
+    — Volunteer Coordinator Network (Reddit community)
+
+═══════════════════════════════════════════════════════════════════
+                        PRICING SECTION (UPDATED)
+              (5 tiers: Free, Starter, Growth, Pro, Enterprise)
+
+    FREE ⭐
+    • Unlimited volunteers
+    • 1 ministry
+    • Email reminders
+    • Basic scheduling
+    • iCal calendar feeds
+    [Start Free]
+
+    STARTER — $19/mo
+    • 100 volunteers
+    • 5 ministries
+    • SMS reminders
+    • Advanced rotations
+    • Analytics
+    [Try Free for 14 Days]
+
+    GROWTH — $49/mo ⭐ Most Popular
+    • 250 volunteers
+    • 15 ministries
+    • Full analytics
+    • Substitution engine
+    • Zapier integrations
+    • Multi-ministry coordination
+    [Try Free for 14 Days]
+
+    PRO — $99/mo
+    • 500 volunteers
+    • Unlimited ministries
+    • API access
+    • Custom rules
+    • White-label
+    [Try Free for 14 Days]
+
+    ENTERPRISE — Custom
+    • Multi-site
+    • 1000+ volunteers
+    • Dedicated support
+    • White-label
+    • Custom integrations
+    [Talk to Sales]
+
+    (Footnote: All plans billed annually get 20% off. 14‑day free 
+     trial on Starter/Pro; credit card required but no auto‑charge. 
+     Overage: $5 per 50 extra volunteers, $10 per 5 extra ministries.)
+
+═══════════════════════════════════════════════════════════════════
+                      FOOTER CTA + LINKS
+
+    [Large Button: "Get Started Free"]
+
+    Quick Links:
+    • Features (Deeper dive)
+    • Pricing
+    • Integrations (Screenshots: PCO, Breeze, Rock)
+    • Blog ("Why Churches Still Fight Scheduling in 2026")
+    • API Docs (For developers)
+    • Book a Demo (Calendly)
+    • Privacy & Terms
+
+    Social: LinkedIn, Twitter (optional for church/nonprofit space)
+    Contact: support@volunteercalendar.org
+
+═══════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 4. Research & Validation Approaches
+
+### Phase 1: Quick Validation (Weeks 1–2, <$100)
+**Goal**: Confirm demand signal and lock in 5–10 beta churches.
+
+#### 4.1 Landing Page Waitlist
+- Deploy VolunteerCalendar.org homepage (Carrd, Framer, or lightweight Next.js)
+- Collect: name, email, church name, team size, current tool, **workflow preference** (centralized, ministry-first, hybrid, self-service)
+- Goal: 50+ signups by week 2
+
+#### 4.2 Direct Outreach & Interviews (5–10 calls)
+- **Questions to ask** (updated with your feedback):
+  - "Walk me through scheduling a month currently"
+  - "What's your biggest pain point? (Scale 1–10)"
+  - "Would you prefer one global team lead approval, or ministry-independent scheduling?"
+  - "How important is calendar integration (Google Calendar, Outlook)?"
+  - "Email reminders, SMS, both, or neither?"
+  - "What would you pay for 50 vols / 15 ministries?" (test $49/mo pricing)
+  - "If I built this, would you beta test? When?"
+- Goal: Lock 1–2 beta churches by week 3
+
+#### 4.3 Competitive Teardown
+- Try Planning Center Services, SignUpGenius, Ministry Scheduler Pro, Rock RMS
+- Document: workflow comparison, feature gaps, UX friction
+- Key question: "Where does workflow flexibility matter most?"
+
+#### 4.4 Survey (Google Forms, Slack/Reddit)
+- "Church Scheduling Pain Points" (2 min, 10 questions)
+- **New question**: "What scheduling approach does your church prefer?" (centralized, independent, self-service)
+- Goal: 100+ responses, >70% cite multi-ministry pain
+
+#### 4.5 Success Metrics for Phase 1
+- ✅ 50+ waitlist signups
+- ✅ 1–2 confirmed beta churches
+- ✅ 5+ successful interviews (avg willingness to pay ≥$20/mo for Growth tier)
+- ✅ 100+ survey responses, >70% cite pain, >60% interested in paying
+- ✅ Workflow flexibility validated (multiple modes requested)
+
+---
+
+### Phase 2: Deeper Research (Concurrently with MVP Build, Weeks 3–12)
+**Goal**: Refine positioning, validate pricing, identify feature priorities.
+
+#### 4.6 Structured Interviews (8–10 churches)
+- Book 45-min Zoom calls with volunteer coordinators
+- Script: current workflow, specific pain, ideal workflow, objections to switch, willingness to pay
+- Key new angle: "If you could design the perfect approval workflow, what would it look like?"
+- Recording + analysis: themes on workflow preferences, reminder preferences, calendar integration value
+
+#### 4.7 Pricing Research
+- A/B test landing page pricing (Version A: $19, $49, $99 vs. Version B: $15, $39, $79)
+- Measure: Signup completion per pricing tier
+- Implicit question: "What would you pay?" from interviews (test $49/mo Growth tier acceptance)
+
+#### 4.8 Feature Prioritization Survey
+- Rank these by importance (1=must-have, 5=nice-to-have):
+  - Flexible workflow modes
+  - Calendar feed integration
+  - SMS vs. email reminder options
+  - Standalone operation (no ChMS needed)
+  - Household awareness
+  - Advanced rotations
+
+#### 4.9 SEO & Content Research
+- Keywords: "church volunteer scheduling", "multi-ministry coordination", "volunteer calendar", "scheduling flexibility"
+- Blog strategy: "Why Churches Need Flexible Scheduling" (your USP)
+
+#### 4.10 Success Metrics for Phase 2
+- ✅ 8+ structured interviews, workflow preferences clear
+- ✅ Pricing confidence: Growth tier ($49/mo) gets >40% preference for 250-vol churches
+- ✅ Feature priorities: Flexible workflows ranked #1, calendar feeds ranked #2
+- ✅ Beta churches testing 2+ workflow modes by week 8
+- ✅ 50%+ of beta churches cite workflow flexibility as key value
+
+---
+
+## 5. Actionable Next Steps (Weeks 1–4)
+
+### Week 1: Foundation & Validation Launch
+**Monday**:
+- [ ] Domain verified (VolunteerCalendar.org live, DNS active)
+- [ ] Figma wireframes created (dashboard, draft UX, team review, reminder options)
+- [ ] GitHub repo initialized (README, tech stack documented)
+
+**Tuesday–Wednesday**:
+- [ ] Landing page live (Carrd or Framer MVP, waitlist form, updated positioning)
+- [ ] Announce in personal network (5–10 texts to church friends)
+
+**Thursday–Friday**:
+- [ ] Post in Reddit r/worshipleaders, r/volunteer, r/church_tech
+- [ ] Post in 3–5 Facebook groups
+- [ ] LinkedIn post (your network + church tech circles)
+- [ ] Survey live (Google Form, link shared in all posts)
+- [ ] Interviews scheduled (aim for 5 by end of week)
+
+**Success marker**: 30+ waitlist signups, 3 interview bookings
+
+### Week 2: Interview Sprint & Initial Research
+**Monday–Tuesday**:
+- [ ] Conduct 5 structured interviews (record with permission)
+- [ ] Competitive teardown (Planning Center, SignUpGenius, Ministry Scheduler Pro)
+- [ ] Compile interview themes into 1-pager
+
+**Wednesday–Thursday**:
+- [ ] First beta church onboarded (church staff account created, intro call)
+- [ ] Database schema design started (Supabase)
+- [ ] API research (Planning Center OAuth, Breeze, Rock)
+
+**Friday**:
+- [ ] Weekly sync with beta church (30 min): Show wireframes, lock go-live date
+- [ ] Review survey data (50+ responses); extract themes on workflow preferences
+
+**Success marker**: 1–2 beta churches locked in, demand validated, workflow flexibility confirmed
+
+### Week 3: MVP Build Begins
+**Day 1–2**:
+- [ ] Frontend scaffolding (Next.js, Tailwind, auth UI)
+- [ ] Backend scaffolding (Supabase, PostgreSQL schema)
+
+**Day 3–5**:
+- [ ] Build Phase 1: Auth & import (Supabase Auth, Planning Center OAuth, CSV upload, manual entry)
+- [ ] Build Phase 2: Setup (ministry creation, service setup, roles/permissions)
+
+**Success marker**: Auth + import working, 1 beta church has 25+ volunteers in system
+
+### Week 4: Auto-Draft + Review
+**Day 1–3**:
+- [ ] Auto-draft algorithm (scheduling logic)
+- [ ] Draft admin UI (matrix view, conflict highlights)
+
+**Day 4–5**:
+- [ ] Team lead review UI (approve/tweak/reject workflow, workflow mode selector)
+- [ ] Manual test with beta church
+
+**Success marker**: 1 complete draft-review-tweak cycle with beta church
+
+---
+
+## 6. Budget & Resources
+
+**Year 1 Estimate**:
+- **Infrastructure**: Supabase ($100–300/mo), Vercel ($0–100/mo), Twilio ($50/mo SMS) = ~$500/mo ~ $6k year 1
+- **Domains**: volunteercalendar.org + fallback domains (~$30/yr)
+- **Tools**: Figma ($12/mo), GitHub ($0), Calendly ($10/mo), Typeform ($0 or paid) ~ $150/yr
+- **Stripe fees**: 2.9% + 30¢ per transaction
+- **Marketing**: Ads budget ($100–300/mo post-launch) ~ $2k year 1
+- **Total**: ~$10k year 1 (mostly your time, minimal cash)
+
+**Your Time**:
+- MVP build: ~200 hours (weeks 3–6, ~10hr/wk)
+- Testing & iterations: ~100 hours (weeks 7–12)
+- GTM & customer calls: ~150 hours (ongoing, ~5–10hr/wk)
+- **Total year 1**: ~500 hours (~10hr/wk average)
+
+---
+
+## 7. Risk Mitigation
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|-----------|
+| Planning Center/Breeze launch competing feature | Medium | High | Move fast MVP; own "flexible workflows" + "standalone option"; consider acquisition. |
+| ChMS integration APIs break | Low | Medium | Maintain CSV fallback; monitor API docs; version-lock dependencies. |
+| Beta churches churn (feature mismatch) | Low | Low | Weekly feedback loops; prioritize their pain; iterate fast. (Workflow flexibility helps here) |
+| Pricing too high / free tier abused | Low | Low | Monitor LTV/CAC; adjust tiers if needed; add validation. |
+| Market too niche | Low | Medium | Horizontal pivot early; "volunteer calendar" messaging broader than "scheduling". |
+| Workflow flexibility adds complexity | Medium | Medium | MVP launches with 1 workflow mode (Centralized); others added incrementally based on feedback. |
+
+---
+
+## 8. Success Metrics (OKRs)
+
+**Q1 (Weeks 1–12)**:
+- O: Launch MVP and validate workflow flexibility + calendar feeds + reminder options
+  - KR1: 50+ waitlist signups by week 2
+  - KR2: 1–2 beta churches live by week 4
+  - KR3: 80% auto-draft quality by week 8
+  - KR4: ≥95% publish-to-confirm rate by week 10
+  - KR5: ≥2 workflow modes tested in beta (centralized + 1 other)
+
+**Q2 (Weeks 13–24)**:
+- O: Scale beta cohort and achieve product-market fit signals
+  - KR1: 5–10 paying churches by end of Q2
+  - KR2: ≥2 conversions from free to Growth tier ($49/mo)
+  - KR3: NPS ≥40 from team leads
+  - KR4: Churn <10% monthly
+  - KR5: ≥70% of beta churches cite workflow flexibility or calendar feeds as key value
+
+**Year 1**:
+- O: Establish VC as flexible, accessible scheduling solution
+  - KR1: 25+ paying churches (mix of tiers)
+  - KR2: $1,500+ MRR ($18k+ ARR)
+  - KR3: Growth tier adoption ≥40% (vs. Starter tier)
+  - KR4: SEO traffic 100+ monthly visits from "church volunteer scheduling" keywords
+  - KR5: Horizontal expansion validated (1–2 schools or nonprofits showing interest)
+
+---
+
+## 9. Timeline & Milestones
+
+| Week | Owner | Deliverable | Status |
+|------|-------|-------------|--------|
+| 1 | You | Landing page live, 50+ waitlist, 5 interviews booked | — |
+| 2 | You | 1–2 beta churches locked in, survey results, demand confirmed | — |
+| 3–4 | You | MVP build: Auth, import, ministry setup, auto-draft, review flow | — |
+| 5 | You | First complete draft-review cycle with beta church | — |
+| 6–8 | You | Publish & confirm, reminders, analytics, calendar feeds | — |
+| 9–10 | You | Paid billing (Stripe), free tier gating, Starter/Pro tiers live | — |
+| 11–12 | You | Beta cohort launch (5 churches), iterate on feedback, stabilize | — |
+| 13–16 | You | V1.0: Multi-workflow support, advanced rotations, mobile app (PWA) | — |
+| 17+ | You | Multi-site support, what-if simulator, white-label, horizontal pivot prep | — |
+
+---
+
+## 10. Success Scenario (12-Month Outcome)
+
+"VolunteerCalendar.org is now the most flexible, accessible scheduling tool for multi-service churches. They can run it standalone (CSV upload, manual entry) or integrate with Planning Center/Breeze without complexity. Workflow flexibility means centralized approval, ministry-independent, or self-service—whatever fits. Calendar feeds auto-sync to Google Calendar/Outlook. Each volunteer controls their reminders (email, SMS, calendar, or none). By month 12, you have 25+ paying churches ($1.5k+ MRR), an NPS of 45+, and clear unit economics. You've fielded inbound from schools and nonprofits, validating horizontal potential. You're either doubling down on year 2 growth, exploring acquisition offers, or building out API for ChMS embeds."
+
+---
+
+## Document Version
+
+- **Updated**: March 16, 2026 (based on Jason Paschall feedback)
+- **Project**: VolunteerCalendar.org (HarpElle Incubator)
+- **Status**: Ready for execution
+
