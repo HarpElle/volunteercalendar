@@ -152,3 +152,34 @@ body {
   background: var(--vc-coral-glow);
   color: var(--vc-indigo);
 }
+
+/* Print-friendly styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+  /* Hide sidebar, nav, and non-essential UI */
+  nav, aside, header, footer,
+  [data-print-hide],
+  button:not([data-print-show]) {
+    display: none !important;
+  }
+  /* Expand main content to full width */
+  main, [role="main"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  /* Ensure tables/grids don't break mid-row */
+  tr, .grid > * {
+    break-inside: avoid;
+  }
+  /* Reset card borders for clean look */
+  .rounded-xl, .rounded-lg {
+    border-color: #ddd !important;
+    box-shadow: none !important;
+  }
+}

@@ -1,4 +1,19 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "confirmation_token", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "calendar_feeds",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "secret_token", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

@@ -3,6 +3,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Assignments — collection group query for token-based volunteer confirmation
+    // Security: confirmation_token is a UUID — knowing it IS the authorization
+    // Only status + responded_at can be changed via unauthenticated update
+    match /{path=**}/assignments/{assignId} {
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'responded_at']);
+    }
+
     // Waitlist — anyone can write, only admins can read
     match /waitlist/{docId} {
       allow create: if true;

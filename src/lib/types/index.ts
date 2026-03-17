@@ -221,3 +221,38 @@ export interface WaitlistEntry {
   phone: string | null;
   created_at: string;
 }
+
+// --- Scheduling Algorithm ---
+
+export type ConflictType =
+  | "unfilled_role"
+  | "overbooked"
+  | "availability_violation"
+  | "household_conflict"
+  | "low_confidence";
+
+export interface ScheduleConflict {
+  type: ConflictType;
+  service_id: string;
+  service_date: string;
+  role_id?: string;
+  volunteer_id?: string;
+  message: string;
+}
+
+export interface SchedulingResult {
+  assignments: Omit<Assignment, "id" | "confirmation_token" | "responded_at" | "reminder_sent_at">[];
+  conflicts: ScheduleConflict[];
+  stats: {
+    total_slots: number;
+    filled_slots: number;
+    fill_rate: number;
+    fairness_score: number;
+  };
+}
+
+/** A service occurrence on a specific date */
+export interface ServiceOccurrence {
+  service: Service;
+  date: string;
+}

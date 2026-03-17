@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -41,11 +42,47 @@ export async function addChurchDocument(
   return addDoc(ref, data);
 }
 
+/** Set a document with a specific ID (create or overwrite) */
+export async function setDocument(collectionPath: string, docId: string, data: DocumentData) {
+  return setDoc(doc(db, collectionPath, docId), data);
+}
+
 /** Get a single document by path */
 export async function getDocument(path: string, docId: string) {
   const snap = await getDoc(doc(db, path, docId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() };
+}
+
+/** Get all documents in a church subcollection */
+export async function getChurchDocuments(
+  churchId: string,
+  subcollection: string,
+  ...constraints: QueryConstraint[]
+) {
+  const ref = collection(db, "churches", churchId, subcollection);
+  const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Update a church subcollection document */
+export async function updateChurchDocument(
+  churchId: string,
+  subcollection: string,
+  docId: string,
+  data: Partial<DocumentData>,
+) {
+  return updateDoc(doc(db, "churches", churchId, subcollection, docId), data);
+}
+
+/** Delete a church subcollection document */
+export async function removeChurchDocument(
+  churchId: string,
+  subcollection: string,
+  docId: string,
+) {
+  return deleteDoc(doc(db, "churches", churchId, subcollection, docId));
 }
 
 /** Query documents with constraints */
