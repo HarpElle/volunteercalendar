@@ -31,6 +31,12 @@ export default function RegisterPage() {
 
     try {
       await signUp(email, password, name);
+      // Fire-and-forget welcome email
+      fetch("/api/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email }),
+      }).catch(() => {});
       router.push("/dashboard");
     } catch {
       // error is set in context

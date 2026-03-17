@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, PRICE_TO_TIER } from "@/lib/stripe";
 import { db } from "@/lib/firebase/config";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import type Stripe from "stripe";
+import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
+import { Resend } from "resend";
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -38,6 +40,26 @@ export async function POST(req: NextRequest) {
             subscription_tier: tier,
             stripe_customer_id: session.customer as string,
           });
+
+          // Send purchase thank-you email (fire-and-forget)
+          if (process.env.RESEND_API_KEY && session.customer_email) {
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            const churchSnap = await getDoc(doc(db, "churches", churchId));
+            const churchName = churchSnap.exists() ? (churchSnap.data().name as string) || "Your church" : "Your church";
+            const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+            const { subject, html, text } = buildPurchaseThankYouEmail({
+              userName: session.customer_details?.name || "there",
+              planName: tierName,
+              churchName,
+            });
+            resend.emails.send({
+              from: "VolunteerCal <noreply@harpelle.com>",
+              to: [session.customer_email],
+              subject,
+              html,
+              text,
+            }).catch((err) => console.error("Purchase thank-you email failed:", err));
+          }
         }
         break;
       }

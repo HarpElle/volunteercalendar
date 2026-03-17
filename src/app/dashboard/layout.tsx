@@ -5,8 +5,13 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import { getOrgTerms } from "@/lib/utils/org-terms";
+import type { OrgType } from "@/lib/types";
 
-const NAV_ITEMS = [
+function getNavItems(ministryLabel: string) {
+  return [
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -35,7 +40,7 @@ const NAV_ITEMS = [
     ),
   },
   {
-    label: "Ministries",
+    label: ministryLabel,
     href: "/dashboard/ministries",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -71,7 +76,8 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-];
+  ];
+}
 
 export default function DashboardLayout({
   children,
@@ -82,6 +88,19 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { user, profile, loading, signOut } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [orgType, setOrgType] = useState<OrgType>("church");
+
+  useEffect(() => {
+    if (!profile?.church_id) return;
+    getDoc(doc(db, "churches", profile.church_id)).then((snap) => {
+      if (snap.exists()) {
+        setOrgType((snap.data().org_type as OrgType) || "church");
+      }
+    }).catch(() => {});
+  }, [profile?.church_id]);
+
+  const terms = getOrgTerms(orgType);
+  const navItems = getNavItems(terms.plural);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -134,7 +153,7 @@ export default function DashboardLayout({
 
         {/* Nav links */}
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

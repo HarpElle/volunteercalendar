@@ -2,7 +2,7 @@ import type { WorkflowMode, SubscriptionTier, ReminderChannel } from "@/lib/type
 
 /** Tier limits for gating */
 export const TIER_LIMITS: Record<string, { volunteers: number; ministries: number }> = {
-  free: { volunteers: Infinity, ministries: 1 },
+  free: { volunteers: 20, ministries: 1 },
   starter: { volunteers: 100, ministries: 5 },
   growth: { volunteers: 250, ministries: 15 },
   pro: { volunteers: 500, ministries: Infinity },
@@ -52,10 +52,10 @@ export const PRICING_TIERS: {
     tier: "free",
     name: "Free",
     price: "$0",
-    volunteers: "Unlimited",
+    volunteers: "20",
     ministries: "1",
     features: [
-      "Unlimited volunteers",
+      "Up to 20 volunteers",
       "1 ministry",
       "Email reminders",
       "Basic scheduling",

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { Church, ChurchSettings, WorkflowMode } from "@/lib/types";
+import type { Church, ChurchSettings, WorkflowMode, OrgType } from "@/lib/types";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -26,6 +26,7 @@ export default function ChurchSetupPage() {
   const [error, setError] = useState("");
 
   const [name, setName] = useState("");
+  const [orgType, setOrgType] = useState<OrgType>("church");
   const [timezone, setTimezone] = useState("America/New_York");
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("centralized");
 
@@ -52,6 +53,7 @@ export default function ChurchSetupPage() {
       const churchData: Omit<Church, "id"> = {
         name,
         slug,
+        org_type: orgType,
         workflow_mode: workflowMode,
         timezone,
         subscription_tier: "free",
@@ -82,7 +84,7 @@ export default function ChurchSetupPage() {
   return (
     <div className="mx-auto max-w-xl">
       <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Set up your church</h1>
+        <h1 className="font-display text-3xl text-vc-indigo">Set up your organization</h1>
         <p className="mt-1 text-vc-text-secondary">
           Tell us about your organization so we can configure scheduling for you.
         </p>
@@ -96,6 +98,33 @@ export default function ChurchSetupPage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-vc-text">Organization Type</label>
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              { value: "church" as const, label: "Church" },
+              { value: "nonprofit" as const, label: "Nonprofit" },
+              { value: "other" as const, label: "Other" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setOrgType(opt.value)}
+                className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
+                  orgType === opt.value
+                    ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
+                    : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-vc-text-muted">
+            {orgType === "church" ? "We’ll use terms like “Ministry” throughout the app." : "We’ll use “Team” instead of “Ministry” throughout the app."}
+          </p>
+        </div>
 
         <Select
           label="Timezone"

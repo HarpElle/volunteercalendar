@@ -75,6 +75,10 @@ VolunteerCal/
 │   │       │   └── route.ts    # iCal (.ics) feed generation
 │   │       ├── export/
 │   │       │   └── route.ts    # CSV/JSON schedule export
+│   │       ├── welcome/
+│   │       │   └── route.ts    # Welcome email on signup (Resend)
+│   │       ├── lifecycle-emails/
+│   │       │   └── route.ts    # Lifecycle emails: purchase thank-you, re-engagement, upsell
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -94,7 +98,7 @@ VolunteerCal/
 │       ├── types/              # TypeScript interfaces
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, email-templates.ts
+│       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts
 │       └── services/           # Scheduling algorithm, reminder service
 └── docs/                       # Research outputs, architecture decisions
 ```

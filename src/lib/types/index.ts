@@ -29,10 +29,13 @@ export type SubscriptionTier =
   | "pro"
   | "enterprise";
 
+export type OrgType = "church" | "nonprofit" | "other";
+
 export interface Church {
   id: string;
   name: string;
   slug: string;
+  org_type: OrgType;
   workflow_mode: WorkflowMode;
   timezone: string;
   subscription_tier: SubscriptionTier;

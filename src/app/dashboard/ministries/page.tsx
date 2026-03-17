@@ -13,18 +13,19 @@ import { Input } from "@/components/ui/input";
 import { TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
-import type { Ministry } from "@/lib/types";
+import type { Ministry, OrgType } from "@/lib/types";
+import { getOrgTerms } from "@/lib/utils/org-terms";
 import Link from "next/link";
 
 const PRESET_COLORS = [
-  "#E07A5F", // coral
-  "#2D3047", // indigo
-  "#81B29A", // sage
-  "#F2CC8F", // sand
-  "#7B68EE", // purple
-  "#E84855", // red
-  "#3D8BF2", // blue
-  "#F29E4C", // orange
+  { hex: "#E07A5F", name: "Coral" },
+  { hex: "#2D3047", name: "Indigo" },
+  { hex: "#81B29A", name: "Sage" },
+  { hex: "#F2CC8F", name: "Sand" },
+  { hex: "#7B68EE", name: "Purple" },
+  { hex: "#E84855", name: "Red" },
+  { hex: "#3D8BF2", name: "Blue" },
+  { hex: "#F29E4C", name: "Orange" },
 ];
 
 export default function MinistriesPage() {
@@ -33,6 +34,7 @@ export default function MinistriesPage() {
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [subscriptionTier, setSubscriptionTier] = useState("free");
+  const [orgType, setOrgType] = useState<OrgType>("church");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export default function MinistriesPage() {
 
   // Form state
   const [name, setName] = useState("");
-  const [color, setColor] = useState(PRESET_COLORS[0]);
+  const [color, setColor] = useState(PRESET_COLORS[0].hex);
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export default function MinistriesPage() {
         setMinistries(docs as unknown as Ministry[]);
         if (churchSnap.exists()) {
           setSubscriptionTier((churchSnap.data().subscription_tier as string) || "free");
+          setOrgType((churchSnap.data().org_type as OrgType) || "church");
         }
       } catch {
         // silent
@@ -67,7 +70,7 @@ export default function MinistriesPage() {
 
   function resetForm() {
     setName("");
-    setColor(PRESET_COLORS[0]);
+    setColor(PRESET_COLORS[0].hex);
     setDescription("");
     setEditingId(null);
     setShowForm(false);
@@ -127,13 +130,15 @@ export default function MinistriesPage() {
     }
   }
 
+  const terms = getOrgTerms(orgType);
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Ministries</h1>
+          <h1 className="font-display text-3xl text-vc-indigo">{terms.plural}</h1>
           <p className="mt-1 text-vc-text-secondary">
-            Organize your volunteer teams by ministry.
+            Organize your volunteer teams by {terms.singularLower}.
           </p>
         </div>
         {!showForm && (() => {
@@ -143,12 +148,12 @@ export default function MinistriesPage() {
             return (
               <Link href="/dashboard/billing">
                 <Button variant="outline">
-                  Upgrade to Add More Ministries
+                  Upgrade to Add More {terms.plural}
                 </Button>
               </Link>
             );
           }
-          return <Button onClick={() => setShowForm(true)}>Add Ministry</Button>;
+          return <Button onClick={() => setShowForm(true)}>Add {terms.singular}</Button>;
         })()}
       </div>
 
@@ -156,19 +161,19 @@ export default function MinistriesPage() {
       {showForm && (
         <div className="mb-8 rounded-xl border border-vc-border-light bg-white p-6">
           <h2 className="mb-4 text-lg font-semibold text-vc-indigo">
-            {editingId ? "Edit Ministry" : "New Ministry"}
+            {editingId ? "Edit " + terms.singular : "New " + terms.singular}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Ministry Name"
+              label={terms.singular + " Name"}
               required
-              placeholder="e.g., Worship, Kids, Tech"
+              placeholder={orgType === "church" ? "e.g., Worship, Kids, Tech" : "e.g., Events, Marketing, Outreach"}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <Input
               label="Description"
-              placeholder="Brief description of this ministry"
+              placeholder={"Brief description of this " + terms.singularLower}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -176,23 +181,30 @@ export default function MinistriesPage() {
               <label className="mb-1.5 block text-sm font-medium text-vc-text">
                 Color
               </label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 {PRESET_COLORS.map((c) => (
                   <button
-                    key={c}
+                    key={c.hex}
                     type="button"
-                    onClick={() => setColor(c)}
-                    className={`h-8 w-8 rounded-full transition-all ${
-                      color === c ? "ring-2 ring-offset-2 ring-vc-indigo scale-110" : "hover:scale-105"
+                    onClick={() => setColor(c.hex)}
+                    className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-all ${
+                      color === c.hex
+                        ? "ring-2 ring-offset-2 ring-vc-indigo bg-vc-bg-warm font-medium"
+                        : "hover:bg-vc-bg-warm/50"
                     }`}
-                    style={{ backgroundColor: c }}
-                  />
+                  >
+                    <span
+                      className="h-5 w-5 shrink-0 rounded-full"
+                      style={{ backgroundColor: c.hex }}
+                    />
+                    <span className="text-vc-text-secondary">{c.name}</span>
+                  </button>
                 ))}
               </div>
             </div>
             <div className="flex gap-3">
               <Button type="submit" loading={saving}>
-                {editingId ? "Save Changes" : "Create Ministry"}
+                {editingId ? "Save Changes" : "Create " + terms.singular}
               </Button>
               <Button type="button" variant="ghost" onClick={resetForm}>
                 Cancel
@@ -207,9 +219,9 @@ export default function MinistriesPage() {
         <div className="py-12 text-center text-vc-text-muted">Loading...</div>
       ) : ministries.length === 0 && !showForm ? (
         <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
-          <p className="text-vc-text-secondary">No ministries yet.</p>
+          <p className="text-vc-text-secondary">No {terms.pluralLower} yet.</p>
           <p className="mt-1 text-sm text-vc-text-muted">
-            Add your first ministry to start organizing volunteers.
+            Add your first {terms.singularLower} to start organizing volunteers.
           </p>
         </div>
       ) : (
