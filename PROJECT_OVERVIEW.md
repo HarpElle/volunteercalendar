@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 10 — Notifications & reminders (complete) |
+| **Status** | Phase 11 — Beta hardening (in progress) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -111,6 +111,9 @@ VolunteerCal/
 │   │       │   └── route.ts    # ChMS import API (test, save creds, import volunteers)
 │   │       ├── reminders/
 │   │       │   └── route.ts    # Scheduled reminder API (48h/24h, email + SMS)
+│   │       ├── cron/
+│   │       │   └── reminders/
+│   │       │       └── route.ts    # Vercel Cron → triggers reminders for all churches
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -153,3 +156,4 @@ VolunteerCal/
 | 8 | Landing page content refresh (inclusive language, brand voice) | Complete |
 | 9 | Integration connectors (Planning Center, Breeze, Rock RMS) + import UI | Complete |
 | 10 | Notifications & reminders (48h/24h email + SMS, Twilio, preferences, admin center) | Complete |
+| 11 | Beta hardening (favicon/PWA, cron automation, error boundaries, 404 page) | Complete |

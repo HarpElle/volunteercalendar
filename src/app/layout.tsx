@@ -30,6 +30,15 @@ export const metadata: Metadata = {
     "scheduling software",
     "Planning Center alternative",
   ],
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.svg",
+  },
+  manifest: "/manifest.json",
   openGraph: {
     title: "VolunteerCal — Flexible Volunteer Scheduling for Churches, Nonprofits & Teams",
     description:
@@ -37,6 +46,7 @@ export const metadata: Metadata = {
     url: "https://volunteercal.com",
     siteName: "VolunteerCal",
     type: "website",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "VolunteerCal" }],
   },
 };
 
@@ -47,6 +57,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="theme-color" content="#2D3A6E" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      </head>
       <body
         className={`${dmSans.variable} ${dmSerifDisplay.variable} font-sans antialiased`}
       >
