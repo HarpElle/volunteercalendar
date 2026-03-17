@@ -1,4 +1,4 @@
-/** iCal (.ics) feed generator for VolunteerCalendar */
+/** iCal (.ics) feed generator for VolunteerCal */
 
 interface CalendarEvent {
   uid: string;
@@ -49,7 +49,7 @@ export function generateICalFeed(
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//VolunteerCalendar//EN",
+    "PRODID:-//VolunteerCal//EN",
     `X-WR-CALNAME:${escapeICalText(calendarName)}`,
     `X-WR-TIMEZONE:${timezone}`,
     "CALSCALE:GREGORIAN",
@@ -63,7 +63,7 @@ export function generateICalFeed(
 
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${event.uid}@volunteercalendar.org`,
+      `UID:${event.uid}@volunteercal.com`,
       `DTSTAMP:${now}`,
       `DTSTART;TZID=${timezone}:${dtstart}`,
       `DURATION:${duration}`,

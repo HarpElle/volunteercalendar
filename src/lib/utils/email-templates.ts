@@ -1,4 +1,4 @@
-/** Branded email templates for VolunteerCalendar */
+/** Branded email templates for VolunteerCal */
 
 interface ConfirmationEmailData {
   volunteerName: string;
@@ -119,7 +119,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
           <tr>
             <td style="padding:16px 32px 24px;border-top:1px solid #E8E4DE;text-align:center;">
               <p style="margin:0;font-size:11px;color:#9A9BB5;">
-                Sent by <span style="color:#E87461;">VolunteerCalendar</span> on behalf of ${data.churchName}
+                Sent by <span style="color:#E87461;">VolunteerCal</span> on behalf of ${data.churchName}
               </p>
             </td>
           </tr>
@@ -145,7 +145,7 @@ Confirm or decline here (no login required):
 ${data.confirmUrl}
 
 —
-Sent by VolunteerCalendar on behalf of ${data.churchName}`;
+Sent by VolunteerCal on behalf of ${data.churchName}`;
 
   return { subject, html, text };
 }

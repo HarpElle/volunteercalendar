@@ -16,7 +16,7 @@ export function Footer() {
                 </svg>
               </div>
               <span className="font-display text-lg text-vc-indigo">
-                Volunteer<span className="text-vc-coral">Calendar</span>
+                Volunteer<span className="text-vc-coral">Cal</span>
               </span>
             </div>
             <p className="mt-2 max-w-xs text-sm text-vc-text-secondary">
@@ -56,7 +56,7 @@ export function Footer() {
         </div>
 
         <p className="text-center text-xs text-vc-text-muted">
-          &copy; {new Date().getFullYear()} VolunteerCalendar. All rights reserved.
+          &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
         </p>
       </div>
     </footer>

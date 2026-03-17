@@ -1,4 +1,4 @@
-# VolunteerCalendar.org
+# VolunteerCal.org
 
 **Flexible scheduling for multi-ministry churches.**
 

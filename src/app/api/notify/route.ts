@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     // Determine base URL for confirmation links
     const origin = request.headers.get("origin")
       || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
-      || "https://volunteercalendar.org";
+      || "https://volunteercal.com";
 
     // Group assignments by volunteer to send one email per volunteer
     const byVolunteer = new Map<string, typeof assignments>();
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
 
         try {
           await resend.emails.send({
-            from: `${churchName} via VolunteerCalendar <noreply@harpelle.com>`,
+            from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
             to: [email],
             subject,
             html,

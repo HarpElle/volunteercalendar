@@ -19,7 +19,7 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "VolunteerCalendar — Flexible Scheduling for Multi-Ministry Churches",
+  title: "VolunteerCal — Flexible Scheduling for Multi-Ministry Churches",
   description:
     "Auto-generate fair, conflict-free volunteer schedules across worship, kids, tech, greeters. Team leaders review. Volunteers confirm. Works standalone or with Planning Center.",
   keywords: [
@@ -30,11 +30,11 @@ export const metadata: Metadata = {
     "Planning Center alternative",
   ],
   openGraph: {
-    title: "VolunteerCalendar — Flexible Scheduling for Multi-Ministry Churches",
+    title: "VolunteerCal — Flexible Scheduling for Multi-Ministry Churches",
     description:
       "Auto-generate fair, conflict-free volunteer schedules. Team leaders review. Volunteers confirm and sync to their calendar.",
-    url: "https://volunteercalendar.org",
-    siteName: "VolunteerCalendar",
+    url: "https://volunteercal.com",
+    siteName: "VolunteerCal",
     type: "website",
   },
 };

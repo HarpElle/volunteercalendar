@@ -299,7 +299,7 @@ export default function BillingPage() {
                   variant="ghost"
                   className="w-full"
                   onClick={() =>
-                    (window.location.href = "mailto:info@volunteercalendar.org")
+                    (window.location.href = "mailto:info@volunteercal.com")
                   }
                 >
                   Contact Us
@@ -323,7 +323,7 @@ export default function BillingPage() {
         All paid plans include a 14-day free trial. Annual billing saves 20%.
         Questions?{" "}
         <a
-          href="mailto:info@volunteercalendar.org"
+          href="mailto:info@volunteercal.com"
           className="text-vc-coral hover:underline"
         >
           Contact us

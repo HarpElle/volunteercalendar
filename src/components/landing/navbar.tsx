@@ -45,7 +45,7 @@ export function Navbar() {
             </svg>
           </div>
           <span className="font-display text-xl text-vc-indigo">
-            Volunteer<span className="text-vc-coral">Calendar</span>
+            Volunteer<span className="text-vc-coral">Cal</span>
           </span>
         </a>
 

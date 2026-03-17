@@ -1,4 +1,4 @@
-/* VolunteerCalendar — Core Type Definitions */
+/* VolunteerCal — Core Type Definitions */
 
 // --- Auth & Users ---
 

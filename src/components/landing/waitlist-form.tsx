@@ -269,7 +269,7 @@ export function WaitlistForm() {
                   </button>
 
                   <p className="text-center text-xs text-vc-text-muted">
-                    No spam, ever. We&apos;ll only reach out about VolunteerCalendar.
+                    No spam, ever. We&apos;ll only reach out about VolunteerCal.
                   </p>
                 </form>
               </AnimateIn>

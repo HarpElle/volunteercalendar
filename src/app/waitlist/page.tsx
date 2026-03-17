@@ -25,7 +25,7 @@ export default function WaitlistConfirmation() {
           You&apos;re on the list!
         </h1>
         <p className="mt-4 text-lg text-vc-text-secondary">
-          Thanks for your interest in VolunteerCalendar. We&apos;ll reach out
+          Thanks for your interest in VolunteerCal. We&apos;ll reach out
           with early access details and next steps.
         </p>
 

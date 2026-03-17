@@ -1,5 +1,5 @@
 /**
- * VolunteerCalendar — Auto-Draft Scheduling Algorithm
+ * VolunteerCal — Auto-Draft Scheduling Algorithm
  *
  * Hybrid approach: Greedy initial assignment → Conflict detection → Local search for fairness.
  * Constraints: availability, blockouts, frequency caps, household conflicts, ministry membership.

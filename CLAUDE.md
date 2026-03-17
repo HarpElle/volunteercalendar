@@ -1,4 +1,4 @@
-# VolunteerCalendar
+# VolunteerCal
 
 Flexible volunteer scheduling SaaS for multi-ministry churches. MVP targets 1-2 beta churches with centralized draft-review-approve-publish workflow.
 
@@ -21,7 +21,7 @@ Flexible volunteer scheduling SaaS for multi-ministry churches. MVP targets 1-2 
 - **Imports:** Use `@/` alias for `src/` directory
 
 ## Design Rules — "Warm Editorial" Aesthetic
-- VolunteerCalendar has its own brand identity (not HarpElle tokens)
+- VolunteerCal has its own brand identity (not HarpElle tokens)
 - Color tokens defined in `src/app/globals.css` under `@theme inline`
 - **Indigo** (`vc-indigo`) — deep trust, primary text, dark sections
 - **Coral** (`vc-coral`) — warm CTAs, accents, interactive elements

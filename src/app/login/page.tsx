@@ -34,7 +34,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <span className="text-xl font-semibold text-vc-indigo">
-            Volunteer<span className="text-vc-coral">Calendar</span>
+            Volunteer<span className="text-vc-coral">Cal</span>
           </span>
         </Link>
 

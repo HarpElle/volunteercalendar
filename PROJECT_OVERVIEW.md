@@ -1,12 +1,12 @@
-# VolunteerCalendar — Project Overview
+# VolunteerCal — Project Overview
 
 | | |
 |---|---|
-| **Project** | VolunteerCalendar.org |
-| **Location** | `HarpElleIncubator/VolunteerCalendar/` |
+| **Project** | VolunteerCal.org |
+| **Location** | `HarpElleIncubator/VolunteerCal/` |
 | **Status** | Phase 6 — Dashboard Analytics, Billing & Exports Complete |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
-| **Deploy** | Vercel (volunteercalendar.org) |
+| **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
 
 ## What It Does
@@ -16,7 +16,7 @@ Multi-tenant SaaS for church volunteer scheduling. Auto-generates fair, conflict
 ## File Structure
 
 ```
-VolunteerCalendar/
+VolunteerCal/
 ├── .StartupIdeas/              # Planning documents (strategy, prompts, research)
 ├── CLAUDE.md                   # Claude Code conventions
 ├── PROJECT_OVERVIEW.md         # This file
