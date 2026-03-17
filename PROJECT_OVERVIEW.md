@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 9 — Integration connectors (complete) |
+| **Status** | Phase 10 — Notifications & reminders (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -71,6 +71,8 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Event CRUD (one-time/recurring, open signup config)
 │   │   │   ├── import/
 │   │   │   │   └── page.tsx        # ChMS import (PCO, Breeze, Rock RMS)
+│   │   │   ├── notifications/
+│   │   │   │   └── page.tsx        # Admin notification center (send + history)
 │   │   │   └── settings/
 │   │   │       └── page.tsx        # Calendar feeds, church config
 │   │   ├── events/
@@ -107,6 +109,8 @@ VolunteerCal/
 │   │       │   └── route.ts    # Event signup API (GET event data, POST signup)
 │   │       ├── import/
 │   │       │   └── route.ts    # ChMS import API (test, save creds, import volunteers)
+│   │       ├── reminders/
+│   │       │   └── route.ts    # Scheduled reminder API (48h/24h, email + SMS)
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -128,7 +132,7 @@ VolunteerCal/
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts, permissions.ts
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
-│       └── services/           # Scheduling algorithm, reminder service
+│       └── services/           # Scheduling algorithm, SMS service
 └── docs/                       # Research outputs, architecture decisions
 ```
 
@@ -148,3 +152,4 @@ VolunteerCal/
 | 7d | Events system, RoleSlots, open signup | Complete |
 | 8 | Landing page content refresh (inclusive language, brand voice) | Complete |
 | 9 | Integration connectors (Planning Center, Breeze, Rock RMS) + import UI | Complete |
+| 10 | Notifications & reminders (48h/24h email + SMS, Twilio, preferences, admin center) | Complete |

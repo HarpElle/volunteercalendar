@@ -19,20 +19,21 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "VolunteerCal — Flexible Scheduling for Multi-Ministry Churches",
+  title: "VolunteerCal — Flexible Volunteer Scheduling for Churches, Nonprofits & Teams",
   description:
-    "Auto-generate fair, conflict-free volunteer schedules across worship, kids, tech, greeters. Team leaders review. Volunteers confirm. Works standalone or with Planning Center.",
+    "Auto-generate fair, conflict-free volunteer schedules across all your teams. Leaders review. Volunteers confirm. Works standalone or with Planning Center, Breeze, and Rock RMS.",
   keywords: [
+    "volunteer scheduling",
     "church volunteer scheduling",
-    "multi-ministry coordination",
+    "nonprofit volunteer management",
     "volunteer calendar",
-    "church scheduling software",
+    "scheduling software",
     "Planning Center alternative",
   ],
   openGraph: {
-    title: "VolunteerCal — Flexible Scheduling for Multi-Ministry Churches",
+    title: "VolunteerCal — Flexible Volunteer Scheduling for Churches, Nonprofits & Teams",
     description:
-      "Auto-generate fair, conflict-free volunteer schedules. Team leaders review. Volunteers confirm and sync to their calendar.",
+      "Auto-generate fair, conflict-free volunteer schedules. Leaders review. Volunteers confirm and sync to their calendar.",
     url: "https://volunteercal.com",
     siteName: "VolunteerCal",
     type: "website",

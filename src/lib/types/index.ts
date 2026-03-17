@@ -398,6 +398,31 @@ export interface EventSignup {
   approved_by: string | null;
 }
 
+// --- Sent Notifications (Tracking) ---
+
+export type NotificationType = "confirmation" | "reminder_48h" | "reminder_24h" | "custom";
+export type NotificationChannel = "email" | "sms";
+export type NotificationStatus = "sent" | "delivered" | "failed" | "bounced";
+
+export interface SentNotification {
+  id: string;
+  church_id: string;
+  volunteer_id: string;
+  volunteer_name: string;
+  volunteer_email: string;
+  volunteer_phone: string | null;
+  assignment_id: string | null;
+  schedule_id: string | null;
+  type: NotificationType;
+  channel: NotificationChannel;
+  status: NotificationStatus;
+  /** Error message if status is 'failed' */
+  error_message: string | null;
+  /** External ID from Resend or Twilio */
+  external_id: string | null;
+  sent_at: string;
+}
+
 /** A service occurrence on a specific date */
 export interface ServiceOccurrence {
   service: Service;
