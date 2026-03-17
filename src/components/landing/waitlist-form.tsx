@@ -7,7 +7,7 @@ import { AnimateIn } from "./animate-in";
 const WORKFLOW_OPTIONS = [
   { value: "", label: "How would you like scheduling to work?" },
   { value: "centralized", label: "Centralized (one admin manages all)" },
-  { value: "ministry-first", label: "Ministry-First (each team manages their own)" },
+  { value: "ministry-first", label: "Team-First (each team manages their own)" },
   { value: "hybrid", label: "Hybrid (auto-draft + team tweaks)" },
   { value: "self-service", label: "Self-Service (volunteers sign up for open slots)" },
   { value: "not-sure", label: "Not sure yet" },

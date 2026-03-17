@@ -17,13 +17,13 @@ export const WORKFLOW_MODES: { value: WorkflowMode; label: string; description: 
   },
   {
     value: "ministry-first",
-    label: "Ministry-First",
-    description: "Each ministry lead generates and publishes independently. Admin monitors conflicts.",
+    label: "Team-First",
+    description: "Each team lead generates and publishes independently. Admin monitors conflicts.",
   },
   {
     value: "hybrid",
     label: "Hybrid",
-    description: "Auto-draft creates templates. Leaders tweak independently. Admin sees cross-ministry alerts.",
+    description: "Auto-draft creates templates. Leaders tweak independently. Admin sees cross-team alerts.",
   },
   {
     value: "self-service",
@@ -56,7 +56,7 @@ export const PRICING_TIERS: {
     ministries: "1",
     features: [
       "Up to 20 volunteers",
-      "1 ministry",
+      "1 team",
       "Email reminders",
       "Basic scheduling",
       "iCal calendar feeds",
@@ -70,7 +70,7 @@ export const PRICING_TIERS: {
     ministries: "5",
     features: [
       "100 volunteers",
-      "5 ministries",
+      "5 teams",
       "SMS + email reminders",
       "Advanced rotations",
       "Analytics",
@@ -85,11 +85,11 @@ export const PRICING_TIERS: {
     highlighted: true,
     features: [
       "250 volunteers",
-      "15 ministries",
+      "15 teams",
       "Full analytics",
       "Substitution engine",
       "Integrations",
-      "Multi-ministry coordination",
+      "Multi-team coordination",
     ],
   },
   {
@@ -100,7 +100,7 @@ export const PRICING_TIERS: {
     ministries: "Unlimited",
     features: [
       "500 volunteers",
-      "Unlimited ministries",
+      "Unlimited teams",
       "API access",
       "Custom rules",
       "White-label",

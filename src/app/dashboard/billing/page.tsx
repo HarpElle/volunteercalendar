@@ -218,7 +218,7 @@ function BillingContent() {
             </div>
             {minNearLimit && (
               <p className="mt-1 text-xs text-vc-coral">
-                Approaching ministry limit
+                Approaching team limit
               </p>
             )}
           </div>
@@ -266,7 +266,7 @@ function BillingContent() {
               </p>
               <p className="text-xs text-vc-text-muted mb-4">
                 {plan.volunteers} volunteers · {plan.ministries}{" "}
-                {plan.ministries === "1" ? "ministry" : "ministries"}
+                {plan.ministries === "1" ? "team" : "teams"}
               </p>
               <ul className="space-y-1.5 mb-5">
                 {plan.features.map((f, i) => (

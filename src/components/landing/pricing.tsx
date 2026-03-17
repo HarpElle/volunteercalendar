@@ -15,7 +15,7 @@ export function Pricing() {
             Start free, grow at your pace
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-text-secondary">
-            Generous free tier for small teams. Upgrade when you need more ministries. 20% off annual plans.
+            Generous free tier for small teams. Upgrade when you need more teams. 20% off annual plans.
           </p>
         </AnimateIn>
 

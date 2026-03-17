@@ -1,164 +1,173 @@
-# VolunteerCalendar — Outstanding Items & Next Steps
+# VolunteerCalendar — Complete Status & Outstanding Items
 
-**Created**: March 17, 2026
-**Status**: MVP (all 6 phases) complete and deployed to volunteercalendar.org
+**Last Updated**: March 17, 2026
+**Status**: MVP complete, deployed to volunteercalendar.org, pre-beta
 
 ---
 
-## What's Done
+## What's Built & Deployed
 
-- Next.js 16 app with full auth flow (login, register, password reset)
-- Landing page with waitlist form (writes to Firestore)
-- Dashboard: setup wizard, volunteers (CSV + manual), ministries, services
-- Scheduling algorithm with conflict detection, draft matrix, ministry review
-- Publish flow with email notifications (Resend) and volunteer confirm/decline
-- Calendar feeds (iCal generation for Google/Outlook/Apple)
-- Dashboard analytics (fill rates, response rates, equity view)
-- Stripe billing (checkout, customer portal, webhook handler, tier gating)
+### Core App (Phases 1–6)
+- Next.js 16 + TypeScript + Tailwind v4 + Firebase (Auth + Firestore)
+- Full auth flow: login, register, password reset, welcome email
+- Landing page with waitlist, sections: hero, pain points, how-it-works, features, pricing, footer
+- Dashboard with sidebar nav, mobile drawer, getting-started wizard
+- Church setup wizard (name, timezone, workflow mode)
+- Volunteer management: manual add, CSV import, profiles
+- Ministry CRUD with color picker
+- Service configuration (day, time, role slots)
+- Scheduling algorithm with conflict detection, fair distribution
+- Draft matrix view with manual overrides
+- Ministry review workflow (Centralized Mode 1)
+- Publish flow → email notifications → volunteer confirm/decline via token link
+- Calendar feeds (iCal .ics) for Google/Outlook/Apple
+- Dashboard analytics: fill rates, response rates, equity view
 - CSV/JSON export + print-to-PDF
-- Deployed to Vercel at volunteercalendar.org
-- Firebase project: volunteercalendar-mvp
-- Stripe account created (HarpElle LLC, test mode)
+- Stripe billing: checkout, customer portal, webhook, tier gating (5 tiers: Free, Starter $19, Growth $49, Pro $99, Enterprise custom)
+
+### Membership & Multi-Org (Phases 7a–7d)
+- Membership data model with role-based permissions (owner, admin, scheduler, volunteer)
+- Invite system: admin sends invite email → invitee accepts
+- Self-registration: volunteer joins via public link → admin approves
+- Org switcher for users in multiple churches
+- Role-conditional navigation (admin vs volunteer views)
+- Volunteer self-service portal: my-schedule, my-availability (blockout dates, weekly unavailable days), my-orgs
+- Events system with open signup, role slots, recurring events
+
+### Landing Page & Content (Phase 8)
+- Inclusive language refresh (works for churches, nonprofits, any volunteer org)
+- Warm editorial brand: DM Serif Display + DM Sans, indigo/coral/sage/sand palette
+- Configurable org terminology (church/organization/team)
+
+### Integrations (Phase 9)
+- Planning Center, Breeze, Rock RMS import adapters
+- Dashboard import UI with credential management
+
+### Notifications & Reminders (Phase 10)
+- 48h + 24h reminder emails via Resend
+- SMS infrastructure via Twilio (pending toll-free verification)
+- Per-volunteer reminder preferences (email, SMS, both, none)
+- Admin notification center with send + history
+- Lifecycle emails: purchase thank-you, re-engagement, upsell
+
+### Beta Hardening (Phase 11)
+- Favicon + PWA manifest (calendar icon, installable standalone app)
+- Vercel Cron for daily automated reminders
+- Error boundaries (global + dashboard-scoped)
+- Custom 404 page
+- SEO: robots.txt, sitemap.ts
+- Privacy Policy and Terms of Service pages
+- Mobile responsive audit across all dashboard pages
+- Vercel Analytics + Speed Insights
+- OG preview image (server-rendered)
+- Test email endpoint for admins
+- All emails route replies to info@volunteercal.com
+- HarpElle attribution in footer
 
 ---
 
-## 1. Stripe: Test Mode → Production
+## Outstanding: Owner Action Items (Jason)
 
-Stripe is currently in **test mode**. Before accepting real payments:
+### Immediate (This Week)
 
-- [ ] **File HarpElle LLC** (meeting with CPA this weekend, March 22)
+- [ ] **Full walkthrough**: register → set up church → add volunteers → create ministries/services → generate schedule → review → publish → check email → confirm as volunteer → view calendar feed
+- [ ] **Test Stripe checkout** in test mode: upgrade from free → Starter, verify Firestore updates
+- [ ] **Test CSV import** with a real volunteer list (Anchor Falls)
+- [ ] **Test calendar feed** — subscribe to iCal URL in Google Calendar
+- [ ] **Test on mobile** — responsive layout, touch targets, drawer nav
+- [ ] **Wait for Twilio toll-free verification** (submitted March 17, expect 1-3 business days), then test SMS reminders
+
+### Business & Legal (Before Live Payments)
+
+- [ ] **File HarpElle LLC** (CPA meeting March 22)
 - [ ] **Open business bank account** under HarpElle LLC
-- [ ] **Complete Stripe account activation**: Settings → Account details → add LLC info, EIN, bank account
-- [ ] **Switch to live mode** in Stripe Dashboard
-- [ ] **Create live products/prices** (Starter $19/mo, Growth $49/mo, Pro $99/mo) — test mode products don't carry over
-- [ ] **Update .env.local and Vercel env vars** with live keys:
-  - `STRIPE_SECRET_KEY` → live key (`sk_live_...`)
-  - `STRIPE_WEBHOOK_SECRET` → new webhook secret for live endpoint
-  - `STRIPE_PRICE_STARTER` → new live price ID
-  - `STRIPE_PRICE_GROWTH` → new live price ID
-  - `STRIPE_PRICE_PRO` → new live price ID
-- [ ] **Create live webhook** in Stripe Dashboard pointing to `https://www.volunteercalendar.org/api/billing/webhook` with events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
-- [ ] **Test a real checkout** end-to-end with a $1 test charge, then refund
+- [ ] **Complete Stripe activation**: Settings → Account details → add LLC info, EIN, bank account
+- [ ] **Switch Stripe to live mode** — create live products/prices (test mode products don't carry over)
+- [ ] **Update env vars** (Vercel + .env.local) with live Stripe keys + new webhook secret
+- [ ] **Create live Stripe webhook** → `https://www.volunteercalendar.org/api/billing/webhook`
+  - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+- [ ] **End-to-end payment test** with real card, then refund
+
+### Email & Domain
+
+- [ ] **Verify volunteercal.com in Resend** — upgrade to paid plan when revenue justifies, add DNS records, switch from `noreply@harpelle.com` to `noreply@volunteercalendar.org`
+- [ ] **Catch-all email forwarding** — set up `*@volunteercal.com` → `info@volunteercal.com` in Hover (for privacy@, legal@, support@ etc.)
+- [ ] **Gmail "Send As"** — configure SMTP relay so you can reply as info@volunteercal.com from Gmail
+
+### Go-to-Market
+
+- [ ] **Identify 5 church contacts** for beta testing
+- [ ] **Create demo video / GIF** of dashboard → auto-draft → review → publish flow
+- [ ] **Post in communities**: Reddit (r/worshipleaders, r/volunteer, r/church_tech), Facebook groups
+- [ ] **Blog post**: "Why Churches Still Fight Scheduling in 2026"
+- [ ] **Email sequence** for waitlist signups: welcome, demo link, beta invite
+- [ ] **Survey**: "Church Scheduling Pain Points" (Google Form)
+- [ ] **Onboard 1–2 beta churches** — free usage through month 6
+- [ ] **Replace placeholder testimonials** with real beta feedback
 
 ---
 
-## 2. Firebase Security & Configuration
+## Outstanding: Development Items
 
-- [ ] **Review Firestore security rules** — current rules are functional but should be audited for production hardening (ensure users can only read/write their own church's data)
-- [ ] **Enable App Check** in Firebase Console (protects APIs from abuse)
-- [ ] **Set up Firebase Auth authorized domains** — add `volunteercalendar.org` and `www.volunteercalendar.org` in Firebase Console → Authentication → Settings → Authorized domains
-- [ ] **Set up Firebase daily backup** (Firestore → Export to Cloud Storage, scheduled via Cloud Functions or Console)
+### High Priority (Pre-Beta or Early Beta)
 
----
+- [ ] **Firebase Auth authorized domains** — add `volunteercalendar.org` and `www.volunteercalendar.org` in Firebase Console → Authentication → Settings
+- [ ] **Firebase App Check** — protects APIs from abuse (Firebase Console)
+- [ ] **Firestore backup** — set up daily export to Cloud Storage
+- [ ] **Error monitoring** — add Sentry or similar for production error tracking
+- [ ] **Cookie consent banner** — if required for analytics (depends on audience location)
+- [ ] **Annual billing option** — Stripe supports this; strategic plan mentions 20% discount
+- [ ] **Overage pricing** — $5/50 extra volunteers, $10/5 extra ministries above tier limits
 
-## 3. Email & Domain
+### Medium Priority (V1.0 Feature Completeness)
 
-- [ ] **Verify sending domain with Resend** — currently using Resend API key, but need to verify `volunteercalendar.org` domain for deliverability (add DNS records in Resend dashboard)
-- [ ] **Set up custom "from" address**: `noreply@volunteercalendar.org` or `notifications@volunteercalendar.org` (instead of default Resend domain)
-- [ ] **Create support/contact email**: `info@volunteercalendar.org` (referenced on landing page and billing page)
-
----
-
-## 4. Features Not Yet Built (from Strategic Plan)
-
-These are planned features that are not in the current MVP:
-
-### High Priority (V1.0 / Weeks 13–20)
-- [ ] **Additional workflow modes** — only Centralized (Mode 1) is built; Ministry-First, Hybrid, and Self-Service are defined in constants but not implemented
-- [ ] **SMS reminders via Twilio** — the reminder channel options exist in the UI but SMS sending is not wired up (only email via Resend works)
-- [ ] **Volunteer self-service portal** — volunteers currently confirm via token links but can't log in to set availability, blockout dates, or frequency preferences themselves
-- [ ] **Household linking** — data model supports it but no UI for linking family members or preventing household conflicts in the scheduler
-- [ ] **ChMS integrations** — Planning Center, Breeze, Rock RMS API imports (currently CSV/manual only)
-- [ ] **Annual billing option** — Stripe supports this but checkout currently only offers monthly; strategic plan mentions 20% annual discount
-- [ ] **Overage pricing** — plan mentions $5/50 extra volunteers, $10/5 extra ministries above tier limits (not implemented)
-
-### Medium Priority (V1.0+)
-- [ ] **Substitution engine** — listed as Growth tier feature; allow volunteers to request subs and auto-match
-- [ ] **Advanced rotations** — 2-on/4-off patterns, seasonal roles, skill-based assignment
-- [ ] **PWA / mobile optimization** — service workers for offline, installable app
-- [ ] **Audit log** — who changed what, when
-- [ ] **Zapier integration** — trigger on schedule changes
+- [ ] **SMS sending** — Twilio integration code exists but awaiting toll-free verification; once approved, test and validate end-to-end
+- [ ] **Household linking** — data model supports it; needs UI for linking family members + scheduler conflict avoidance
+- [ ] **Volunteer self-service availability** — volunteers can set blockouts but can't directly edit frequency preferences or skill tags from their portal
+- [ ] **Substitution engine** — Growth tier feature; allow volunteers to request subs, auto-match replacements
+- [ ] **Additional workflow modes** — only Centralized (Mode 1) built; Ministry-First, Hybrid, Self-Service defined in constants but not implemented
+- [ ] **Advanced rotations** — 2-on/4-off patterns, seasonal roles, skill-based assignment logic
 
 ### Lower Priority (V1.5+ / Months 6–12)
+
+- [ ] **ChMS live sync** — currently one-time import; could add ongoing sync with Planning Center webhooks
 - [ ] **Multi-site support** — per-campus services, cross-site leadership
 - [ ] **What-if scheduler** — sandbox mode to test changes before publishing
 - [ ] **White-label** — custom branding for Pro/Enterprise tiers
-- [ ] **API access** — listed as Pro tier feature, public API for third-party integrations
-- [ ] **Horizontal expansion** — schools, nonprofits (messaging pivot)
+- [ ] **Public API** — Pro tier feature for third-party integrations
+- [ ] **Audit log** — who changed what, when
+- [ ] **Zapier integration** — trigger on schedule changes
+- [ ] **Horizontal expansion** — schools, nonprofits, broader messaging
 
 ---
 
-## 5. Testing & QA
+## Environment Variables Reference
 
-- [ ] **Test the full user flow** yourself: register → set up church → add volunteers → create ministries/services → generate schedule → review → publish → check email → confirm as volunteer → view calendar feed
-- [ ] **Test Stripe checkout** in test mode: upgrade from free → Starter, verify Firestore `subscription_tier` updates
-- [ ] **Test webhook** by triggering events from Stripe Dashboard → Developers → Webhooks → Send test event
-- [ ] **Test CSV import** with a real volunteer list
-- [ ] **Test calendar feed** — subscribe to an iCal URL in Google Calendar and verify events appear
-- [ ] **Test on mobile** — responsive layout, touch targets, drawer navigation
-- [ ] **Test password reset** — verify email arrives and link works
+When switching from test to live mode, update in **both** `.env.local` and **Vercel Dashboard → Settings → Environment Variables**:
 
----
-
-## 6. Go-to-Market & Launch
-
-### Immediate (This Week)
-- [ ] **Test the app yourself** — create your church, add your 50 volunteers, run scheduling
-- [ ] **Identify 5 church contacts** for interviews/beta testing
-- [ ] **Post in communities**: Reddit (r/worshipleaders, r/volunteer, r/church_tech), Facebook groups (Church Tech Leaders, Worship Leaders)
-
-### Pre-Beta Launch
-- [ ] **Create a demo video / GIF** showing the dashboard → auto-draft → review → publish flow (strategic plan calls for this on landing page hero)
-- [ ] **Set up Google Analytics or Vercel Analytics** for landing page tracking
-- [ ] **Blog post**: "Why Churches Still Fight Scheduling in 2026" (drives SEO, establishes expertise)
-- [ ] **Email sequence** for waitlist: welcome email, demo link, beta invite
-- [ ] **Survey** (Google Form): "Church Scheduling Pain Points" — workflow preference, reminder preference, pricing acceptance
-
-### Beta Launch (Weeks 13–16 per plan)
-- [ ] **Onboard 1–2 beta churches** — intro call, walkthrough, set expectations
-- [ ] **Offer free usage until month 6**, then month-to-month pricing
-- [ ] **Weekly feedback loop** — 30-min check-in with beta churches
-- [ ] **Collect testimonials** for landing page social proof section (currently placeholder quotes — once you have real feedback, replace)
-
-### Growth (Months 6–12 targets from plan)
-- [ ] 25+ paying churches
-- [ ] $1,500+ MRR ($18k+ ARR)
-- [ ] Growth tier adoption ≥40%
-- [ ] SEO traffic: 100+ monthly visits from "church volunteer scheduling"
-- [ ] NPS ≥40 from team leads
+| Variable | Current State | Action |
+|----------|--------------|--------|
+| `STRIPE_SECRET_KEY` | Test (`sk_test_...`) | Replace with `sk_live_...` |
+| `STRIPE_WEBHOOK_SECRET` | Test (`whsec_...`) | New secret from live webhook |
+| `STRIPE_PRICE_STARTER` | Test price ID | New ID from live product |
+| `STRIPE_PRICE_GROWTH` | Test price ID | New ID from live product |
+| `STRIPE_PRICE_PRO` | Test price ID | New ID from live product |
+| `RESEND_API_KEY` | Active (harpelle.com domain) | Keep; verify volunteercal.com later |
+| `TWILIO_ACCOUNT_SID` | Set | Keep |
+| `TWILIO_AUTH_TOKEN` | Set (regenerated March 17) | Keep |
+| `TWILIO_FROM_NUMBER` | Set (toll-free, pending verification) | Keep |
+| `CRON_SECRET` | Set | Keep |
+| Firebase keys (`NEXT_PUBLIC_FIREBASE_*`) | Production | No change needed |
 
 ---
 
-## 7. Infrastructure & DevOps
+## Growth Targets (from Strategic Plan)
 
-- [ ] **Set up preview deployments** — Vercel auto-deploys PRs if connected to GitHub (already connected)
-- [ ] **Add error monitoring** — Sentry or similar for catching production errors
-- [ ] **Set up uptime monitoring** — Vercel's built-in or an external service
-- [ ] **Review Vercel plan** — free tier may be sufficient initially; monitor usage
-
----
-
-## 8. Legal & Business
-
-- [ ] **File HarpElle LLC** (CPA meeting March 22)
-- [ ] **Open business bank account**
-- [ ] **Privacy Policy page** — required for Stripe, Firebase Auth, and GDPR compliance (referenced in landing page footer but page doesn't exist yet)
-- [ ] **Terms of Service page** — same as above
-- [ ] **Cookie consent** — if using analytics, may need a consent banner depending on audience location
-
----
-
-## Quick Reference: Environment Variables to Update for Production
-
-When switching from test to live mode, update these in **both** `.env.local` and **Vercel Dashboard → Settings → Environment Variables**:
-
-| Variable | Current (Test) | Action Needed |
-|----------|---------------|---------------|
-| `STRIPE_SECRET_KEY` | `sk_test_...` | Replace with `sk_live_...` |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_...` | New secret from live webhook |
-| `STRIPE_PRICE_STARTER` | `price_...` (test) | New ID from live product |
-| `STRIPE_PRICE_GROWTH` | `price_...` (test) | New ID from live product |
-| `STRIPE_PRICE_PRO` | `price_...` (test) | New ID from live product |
-| `RESEND_API_KEY` | Current key | Verify domain first |
-
-Firebase keys (`NEXT_PUBLIC_FIREBASE_*`) stay the same — they're the same project in prod.
+| Milestone | Target |
+|-----------|--------|
+| Beta launch | Weeks 13–16 (April 2026) |
+| 25+ paying churches | Month 12 |
+| $1,500+ MRR ($18k+ ARR) | Month 12 |
+| Growth tier adoption | ≥40% |
+| SEO traffic | 100+ monthly visits from "church volunteer scheduling" |
+| NPS from team leads | ≥40 |
