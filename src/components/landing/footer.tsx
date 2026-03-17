@@ -35,8 +35,11 @@ export function Footer() {
             <a href="#pricing" className="text-vc-text-secondary transition-colors hover:text-vc-indigo">
               Pricing
             </a>
-            <a href="#waitlist" className="text-vc-coral font-medium transition-colors hover:text-vc-coral-dark">
-              Early Access
+            <a href="/login" className="text-vc-text-secondary transition-colors hover:text-vc-indigo">
+              Log In
+            </a>
+            <a href="/register" className="text-vc-coral font-medium transition-colors hover:text-vc-coral-dark">
+              Start Free
             </a>
           </div>
         </div>

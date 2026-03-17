@@ -23,7 +23,7 @@ export function Hero() {
         >
           <span className="inline-flex items-center gap-2 rounded-full border border-vc-coral/20 bg-vc-coral-glow px-4 py-2 text-sm font-medium text-vc-coral-dark">
             <span className="h-1.5 w-1.5 rounded-full bg-vc-coral animate-pulse" />
-            Now accepting early access signups
+            Now live — start scheduling for free
           </span>
         </motion.div>
 
@@ -76,7 +76,7 @@ export function Hero() {
           className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
         >
           <a
-            href="#waitlist"
+            href="/register"
             className="group relative inline-flex items-center gap-2 rounded-full bg-vc-coral px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-vc-coral/20 transition-all hover:bg-vc-coral-dark hover:shadow-xl hover:shadow-vc-coral/30 active:scale-[0.98]"
           >
             Start Free Today

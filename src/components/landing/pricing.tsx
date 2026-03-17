@@ -75,7 +75,7 @@ export function Pricing() {
                 </ul>
 
                 <a
-                  href="#waitlist"
+                  href={tier.tier === "enterprise" ? "mailto:info@volunteercalendar.org" : "/register"}
                   className={`rounded-full px-4 py-2.5 text-center text-sm font-semibold transition-all active:scale-[0.98] ${
                     tier.highlighted
                       ? "bg-vc-coral text-white shadow-sm hover:bg-vc-coral-dark hover:shadow-md"

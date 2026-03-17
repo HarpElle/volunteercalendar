@@ -122,13 +122,13 @@ export function WaitlistForm() {
             <motion.div key="form" exit={{ opacity: 0, y: -20 }}>
               <AnimateIn>
                 <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-coral">
-                  Early Access
+                  Have Questions?
                 </p>
                 <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
-                  Get started first
+                  Tell us about your church
                 </h2>
                 <p className="mx-auto mt-4 max-w-md text-center text-lg text-vc-text-secondary">
-                  Join the waitlist and help shape what VolunteerCalendar becomes.
+                  Not ready to dive in yet? Share your info and we&apos;ll reach out to help you get started.
                 </p>
               </AnimateIn>
 

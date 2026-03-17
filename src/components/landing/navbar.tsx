@@ -60,12 +60,20 @@ export function Navbar() {
               {link.label}
             </a>
           ))}
-          <a
-            href="#waitlist"
-            className="rounded-full bg-vc-coral px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-vc-coral-dark hover:shadow-md active:scale-[0.98]"
-          >
-            Get Early Access
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href="/login"
+              className="text-sm font-medium text-vc-text-secondary transition-colors hover:text-vc-indigo"
+            >
+              Log In
+            </a>
+            <a
+              href="/register"
+              className="rounded-full bg-vc-coral px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-vc-coral-dark hover:shadow-md active:scale-[0.98]"
+            >
+              Start Free
+            </a>
+          </div>
         </div>
 
         {/* Mobile menu button */}
@@ -106,11 +114,18 @@ export function Navbar() {
                 </a>
               ))}
               <a
-                href="#waitlist"
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+              >
+                Log In
+              </a>
+              <a
+                href="/register"
                 onClick={() => setMobileOpen(false)}
                 className="mt-2 rounded-full bg-vc-coral px-5 py-2.5 text-center text-sm font-semibold text-white"
               >
-                Get Early Access
+                Start Free
               </a>
             </div>
           </motion.div>
