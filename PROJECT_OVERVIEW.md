@@ -4,14 +4,14 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 6 — Dashboard Analytics, Billing & Exports Complete |
+| **Status** | Phase 9 — Integration connectors (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
 
 ## What It Does
 
-Multi-tenant SaaS for church volunteer scheduling. Auto-generates fair, conflict-free schedules across ministries. Team leaders review and approve. Volunteers confirm via email. Calendar feeds sync to Google/Outlook. Works standalone (CSV/manual) or with Planning Center/Breeze/Rock.
+Multi-tenant SaaS for volunteer scheduling — built for churches, nonprofits, and volunteer-driven organizations. Auto-generates fair, conflict-free schedules across teams. Team leaders review and approve. Volunteers confirm via email. Calendar feeds sync to Google/Outlook. Works standalone (CSV/manual) or with Planning Center/Breeze/Rock.
 
 ## File Structure
 
@@ -59,8 +59,30 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Schedule list, generate draft, matrix view, CSV/PDF export
 │   │   │   ├── billing/
 │   │   │   │   └── page.tsx        # Subscription management, plan comparison, usage meters
+│   │   │   ├── members/
+│   │   │   │   └── page.tsx        # Member management (invite, approve, roles)
+│   │   │   ├── my-schedule/
+│   │   │   │   └── page.tsx        # Volunteer schedule view (all orgs, per-role times)
+│   │   │   ├── my-availability/
+│   │   │   │   └── page.tsx        # Blockout dates + weekly unavailable days
+│   │   │   ├── my-orgs/
+│   │   │   │   └── page.tsx        # Multi-org management (invites, reminders, switch)
+│   │   │   ├── events/
+│   │   │   │   └── page.tsx        # Event CRUD (one-time/recurring, open signup config)
+│   │   │   ├── import/
+│   │   │   │   └── page.tsx        # ChMS import (PCO, Breeze, Rock RMS)
 │   │   │   └── settings/
 │   │   │       └── page.tsx        # Calendar feeds, church config
+│   │   ├── events/
+│   │   │   └── [eventId]/
+│   │   │       └── signup/
+│   │   │           └── page.tsx    # Public event signup page (role selection)
+│   │   ├── join/
+│   │   │   └── [churchId]/
+│   │   │       └── page.tsx        # Public volunteer self-registration
+│   │   ├── invites/
+│   │   │   └── [membershipId]/
+│   │   │       └── page.tsx        # Accept/decline invitation
 │   │   ├── confirm/
 │   │   │   └── [token]/
 │   │   │       └── page.tsx        # Public volunteer confirm/decline (no auth)
@@ -79,6 +101,12 @@ VolunteerCal/
 │   │       │   └── route.ts    # Welcome email on signup (Resend)
 │   │       ├── lifecycle-emails/
 │   │       │   └── route.ts    # Lifecycle emails: purchase thank-you, re-engagement, upsell
+│   │       ├── invite/
+│   │       │   └── route.ts    # Send invitation email + create pending membership
+│   │       ├── signup/
+│   │       │   └── route.ts    # Event signup API (GET event data, POST signup)
+│   │       ├── import/
+│   │       │   └── route.ts    # ChMS import API (test, save creds, import volunteers)
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -92,13 +120,14 @@ VolunteerCal/
 │   │   ├── landing/            # Landing page sections
 │   │   └── scheduling/         # Schedule matrix, draft view, approval cards
 │   └── lib/
-│       ├── firebase/           # config.ts, auth.ts, firestore.ts
+│       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks
 │       ├── types/              # TypeScript interfaces
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts
+│       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts, permissions.ts
+│       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, reminder service
 └── docs/                       # Research outputs, architecture decisions
 ```
@@ -113,3 +142,9 @@ VolunteerCal/
 | 4 | Review/approval workflow (Centralized mode) | Complete |
 | 5 | Publish, volunteer confirmations, calendar feeds | Complete |
 | 6 | Dashboard analytics, Stripe billing, exports | Complete |
+| 7a | Membership data model, permissions, role-conditional nav, org switcher | Complete |
+| 7b | Two-way approval (invite/accept, self-register/approve) | Complete |
+| 7c | Volunteer self-service portal, per-role time scheduling, all-day events | Complete |
+| 7d | Events system, RoleSlots, open signup | Complete |
+| 8 | Landing page content refresh (inclusive language, brand voice) | Complete |
+| 9 | Integration connectors (Planning Center, Breeze, Rock RMS) + import UI | Complete |
