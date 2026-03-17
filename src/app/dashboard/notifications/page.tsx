@@ -17,6 +17,8 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<{ type: string; message: string } | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<{ type: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!churchId || !user) return;
@@ -70,6 +72,33 @@ export default function NotificationsPage() {
       setSendResult({ type: "error", message: "Network error" });
     } finally {
       setSending(null);
+    }
+  }
+
+  async function sendTestEmail() {
+    if (!user) return;
+    setSendingTest(true);
+    setTestResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/test-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type: "reminder", email: user.email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTestResult({ type: "success", message: data.message });
+      } else {
+        setTestResult({ type: "error", message: data.error || "Failed to send test email" });
+      }
+    } catch {
+      setTestResult({ type: "error", message: "Network error" });
+    } finally {
+      setSendingTest(false);
     }
   }
 
@@ -210,6 +239,29 @@ export default function NotificationsPage() {
               the <code className="rounded bg-vc-bg-warm px-1.5 py-0.5 text-xs text-vc-indigo">x-cron-secret</code> header.
               Vercel Cron or an external scheduler can trigger this daily.
             </p>
+          </div>
+
+          <div className="rounded-2xl border border-dashed border-vc-border-light bg-white p-6">
+            <h2 className="text-lg font-semibold text-vc-indigo mb-2">Test Email</h2>
+            <p className="text-sm text-vc-text-secondary mb-4">
+              Send a sample reminder email to <strong>{user?.email}</strong> to preview how it looks in your inbox.
+            </p>
+            <Button
+              onClick={sendTestEmail}
+              loading={sendingTest}
+              variant="secondary"
+            >
+              Send Test Email
+            </Button>
+            {testResult && (
+              <div className={`mt-3 rounded-lg px-4 py-3 text-sm ${
+                testResult.type === "success"
+                  ? "bg-vc-sage/10 text-vc-sage-dark"
+                  : "bg-vc-danger/5 text-vc-danger"
+              }`}>
+                {testResult.message}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -55,9 +55,19 @@ export function Footer() {
           <div className="h-px flex-1 bg-vc-border-light" />
         </div>
 
-        <p className="text-center text-xs text-vc-text-muted">
-          &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
-        </p>
+        <div className="flex flex-col items-center gap-2 text-xs text-vc-text-muted">
+          <div className="flex gap-4">
+            <a href="/privacy" className="transition-colors hover:text-vc-indigo">
+              Privacy Policy
+            </a>
+            <a href="/terms" className="transition-colors hover:text-vc-indigo">
+              Terms of Service
+            </a>
+          </div>
+          <p>
+            &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
+          </p>
+        </div>
       </div>
     </footer>
   );

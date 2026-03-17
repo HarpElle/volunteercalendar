@@ -140,6 +140,18 @@ function RegisterForm() {
             <Button type="submit" loading={loading} className="w-full">
               Create Account
             </Button>
+
+            <p className="text-center text-xs text-vc-text-muted">
+              By signing up, you agree to our{" "}
+              <Link href="/terms" className="text-vc-coral hover:text-vc-coral-dark transition-colors">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="text-vc-coral hover:text-vc-coral-dark transition-colors">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
         </div>
 
