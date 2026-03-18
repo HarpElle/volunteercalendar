@@ -406,6 +406,15 @@ function OrganizationContent() {
         )}
       </section>
 
+      {/* ── Short Links ── */}
+      {isAdmin(activeMembership) && churchId && (
+        <ShortLinksSection
+          churchId={churchId}
+          currentTier={currentTier}
+          shortLinksLimit={limits.short_links}
+        />
+      )}
+
       {/* ── Billing & Plan ── */}
       {isOwner(activeMembership) && (
         <section className="mb-8" id="billing-section">
@@ -621,15 +630,6 @@ function OrganizationContent() {
           </form>
         </div>
       </section>
-
-      {/* ── Short Links ── */}
-      {isAdmin(activeMembership) && churchId && (
-        <ShortLinksSection
-          churchId={churchId}
-          currentTier={currentTier}
-          shortLinksLimit={limits.short_links}
-        />
-      )}
 
       {/* ── Danger Zone ── */}
       {isOwner(activeMembership) && (
