@@ -75,19 +75,24 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Delete all subcollections under the church document
-    const batch = adminDb.batch();
+    // Firestore batches are single-use — create a new one after each commit.
+    let batch = adminDb.batch();
     let deleteCount = 0;
+
+    async function addDelete(ref: FirebaseFirestore.DocumentReference) {
+      batch.delete(ref);
+      deleteCount++;
+      if (deleteCount >= 490) {
+        await batch.commit();
+        batch = adminDb.batch();
+        deleteCount = 0;
+      }
+    }
 
     for (const collection of SUBCOLLECTIONS) {
       const snap = await adminDb.collection(`churches/${church_id}/${collection}`).get();
-      for (const doc of snap.docs) {
-        batch.delete(doc.ref);
-        deleteCount++;
-        // Firestore batches max at 500 operations
-        if (deleteCount >= 490) {
-          await batch.commit();
-          deleteCount = 0;
-        }
+      for (const d of snap.docs) {
+        await addDelete(d.ref);
       }
     }
 
@@ -96,13 +101,8 @@ export async function DELETE(req: NextRequest) {
       .collection("memberships")
       .where("church_id", "==", church_id)
       .get();
-    for (const doc of membershipsSnap.docs) {
-      batch.delete(doc.ref);
-      deleteCount++;
-      if (deleteCount >= 490) {
-        await batch.commit();
-        deleteCount = 0;
-      }
+    for (const d of membershipsSnap.docs) {
+      await addDelete(d.ref);
     }
 
     // Delete all event_signups for this church
@@ -110,13 +110,8 @@ export async function DELETE(req: NextRequest) {
       .collection("event_signups")
       .where("church_id", "==", church_id)
       .get();
-    for (const doc of signupsSnap.docs) {
-      batch.delete(doc.ref);
-      deleteCount++;
-      if (deleteCount >= 490) {
-        await batch.commit();
-        deleteCount = 0;
-      }
+    for (const d of signupsSnap.docs) {
+      await addDelete(d.ref);
     }
 
     // Delete all short_links for this church
@@ -124,17 +119,21 @@ export async function DELETE(req: NextRequest) {
       .collection("short_links")
       .where("church_id", "==", church_id)
       .get();
-    for (const doc of shortLinksSnap.docs) {
-      batch.delete(doc.ref);
-      deleteCount++;
-      if (deleteCount >= 490) {
-        await batch.commit();
-        deleteCount = 0;
-      }
+    for (const d of shortLinksSnap.docs) {
+      await addDelete(d.ref);
+    }
+
+    // Delete pending_invites for this church
+    const pendingSnap = await adminDb
+      .collection("pending_invites")
+      .where("church_id", "==", church_id)
+      .get();
+    for (const d of pendingSnap.docs) {
+      await addDelete(d.ref);
     }
 
     // Delete the church document itself
-    batch.delete(adminDb.doc(`churches/${church_id}`));
+    await addDelete(adminDb.doc(`churches/${church_id}`));
 
     // Commit remaining
     if (deleteCount > 0) {
