@@ -113,14 +113,16 @@ service cloud.firestore {
 
     // ─── Churches ───
     match /churches/{churchId} {
-      // Any active member can read their church
-      allow read: if isActiveMember(churchId);
+      // Any active member can read their church; bootstrap allows owner to read own church
+      allow read: if isActiveMember(churchId)
+        || (request.auth != null && request.auth.uid == churchId);
 
       // Bootstrap: user can create a church doc with their UID as the ID
       allow create: if request.auth != null && request.auth.uid == churchId;
 
-      // Admins and owners can update church settings
-      allow update: if isOrgAdmin(churchId);
+      // Admins/owners can update; bootstrap allows owner to update own church during setup
+      allow update: if isOrgAdmin(churchId)
+        || (request.auth != null && request.auth.uid == churchId);
 
       // Only owner can delete a church
       allow delete: if isOrgOwner(churchId);

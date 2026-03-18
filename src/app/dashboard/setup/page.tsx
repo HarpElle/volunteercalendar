@@ -3,7 +3,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import { setDocument, updateDocument, createMembership } from "@/lib/firebase/firestore";
+import { setDocument, updateDocument, createMembership, getDocument } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -71,9 +71,9 @@ export default function ChurchSetupPage() {
 
       // Use the user's UID as the church ID for simple 1:1 mapping during MVP
       const churchId = user.uid;
-      await setDocument("churches", churchId, churchData);
 
-      // Create owner membership
+      // Create owner membership first — this uses the bootstrap rule and enables
+      // church doc updates if a previous attempt partially created the church doc
       const now = new Date().toISOString();
       await createMembership({
         user_id: user.uid,
@@ -88,7 +88,10 @@ export default function ChurchSetupPage() {
         updated_at: now,
       });
 
-      // Link user profile to their church (legacy fields for backward compat)
+      // Create or overwrite church doc (now allowed because membership exists)
+      await setDocument("churches", churchId, churchData);
+
+      // Link user profile to their church
       await updateDocument("users", user.uid, {
         church_id: churchId,
         default_church_id: churchId,
@@ -137,9 +140,6 @@ export default function ChurchSetupPage() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-vc-text-muted">
-            {orgType === "church" ? "We\u2019ll use terms like \u201cMinistry\u201d throughout the app." : "We\u2019ll use \u201cTeam\u201d instead of \u201cMinistry\u201d throughout the app."}
-          </p>
         </div>
 
         <Input
