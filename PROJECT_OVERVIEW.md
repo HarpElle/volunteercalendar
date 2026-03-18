@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 11 — Beta hardening (in progress) |
+| **Status** | Phase 12 — Dashboard UI/UX reorganization (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -18,6 +18,7 @@ Multi-tenant SaaS for volunteer scheduling — built for churches, nonprofits, a
 ```
 VolunteerCal/
 ├── .StartupIdeas/              # Planning documents (strategy, prompts, research)
+├── middleware.ts                # Centralized route redirects (old URLs → new pages)
 ├── CLAUDE.md                   # Claude Code conventions
 ├── PROJECT_OVERVIEW.md         # This file
 ├── README.md                   # Public-facing README
@@ -49,32 +50,22 @@ VolunteerCal/
 │   │   │   ├── page.tsx        # Dashboard home (stats + getting started)
 │   │   │   ├── setup/
 │   │   │   │   └── page.tsx        # Church setup wizard (name, timezone, workflow)
-│   │   │   ├── volunteers/
-│   │   │   │   └── page.tsx        # Volunteer list, manual add, CSV import
-│   │   │   ├── ministries/
-│   │   │   │   └── page.tsx        # Ministry CRUD with color picker
-│   │   │   ├── services/
-│   │   │   │   └── page.tsx        # Service config (day, time, roles)
+│   │   │   ├── people/
+│   │   │   │   └── page.tsx        # Unified people management (roster, invites, CSV/ChMS import)
+│   │   │   ├── services-events/
+│   │   │   │   └── page.tsx        # Combined services + events (tabbed: Services | Events)
 │   │   │   ├── schedules/
 │   │   │   │   └── page.tsx        # Schedule list, generate draft, matrix view, CSV/PDF export
-│   │   │   ├── billing/
-│   │   │   │   └── page.tsx        # Subscription management, plan comparison, usage meters
-│   │   │   ├── members/
-│   │   │   │   └── page.tsx        # Member management (invite, approve, roles)
 │   │   │   ├── my-schedule/
-│   │   │   │   └── page.tsx        # Volunteer schedule view (all orgs, per-role times)
-│   │   │   ├── my-availability/
-│   │   │   │   └── page.tsx        # Blockout dates + weekly unavailable days
+│   │   │   │   └── page.tsx        # Volunteer view (Upcoming | Past | Availability tabs)
 │   │   │   ├── my-orgs/
 │   │   │   │   └── page.tsx        # Multi-org management (invites, reminders, switch)
-│   │   │   ├── events/
-│   │   │   │   └── page.tsx        # Event CRUD (one-time/recurring, open signup config)
-│   │   │   ├── import/
-│   │   │   │   └── page.tsx        # ChMS import (PCO, Breeze, Rock RMS)
+│   │   │   ├── organization/
+│   │   │   │   └── page.tsx        # Org settings, ministries/teams, billing (stacked sections)
+│   │   │   ├── account/
+│   │   │   │   └── page.tsx        # User profile, password, calendar feeds, danger zone
 │   │   │   ├── notifications/
 │   │   │   │   └── page.tsx        # Admin notification center (send + history)
-│   │   │   └── settings/
-│   │   │       └── page.tsx        # Calendar feeds, church config
 │   │   ├── events/
 │   │   │   └── [eventId]/
 │   │   │       └── signup/
@@ -157,3 +148,4 @@ VolunteerCal/
 | 9 | Integration connectors (Planning Center, Breeze, Rock RMS) + import UI | Complete |
 | 10 | Notifications & reminders (48h/24h email + SMS, Twilio, preferences, admin center) | Complete |
 | 11 | Beta hardening (favicon/PWA, cron automation, error boundaries, 404 page) | Complete |
+| 12 | Dashboard UI/UX reorganization (grouped nav, avatar menu, People/Organization/Account/Services&Events pages, middleware redirects) | Complete |

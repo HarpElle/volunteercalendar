@@ -71,6 +71,18 @@
 - All emails route replies to info@volunteercal.com
 - HarpElle attribution in footer
 
+### Dashboard UI/UX Reorganization (Phase 12)
+- Reduced sidebar from 14 flat items to 7 max (admin) with section grouping: Home, My Schedule | SCHEDULING: Schedules, Services & Events | MANAGE: People, Notifications | ORGANIZATION: Organization
+- Volunteers see only 2 nav items (Home, My Schedule); schedulers 4; admins 7
+- Avatar popover (bottom-left) replaces sidebar account link → Account Settings, My Organizations, Sign Out
+- Unified People page: Roster + Invites tabs, Add People (individual/CSV/ChMS), join link sharing
+- Combined Services & Events page with tab switching
+- Organization page: stacked sections (General, Ministries/Teams, Billing, Danger Zone) with role gates
+- Account page: user profile, password, calendar feeds, account deletion (extracted from old Settings)
+- My Schedule absorbs Availability as third tab
+- Centralized middleware.ts for all old-to-new route redirects (308 permanent)
+- Deleted 8 old page files: volunteers, members, import, ministries, billing, settings, services, events, my-availability
+
 ---
 
 ## Outstanding: Owner Action Items (Jason)

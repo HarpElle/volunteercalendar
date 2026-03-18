@@ -8,10 +8,8 @@ import {
   getChurchDocuments,
   removeChurchDocument,
   updateDocument,
-  getDocument,
   getUserMemberships,
   deleteMembership,
-  membershipDocId,
 } from "@/lib/firebase/firestore";
 import {
   updateUserDisplayName,
@@ -20,24 +18,10 @@ import {
 } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { isAdmin, isOwner } from "@/lib/utils/permissions";
-import { getOrgTerms } from "@/lib/utils/org-terms";
-import { WORKFLOW_MODES } from "@/lib/constants";
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
-import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, OrgType, WorkflowMode } from "@/lib/types";
+import { isOwner } from "@/lib/utils/permissions";
+import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
 
-const TIMEZONE_OPTIONS = [
-  { value: "America/New_York", label: "Eastern (ET)" },
-  { value: "America/Chicago", label: "Central (CT)" },
-  { value: "America/Denver", label: "Mountain (MT)" },
-  { value: "America/Los_Angeles", label: "Pacific (PT)" },
-  { value: "America/Anchorage", label: "Alaska (AKT)" },
-  { value: "Pacific/Honolulu", label: "Hawaii (HT)" },
-];
-
-export default function SettingsPage() {
+export default function AccountPage() {
   const router = useRouter();
   const { user, profile, activeMembership, signOut } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
@@ -67,46 +51,33 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  // Org settings state
-  const [orgName, setOrgName] = useState("");
-  const [orgType, setOrgType] = useState<OrgType>("church");
-  const [orgTimezone, setOrgTimezone] = useState("America/New_York");
-  const [orgWorkflowMode, setOrgWorkflowMode] = useState<WorkflowMode>("centralized");
-  const [orgSaving, setOrgSaving] = useState(false);
-  const [orgSuccess, setOrgSuccess] = useState("");
-  const [orgError, setOrgError] = useState("");
-
   // Delete account state
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  // Load data
+  // Load profile data
   useEffect(() => {
     setDisplayName(profile?.display_name || "");
     setPhone(profile?.phone || "");
   }, [profile]);
 
+  // Load calendar feed data
   useEffect(() => {
-    if (!churchId) return;
+    if (!churchId) {
+      setLoading(false);
+      return;
+    }
     async function load() {
       try {
-        const [feedDocs, volDocs, minDocs, churchSnap] = await Promise.all([
+        const [feedDocs, volDocs, minDocs] = await Promise.all([
           getChurchDocuments(churchId!, "calendar_feeds"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
-          getDoc(doc(db, "churches", churchId!)),
         ]);
         setFeeds(feedDocs as unknown as CalendarFeed[]);
         setVolunteers(volDocs as unknown as Volunteer[]);
         setMinistries(minDocs as unknown as Ministry[]);
-        if (churchSnap.exists()) {
-          const data = churchSnap.data();
-          setOrgName(data.name || "");
-          setOrgType((data.org_type as OrgType) || "church");
-          setOrgTimezone(data.timezone || "America/New_York");
-          setOrgWorkflowMode((data.workflow_mode as WorkflowMode) || "centralized");
-        }
       } catch {
         // silent
       } finally {
@@ -166,34 +137,6 @@ export default function SettingsPage() {
     }
   }
 
-  // --- Org settings handler ---
-
-  async function handleOrgSave(e: FormEvent) {
-    e.preventDefault();
-    if (!churchId) return;
-    setOrgSaving(true);
-    setOrgError("");
-    setOrgSuccess("");
-    try {
-      const slug = orgName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
-      await updateDocument("churches", churchId, {
-        name: orgName,
-        slug,
-        org_type: orgType,
-        timezone: orgTimezone,
-      });
-      setOrgSuccess("Organization settings updated.");
-      setTimeout(() => setOrgSuccess(""), 3000);
-    } catch (err) {
-      setOrgError((err as Error).message || "Failed to update organization.");
-    } finally {
-      setOrgSaving(false);
-    }
-  }
-
   // --- Delete account handler ---
 
   async function handleDeleteAccount() {
@@ -201,18 +144,11 @@ export default function SettingsPage() {
     setDeleting(true);
     setDeleteError("");
     try {
-      // Delete all user memberships
       const memberships = await getUserMemberships(user.uid);
       await Promise.all(memberships.map((m) => deleteMembership(m.id)));
-
-      // Delete user profile document
       const { removeDocument } = await import("@/lib/firebase/firestore");
       await removeDocument("users", user.uid);
-
-      // Delete Firebase Auth account
       await deleteCurrentUser();
-
-      // Redirect to home (auth state listener will handle cleanup)
       router.push("/");
     } catch (err) {
       const code = (err as { code?: string }).code;
@@ -291,22 +227,19 @@ export default function SettingsPage() {
     org: "Organization (everyone)",
   };
 
-  const terms = getOrgTerms(orgType);
-  const workflowLabel = WORKFLOW_MODES.find((m) => m.value === orgWorkflowMode)?.label || orgWorkflowMode;
-
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-display text-3xl text-vc-indigo">Settings</h1>
+        <h1 className="font-display text-3xl text-vc-indigo">Account Settings</h1>
         <p className="mt-1 text-vc-text-secondary">
-          Manage your profile, organization, and calendar feeds.
+          Manage your profile, password, and calendar feeds.
         </p>
       </div>
 
       {/* Profile Section */}
       <section className="mb-10">
         <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Profile</h2>
-        <div className="rounded-xl border border-vc-border-light bg-white p-6">
+        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
           <form onSubmit={handleProfileSave} className="space-y-4">
             <Input
               label="Display Name"
@@ -367,72 +300,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Organization Settings (admin+ only) */}
-      {isAdmin(activeMembership) && (
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Organization</h2>
-          <div className="rounded-xl border border-vc-border-light bg-white p-6">
-            <form onSubmit={handleOrgSave} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-vc-text">Organization Type</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { value: "church" as const, label: "Church" },
-                    { value: "nonprofit" as const, label: "Nonprofit" },
-                    { value: "other" as const, label: "Other" },
-                  ]).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setOrgType(opt.value)}
-                      className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
-                        orgType === opt.value
-                          ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
-                          : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Input
-                label={orgType === "church" ? "Church Name" : "Organization Name"}
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                required
-              />
-
-              <Select
-                label="Timezone"
-                options={TIMEZONE_OPTIONS}
-                value={orgTimezone}
-                onChange={(e) => setOrgTimezone(e.target.value)}
-              />
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
-                    {workflowLabel}
-                  </span>
-                  <span className="text-xs text-vc-text-muted">
-                    Contact support to change workflow mode.
-                  </span>
-                </div>
-              </div>
-
-              {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
-              {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
-              <Button type="submit" loading={orgSaving} size="sm">
-                Save Organization
-              </Button>
-            </form>
-          </div>
-        </section>
-      )}
-
       {/* Calendar Feeds Section */}
       <section className="mb-10">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -451,7 +318,7 @@ export default function SettingsPage() {
 
         {/* Create feed form */}
         {showCreate && (
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-5">
+          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-5">
             <h3 className="mb-3 font-medium text-vc-indigo">Create Calendar Feed</h3>
             <div className="space-y-4">
               <div>
@@ -520,7 +387,7 @@ export default function SettingsPage() {
         {loading ? (
           <div className="py-8 text-center text-vc-text-muted">Loading...</div>
         ) : feeds.length === 0 && !showCreate ? (
-          <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
+          <div className="rounded-2xl border border-dashed border-vc-border bg-white p-8 text-center">
             <svg className="mx-auto mb-3 h-8 w-8 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
             </svg>
@@ -534,7 +401,7 @@ export default function SettingsPage() {
             {feeds.map((feed) => {
               const url = getFeedUrl(feed);
               return (
-                <div key={feed.id} className="rounded-xl border border-vc-border-light bg-white p-4">
+                <div key={feed.id} className="rounded-2xl border border-vc-border-light bg-white p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -566,7 +433,7 @@ export default function SettingsPage() {
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-vc-text-muted">
-                    Add this URL to Google Calendar (Other calendars → From URL) or Outlook (Add calendar → Subscribe from web).
+                    Add this URL to Google Calendar (Other calendars &rarr; From URL) or Outlook (Add calendar &rarr; Subscribe from web).
                   </p>
                 </div>
               );
@@ -579,7 +446,7 @@ export default function SettingsPage() {
       {isOwner(activeMembership) && (
         <section className="mb-10">
           <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
-          <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
+          <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
             <h3 className="font-medium text-vc-indigo">Delete Account</h3>
             <p className="mt-1 text-sm text-vc-text-muted">
               Permanently delete your account, profile, and all memberships. Organization data

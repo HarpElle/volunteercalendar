@@ -1,0 +1,645 @@
+"use client";
+
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAuth } from "@/lib/context/auth-context";
+import {
+  addChurchDocument,
+  getChurchDocuments,
+  updateChurchDocument,
+  removeChurchDocument,
+  updateDocument,
+} from "@/lib/firebase/firestore";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { isAdmin, isOwner } from "@/lib/utils/permissions";
+import { getOrgTerms } from "@/lib/utils/org-terms";
+import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import type { Ministry, OrgType, WorkflowMode, Church, Volunteer } from "@/lib/types";
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (ET)" },
+  { value: "America/Chicago", label: "Central (CT)" },
+  { value: "America/Denver", label: "Mountain (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific (PT)" },
+  { value: "America/Anchorage", label: "Alaska (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (HT)" },
+];
+
+const PRESET_COLORS = [
+  { hex: "#E07A5F", name: "Coral" },
+  { hex: "#2D3047", name: "Indigo" },
+  { hex: "#81B29A", name: "Sage" },
+  { hex: "#F2CC8F", name: "Sand" },
+  { hex: "#7B68EE", name: "Purple" },
+  { hex: "#E84855", name: "Red" },
+  { hex: "#3D8BF2", name: "Blue" },
+  { hex: "#F29E4C", name: "Orange" },
+];
+
+export default function OrganizationPage() {
+  return (
+    <Suspense>
+      <OrganizationContent />
+    </Suspense>
+  );
+}
+
+function OrganizationContent() {
+  const { user, profile, activeMembership } = useAuth();
+  const searchParams = useSearchParams();
+  const churchId = activeMembership?.church_id || profile?.church_id;
+
+  // Church data
+  const [church, setChurch] = useState<Church | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // General settings state
+  const [orgName, setOrgName] = useState("");
+  const [orgType, setOrgType] = useState<OrgType>("church");
+  const [orgTimezone, setOrgTimezone] = useState("America/New_York");
+  const [orgWorkflowMode, setOrgWorkflowMode] = useState<WorkflowMode>("centralized");
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSuccess, setOrgSuccess] = useState("");
+  const [orgError, setOrgError] = useState("");
+
+  // Ministries state
+  const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [showMinistryForm, setShowMinistryForm] = useState(false);
+  const [editingMinistryId, setEditingMinistryId] = useState<string | null>(null);
+  const [ministrySaving, setMinistrySaving] = useState(false);
+  const [deletingMinistry, setDeletingMinistry] = useState<string | null>(null);
+  const [ministryName, setMinistryName] = useState("");
+  const [ministryColor, setMinistryColor] = useState(PRESET_COLORS[0].hex);
+  const [ministryDescription, setMinistryDescription] = useState("");
+
+  // Billing state
+  const [volunteerCount, setVolunteerCount] = useState(0);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const billingSuccess = searchParams.get("success") === "true";
+  const billingCanceled = searchParams.get("canceled") === "true";
+
+  // Load all data
+  useEffect(() => {
+    if (!churchId) {
+      setLoading(false);
+      return;
+    }
+    async function load() {
+      try {
+        const [churchSnap, minDocs, volDocs] = await Promise.all([
+          getDoc(doc(db, "churches", churchId!)),
+          getChurchDocuments(churchId!, "ministries"),
+          getChurchDocuments(churchId!, "volunteers"),
+        ]);
+        if (churchSnap.exists()) {
+          const data = churchSnap.data();
+          const ch = { id: churchSnap.id, ...data } as unknown as Church;
+          setChurch(ch);
+          setOrgName(data.name || "");
+          setOrgType((data.org_type as OrgType) || "church");
+          setOrgTimezone(data.timezone || "America/New_York");
+          setOrgWorkflowMode((data.workflow_mode as WorkflowMode) || "centralized");
+        }
+        setMinistries(minDocs as unknown as Ministry[]);
+        setVolunteerCount((volDocs as unknown as Volunteer[]).length);
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [churchId]);
+
+  const terms = getOrgTerms(orgType);
+  const currentTier = church?.subscription_tier || "free";
+  const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;
+  const workflowLabel = WORKFLOW_MODES.find((m) => m.value === orgWorkflowMode)?.label || orgWorkflowMode;
+  const volNearLimit = limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
+  const minNearLimit = limits.ministries !== Infinity && ministries.length >= limits.ministries * 0.8;
+
+  // --- General settings handler ---
+
+  async function handleOrgSave(e: FormEvent) {
+    e.preventDefault();
+    if (!churchId) return;
+    setOrgSaving(true);
+    setOrgError("");
+    setOrgSuccess("");
+    try {
+      const slug = orgName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      await updateDocument("churches", churchId, {
+        name: orgName,
+        slug,
+        org_type: orgType,
+        timezone: orgTimezone,
+      });
+      setOrgSuccess("Organization settings updated.");
+      setTimeout(() => setOrgSuccess(""), 3000);
+    } catch (err) {
+      setOrgError((err as Error).message || "Failed to update organization.");
+    } finally {
+      setOrgSaving(false);
+    }
+  }
+
+  // --- Ministry handlers ---
+
+  function resetMinistryForm() {
+    setMinistryName("");
+    setMinistryColor(PRESET_COLORS[0].hex);
+    setMinistryDescription("");
+    setEditingMinistryId(null);
+    setShowMinistryForm(false);
+  }
+
+  function startEditMinistry(m: Ministry) {
+    setMinistryName(m.name);
+    setMinistryColor(m.color);
+    setMinistryDescription(m.description);
+    setEditingMinistryId(m.id);
+    setShowMinistryForm(true);
+  }
+
+  async function handleMinistrySubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!churchId || !user) return;
+    setMinistrySaving(true);
+    try {
+      const data = {
+        name: ministryName,
+        color: ministryColor,
+        description: ministryDescription,
+        church_id: churchId,
+        lead_user_id: user.uid,
+        lead_email: user.email || "",
+        ...(editingMinistryId ? {} : { created_at: new Date().toISOString() }),
+      };
+      if (editingMinistryId) {
+        await updateChurchDocument(churchId, "ministries", editingMinistryId, data);
+        setMinistries((prev) =>
+          prev.map((m) => (m.id === editingMinistryId ? { ...m, ...data } : m))
+        );
+      } else {
+        const ref = await addChurchDocument(churchId, "ministries", data);
+        setMinistries((prev) => [...prev, { id: ref.id, ...data } as Ministry]);
+      }
+      resetMinistryForm();
+    } catch {
+      // silent
+    } finally {
+      setMinistrySaving(false);
+    }
+  }
+
+  async function handleDeleteMinistry(id: string) {
+    if (!churchId) return;
+    setDeletingMinistry(id);
+    try {
+      await removeChurchDocument(churchId, "ministries", id);
+      setMinistries((prev) => prev.filter((m) => m.id !== id));
+    } catch {
+      // silent
+    } finally {
+      setDeletingMinistry(null);
+    }
+  }
+
+  // --- Billing handlers ---
+
+  async function handleCheckout(tier: string) {
+    setCheckoutLoading(tier);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId, tier }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      // silent
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function handlePortal() {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      // silent
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="py-16 text-center text-vc-text-muted">Loading...</div>;
+  }
+
+  const ministryLimitReached = limits.ministries !== Infinity && ministries.length >= limits.ministries;
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="font-display text-3xl text-vc-indigo">Organization</h1>
+        <p className="mt-1 text-vc-text-secondary">
+          Manage your {orgType === "church" ? "church" : "organization"} settings, {terms.pluralLower}, and billing.
+        </p>
+      </div>
+
+      {/* Billing banners */}
+      {billingSuccess && (
+        <div className="mb-6 rounded-lg bg-vc-sage/10 border border-vc-sage/30 px-4 py-3 text-sm text-vc-sage font-medium">
+          Subscription activated! Your plan has been updated.
+        </div>
+      )}
+      {billingCanceled && (
+        <div className="mb-6 rounded-lg bg-vc-sand/20 border border-vc-sand/30 px-4 py-3 text-sm text-vc-text-secondary">
+          Checkout was canceled. You can try again anytime.
+        </div>
+      )}
+
+      {/* ── General Settings ── */}
+      <section className="mb-8">
+        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
+        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+          <form onSubmit={handleOrgSave} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-vc-text">Organization Type</label>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { value: "church" as const, label: "Church" },
+                  { value: "nonprofit" as const, label: "Nonprofit" },
+                  { value: "other" as const, label: "Other" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setOrgType(opt.value)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
+                      orgType === opt.value
+                        ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
+                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Input
+              label={orgType === "church" ? "Church Name" : "Organization Name"}
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              required
+            />
+
+            <Select
+              label="Timezone"
+              options={TIMEZONE_OPTIONS}
+              value={orgTimezone}
+              onChange={(e) => setOrgTimezone(e.target.value)}
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
+                  {workflowLabel}
+                </span>
+                <span className="text-xs text-vc-text-muted">
+                  Contact support to change workflow mode.
+                </span>
+              </div>
+            </div>
+
+            {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
+            {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
+            <Button type="submit" loading={orgSaving} size="sm">
+              Save Organization
+            </Button>
+          </form>
+        </div>
+      </section>
+
+      {/* ── Ministries / Teams ── */}
+      <section className="mb-8">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold text-vc-indigo">{terms.plural}</h2>
+          {!showMinistryForm && (
+            ministryLimitReached ? (
+              <Button variant="outline" size="sm" onClick={() => {
+                const el = document.getElementById("billing-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}>
+                Upgrade to Add More {terms.plural}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setShowMinistryForm(true)}>
+                Add {terms.singular}
+              </Button>
+            )
+          )}
+        </div>
+
+        {/* Add / Edit form */}
+        {showMinistryForm && (
+          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+            <h3 className="mb-4 font-medium text-vc-indigo">
+              {editingMinistryId ? "Edit " + terms.singular : "New " + terms.singular}
+            </h3>
+            <form onSubmit={handleMinistrySubmit} className="space-y-4">
+              <Input
+                label={terms.singular + " Name"}
+                required
+                placeholder={orgType === "church" ? "e.g., Worship, Kids, Tech" : "e.g., Events, Marketing, Outreach"}
+                value={ministryName}
+                onChange={(e) => setMinistryName(e.target.value)}
+              />
+              <Input
+                label="Description"
+                placeholder={"Brief description of this " + terms.singularLower}
+                value={ministryDescription}
+                onChange={(e) => setMinistryDescription(e.target.value)}
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-vc-text">Color</label>
+                <div className="flex flex-wrap gap-3">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c.hex}
+                      type="button"
+                      onClick={() => setMinistryColor(c.hex)}
+                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-all ${
+                        ministryColor === c.hex
+                          ? "ring-2 ring-offset-2 ring-vc-indigo bg-vc-bg-warm font-medium"
+                          : "hover:bg-vc-bg-warm/50"
+                      }`}
+                    >
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-full"
+                        style={{ backgroundColor: c.hex }}
+                      />
+                      <span className="text-vc-text-secondary">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button type="submit" loading={ministrySaving}>
+                  {editingMinistryId ? "Save Changes" : "Create " + terms.singular}
+                </Button>
+                <Button type="button" variant="ghost" onClick={resetMinistryForm}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Ministry list */}
+        {ministries.length === 0 && !showMinistryForm ? (
+          <div className="rounded-2xl border border-dashed border-vc-border bg-white p-12 text-center">
+            <p className="text-vc-text-secondary">No {terms.pluralLower} yet.</p>
+            <p className="mt-1 text-sm text-vc-text-muted">
+              Add your first {terms.singularLower} to start organizing volunteers.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {ministries.map((m) => (
+              <div
+                key={m.id}
+                className="group relative rounded-2xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
+                    style={{ backgroundColor: m.color }}
+                  />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-vc-indigo">{m.name}</h3>
+                    {m.description && (
+                      <p className="mt-1 text-sm text-vc-text-muted">{m.description}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => startEditMinistry(m)}
+                    className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMinistry(m.id)}
+                    disabled={deletingMinistry === m.id}
+                    className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+                  >
+                    {deletingMinistry === m.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Billing & Plan ── */}
+      {isOwner(activeMembership) && (
+        <section className="mb-8" id="billing-section">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Billing & Plan</h2>
+
+          {/* Current plan card */}
+          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="font-semibold text-vc-indigo">Current Plan</h3>
+                  <Badge variant={currentTier === "free" ? "default" : "success"}>
+                    {currentTier.charAt(0).toUpperCase() + currentTier.slice(1)}
+                  </Badge>
+                </div>
+                <p className="text-sm text-vc-text-secondary">
+                  {PRICING_TIERS.find((t) => t.tier === currentTier)?.price || "$0"}{" "}
+                  {currentTier !== "free" && "· Billed monthly"}
+                </p>
+              </div>
+              {currentTier !== "free" && (
+                <Button variant="outline" size="sm" onClick={handlePortal} loading={portalLoading}>
+                  Manage Subscription
+                </Button>
+              )}
+            </div>
+
+            {/* Usage meters */}
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg bg-vc-bg-warm p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-vc-text-secondary">Volunteers</span>
+                  <span className="text-sm font-semibold text-vc-indigo">
+                    {volunteerCount} / {limits.volunteers === Infinity ? "\u221E" : limits.volunteers}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${volNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    style={{
+                      width: limits.volunteers === Infinity
+                        ? "10%"
+                        : `${Math.min((volunteerCount / limits.volunteers) * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+                {volNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching volunteer limit</p>}
+              </div>
+              <div className="rounded-lg bg-vc-bg-warm p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-vc-text-secondary">{terms.plural}</span>
+                  <span className="text-sm font-semibold text-vc-indigo">
+                    {ministries.length} / {limits.ministries === Infinity ? "\u221E" : limits.ministries}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${minNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    style={{
+                      width: limits.ministries === Infinity
+                        ? "10%"
+                        : `${Math.min((ministries.length / limits.ministries) * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+                {minNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching {terms.singularLower} limit</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Plan comparison */}
+          <h3 className="mb-4 font-semibold text-vc-indigo">
+            {currentTier === "free" ? "Upgrade Your Plan" : "All Plans"}
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {PRICING_TIERS.map((plan) => {
+              const isCurrent = plan.tier === currentTier;
+              const isDowngrade =
+                PRICING_TIERS.findIndex((t) => t.tier === currentTier) >
+                PRICING_TIERS.findIndex((t) => t.tier === plan.tier);
+              const canCheckout = !isCurrent && !isDowngrade && plan.tier !== "free" && plan.tier !== "enterprise";
+
+              return (
+                <div
+                  key={plan.tier}
+                  className={`rounded-xl border p-5 transition-shadow ${
+                    plan.highlighted && !isCurrent
+                      ? "border-vc-coral/40 bg-vc-coral/5 shadow-sm"
+                      : isCurrent
+                        ? "border-vc-sage/40 bg-vc-sage/5"
+                        : "border-vc-border-light bg-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-semibold text-vc-indigo">{plan.name}</h4>
+                    {isCurrent && <Badge variant="success">Current</Badge>}
+                    {plan.highlighted && !isCurrent && <Badge variant="warning">Popular</Badge>}
+                  </div>
+                  <p className="text-2xl font-bold text-vc-indigo mb-1">{plan.price}</p>
+                  <p className="text-xs text-vc-text-muted mb-4">
+                    {plan.volunteers} volunteers · {plan.ministries}{" "}
+                    {plan.ministries === "1" ? "team" : "teams"}
+                  </p>
+                  <ul className="space-y-1.5 mb-5">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-vc-text-secondary">
+                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {canCheckout ? (
+                    <Button
+                      size="sm"
+                      variant={plan.highlighted ? "primary" : "outline"}
+                      className="w-full"
+                      loading={checkoutLoading === plan.tier}
+                      onClick={() => handleCheckout(plan.tier)}
+                    >
+                      {currentTier === "free" ? "Start Free Trial" : "Upgrade"}
+                    </Button>
+                  ) : plan.tier === "enterprise" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => (window.location.href = "mailto:info@volunteercal.com")}
+                    >
+                      Contact Us
+                    </Button>
+                  ) : isCurrent ? (
+                    <Button size="sm" variant="ghost" className="w-full" disabled>
+                      Current Plan
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-vc-text-muted">
+            All paid plans include a 14-day free trial. Annual billing saves 20%.
+            Questions?{" "}
+            <a href="mailto:info@volunteercal.com" className="text-vc-coral hover:underline">
+              Contact us
+            </a>
+          </p>
+        </section>
+      )}
+
+      {/* ── Danger Zone ── */}
+      {isOwner(activeMembership) && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
+          <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
+            <h3 className="font-medium text-vc-indigo">Delete Organization</h3>
+            <p className="mt-1 text-sm text-vc-text-muted">
+              Permanently deleting an organization removes all its data including volunteers,
+              schedules, and assignments. This cannot be undone.
+            </p>
+            <p className="mt-3 text-sm text-vc-text-muted">
+              To delete this organization, please contact support at{" "}
+              <a href="mailto:info@volunteercal.com" className="text-vc-coral hover:underline">
+                info@volunteercal.com
+              </a>.
+            </p>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
