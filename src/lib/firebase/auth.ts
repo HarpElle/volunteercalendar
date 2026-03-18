@@ -4,6 +4,11 @@ import {
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  updateProfile,
+  updatePassword as fbUpdatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  deleteUser,
   type User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -51,4 +56,24 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export function onAuthChange(callback: (user: User | null) => void) {
   return onAuthStateChanged(auth, callback);
+}
+
+export async function updateUserDisplayName(displayName: string) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+  await updateProfile(user, { displayName });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Not authenticated");
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await fbUpdatePassword(user, newPassword);
+}
+
+export async function deleteCurrentUser() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+  await deleteUser(user);
 }

@@ -1,43 +1,112 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   addChurchDocument,
   getChurchDocuments,
   removeChurchDocument,
+  updateDocument,
+  getDocument,
+  getUserMemberships,
+  deleteMembership,
+  membershipDocId,
 } from "@/lib/firebase/firestore";
+import {
+  updateUserDisplayName,
+  changePassword,
+  deleteCurrentUser,
+} from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
-import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { isAdmin, isOwner } from "@/lib/utils/permissions";
+import { getOrgTerms } from "@/lib/utils/org-terms";
+import { WORKFLOW_MODES } from "@/lib/constants";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, OrgType, WorkflowMode } from "@/lib/types";
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (ET)" },
+  { value: "America/Chicago", label: "Central (CT)" },
+  { value: "America/Denver", label: "Mountain (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific (PT)" },
+  { value: "America/Anchorage", label: "Alaska (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (HT)" },
+];
 
 export default function SettingsPage() {
-  const { profile } = useAuth();
-  const churchId = profile?.church_id;
+  const router = useRouter();
+  const { user, profile, activeMembership, signOut } = useAuth();
+  const churchId = activeMembership?.church_id || profile?.church_id;
 
+  // Calendar feeds state
   const [feeds, setFeeds] = useState<CalendarFeed[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-
-  // Create feed form
   const [showCreate, setShowCreate] = useState(false);
   const [feedType, setFeedType] = useState<CalendarFeedType>("personal");
   const [targetId, setTargetId] = useState("");
+
+  // Profile state
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [profileError, setProfileError] = useState("");
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
+  // Org settings state
+  const [orgName, setOrgName] = useState("");
+  const [orgType, setOrgType] = useState<OrgType>("church");
+  const [orgTimezone, setOrgTimezone] = useState("America/New_York");
+  const [orgWorkflowMode, setOrgWorkflowMode] = useState<WorkflowMode>("centralized");
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSuccess, setOrgSuccess] = useState("");
+  const [orgError, setOrgError] = useState("");
+
+  // Delete account state
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // Load data
+  useEffect(() => {
+    setDisplayName(profile?.display_name || "");
+    setPhone(profile?.phone || "");
+  }, [profile]);
 
   useEffect(() => {
     if (!churchId) return;
     async function load() {
       try {
-        const [feedDocs, volDocs, minDocs] = await Promise.all([
+        const [feedDocs, volDocs, minDocs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "calendar_feeds"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
+          getDoc(doc(db, "churches", churchId!)),
         ]);
         setFeeds(feedDocs as unknown as CalendarFeed[]);
         setVolunteers(volDocs as unknown as Volunteer[]);
         setMinistries(minDocs as unknown as Ministry[]);
+        if (churchSnap.exists()) {
+          const data = churchSnap.data();
+          setOrgName(data.name || "");
+          setOrgType((data.org_type as OrgType) || "church");
+          setOrgTimezone(data.timezone || "America/New_York");
+          setOrgWorkflowMode((data.workflow_mode as WorkflowMode) || "centralized");
+        }
       } catch {
         // silent
       } finally {
@@ -47,11 +116,121 @@ export default function SettingsPage() {
     load();
   }, [churchId]);
 
+  // --- Profile handlers ---
+
+  async function handleProfileSave(e: FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileSuccess("");
+    try {
+      await updateUserDisplayName(displayName);
+      await updateDocument("users", user.uid, {
+        display_name: displayName,
+        phone: phone.trim() || null,
+      });
+      setProfileSuccess("Profile updated.");
+      setTimeout(() => setProfileSuccess(""), 3000);
+    } catch (err) {
+      setProfileError((err as Error).message || "Failed to update profile.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function handlePasswordChange(e: FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters.");
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordSuccess("Password changed successfully.");
+      setTimeout(() => setPasswordSuccess(""), 3000);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setPasswordError("Current password is incorrect.");
+      } else {
+        setPasswordError((err as Error).message || "Failed to change password.");
+      }
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  // --- Org settings handler ---
+
+  async function handleOrgSave(e: FormEvent) {
+    e.preventDefault();
+    if (!churchId) return;
+    setOrgSaving(true);
+    setOrgError("");
+    setOrgSuccess("");
+    try {
+      const slug = orgName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      await updateDocument("churches", churchId, {
+        name: orgName,
+        slug,
+        org_type: orgType,
+        timezone: orgTimezone,
+      });
+      setOrgSuccess("Organization settings updated.");
+      setTimeout(() => setOrgSuccess(""), 3000);
+    } catch (err) {
+      setOrgError((err as Error).message || "Failed to update organization.");
+    } finally {
+      setOrgSaving(false);
+    }
+  }
+
+  // --- Delete account handler ---
+
+  async function handleDeleteAccount() {
+    if (!user || deleteConfirm !== "DELETE") return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      // Delete all user memberships
+      const memberships = await getUserMemberships(user.uid);
+      await Promise.all(memberships.map((m) => deleteMembership(m.id)));
+
+      // Delete user profile document
+      const { removeDocument } = await import("@/lib/firebase/firestore");
+      await removeDocument("users", user.uid);
+
+      // Delete Firebase Auth account
+      await deleteCurrentUser();
+
+      // Redirect to home (auth state listener will handle cleanup)
+      router.push("/");
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "auth/requires-recent-login") {
+        setDeleteError("For security, please sign out, sign back in, and try again.");
+      } else {
+        setDeleteError((err as Error).message || "Failed to delete account.");
+      }
+      setDeleting(false);
+    }
+  }
+
+  // --- Calendar feed handlers ---
+
   async function handleCreateFeed() {
     if (!churchId) return;
     if (feedType !== "org" && !targetId) return;
     setCreating(true);
-
     try {
       const feedData = {
         church_id: churchId,
@@ -112,14 +291,147 @@ export default function SettingsPage() {
     org: "Organization (everyone)",
   };
 
+  const terms = getOrgTerms(orgType);
+  const workflowLabel = WORKFLOW_MODES.find((m) => m.value === orgWorkflowMode)?.label || orgWorkflowMode;
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="font-display text-3xl text-vc-indigo">Settings</h1>
         <p className="mt-1 text-vc-text-secondary">
-          Manage calendar feeds and church configuration.
+          Manage your profile, organization, and calendar feeds.
         </p>
       </div>
+
+      {/* Profile Section */}
+      <section className="mb-10">
+        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Profile</h2>
+        <div className="rounded-xl border border-vc-border-light bg-white p-6">
+          <form onSubmit={handleProfileSave} className="space-y-4">
+            <Input
+              label="Display Name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-vc-text">Email</label>
+              <input
+                value={user?.email || ""}
+                disabled
+                className="rounded-lg border border-vc-border bg-vc-bg-warm px-3 py-2 text-base text-vc-text-muted disabled:cursor-not-allowed"
+              />
+            </div>
+            <Input
+              label="Phone Number"
+              type="tel"
+              placeholder="+1 (555) 123-4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <p className="text-xs text-vc-text-muted -mt-2">
+              Required for SMS reminders. Include country code for international numbers.
+            </p>
+            {profileError && <p className="text-sm text-vc-danger">{profileError}</p>}
+            {profileSuccess && <p className="text-sm text-vc-sage">{profileSuccess}</p>}
+            <Button type="submit" loading={profileSaving} size="sm">
+              Save Profile
+            </Button>
+          </form>
+
+          {/* Change Password */}
+          <div className="mt-8 border-t border-vc-border-light pt-6">
+            <h3 className="mb-3 font-medium text-vc-indigo">Change Password</h3>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <Input
+                label="Current Password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+              <Input
+                label="New Password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+              {passwordError && <p className="text-sm text-vc-danger">{passwordError}</p>}
+              {passwordSuccess && <p className="text-sm text-vc-sage">{passwordSuccess}</p>}
+              <Button type="submit" loading={passwordSaving} size="sm">
+                Change Password
+              </Button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* Organization Settings (admin+ only) */}
+      {isAdmin(activeMembership) && (
+        <section className="mb-10">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Organization</h2>
+          <div className="rounded-xl border border-vc-border-light bg-white p-6">
+            <form onSubmit={handleOrgSave} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-vc-text">Organization Type</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: "church" as const, label: "Church" },
+                    { value: "nonprofit" as const, label: "Nonprofit" },
+                    { value: "other" as const, label: "Other" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setOrgType(opt.value)}
+                      className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
+                        orgType === opt.value
+                          ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
+                          : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Input
+                label={orgType === "church" ? "Church Name" : "Organization Name"}
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                required
+              />
+
+              <Select
+                label="Timezone"
+                options={TIMEZONE_OPTIONS}
+                value={orgTimezone}
+                onChange={(e) => setOrgTimezone(e.target.value)}
+              />
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
+                    {workflowLabel}
+                  </span>
+                  <span className="text-xs text-vc-text-muted">
+                    Contact support to change workflow mode.
+                  </span>
+                </div>
+              </div>
+
+              {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
+              {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
+              <Button type="submit" loading={orgSaving} size="sm">
+                Save Organization
+              </Button>
+            </form>
+          </div>
+        </section>
+      )}
 
       {/* Calendar Feeds Section */}
       <section className="mb-10">
@@ -263,12 +575,41 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Placeholder for future settings */}
-      <section className="rounded-xl border border-dashed border-vc-border bg-vc-bg-warm/50 p-6 text-center">
-        <p className="text-sm text-vc-text-muted">
-          More settings coming soon: notification preferences, billing, integrations.
-        </p>
-      </section>
+      {/* Danger Zone (owner only) */}
+      {isOwner(activeMembership) && (
+        <section className="mb-10">
+          <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
+          <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
+            <h3 className="font-medium text-vc-indigo">Delete Account</h3>
+            <p className="mt-1 text-sm text-vc-text-muted">
+              Permanently delete your account, profile, and all memberships. Organization data
+              (volunteers, schedules, etc.) will remain but may become inaccessible if you are the
+              sole owner.
+            </p>
+            <p className="mt-2 text-sm font-medium text-vc-danger">
+              This action cannot be undone.
+            </p>
+            <div className="mt-4 space-y-3">
+              <Input
+                label={`Type "DELETE" to confirm`}
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+              />
+              {deleteError && <p className="text-sm text-vc-danger">{deleteError}</p>}
+              <Button
+                variant="outline"
+                onClick={handleDeleteAccount}
+                loading={deleting}
+                disabled={deleteConfirm !== "DELETE"}
+                className="border-vc-danger text-vc-danger hover:bg-vc-danger/5 disabled:opacity-40"
+              >
+                Delete My Account
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

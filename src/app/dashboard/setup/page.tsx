@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { setDocument, updateDocument, createMembership } from "@/lib/firebase/firestore";
@@ -21,7 +21,7 @@ const TIMEZONE_OPTIONS = [
 
 export default function ChurchSetupPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -31,6 +31,13 @@ export default function ChurchSetupPage() {
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("centralized");
 
   const selectedWorkflow = WORKFLOW_MODES.find((m) => m.value === workflowMode);
+
+  // Redirect if user already has an org set up
+  useEffect(() => {
+    if (profile?.church_id) {
+      router.replace("/dashboard");
+    }
+  }, [profile, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -91,7 +98,8 @@ export default function ChurchSetupPage() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError((err as Error).message || "Failed to create church. Please try again.");
+      console.error("Setup failed:", err);
+      setError((err as Error).message || "Failed to create organization. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -107,14 +115,6 @@ export default function ChurchSetupPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Input
-          label="Church Name"
-          required
-          placeholder="Anchor Falls Church"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
         <div className="space-y-2">
           <label className="text-sm font-medium text-vc-text">Organization Type</label>
           <div className="grid grid-cols-3 gap-3">
@@ -138,9 +138,17 @@ export default function ChurchSetupPage() {
             ))}
           </div>
           <p className="text-xs text-vc-text-muted">
-            {orgType === "church" ? "We’ll use terms like “Ministry” throughout the app." : "We’ll use “Team” instead of “Ministry” throughout the app."}
+            {orgType === "church" ? "We\u2019ll use terms like \u201cMinistry\u201d throughout the app." : "We\u2019ll use \u201cTeam\u201d instead of \u201cMinistry\u201d throughout the app."}
           </p>
         </div>
+
+        <Input
+          label={orgType === "church" ? "Church Name" : "Organization Name"}
+          required
+          placeholder={orgType === "church" ? "Anchor Falls Church" : "Helping Hands Nonprofit"}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
 
         <Select
           label="Timezone"
@@ -183,7 +191,7 @@ export default function ChurchSetupPage() {
         )}
 
         <Button type="submit" loading={loading} size="lg" className="w-full">
-          Create Church
+          {orgType === "church" ? "Create Church" : "Create Organization"}
         </Button>
       </form>
     </div>

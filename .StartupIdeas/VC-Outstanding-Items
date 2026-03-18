@@ -12,7 +12,7 @@
 - Full auth flow: login, register, password reset, welcome email
 - Landing page with waitlist, sections: hero, pain points, how-it-works, features, pricing, footer
 - Dashboard with sidebar nav, mobile drawer, getting-started wizard
-- Church setup wizard (name, timezone, workflow mode)
+- Church setup wizard (org type, name, timezone, workflow mode) with dynamic labels per org type
 - Volunteer management: manual add, CSV import, profiles
 - Ministry CRUD with color picker
 - Service configuration (day, time, role slots)
@@ -50,7 +50,14 @@
 - Admin notification center with send + history
 - Lifecycle emails: purchase thank-you, re-engagement, upsell
 
-### Beta Hardening (Phase 11)
+### Account & Settings (Phase 11a)
+- Legacy account membership auto-repair (accounts created before Phase 7 get owner membership on login)
+- Settings page: profile editing (display name, password change)
+- Settings page: organization settings (name, type, timezone) for admins
+- Account deletion with confirmation for owners
+- Firestore security rules bootstrap rule for initial org + membership creation
+
+### Beta Hardening (Phase 11b)
 - Favicon + PWA manifest (calendar icon, installable standalone app)
 - Vercel Cron for daily automated reminders
 - Error boundaries (global + dashboard-scoped)
@@ -70,7 +77,10 @@
 
 ### Immediate (This Week)
 
-- [ ] **Full walkthrough**: register → set up church → add volunteers → create ministries/services → generate schedule → review → publish → check email → confirm as volunteer → view calendar feed
+- [ ] **Full walkthrough**: register → set up org → add volunteers → create ministries/services → generate schedule → review → publish → check email → confirm as volunteer → view calendar feed
+- [x] **Verify setup wizard**: org type first, dynamic labels for nonprofit/other, Firestore rules bootstrap fix
+- [x] **Verify legacy account repair**: old accounts auto-get owner membership on login
+- [x] **Verify account management**: profile edit, password change, org settings, account deletion in Settings page
 - [ ] **Test Stripe checkout** in test mode: upgrade from free → Starter, verify Firestore updates
 - [ ] **Test CSV import** with a real volunteer list (Anchor Falls)
 - [ ] **Test calendar feed** — subscribe to iCal URL in Google Calendar
@@ -84,14 +94,13 @@
 - [ ] **Complete Stripe activation**: Settings → Account details → add LLC info, EIN, bank account
 - [ ] **Switch Stripe to live mode** — create live products/prices (test mode products don't carry over)
 - [ ] **Update env vars** (Vercel + .env.local) with live Stripe keys + new webhook secret
-- [ ] **Create live Stripe webhook** → `https://www.volunteercalendar.org/api/billing/webhook`
+- [ ] **Create live Stripe webhook** → `https://www.volunteercal.com/api/billing/webhook`
   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 - [ ] **End-to-end payment test** with real card, then refund
 
 ### Email & Domain
 
-- [ ] **Verify volunteercal.com in Resend** — upgrade to paid plan when revenue justifies, add DNS records, switch from `noreply@harpelle.com` to `noreply@volunteercalendar.org`
-- [ ] **Catch-all email forwarding** — set up `*@volunteercal.com` → `info@volunteercal.com` in Hover (for privacy@, legal@, support@ etc.)
+- [ ] **Verify volunteercal.com in Resend** — upgrade to paid plan when revenue justifies, add DNS records, switch from `noreply@harpelle.com` to `noreply@volunteercal.com`
 - [ ] **Gmail "Send As"** — configure SMTP relay so you can reply as info@volunteercal.com from Gmail
 
 ### Go-to-Market
@@ -110,8 +119,7 @@
 ## Outstanding: Development Items
 
 ### High Priority (Pre-Beta or Early Beta)
-
-- [ ] **Firebase Auth authorized domains** — add `volunteercalendar.org` and `www.volunteercalendar.org` in Firebase Console → Authentication → Settings
+ 
 - [ ] **Firebase App Check** — protects APIs from abuse (Firebase Console)
 - [ ] **Firestore backup** — set up daily export to Cloud Storage
 - [ ] **Error monitoring** — add Sentry or similar for production error tracking

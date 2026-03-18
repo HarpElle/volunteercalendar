@@ -68,6 +68,13 @@ service cloud.firestore {
       allow read: if request.auth != null
         && isOrgAdmin(resource.data.church_id);
 
+      // Bootstrap: user can create their own owner membership for a church they own (churchId === uid)
+      allow create: if request.auth != null
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.church_id == request.auth.uid
+        && request.resource.data.role == 'owner'
+        && request.resource.data.status == 'active';
+
       // Users can create their own membership (self-registration → pending_org_approval)
       allow create: if request.auth != null
         && request.resource.data.user_id == request.auth.uid
