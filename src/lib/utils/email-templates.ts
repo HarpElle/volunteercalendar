@@ -1068,3 +1068,102 @@ Sent by VolunteerCal on behalf of ${data.churchName}`;
 
   return { subject, html, text };
 }
+
+// ─── Organization Deleted Confirmation Email ────────────────────────────
+
+interface OrgDeletedEmailData {
+  userName: string;
+  orgName: string;
+}
+
+export function buildOrgDeletedEmail(data: OrgDeletedEmailData): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const firstName = data.userName.split(" ")[0] || "there";
+
+  const subject = `Your organization "${data.orgName}" has been deleted`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FEFCF9;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FEFCF9;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E8E4DE;">
+          <tr>
+            <td style="background-color:#2D2B55;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
+                Organization Deleted
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                Hi ${firstName},
+              </p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                This is a confirmation that your organization <strong style="color:#2D2B55;">${data.orgName}</strong> and all of its associated data — including volunteers, schedules, memberships, and billing — have been permanently deleted from VolunteerCal.
+              </p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                Thank you for giving VolunteerCal a place in your workflow. We genuinely appreciate the time you spent with us, and we hope we made scheduling a little easier along the way.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
+                If your team ever needs a hand with volunteer coordination again, we'd love to welcome you back. Your account is still active — you can create a new organization anytime from your dashboard.
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:16px;">
+                    <a href="https://volunteercal.org/dashboard" style="display:inline-block;background-color:#E87461;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
+                      Go to Dashboard
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#9A9BB5;text-align:center;">
+                If you'd also like to delete your account entirely, you can do so from Account Settings.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px;border-top:1px solid #E8E4DE;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#9A9BB5;">
+                <span style="color:#E87461;">VolunteerCal</span> &middot; Thoughtfully built by HarpElle
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = `Organization Deleted — ${data.orgName}
+
+Hi ${firstName},
+
+This is a confirmation that your organization "${data.orgName}" and all of its associated data — including volunteers, schedules, memberships, and billing — have been permanently deleted from VolunteerCal.
+
+Thank you for giving VolunteerCal a place in your workflow. We genuinely appreciate the time you spent with us, and we hope we made scheduling a little easier along the way.
+
+If your team ever needs a hand with volunteer coordination again, we'd love to welcome you back. Your account is still active — you can create a new organization anytime from your dashboard.
+
+Go to your dashboard: https://volunteercal.org/dashboard
+
+If you'd also like to delete your account entirely, you can do so from Account Settings.
+
+—
+VolunteerCal · Thoughtfully built by HarpElle`;
+
+  return { subject, html, text };
+}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
@@ -25,18 +24,12 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { profile } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const churchId = profile?.church_id;
-
-  useEffect(() => {
-    if (profile && !profile.church_id) {
-      router.replace("/dashboard/setup");
-    }
-  }, [profile, router]);
+  const hasOrg = !!churchId;
 
   useEffect(() => {
     if (!churchId) return;
@@ -156,7 +149,39 @@ export default function DashboardPage() {
     load();
   }, [churchId]);
 
-  if (!profile?.church_id) return null;
+  if (!hasOrg) {
+    return (
+      <div className="mx-auto max-w-lg py-16 text-center">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-vc-sand/30">
+          <svg className="h-8 w-8 text-vc-indigo/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+          </svg>
+        </div>
+        <h1 className="font-display text-2xl text-vc-indigo">
+          No Organization
+        </h1>
+        <p className="mt-2 text-vc-text-secondary">
+          You&apos;re not currently part of any organization. Create a new one to
+          start scheduling volunteers, or delete your account if you no longer
+          need the service.
+        </p>
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <Link
+            href="/dashboard/setup"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-6 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+          >
+            Create a New Organization
+          </Link>
+          <Link
+            href="/dashboard/account"
+            className="text-sm text-vc-text-muted underline underline-offset-2 hover:text-vc-indigo"
+          >
+            Manage account settings
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const hasData = stats && (stats.volunteers > 0 || stats.ministries > 0);
 

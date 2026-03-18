@@ -934,8 +934,9 @@ function DeleteOrgSection({
         return;
       }
 
-      // Redirect to home after successful deletion
-      window.location.href = "/";
+      // Full reload to dashboard — profile now has church_id cleared,
+      // so user will see the no-org state with options to create or leave.
+      window.location.href = "/dashboard";
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

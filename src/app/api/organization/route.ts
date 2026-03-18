@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
+import { buildOrgDeletedEmail } from "@/lib/utils/email-templates";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const SUBCOLLECTIONS = [
   "volunteers",
@@ -138,6 +142,53 @@ export async function DELETE(req: NextRequest) {
     // Commit remaining
     if (deleteCount > 0) {
       await batch.commit();
+    }
+
+    // Clear church_id / default_church_id from all affected user profiles
+    // so they don't get stuck pointing at a deleted org.
+    const affectedUserIds = new Set<string>();
+    for (const d of membershipsSnap.docs) {
+      const uid = d.data()?.user_id;
+      if (uid) affectedUserIds.add(uid);
+    }
+    // Always include the requesting user
+    affectedUserIds.add(userId);
+
+    const profileBatch = adminDb.batch();
+    for (const uid of affectedUserIds) {
+      const userRef = adminDb.doc(`users/${uid}`);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) continue;
+      const data = userSnap.data() || {};
+      const updates: Record<string, unknown> = {};
+      if (data.church_id === church_id) updates.church_id = null;
+      if (data.default_church_id === church_id) updates.default_church_id = null;
+      if (Object.keys(updates).length > 0) {
+        profileBatch.update(userRef, updates);
+      }
+    }
+    await profileBatch.commit();
+
+    // Send confirmation email to the owner (best-effort, don't block on failure)
+    try {
+      const ownerEmail = decoded.email;
+      const ownerProfile = await adminDb.doc(`users/${userId}`).get();
+      const ownerName = ownerProfile.data()?.display_name || ownerEmail || "there";
+      if (ownerEmail) {
+        const { subject, html, text } = buildOrgDeletedEmail({
+          userName: ownerName,
+          orgName,
+        });
+        await resend.emails.send({
+          from: "VolunteerCal <noreply@volunteercal.org>",
+          to: ownerEmail,
+          subject,
+          html,
+          text,
+        });
+      }
+    } catch (emailErr) {
+      console.warn("Failed to send org deletion confirmation email:", emailErr);
     }
 
     return NextResponse.json({ success: true, message: "Organization deleted" });
