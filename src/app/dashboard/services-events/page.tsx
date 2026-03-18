@@ -54,8 +54,8 @@ const EVENT_RECURRENCE_OPTIONS: { value: RecurrencePattern; label: string }[] = 
 
 const SIGNUP_MODES: { value: SignupMode; label: string }[] = [
   { value: "open", label: "Open signup \u2014 volunteers pick their own roles" },
-  { value: "scheduled", label: "Scheduled \u2014 admin assigns roles" },
-  { value: "hybrid", label: "Hybrid \u2014 admin assigns, volunteers fill remaining" },
+  { value: "scheduled", label: "Scheduled \u2014 scheduler assigns roles" },
+  { value: "hybrid", label: "Hybrid \u2014 scheduler assigns, volunteers fill remaining" },
 ];
 
 const VISIBILITY_OPTIONS: { value: EventVisibility; label: string }[] = [

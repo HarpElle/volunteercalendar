@@ -282,70 +282,6 @@ function OrganizationContent() {
         </div>
       )}
 
-      {/* ── General Settings ── */}
-      <section className="mb-8">
-        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
-          <form onSubmit={handleOrgSave} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-vc-text">Organization Type</label>
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  { value: "church" as const, label: "Church" },
-                  { value: "nonprofit" as const, label: "Nonprofit" },
-                  { value: "other" as const, label: "Other" },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setOrgType(opt.value)}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
-                      orgType === opt.value
-                        ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Input
-              label={orgType === "church" ? "Church Name" : "Organization Name"}
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              required
-            />
-
-            <Select
-              label="Timezone"
-              options={TIMEZONE_OPTIONS}
-              value={orgTimezone}
-              onChange={(e) => setOrgTimezone(e.target.value)}
-            />
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
-                  {workflowLabel}
-                </span>
-                <span className="text-xs text-vc-text-muted">
-                  Contact support to change workflow mode.
-                </span>
-              </div>
-            </div>
-
-            {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
-            {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
-            <Button type="submit" loading={orgSaving} size="sm">
-              Save Organization
-            </Button>
-          </form>
-        </div>
-      </section>
-
       {/* ── Ministries / Teams ── */}
       <section className="mb-8">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -620,6 +556,70 @@ function OrganizationContent() {
           </p>
         </section>
       )}
+
+      {/* ── General Settings ── */}
+      <section className="mb-8">
+        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
+        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+          <form onSubmit={handleOrgSave} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-vc-text">Organization Type</label>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { value: "church" as const, label: "Church" },
+                  { value: "nonprofit" as const, label: "Nonprofit" },
+                  { value: "other" as const, label: "Other" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setOrgType(opt.value)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
+                      orgType === opt.value
+                        ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
+                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Input
+              label={orgType === "church" ? "Church Name" : "Organization Name"}
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              required
+            />
+
+            <Select
+              label="Timezone"
+              options={TIMEZONE_OPTIONS}
+              value={orgTimezone}
+              onChange={(e) => setOrgTimezone(e.target.value)}
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
+                  {workflowLabel}
+                </span>
+                <span className="text-xs text-vc-text-muted">
+                  Contact support to change workflow mode.
+                </span>
+              </div>
+            </div>
+
+            {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
+            {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
+            <Button type="submit" loading={orgSaving} size="sm">
+              Save Organization
+            </Button>
+          </form>
+        </div>
+      </section>
 
       {/* ── Danger Zone ── */}
       {isOwner(activeMembership) && (
