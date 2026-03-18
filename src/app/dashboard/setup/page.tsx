@@ -98,8 +98,8 @@ export default function ChurchSetupPage() {
         role: "admin",
       });
 
-      router.push("/dashboard");
-      router.refresh();
+      // Full page reload so onAuthStateChanged re-fires with updated profile
+      window.location.href = "/dashboard";
     } catch (err) {
       console.error("Setup failed:", err);
       setError((err as Error).message || "Failed to create organization. Please try again.");
