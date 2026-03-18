@@ -9,31 +9,31 @@ import type { Event, Church, EventSignup } from "@/lib/types";
  */
 export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId");
+  const churchId = req.nextUrl.searchParams.get("churchId");
   if (!eventId) {
     return NextResponse.json({ error: "Missing eventId" }, { status: 400 });
   }
 
   try {
-    // Search all churches for this event (events are subcollections under churches)
-    // We use a collection group query to find the event across all churches
-    const eventsQuery = adminDb.collectionGroup("events").where("__name__", "==", eventId);
-    let eventSnap = await eventsQuery.get();
+    let eventData: Event | null = null;
 
-    // Collection group queries with __name__ match the full path, so try a different approach:
-    // Look through all churches (in production this should use an index or top-level reference)
-    if (eventSnap.empty) {
-      // Fallback: scan churches collection group for the event
+    if (churchId) {
+      // Direct lookup when churchId is provided (preferred path)
+      const eventDoc = await adminDb.doc(`churches/${churchId}/events/${eventId}`).get();
+      if (!eventDoc.exists) {
+        return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      }
+      eventData = { id: eventDoc.id, ...eventDoc.data() } as Event;
+    } else {
+      // Legacy fallback: scan collection group (for old links without churchId)
       const allEvents = adminDb.collectionGroup("events");
       const snap = await allEvents.get();
       const found = snap.docs.find((d) => d.id === eventId);
       if (!found) {
         return NextResponse.json({ error: "Event not found" }, { status: 404 });
       }
-      eventSnap = { docs: [found], empty: false } as unknown as FirebaseFirestore.QuerySnapshot;
+      eventData = { id: found.id, ...found.data() } as Event;
     }
-
-    const eventDoc = eventSnap.docs[0];
-    const eventData = { id: eventDoc.id, ...eventDoc.data() } as Event;
 
     // Check visibility — only public or internal events can be loaded
     // (internal events still load; auth check happens on POST)

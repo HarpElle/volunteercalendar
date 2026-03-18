@@ -10,9 +10,13 @@ import {
   removeChurchDocument,
   getEventSignups,
 } from "@/lib/firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { ShortLinkCreator } from "@/components/ui/short-link-creator";
+import { isAdmin } from "@/lib/utils/permissions";
+import { getAuth } from "firebase/auth";
 import type {
   Service,
   ServiceRole,
@@ -89,13 +93,24 @@ function ServicesEventsContent() {
   const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [churchName, setChurchName] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Shared data: ministries
+  // Shared data: ministries + church name
   useEffect(() => {
     if (!churchId) return;
-    getChurchDocuments(churchId, "ministries")
-      .then((mins) => setMinistries(mins as unknown as Ministry[]))
+    Promise.all([
+      getChurchDocuments(churchId, "ministries"),
+      import("firebase/firestore").then(({ doc, getDoc }) =>
+        getDoc(doc(db, "churches", churchId)),
+      ),
+    ])
+      .then(([mins, churchSnap]) => {
+        setMinistries(mins as unknown as Ministry[]);
+        if (churchSnap.exists()) {
+          setChurchName(churchSnap.data().name || "");
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [churchId]);
@@ -133,7 +148,7 @@ function ServicesEventsContent() {
       {tab === "services" ? (
         <ServicesTab churchId={churchId} ministries={ministries} loading={loading} />
       ) : (
-        <EventsTab churchId={churchId} user={user} ministries={ministries} loading={loading} />
+        <EventsTab churchId={churchId} churchName={churchName} user={user} activeMembership={activeMembership} ministries={ministries} loading={loading} />
       )}
     </div>
   );
@@ -158,18 +173,33 @@ function ServicesTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Form state
   const [name, setName] = useState("");
-  const [ministryId, setMinistryId] = useState("");
   const [recurrence, setRecurrence] = useState<RecurrencePattern>("weekly");
   const [dayOfWeek, setDayOfWeek] = useState("0");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:30");
   const [allDay, setAllDay] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("90");
-  const [roles, setRoles] = useState<ServiceRole[]>([
-    { role_id: crypto.randomUUID(), title: "", count: 1 },
+
+  // Multi-ministry form state
+  type FormMinistry = {
+    id: string; // local form ID
+    ministry_id: string;
+    roles: ServiceRole[];
+    start_time: string | null;
+    end_time: string | null;
+  };
+  const [formMinistries, setFormMinistries] = useState<FormMinistry[]>([
+    {
+      id: crypto.randomUUID(),
+      ministry_id: "",
+      roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+      start_time: null,
+      end_time: null,
+    },
   ]);
 
   useEffect(() => {
@@ -182,44 +212,111 @@ function ServicesTab({
 
   function resetForm() {
     setName("");
-    setMinistryId("");
     setRecurrence("weekly");
     setDayOfWeek("0");
     setStartTime("09:00");
     setEndTime("10:30");
     setAllDay(false);
     setDurationMinutes("90");
-    setRoles([{ role_id: crypto.randomUUID(), title: "", count: 1 }]);
+    setFormMinistries([
+      {
+        id: crypto.randomUUID(),
+        ministry_id: "",
+        roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+        start_time: null,
+        end_time: null,
+      },
+    ]);
     setEditingId(null);
     setShowForm(false);
   }
 
   function startEdit(s: Service) {
     setName(s.name);
-    setMinistryId(s.ministry_id);
     setRecurrence(s.recurrence);
     setDayOfWeek(String(s.day_of_week));
     setStartTime(s.start_time);
     setEndTime(s.end_time || "");
     setAllDay(s.all_day || false);
     setDurationMinutes(String(s.duration_minutes));
-    setRoles(s.roles.length > 0 ? s.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }]);
+
+    // Load ministries from new format or legacy
+    if (s.ministries && s.ministries.length > 0) {
+      setFormMinistries(
+        s.ministries.map((m) => ({
+          id: crypto.randomUUID(),
+          ministry_id: m.ministry_id,
+          roles: m.roles.length > 0 ? m.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+          start_time: m.start_time,
+          end_time: m.end_time,
+        })),
+      );
+    } else {
+      setFormMinistries([
+        {
+          id: crypto.randomUUID(),
+          ministry_id: s.ministry_id,
+          roles: s.roles.length > 0 ? s.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+          start_time: null,
+          end_time: null,
+        },
+      ]);
+    }
     setEditingId(s.id);
     setShowForm(true);
   }
 
-  function addRole() {
-    setRoles((prev) => [...prev, { role_id: crypto.randomUUID(), title: "", count: 1 }]);
+  function addMinistrySection() {
+    setFormMinistries((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        ministry_id: "",
+        roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+        start_time: null,
+        end_time: null,
+      },
+    ]);
   }
 
-  function updateRole(index: number, field: string, value: string | number | null) {
-    setRoles((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
+  function removeMinistrySection(fmId: string) {
+    setFormMinistries((prev) => prev.filter((m) => m.id !== fmId));
+  }
+
+  function updateMinistryField(fmId: string, field: string, value: string | null) {
+    setFormMinistries((prev) =>
+      prev.map((m) => (m.id === fmId ? { ...m, [field]: value } : m)),
     );
   }
 
-  function removeRole(index: number) {
-    setRoles((prev) => prev.filter((_, i) => i !== index));
+  function addRoleToMinistry(fmId: string) {
+    setFormMinistries((prev) =>
+      prev.map((m) =>
+        m.id === fmId
+          ? { ...m, roles: [...m.roles, { role_id: crypto.randomUUID(), title: "", count: 1 }] }
+          : m,
+      ),
+    );
+  }
+
+  function updateRoleInMinistry(fmId: string, roleIdx: number, field: string, value: string | number | null) {
+    setFormMinistries((prev) =>
+      prev.map((m) =>
+        m.id === fmId
+          ? { ...m, roles: m.roles.map((r, i) => (i === roleIdx ? { ...r, [field]: value } : r)) }
+          : m,
+      ),
+    );
+  }
+
+  function removeRoleFromMinistry(fmId: string, roleIdx: number) {
+    setFormMinistries((prev) =>
+      prev.map((m) =>
+        m.id === fmId
+          ? { ...m, roles: m.roles.filter((_, i) => i !== roleIdx) }
+          : m,
+      ),
+    );
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -228,18 +325,32 @@ function ServicesTab({
     setSaving(true);
 
     try {
-      const filteredRoles = roles.filter((r) => r.title.trim());
+      // Build ministries array
+      const builtMinistries = formMinistries
+        .filter((m) => m.ministry_id)
+        .map((m) => ({
+          ministry_id: m.ministry_id,
+          roles: m.roles.filter((r) => r.title.trim()),
+          start_time: m.start_time || null,
+          end_time: m.end_time || null,
+        }));
+
+      // Build flat roles + primary ministry_id for backward compat
+      const allRoles = builtMinistries.flatMap((m) => m.roles);
+      const primaryMinistryId = builtMinistries[0]?.ministry_id || "";
+
       const data = {
         name,
         church_id: churchId,
-        ministry_id: ministryId,
+        ministry_id: primaryMinistryId,
         recurrence,
         day_of_week: Number(dayOfWeek),
         start_time: allDay ? "00:00" : startTime,
         end_time: allDay ? null : (endTime || null),
         all_day: allDay,
         duration_minutes: Number(durationMinutes),
-        roles: filteredRoles,
+        roles: allRoles,
+        ministries: builtMinistries,
         ...(editingId ? {} : { created_at: new Date().toISOString() }),
       };
 
@@ -262,6 +373,12 @@ function ServicesTab({
 
   async function handleDelete(id: string) {
     if (!churchId) return;
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      setTimeout(() => setConfirmDeleteId(null), 4000);
+      return;
+    }
+    setConfirmDeleteId(null);
     setDeleting(id);
     try {
       await removeChurchDocument(churchId, "services", id);
@@ -277,11 +394,40 @@ function ServicesTab({
     return ministries.find((m) => m.id === id)?.name || "\u2014";
   }
 
+  function getMinistryColor(id: string) {
+    return ministries.find((m) => m.id === id)?.color || "#9A9BB5";
+  }
+
   function getDayName(day: number) {
     return DAYS.find((d) => d.value === String(day))?.label || "\u2014";
   }
 
+  function getServiceMinistryNames(s: Service): string {
+    if (s.ministries && s.ministries.length > 0) {
+      return s.ministries.map((m) => getMinistryName(m.ministry_id)).join(", ");
+    }
+    return getMinistryName(s.ministry_id);
+  }
+
+  function getServiceAllRoles(s: Service): { role: ServiceRole; ministryName: string; ministryColor: string }[] {
+    if (s.ministries && s.ministries.length > 0) {
+      return s.ministries.flatMap((m) =>
+        m.roles.map((r) => ({
+          role: r,
+          ministryName: getMinistryName(m.ministry_id),
+          ministryColor: getMinistryColor(m.ministry_id),
+        })),
+      );
+    }
+    return s.roles.map((r) => ({
+      role: r,
+      ministryName: getMinistryName(s.ministry_id),
+      ministryColor: getMinistryColor(s.ministry_id),
+    }));
+  }
+
   const isLoading = loading || ministriesLoading;
+  const usedMinistryIds = formMinistries.map((m) => m.ministry_id).filter(Boolean);
 
   return (
     <div>
@@ -298,23 +444,13 @@ function ServicesTab({
             {editingId ? "Edit Service" : "New Service"}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label="Service Name"
-                required
-                placeholder="e.g., Sunday Morning Worship"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <Select
-                label="Ministry"
-                required
-                placeholder="Select a ministry"
-                options={ministries.map((m) => ({ value: m.id, label: m.name }))}
-                value={ministryId}
-                onChange={(e) => setMinistryId(e.target.value)}
-              />
-            </div>
+            <Input
+              label="Service Name"
+              required
+              placeholder="e.g., Sunday Morning Worship"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
 
             <div className="grid gap-4 sm:grid-cols-3">
               <Select
@@ -362,98 +498,155 @@ function ServicesTab({
 
             <p className="text-xs text-vc-text-muted -mt-2">
               {allDay
-                ? "No specific times \u2014 roles can still have their own time windows below."
-                : "Default times for the service. Individual roles can override these below."}
+                ? "No specific times \u2014 each ministry can set its own time window below."
+                : "Default times for the service. Each ministry can override these below."}
             </p>
 
-            {/* Roles */}
+            {/* Ministry sections */}
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-vc-text">
-                  Roles Needed
+              <div className="mb-3 flex items-center justify-between">
+                <label className="text-sm font-semibold text-vc-indigo">
+                  Ministries & Roles
                 </label>
-                <button
-                  type="button"
-                  onClick={addRole}
-                  className="text-sm font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                >
-                  + Add role
-                </button>
+                {ministries.length > formMinistries.length && (
+                  <button
+                    type="button"
+                    onClick={addMinistrySection}
+                    className="text-sm font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                  >
+                    + Add ministry
+                  </button>
+                )}
               </div>
-              <div className="space-y-3">
-                {roles.map((role, i) => (
-                  <div key={role.role_id} className="rounded-lg border border-vc-border-light bg-vc-bg/50 p-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                        placeholder="Role title (e.g., Producer, Editor, Camera)"
-                        value={role.title}
-                        onChange={(e) => updateRole(i, "title", e.target.value)}
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        className="w-20 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                        placeholder="Qty"
-                        value={role.count}
-                        onChange={(e) => updateRole(i, "count", Number(e.target.value))}
-                      />
-                      {roles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeRole(i)}
-                          className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+
+              <div className="space-y-4">
+                {formMinistries.map((fm) => {
+                  const availableMinistries = ministries.filter(
+                    (m) => m.id === fm.ministry_id || !usedMinistryIds.includes(m.id),
+                  );
+
+                  return (
+                    <div
+                      key={fm.id}
+                      className="rounded-xl border border-vc-border-light bg-vc-bg/30 p-4"
+                      style={fm.ministry_id ? { borderLeftWidth: 4, borderLeftColor: getMinistryColor(fm.ministry_id) } : undefined}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <select
+                          required
+                          className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                          value={fm.ministry_id}
+                          onChange={(e) => updateMinistryField(fm.id, "ministry_id", e.target.value)}
                         >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {/* Per-role time override */}
-                    {role.title.trim() && (
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-vc-text-muted shrink-0">Custom times:</span>
-                        <input
-                          type="time"
-                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
-                          placeholder="Start"
-                          value={role.start_time || ""}
-                          onChange={(e) => updateRole(i, "start_time", e.target.value || null)}
-                        />
-                        <span className="text-xs text-vc-text-muted">to</span>
-                        <input
-                          type="time"
-                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
-                          placeholder="End"
-                          value={role.end_time || ""}
-                          onChange={(e) => updateRole(i, "end_time", e.target.value || null)}
-                        />
-                        {(role.start_time || role.end_time) && (
+                          <option value="">Select ministry...</option>
+                          {availableMinistries.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+
+                        {/* Per-ministry time override toggle */}
+                        {(fm.start_time || fm.end_time) ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="time"
+                              className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+                              value={fm.start_time || ""}
+                              onChange={(e) => updateMinistryField(fm.id, "start_time", e.target.value || null)}
+                            />
+                            <span className="text-xs text-vc-text-muted">\u2013</span>
+                            <input
+                              type="time"
+                              className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+                              value={fm.end_time || ""}
+                              onChange={(e) => updateMinistryField(fm.id, "end_time", e.target.value || null)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateMinistryField(fm.id, "start_time", null);
+                                updateMinistryField(fm.id, "end_time", null);
+                              }}
+                              className="ml-1 text-xs text-vc-text-muted hover:text-vc-danger"
+                              title="Use service default time"
+                            >
+                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : !allDay ? (
                           <button
                             type="button"
                             onClick={() => {
-                              updateRole(i, "start_time", null as unknown as string);
-                              updateRole(i, "end_time", null as unknown as string);
+                              updateMinistryField(fm.id, "start_time", startTime);
+                              updateMinistryField(fm.id, "end_time", endTime);
                             }}
-                            className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                            className="text-xs text-vc-text-muted hover:text-vc-coral transition-colors whitespace-nowrap"
                           >
-                            Clear
+                            Custom time
+                          </button>
+                        ) : null}
+
+                        {formMinistries.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeMinistrySection(fm.id)}
+                            className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+                            title="Remove ministry"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
                           </button>
                         )}
-                        {!role.start_time && !role.end_time && (
-                          <span className="text-xs text-vc-text-muted italic">
-                            {allDay ? "No times set" : "Using service default"}
-                          </span>
-                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Roles for this ministry */}
+                      <div className="space-y-2">
+                        {fm.roles.map((role, ri) => (
+                          <div key={role.role_id} className="flex items-center gap-2">
+                            <input
+                              className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                              placeholder="Role title (e.g., Producer, Camera)"
+                              value={role.title}
+                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "title", e.target.value)}
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              className="w-20 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                              placeholder="Qty"
+                              value={role.count}
+                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "count", Number(e.target.value))}
+                            />
+                            {fm.roles.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeRoleFromMinistry(fm.id, ri)}
+                                className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => addRoleToMinistry(fm.id)}
+                          className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                        >
+                          + Add role
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <Button type="submit" loading={saving}>
                 {editingId ? "Save Changes" : "Create Service"}
               </Button>
@@ -479,57 +672,94 @@ function ServicesTab({
         </div>
       ) : (
         <div className="space-y-3">
-          {services.map((s) => (
-            <div
-              key={s.id}
-              className="group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-vc-indigo">{s.name}</h3>
-                  <p className="mt-1 text-sm text-vc-text-muted">
-                    {getDayName(s.day_of_week)}{s.all_day ? " \u00b7 All day" : ` \u00b7 ${s.start_time}${s.end_time ? `\u2013${s.end_time}` : ` \u00b7 ${s.duration_minutes} min`}`} \u00b7 {getMinistryName(s.ministry_id)}
-                  </p>
+          {services.map((s) => {
+            const serviceRoles = getServiceAllRoles(s);
+            const hasMultiMinistry = s.ministries && s.ministries.length > 1;
+
+            return (
+              <div
+                key={s.id}
+                className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-vc-indigo">{s.name}</h3>
+                    <p className="mt-1 text-sm text-vc-text-muted">
+                      {getDayName(s.day_of_week)}{s.all_day ? " \u00b7 All day" : ` \u00b7 ${s.start_time}${s.end_time ? `\u2013${s.end_time}` : ` \u00b7 ${s.duration_minutes} min`}`} \u00b7 {getServiceMinistryNames(s)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-vc-bg-warm px-3 py-1 text-xs font-medium text-vc-text-secondary capitalize">
+                    {s.recurrence}
+                  </span>
                 </div>
-                <span className="rounded-full bg-vc-bg-warm px-3 py-1 text-xs font-medium text-vc-text-secondary capitalize">
-                  {s.recurrence}
-                </span>
-              </div>
-              {s.roles.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {s.roles.map((r) => {
-                    const hasCustomTime = r.start_time || r.end_time;
-                    const timeStr = hasCustomTime
-                      ? ` (${r.start_time || "?"}–${r.end_time || "?"})`
-                      : "";
-                    return (
-                      <span
-                        key={r.role_id}
-                        className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo"
-                      >
-                        {r.title} \u00d7{r.count}{timeStr}
-                      </span>
-                    );
-                  })}
+
+                {/* Show ministry-grouped roles for multi-ministry services */}
+                {hasMultiMinistry ? (
+                  <div className="mt-3 space-y-2">
+                    {s.ministries!.map((sm) => (
+                      <div key={sm.ministry_id} className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                          style={{ backgroundColor: getMinistryColor(sm.ministry_id) }}
+                        >
+                          {getMinistryName(sm.ministry_id)}
+                          {sm.start_time && (
+                            <span className="opacity-80 ml-1">{sm.start_time}{sm.end_time ? `\u2013${sm.end_time}` : ""}</span>
+                          )}
+                        </span>
+                        {sm.roles.map((r) => (
+                          <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-0.5 text-xs font-medium text-vc-indigo">
+                            {r.title} \u00d7{r.count}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : serviceRoles.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {serviceRoles.map(({ role: r }) => {
+                      const hasCustomTime = r.start_time || r.end_time;
+                      const timeStr = hasCustomTime ? ` (${r.start_time || "?"}–${r.end_time || "?"})` : "";
+                      return (
+                        <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo">
+                          {r.title} \u00d7{r.count}{timeStr}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Actions — always visible */}
+                <div className="mt-3 flex items-center gap-1 border-t border-vc-border-light pt-3">
+                  <button
+                    onClick={() => startEdit(s)}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                    </svg>
+                    Edit
+                  </button>
+                  <div className="ml-auto">
+                    <button
+                      onClick={() => handleDelete(s.id)}
+                      disabled={deleting === s.id}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        confirmDeleteId === s.id
+                          ? "bg-vc-danger/10 text-vc-danger"
+                          : "text-vc-text-muted hover:bg-vc-danger/5 hover:text-vc-danger"
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                      </svg>
+                      {deleting === s.id ? "Deleting..." : confirmDeleteId === s.id ? "Confirm delete" : "Delete"}
+                    </button>
+                  </div>
                 </div>
-              )}
-              <div className="mt-3 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => startEdit(s)}
-                  className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(s.id)}
-                  disabled={deleting === s.id}
-                  className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-                >
-                  {deleting === s.id ? "Deleting..." : "Delete"}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -542,12 +772,16 @@ function ServicesTab({
 
 function EventsTab({
   churchId,
+  churchName,
   user,
+  activeMembership,
   ministries,
   loading: ministriesLoading,
 }: {
   churchId: string | undefined;
+  churchName: string;
   user: ReturnType<typeof useAuth>["user"];
+  activeMembership: ReturnType<typeof useAuth>["activeMembership"];
   ministries: Ministry[];
   loading: boolean;
 }) {
@@ -558,6 +792,9 @@ function EventsTab({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [signupCounts, setSignupCounts] = useState<Record<string, number>>({});
+  const [shortLinkEventId, setShortLinkEventId] = useState<string | null>(null);
+  const [emailInviteEventId, setEmailInviteEventId] = useState<string | null>(null);
+  const userIsAdmin = isAdmin(activeMembership);
 
   // Form state
   const [name, setName] = useState("");
@@ -710,7 +947,7 @@ function EventsTab({
         const ref = await addChurchDocument(churchId, "events", data);
         const newEvent = { id: ref.id, ...data } as Event;
         if (visibility === "public") {
-          const realUrl = `${window.location.origin}/events/${ref.id}/signup`;
+          const realUrl = `${window.location.origin}/events/${churchId}/${ref.id}/signup`;
           await updateChurchDocument(churchId, "events", ref.id, {
             promotion: { ...data.promotion, signup_url: realUrl },
           });
@@ -739,9 +976,57 @@ function EventsTab({
     }
   }
 
+  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
+
+  async function printEventInvite(ev: Event) {
+    const { printFlyer } = await import("@/lib/utils/print-flyer");
+    const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
+    const dateStr = ev.date || "";
+    const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
+    printFlyer({
+      title: ev.name,
+      subtitle: ev.all_day
+        ? `${dateStr} — All Day`
+        : `${dateStr}${timeStr}`,
+      orgName: churchName,
+      url: signupUrl,
+      instructions: [
+        "Scan the QR code with your phone camera",
+        "Choose a volunteer role",
+        "Sign up — new volunteers will need to create an account",
+      ],
+      footer: "Powered by VolunteerCal",
+    });
+  }
+
+  async function downloadEventSlide(ev: Event) {
+    const { downloadSlide } = await import("@/lib/utils/download-slide");
+    const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
+    const dateStr = ev.date || "";
+    const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
+    downloadSlide({
+      title: ev.name,
+      subtitle: ev.all_day
+        ? `${dateStr} — All Day`
+        : `${dateStr}${timeStr}`,
+      orgName: churchName,
+      url: signupUrl,
+    });
+  }
+
+  function formatEventTime(t: string) {
+    const [h, m] = t.split(":");
+    const hour = Number(h);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${h12}:${m} ${ampm}`;
+  }
+
   function copySignupLink(eventId: string) {
-    const url = `${window.location.origin}/events/${eventId}/signup`;
+    const url = `${window.location.origin}/events/${churchId}/${eventId}/signup`;
     navigator.clipboard.writeText(url);
+    setCopiedEventId(eventId);
+    setTimeout(() => setCopiedEventId(null), 2000);
   }
 
   function getMinistryNames(ids: string[]) {
@@ -1074,17 +1359,43 @@ function EventsTab({
               </h2>
               <div className="space-y-3">
                 {upcomingEvents.map((ev) => (
-                  <EventCard
-                    key={ev.id}
-                    event={ev}
-                    signupCount={signupCounts[ev.id] || 0}
-                    onEdit={() => startEdit(ev)}
-                    onDelete={() => handleDelete(ev.id)}
-                    onCopyLink={() => copySignupLink(ev.id)}
-                    deleting={deleting === ev.id}
-                    getMinistryNames={getMinistryNames}
-                    formatTime={formatTime}
-                  />
+                  <div key={ev.id}>
+                    <EventCard
+                      event={ev}
+                      signupCount={signupCounts[ev.id] || 0}
+                      onEdit={() => startEdit(ev)}
+                      onDelete={() => handleDelete(ev.id)}
+                      onCopyLink={() => copySignupLink(ev.id)}
+                      onPrintInvite={() => printEventInvite(ev)}
+                      onDownloadSlide={() => downloadEventSlide(ev)}
+                      onCreateShortLink={userIsAdmin ? () => setShortLinkEventId(ev.id) : undefined}
+                      onEmailInvite={userIsAdmin ? () => setEmailInviteEventId(ev.id) : undefined}
+                      deleting={deleting === ev.id}
+                      copied={copiedEventId === ev.id}
+                      getMinistryNames={getMinistryNames}
+                      formatTime={formatTime}
+                    />
+                    {shortLinkEventId === ev.id && churchId && (
+                      <div className="mt-2 ml-4">
+                        <ShortLinkCreator
+                          churchId={churchId}
+                          targetUrl={`/events/${churchId}/${ev.id}/signup`}
+                          label={`Event signup — ${ev.name}`}
+                          onClose={() => setShortLinkEventId(null)}
+                        />
+                      </div>
+                    )}
+                    {emailInviteEventId === ev.id && churchId && (
+                      <div className="mt-2 ml-4">
+                        <EventEmailInvite
+                          churchId={churchId}
+                          eventId={ev.id}
+                          eventName={ev.name}
+                          onClose={() => setEmailInviteEventId(null)}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1098,18 +1409,44 @@ function EventsTab({
               </h2>
               <div className="space-y-3">
                 {pastEvents.map((ev) => (
-                  <EventCard
-                    key={ev.id}
-                    event={ev}
-                    signupCount={signupCounts[ev.id] || 0}
-                    onEdit={() => startEdit(ev)}
-                    onDelete={() => handleDelete(ev.id)}
-                    onCopyLink={() => copySignupLink(ev.id)}
-                    deleting={deleting === ev.id}
-                    getMinistryNames={getMinistryNames}
-                    formatTime={formatTime}
-                    isPast
-                  />
+                  <div key={ev.id}>
+                    <EventCard
+                      event={ev}
+                      signupCount={signupCounts[ev.id] || 0}
+                      onEdit={() => startEdit(ev)}
+                      onDelete={() => handleDelete(ev.id)}
+                      onCopyLink={() => copySignupLink(ev.id)}
+                      onPrintInvite={() => printEventInvite(ev)}
+                      onDownloadSlide={() => downloadEventSlide(ev)}
+                      onCreateShortLink={userIsAdmin ? () => setShortLinkEventId(ev.id) : undefined}
+                      onEmailInvite={userIsAdmin ? () => setEmailInviteEventId(ev.id) : undefined}
+                      deleting={deleting === ev.id}
+                      copied={copiedEventId === ev.id}
+                      getMinistryNames={getMinistryNames}
+                      formatTime={formatTime}
+                      isPast
+                    />
+                    {shortLinkEventId === ev.id && churchId && (
+                      <div className="mt-2 ml-4">
+                        <ShortLinkCreator
+                          churchId={churchId}
+                          targetUrl={`/events/${churchId}/${ev.id}/signup`}
+                          label={`Event signup — ${ev.name}`}
+                          onClose={() => setShortLinkEventId(null)}
+                        />
+                      </div>
+                    )}
+                    {emailInviteEventId === ev.id && churchId && (
+                      <div className="mt-2 ml-4">
+                        <EventEmailInvite
+                          churchId={churchId}
+                          eventId={ev.id}
+                          eventName={ev.name}
+                          onClose={() => setEmailInviteEventId(null)}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1130,7 +1467,12 @@ function EventCard({
   onEdit,
   onDelete,
   onCopyLink,
+  onPrintInvite,
+  onDownloadSlide,
+  onCreateShortLink,
+  onEmailInvite,
   deleting,
+  copied,
   getMinistryNames,
   formatTime,
   isPast,
@@ -1140,22 +1482,39 @@ function EventCard({
   onEdit: () => void;
   onDelete: () => void;
   onCopyLink: () => void;
+  onPrintInvite: () => void;
+  onDownloadSlide: () => void;
+  onCreateShortLink?: () => void;
+  onEmailInvite?: () => void;
   deleting: boolean;
+  copied: boolean;
   getMinistryNames: (ids: string[]) => string;
   formatTime: (t: string | null) => string;
   isPast?: boolean;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const totalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
+  const hasSignupLink = ev.signup_mode !== "scheduled" || ev.visibility === "public";
+
+  function handleDeleteClick() {
+    if (confirmDelete) {
+      onDelete();
+      setConfirmDelete(false);
+    } else {
+      setConfirmDelete(true);
+      setTimeout(() => setConfirmDelete(false), 4000);
+    }
+  }
 
   return (
     <div
-      className={`group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md ${
+      className={`rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md ${
         isPast ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold text-vc-indigo">{ev.name}</h3>
             {ev.signup_mode !== "scheduled" && (
               <span className="rounded-full bg-vc-sage/15 px-2 py-0.5 text-xs font-medium text-vc-sage">
@@ -1214,7 +1573,7 @@ function EventCard({
                 {r.title} \u00d7{r.count}
                 {timeStr}
                 {r.allow_signup && (
-                  <span className="ml-1 text-vc-sage" title="Open for signup">\u25cf</span>
+                  <span className="ml-1 text-vc-sage" title="Open for signup">{"\u25cf"}</span>
                 )}
               </span>
             );
@@ -1222,29 +1581,249 @@ function EventCard({
         </div>
       )}
 
-      <div className="mt-3 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      {/* Actions — always visible */}
+      <div className="mt-3 flex items-center gap-1 border-t border-vc-border-light pt-3">
         <button
           onClick={onEdit}
-          className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
         >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
           Edit
         </button>
-        {(ev.signup_mode !== "scheduled" || ev.visibility === "public") && (
-          <button
-            onClick={onCopyLink}
-            className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-          >
-            Copy signup link
-          </button>
+
+        {hasSignupLink && (
+          <>
+            <button
+              onClick={onCopyLink}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                copied
+                  ? "bg-vc-sage/10 text-vc-sage"
+                  : "text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo"
+              }`}
+            >
+              {copied ? (
+                <>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                  </svg>
+                  Share link
+                </>
+              )}
+            </button>
+            <button
+              onClick={onPrintInvite}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+              </svg>
+              Print invite
+            </button>
+            <button
+              onClick={onDownloadSlide}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Slide
+            </button>
+            {onCreateShortLink && (
+              <button
+                onClick={onCreateShortLink}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                </svg>
+                Short link
+              </button>
+            )}
+            {onEmailInvite && (
+              <button
+                onClick={onEmailInvite}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+                Email invite
+              </button>
+            )}
+          </>
         )}
+
+        <div className="ml-auto">
+          <button
+            onClick={handleDeleteClick}
+            disabled={deleting}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              confirmDelete
+                ? "bg-vc-danger/10 text-vc-danger"
+                : "text-vc-text-muted hover:bg-vc-danger/5 hover:text-vc-danger"
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+            {deleting ? "Deleting..." : confirmDelete ? "Confirm delete" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Event Email Invite (inline compose)
+// ---------------------------------------------------------------------------
+
+function EventEmailInvite({
+  churchId,
+  eventId,
+  eventName,
+  onClose,
+}: {
+  churchId: string;
+  eventId: string;
+  eventName: string;
+  onClose: () => void;
+}) {
+  const [emails, setEmails] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ sent: number; failed: number } | null>(null);
+
+  async function handleSend() {
+    const recipientList = emails
+      .split(/[,\n]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.includes("@"));
+
+    if (recipientList.length === 0) {
+      setError("Enter at least one valid email address.");
+      return;
+    }
+    if (recipientList.length > 50) {
+      setError("Maximum 50 recipients per send.");
+      return;
+    }
+
+    setSending(true);
+    setError("");
+
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      if (!token) {
+        setError("Not authenticated");
+        return;
+      }
+
+      const res = await fetch("/api/event-invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          event_id: eventId,
+          recipient_emails: recipientList,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to send invites");
+        return;
+      }
+
+      setResult({ sent: data.sent, failed: data.failed });
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="space-y-3 rounded-xl border border-vc-sage/30 bg-vc-sage/5 p-4">
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+          </svg>
+          <p className="text-sm font-medium text-vc-sage">
+            {result.sent} invite{result.sent !== 1 ? "s" : ""} sent!
+          </p>
+        </div>
+        {result.failed > 0 && (
+          <p className="text-xs text-vc-danger">
+            {result.failed} email{result.failed !== 1 ? "s" : ""} failed to send.
+          </p>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            className="text-xs font-medium text-vc-text-secondary hover:text-vc-indigo transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-vc-border-light bg-white p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-vc-indigo">
+          Email invite — {eventName}
+        </p>
         <button
-          onClick={onDelete}
-          disabled={deleting}
-          className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+          onClick={onClose}
+          className="text-vc-text-muted hover:text-vc-indigo transition-colors"
         >
-          {deleting ? "Deleting..." : "Delete"}
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
+
+      <div>
+        <label className="text-xs font-medium text-vc-text-secondary">
+          Recipient emails (comma or newline separated)
+        </label>
+        <textarea
+          value={emails}
+          onChange={(e) => setEmails(e.target.value)}
+          placeholder={"jane@example.com, john@example.com"}
+          rows={3}
+          className="mt-1 w-full rounded-lg border border-vc-border px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:outline-none focus:ring-2 focus:border-vc-coral focus:ring-vc-coral/20 transition-colors"
+        />
+        <p className="mt-1 text-xs text-vc-text-muted">
+          Up to 50 recipients. Each will receive a branded invite with event details and a signup link.
+        </p>
+      </div>
+
+      {error && <p className="text-xs text-vc-danger">{error}</p>}
+
+      <button
+        onClick={handleSend}
+        disabled={sending || !emails.trim()}
+        className="w-full rounded-lg bg-vc-coral px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-vc-coral/90 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {sending ? "Sending..." : "Send invites"}
+      </button>
     </div>
   );
 }

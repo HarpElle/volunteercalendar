@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Assignment, Service, Volunteer, Ministry, Schedule } from "@/lib/types";
+import { getServiceMinistryIds } from "@/lib/utils/service-helpers";
 
 interface ScheduleMatrixProps {
   assignments: Assignment[];
@@ -159,20 +160,25 @@ export function ScheduleMatrix({
                   {Object.entries(byService).map(([serviceId, svcAssignments]) => {
                     const service = serviceMap.get(serviceId);
                     if (!service) return null;
-                    const ministry = ministryMap.get(service.ministry_id);
+                    const ministryIds = getServiceMinistryIds(service);
+                    const primaryMinistry = ministryMap.get(ministryIds[0]);
+                    const ministryNames = ministryIds
+                      .map((id) => ministryMap.get(id)?.name)
+                      .filter(Boolean)
+                      .join(", ");
 
                     return (
                       <div key={serviceId} className="px-5 py-3">
                         <div className="mb-2 flex items-center gap-2">
                           <span
                             className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: getMinistryColor(service.ministry_id) }}
+                            style={{ backgroundColor: primaryMinistry?.color || "#ccc" }}
                           />
                           <span className="text-sm font-medium text-vc-indigo">
                             {service.name}
                           </span>
                           <span className="text-xs text-vc-text-muted">
-                            {service.start_time} · {ministry?.name}
+                            {service.start_time} · {ministryNames}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-2">

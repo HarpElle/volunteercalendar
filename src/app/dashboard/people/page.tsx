@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { INTEGRATIONS } from "@/lib/integrations/config";
+import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import type {
   Volunteer,
   Ministry,
@@ -208,17 +209,7 @@ function PeopleContent() {
           </p>
         </div>
         {canManage && addMode === null && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setAddMode("csv")}>
-              Import CSV
-            </Button>
-            <Button variant="outline" onClick={() => setAddMode("chms")}>
-              Connect ChMS
-            </Button>
-            <Button onClick={() => setAddMode("individual")}>
-              Add Person
-            </Button>
-          </div>
+          <AddPeopleMenu onSelect={setAddMode} />
         )}
       </div>
 
@@ -356,7 +347,7 @@ function PeopleContent() {
 
           {/* Share join link */}
           {canManage && (
-            <JoinLinkSection churchId={churchId!} />
+            <JoinLinkSection churchId={churchId!} churchName={churchName} />
           )}
         </>
       )}
@@ -576,6 +567,94 @@ function RosterRow({
 // Add Individual Panel
 // ---------------------------------------------------------------------------
 
+function AddPeopleMenu({ onSelect }: { onSelect: (mode: "individual" | "csv" | "chms") => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <Button onClick={() => setOpen(!open)}>
+        <span className="flex items-center gap-1.5">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Add People
+        </span>
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-xl border border-vc-border-light bg-white p-2 shadow-xl shadow-black/[0.08]">
+            <button
+              onClick={() => { setOpen(false); onSelect("individual"); }}
+              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
+            >
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-vc-indigo">Add person</p>
+                <p className="text-xs text-vc-text-muted">Add someone manually</p>
+              </div>
+            </button>
+            <button
+              onClick={() => { setOpen(false); onSelect("csv"); }}
+              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
+            >
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-vc-indigo">Import CSV</p>
+                <p className="text-xs text-vc-text-muted">Upload a spreadsheet</p>
+              </div>
+            </button>
+            <button
+              onClick={() => { setOpen(false); onSelect("chms"); }}
+              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
+            >
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-vc-indigo">Import from ChMS</p>
+                <p className="text-xs text-vc-text-muted">Planning Center, Breeze, Rock RMS</p>
+              </div>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PanelHeader({
+  title,
+  subtitle,
+  onClose,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mb-5 flex items-start justify-between gap-4">
+      <div>
+        <h2 className="text-lg font-semibold text-vc-indigo">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-sm text-vc-text-muted">{subtitle}</p>}
+      </div>
+      <button
+        onClick={onClose}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+        title="Close"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function AddIndividualPanel({
   churchId,
   ministries,
@@ -643,9 +722,9 @@ function AddIndividualPanel({
 
   return (
     <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Add Person</h2>
+      <PanelHeader title="Add Person" subtitle="Add someone to your roster manually." onClose={onCancel} />
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Input
             label="Full Name"
             required
@@ -660,19 +739,19 @@ function AddIndividualPanel({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          <Input
+            label="Phone"
+            type="tel"
+            placeholder="(555) 123-4567"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
         </div>
-        <Input
-          label="Phone"
-          type="tel"
-          placeholder="(555) 123-4567"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
 
         {ministries.length > 0 && (
           <div>
             <label className="mb-1.5 block text-sm font-medium text-vc-text">
-              Ministries
+              Assign to ministries
             </label>
             <div className="flex flex-wrap gap-2">
               {ministries.map((m) => (
@@ -702,9 +781,8 @@ function AddIndividualPanel({
           </div>
         )}
 
-        <div className="flex gap-3">
+        <div className="flex justify-end pt-2">
           <Button type="submit" loading={saving}>Add Person</Button>
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
         </div>
       </form>
     </div>
@@ -726,11 +804,13 @@ function CSVImportPanel({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<{ count: number; errors: string[] } | null>(null);
 
   async function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     setSaving(true);
     setImportStatus(null);
 
@@ -815,36 +895,71 @@ function CSVImportPanel({
 
   return (
     <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <h2 className="mb-2 text-lg font-semibold text-vc-indigo">Import from CSV</h2>
-      <p className="mb-4 text-sm text-vc-text-muted">
-        Upload a CSV with columns: <strong>name</strong> (required), <strong>email</strong>, <strong>phone</strong>.
-        You can assign ministries after import.
-      </p>
-      <div className="flex items-center gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          onChange={handleCSVImport}
-          className="text-sm text-vc-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-vc-coral file:px-4 file:py-2 file:text-sm file:font-medium file:text-white file:cursor-pointer hover:file:bg-vc-coral-dark"
-        />
-        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-      </div>
-      {saving && <p className="mt-3 text-sm text-vc-text-muted">Importing...</p>}
-      {importStatus && (
-        <div className="mt-4">
-          {importStatus.count > 0 && (
-            <p className="text-sm font-medium text-vc-sage">
-              Successfully imported {importStatus.count} {importStatus.count !== 1 ? "people" : "person"}.
-            </p>
+      <PanelHeader
+        title="Import from CSV"
+        subtitle="Upload a spreadsheet with name (required), email, and phone columns."
+        onClose={onCancel}
+      />
+
+      {!importStatus ? (
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="cursor-pointer rounded-xl border-2 border-dashed border-vc-border bg-vc-bg/50 px-6 py-10 text-center transition-colors hover:border-vc-coral/40 hover:bg-vc-coral/5"
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleCSVImport}
+            className="hidden"
+          />
+          {saving ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
+              <p className="text-sm font-medium text-vc-indigo">Importing {fileName}...</p>
+            </div>
+          ) : (
+            <>
+              <svg className="mx-auto h-10 w-10 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="mt-3 text-sm font-medium text-vc-indigo">
+                Click to choose a CSV file
+              </p>
+              <p className="mt-1 text-xs text-vc-text-muted">
+                Columns: <strong>name</strong> (required), email, phone. Ministries can be assigned after import.
+              </p>
+            </>
           )}
-          {importStatus.errors.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {importStatus.errors.map((err, i) => (
-                <p key={i} className="text-sm text-vc-danger">{err}</p>
-              ))}
+        </div>
+      ) : (
+        <div>
+          {importStatus.count > 0 && (
+            <div className="flex items-center gap-3 rounded-lg bg-vc-sage/10 px-4 py-3">
+              <svg className="h-5 w-5 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+              <p className="text-sm font-medium text-vc-sage">
+                Successfully imported {importStatus.count} {importStatus.count !== 1 ? "people" : "person"}.
+              </p>
             </div>
           )}
+          {importStatus.errors.length > 0 && (
+            <div className="mt-3 rounded-lg bg-vc-danger/5 p-4">
+              <p className="mb-1 text-xs font-semibold text-vc-danger">Issues</p>
+              <div className="space-y-0.5">
+                {importStatus.errors.map((err, i) => (
+                  <p key={i} className="text-xs text-vc-danger/80">{err}</p>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setImportStatus(null); setFileName(null); }}>
+              Import more
+            </Button>
+            <Button onClick={onCancel}>Done</Button>
+          </div>
         </div>
       )}
     </div>
@@ -951,50 +1066,86 @@ function ChMSImportPanel({
     setError("");
   }
 
+  const STEP_LABELS: Record<ChMSStep, string> = {
+    select: "Choose platform",
+    connect: "Enter credentials",
+    testing: "Testing connection",
+    connected: "Ready to import",
+    importing: "Importing",
+    done: "Complete",
+  };
+
+  const stepOrder: ChMSStep[] = ["select", "connect", "connected", "done"];
+  const currentStepIdx = stepOrder.indexOf(
+    step === "testing" ? "connect" : step === "importing" ? "done" : step,
+  );
+
   return (
     <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-vc-indigo">Connect Church Management System</h2>
-        {step === "select" && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-        )}
-      </div>
+      <PanelHeader
+        title="Import from ChMS"
+        subtitle="One-time import from your church management system. Your existing data will not be affected."
+        onClose={step === "importing" ? () => {} : onCancel}
+      />
+
+      {/* Step indicator */}
+      {step !== "select" && (
+        <div className="mb-6 flex items-center gap-2">
+          {stepOrder.map((s, i) => (
+            <div key={s} className="flex items-center gap-2">
+              {i > 0 && <div className={`h-px w-6 ${i <= currentStepIdx ? "bg-vc-coral" : "bg-vc-border-light"}`} />}
+              <div
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                  i < currentStepIdx
+                    ? "bg-vc-sage text-white"
+                    : i === currentStepIdx
+                      ? "bg-vc-coral text-white"
+                      : "bg-vc-bg-warm text-vc-text-muted"
+                }`}
+              >
+                {i < currentStepIdx ? (
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                ) : (
+                  i + 1
+                )}
+              </div>
+              <span className={`text-xs font-medium ${i === currentStepIdx ? "text-vc-indigo" : "text-vc-text-muted"}`}>
+                {STEP_LABELS[s]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Select Provider */}
       {step === "select" && (
-        <div className="space-y-4">
-          <p className="text-sm text-vc-text-muted">
-            Select a platform to import from. Your existing data will not be affected.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {INTEGRATIONS.map((config) => (
-              <button
-                key={config.provider}
-                onClick={() => selectProvider(config)}
-                className="group rounded-xl border border-vc-border-light bg-vc-bg/50 p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/[0.03] hover:border-vc-coral/40"
-              >
-                <ProviderIcon provider={config.provider} />
-                <h3 className="mt-3 font-semibold text-vc-indigo">{config.label}</h3>
-                <p className="mt-1 text-sm text-vc-text-secondary">{config.description}</p>
-              </button>
-            ))}
-          </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {INTEGRATIONS.map((config) => (
+            <button
+              key={config.provider}
+              onClick={() => selectProvider(config)}
+              className="group rounded-xl border border-vc-border-light bg-vc-bg/50 p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/[0.03] hover:border-vc-coral/40"
+            >
+              <ProviderIcon provider={config.provider} />
+              <h3 className="mt-3 font-semibold text-vc-indigo">{config.label}</h3>
+              <p className="mt-1 text-sm text-vc-text-secondary">{config.description}</p>
+            </button>
+          ))}
         </div>
       )}
 
       {/* Enter Credentials */}
       {(step === "connect" || step === "testing") && selectedProvider && (
         <div className="max-w-lg">
-          <button onClick={startOver} className="mb-4 text-sm font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">
-            &larr; Back to providers
-          </button>
           <div className="flex items-center gap-3 mb-4">
             <ProviderIcon provider={selectedProvider.provider} />
-            <h3 className="font-semibold text-vc-indigo">Connect {selectedProvider.label}</h3>
+            <div>
+              <h3 className="font-semibold text-vc-indigo">{selectedProvider.label}</h3>
+              <p className="text-xs text-vc-text-muted">Credentials are stored securely and only used for importing.</p>
+            </div>
           </div>
-          <p className="mb-4 text-sm text-vc-text-secondary">
-            Enter your API credentials to connect. These are stored securely and only used for importing.
-          </p>
           <div className="space-y-3">
             {selectedProvider.authFields.map((field) => (
               <div key={field.key}>
@@ -1014,49 +1165,46 @@ function ChMSImportPanel({
             ))}
           </div>
           {error && <div className="mt-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
-          <Button
-            className="mt-4 w-full"
-            onClick={testConnection}
-            loading={step === "testing"}
-            disabled={selectedProvider.authFields.some((f) => f.required && !credentials[f.key]?.trim())}
-          >
-            Test Connection
-          </Button>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" onClick={startOver}>Back</Button>
+            <Button
+              onClick={testConnection}
+              loading={step === "testing"}
+              disabled={selectedProvider.authFields.some((f) => f.required && !credentials[f.key]?.trim())}
+            >
+              Test Connection
+            </Button>
+          </div>
         </div>
       )}
 
       {/* Connected */}
       {step === "connected" && selectedProvider && (
         <div className="max-w-lg">
-          <button onClick={startOver} className="mb-4 text-sm font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">
-            &larr; Back to providers
-          </button>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-vc-sage/15">
-              <svg className="h-5 w-5 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </div>
+          <div className="flex items-center gap-3 rounded-lg bg-vc-sage/10 px-4 py-3 mb-4">
+            <svg className="h-5 w-5 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
             <div>
-              <h3 className="font-semibold text-vc-indigo">Connected to {selectedProvider.label}</h3>
-              <p className="text-sm text-vc-sage">Connection verified</p>
+              <p className="text-sm font-medium text-vc-sage">Connected to {selectedProvider.label}</p>
+              <p className="text-xs text-vc-text-muted">Existing people (matched by email) will be updated, not duplicated.</p>
             </div>
           </div>
-          <p className="mb-4 text-sm text-vc-text-secondary">
-            Ready to import. Existing people (matched by email) will be updated, not duplicated.
-          </p>
           {error && <div className="mb-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
-          <Button onClick={runImport} loading={importing} className="w-full">Import People</Button>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={startOver}>Back</Button>
+            <Button onClick={runImport} loading={importing}>Import People</Button>
+          </div>
         </div>
       )}
 
       {/* Importing */}
       {step === "importing" && (
-        <div className="max-w-lg text-center py-4">
+        <div className="max-w-lg text-center py-8">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
-          <h3 className="font-semibold text-vc-indigo">Importing...</h3>
+          <h3 className="font-semibold text-vc-indigo">Importing from {selectedProvider?.label}...</h3>
           <p className="mt-1 text-sm text-vc-text-secondary">
-            Fetching data from {selectedProvider?.label}. This may take a minute for large organizations.
+            This may take a minute for large organizations.
           </p>
         </div>
       )}
@@ -1064,14 +1212,6 @@ function ChMSImportPanel({
       {/* Done */}
       {step === "done" && importStats && (
         <div className="max-w-lg">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-vc-sage/15">
-              <svg className="h-5 w-5 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </div>
-            <h3 className="font-semibold text-vc-indigo">Import Complete</h3>
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <StatCard label="People found" value={importStats.people_found} />
             <StatCard label="Imported" value={importStats.imported} />
@@ -1079,16 +1219,16 @@ function ChMSImportPanel({
             <StatCard label="Skipped" value={importStats.skipped} />
           </div>
           {importStats.errors.length > 0 && (
-            <div className="mt-4 rounded-lg bg-vc-sand/20 p-3">
-              <p className="text-xs font-medium text-vc-text-secondary mb-1">Issues:</p>
+            <div className="mt-4 rounded-lg bg-vc-danger/5 p-4">
+              <p className="mb-1 text-xs font-semibold text-vc-danger">Issues</p>
               {importStats.errors.map((err, i) => (
-                <p key={i} className="text-xs text-vc-text-muted">{err}</p>
+                <p key={i} className="text-xs text-vc-danger/80">{err}</p>
               ))}
             </div>
           )}
-          <div className="mt-4 flex gap-3">
-            <Button onClick={onDone}>Done</Button>
+          <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" onClick={startOver}>Import from another source</Button>
+            <Button onClick={onDone}>Done</Button>
           </div>
         </div>
       )}
@@ -1199,13 +1339,107 @@ function InviteForm({
 // Join Link Section
 // ---------------------------------------------------------------------------
 
-function JoinLinkSection({ churchId }: { churchId: string }) {
+function JoinLinkSection({ churchId, churchName }: { churchId: string; churchName: string }) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const joinLink = `${baseUrl}/join/${churchId}`;
+  const [copied, setCopied] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showShortLinkCreator, setShowShortLinkCreator] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
+
+  // Close share menu on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
+      }
+    }
+    if (showShareMenu) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showShareMenu]);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(joinLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handlePrintFlyer() {
+    setShowShareMenu(false);
+    const { printFlyer } = await import("@/lib/utils/print-flyer");
+    printFlyer({
+      title: "Volunteer With Us!",
+      subtitle: "Scan the QR code to sign up as a volunteer.",
+      orgName: churchName,
+      url: joinLink,
+      instructions: [
+        "Scan the QR code with your phone camera",
+        "Create a free account (or sign in)",
+        "Request to join — we'll approve you shortly!",
+      ],
+      footer: "Powered by VolunteerCal",
+    });
+  }
+
+  async function handleDownloadSlide() {
+    setShowShareMenu(false);
+    const { downloadSlide } = await import("@/lib/utils/download-slide");
+    downloadSlide({
+      title: "Volunteer With Us!",
+      subtitle: "Scan the QR code to sign up as a volunteer.",
+      orgName: churchName,
+      url: joinLink,
+    });
+  }
 
   return (
     <div className="mt-6 rounded-xl border border-dashed border-vc-border bg-vc-bg-warm p-5">
-      <p className="text-sm font-medium text-vc-indigo mb-2">Share join link</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium text-vc-indigo">Share join link</p>
+        <div className="relative" ref={shareRef}>
+          <button
+            onClick={() => setShowShareMenu(!showShareMenu)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-white hover:text-vc-indigo transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
+            </svg>
+            Share options
+          </button>
+          {showShareMenu && (
+            <div className="absolute right-0 top-full mt-1 z-10 w-52 rounded-xl border border-vc-border-light bg-white py-1 shadow-lg">
+              <button
+                onClick={handlePrintFlyer}
+                className="w-full px-3 py-2.5 text-left text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors flex items-center gap-2"
+              >
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+                </svg>
+                Print QR flyer
+              </button>
+              <button
+                onClick={handleDownloadSlide}
+                className="w-full px-3 py-2.5 text-left text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors flex items-center gap-2"
+              >
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download slide (16:9)
+              </button>
+              <div className="my-1 border-t border-vc-border-light" />
+              <button
+                onClick={() => { setShowShareMenu(false); setShowShortLinkCreator(true); }}
+                className="w-full px-3 py-2.5 text-left text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors flex items-center gap-2"
+              >
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                </svg>
+                Create short link
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       <div className="flex items-center gap-2">
         <input
           readOnly
@@ -1214,15 +1448,30 @@ function JoinLinkSection({ churchId }: { churchId: string }) {
           onClick={(e) => (e.target as HTMLInputElement).select()}
         />
         <button
-          onClick={() => navigator.clipboard.writeText(joinLink)}
-          className="shrink-0 rounded-lg border border-vc-border px-3 py-2 text-sm font-medium text-vc-text-secondary hover:bg-white transition-colors"
+          onClick={handleCopy}
+          className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            copied
+              ? "border-vc-sage/30 bg-vc-sage/10 text-vc-sage"
+              : "border-vc-border text-vc-text-secondary hover:bg-white"
+          }`}
         >
-          Copy
+          {copied ? "Copied!" : "Copy"}
         </button>
       </div>
       <p className="mt-1 text-xs text-vc-text-muted">
         Anyone with this link can request to join. You'll need to approve them.
       </p>
+
+      {showShortLinkCreator && (
+        <div className="mt-3">
+          <ShortLinkCreator
+            churchId={churchId}
+            targetUrl={`/join/${churchId}`}
+            label={`Volunteer signup — ${churchName}`}
+            onClose={() => setShowShortLinkCreator(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

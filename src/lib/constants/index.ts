@@ -1,12 +1,12 @@
 import type { WorkflowMode, SubscriptionTier, ReminderChannel } from "@/lib/types";
 
 /** Tier limits for gating */
-export const TIER_LIMITS: Record<string, { volunteers: number; ministries: number }> = {
-  free: { volunteers: 20, ministries: 1 },
-  starter: { volunteers: 100, ministries: 5 },
-  growth: { volunteers: 250, ministries: 15 },
-  pro: { volunteers: 500, ministries: Infinity },
-  enterprise: { volunteers: Infinity, ministries: Infinity },
+export const TIER_LIMITS: Record<string, { volunteers: number; ministries: number; short_links: number }> = {
+  free: { volunteers: 20, ministries: 1, short_links: 0 },
+  starter: { volunteers: 100, ministries: 5, short_links: 3 },
+  growth: { volunteers: 250, ministries: 15, short_links: 10 },
+  pro: { volunteers: 500, ministries: Infinity, short_links: 25 },
+  enterprise: { volunteers: Infinity, ministries: Infinity, short_links: 100 },
 };
 
 export const WORKFLOW_MODES: { value: WorkflowMode; label: string; description: string }[] = [

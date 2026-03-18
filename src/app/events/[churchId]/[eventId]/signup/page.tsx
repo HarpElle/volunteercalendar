@@ -4,18 +4,15 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
-import { getEventSignups } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { Event, RoleSlot, EventSignup, Church } from "@/lib/types";
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
 
 type PageState = "loading" | "not_found" | "ready" | "submitted";
 
 export default function EventSignupPage() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { churchId, eventId } = useParams<{ churchId: string; eventId: string }>();
   const { user, profile } = useAuth();
 
   const [state, setState] = useState<PageState>("loading");
@@ -31,9 +28,7 @@ export default function EventSignupPage() {
   useEffect(() => {
     async function load() {
       try {
-        // We need to find the event — try loading from all churches the user might have access to.
-        // For public events, we use the API route which accepts eventId and looks it up.
-        const res = await fetch(`/api/signup?eventId=${eventId}`);
+        const res = await fetch(`/api/signup?eventId=${eventId}&churchId=${churchId}`);
         if (!res.ok) {
           setState("not_found");
           return;
@@ -48,7 +43,7 @@ export default function EventSignupPage() {
       }
     }
     load();
-  }, [eventId]);
+  }, [eventId, churchId]);
 
   async function handleSignup() {
     if (!event) return;
@@ -254,7 +249,7 @@ export default function EventSignupPage() {
             <h2 className="mb-3 text-lg font-semibold text-vc-indigo">Choose a Role</h2>
             <div className="space-y-2">
               {signupRoles.map((role) => {
-                const { filled, remaining } = getRoleAvailability(role);
+                const { remaining } = getRoleAvailability(role);
                 const isFull = remaining === 0;
                 const isSelected = selectedRoleId === role.role_id;
                 const hasCustomTime = role.start_time || role.end_time;
@@ -333,7 +328,7 @@ export default function EventSignupPage() {
             <p className="mt-2 text-xs text-vc-text-muted">
               Already have an account?{" "}
               <Link
-                href={`/login?redirect=/events/${eventId}/signup`}
+                href={`/login?redirect=/events/${churchId}/${eventId}/signup`}
                 className="font-medium text-vc-coral hover:text-vc-coral-dark"
               >
                 Sign in

@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 12 — Dashboard UI/UX reorganization (complete) |
+| **Status** | Phase 13 — Sharing & invite features (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -66,7 +66,13 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # User profile, password, calendar feeds, danger zone
 │   │   │   ├── notifications/
 │   │   │   │   └── page.tsx        # Admin notification center (send + history)
+│   │   ├── s/
+│   │   │   └── [slug]/
+│   │   │       └── page.tsx        # Short link resolver (server redirect)
 │   │   ├── events/
+│   │   │   ├── [churchId]/
+│   │   │   │   └── [eventId]/
+│   │   │   │       └── page.tsx    # Public event detail page (signup link target)
 │   │   │   └── [eventId]/
 │   │   │       └── signup/
 │   │   │           └── page.tsx    # Public event signup page (role selection)
@@ -105,6 +111,14 @@ VolunteerCal/
 │   │       ├── cron/
 │   │       │   └── reminders/
 │   │       │       └── route.ts    # Vercel Cron → triggers reminders for all churches
+│   │       ├── short-links/
+│   │       │   ├── route.ts        # Short links CRUD API (GET list, POST create, DELETE)
+│   │       │   └── check/
+│   │       │       └── route.ts    # Public slug availability check
+│   │       ├── event-invite/
+│   │       │   └── route.ts        # Send event invite emails (batch, admin+)
+│   │       ├── organization/
+│   │       │   └── route.ts        # Org management API (cascading delete)
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -113,7 +127,7 @@ VolunteerCal/
 │   │           └── webhook/
 │   │               └── route.ts    # Stripe webhook handler
 │   ├── components/
-│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal
+│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, short-link-creator
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections
 │   │   └── scheduling/         # Schedule matrix, draft view, approval cards
@@ -124,7 +138,7 @@ VolunteerCal/
 │       ├── types/              # TypeScript interfaces
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts, permissions.ts
+│       ├── utils/              # ical.ts, email-templates.ts, org-terms.ts, permissions.ts, download-slide.ts
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, SMS service
 └── docs/                       # Research outputs, architecture decisions
@@ -149,3 +163,4 @@ VolunteerCal/
 | 10 | Notifications & reminders (48h/24h email + SMS, Twilio, preferences, admin center) | Complete |
 | 11 | Beta hardening (favicon/PWA, cron automation, error boundaries, 404 page) | Complete |
 | 12 | Dashboard UI/UX reorganization (grouped nav, avatar menu, People/Organization/Account/Services&Events pages, middleware redirects) | Complete |
+| 13 | Sharing & invite features: short links (create/resolve/manage, tier-gated), downloadable QR slides (1920×1080 Canvas), email event invites (batch send via Resend), multi-ministry scheduler migration | Complete |

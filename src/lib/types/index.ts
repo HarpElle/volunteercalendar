@@ -138,14 +138,25 @@ export interface ServiceRole {
 
 export type RecurrencePattern = "weekly" | "biweekly" | "monthly" | "custom";
 
+/** A ministry's participation in a service, with its own roles and optional time overrides. */
+export interface ServiceMinistry {
+  ministry_id: string;
+  roles: ServiceRole[];
+  /** Per-ministry start time override (HH:mm). Null = inherits from service. */
+  start_time: string | null;
+  /** Per-ministry end time override (HH:mm). Null = inherits from service. */
+  end_time: string | null;
+}
+
 export interface Service {
   id: string;
   church_id: string;
+  /** @deprecated Primary ministry. Use `ministries` array for multi-ministry services. */
   ministry_id: string;
   name: string;
   recurrence: RecurrencePattern;
   day_of_week: number;
-  /** Default start time for the service (HH:mm). Roles may override. */
+  /** Default start time for the service (HH:mm). Ministries/roles may override. */
   start_time: string;
   /** Default end time for the service (HH:mm). Null = use duration_minutes. */
   end_time: string | null;
@@ -153,7 +164,10 @@ export interface Service {
   duration_minutes: number;
   /** Whether this is an all-day service (no specific times). */
   all_day: boolean;
+  /** @deprecated Flat role list for legacy single-ministry services. Use ministries[].roles instead. */
   roles: ServiceRole[];
+  /** Multi-ministry support. Each entry has its own roles and optional time overrides. */
+  ministries?: ServiceMinistry[];
   created_at: string;
 }
 
@@ -332,6 +346,22 @@ export interface CalendarFeed {
   target_id: string;
   secret_token: string;
   created_at: string;
+}
+
+// --- Short Links ---
+
+export interface ShortLink {
+  id: string;
+  church_id: string;
+  /** User-chosen slug, e.g. "easter-signup". URL: /s/{slug} */
+  slug: string;
+  /** Full destination URL (absolute path like /join/{churchId} or /events/{churchId}/{eventId}/signup) */
+  target_url: string;
+  /** Human label shown in dashboard */
+  label: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
 }
 
 // --- Waitlist ---

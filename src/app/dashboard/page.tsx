@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import type { Schedule, Assignment, Service, Volunteer, Ministry } from "@/lib/types";
+import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
 
 interface DashboardStats {
   volunteers: number;
@@ -120,8 +121,9 @@ export default function DashboardPage() {
           .slice(0, 6)
           .map((u) => {
             const svc = serviceMap.get(u.serviceId);
-            const ministry = svc ? ministryMap.get(svc.ministry_id) : null;
-            const needed = svc ? svc.roles.reduce((r, role) => r + role.count, 0) : 0;
+            const svcMinistryIds = svc ? getServiceMinistryIds(svc) : [];
+            const ministry = svcMinistryIds.length > 0 ? ministryMap.get(svcMinistryIds[0]) : null;
+            const needed = svc ? getAllServiceRoles(svc).reduce((r, role) => r + role.count, 0) : 0;
             return {
               name: svc?.name || "Service",
               date: u.date,

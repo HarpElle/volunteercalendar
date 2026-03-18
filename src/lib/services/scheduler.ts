@@ -17,6 +17,7 @@ import type {
   ServiceOccurrence,
   ScheduleStatus,
 } from "@/lib/types";
+import { getServiceMinistries } from "@/lib/utils/service-helpers";
 
 // --- Date Helpers ---
 
@@ -185,50 +186,55 @@ export function generateDraftSchedule(
   for (const occurrence of occurrences) {
     const { service, date } = occurrence;
 
-    for (const role of service.roles) {
-      for (let slot = 0; slot < role.count; slot++) {
-        totalSlots++;
+    // Iterate per-ministry roles (supports multi-ministry services)
+    const serviceMinistries = getServiceMinistries(service);
+    for (const sm of serviceMinistries) {
+      for (const role of sm.roles) {
+        for (let slot = 0; slot < role.count; slot++) {
+          totalSlots++;
 
-        const bestVolunteer = findBestVolunteer(
-          service,
-          role,
-          date,
-          volunteers,
-          households,
-          assignments,
-          counts,
-        );
+          const bestVolunteer = findBestVolunteer(
+            service,
+            sm.ministry_id,
+            role,
+            date,
+            volunteers,
+            households,
+            assignments,
+            counts,
+          );
 
-        if (bestVolunteer) {
-          const assignment: DraftAssignment = {
-            schedule_id: scheduleId,
-            church_id: churchId,
-            service_id: service.id,
-            event_id: null,
-            signup_type: "scheduled" as const,
-            service_date: date,
-            volunteer_id: bestVolunteer.id,
-            role_id: role.role_id,
-            role_title: role.title,
-            ministry_id: service.ministry_id,
-            status: "draft" as const,
-          };
-          assignments.push(assignment);
+          if (bestVolunteer) {
+            const assignment: DraftAssignment = {
+              schedule_id: scheduleId,
+              church_id: churchId,
+              service_id: service.id,
+              event_id: null,
+              signup_type: "scheduled" as const,
+              service_date: date,
+              volunteer_id: bestVolunteer.id,
+              role_id: role.role_id,
+              role_title: role.title,
+              ministry_id: sm.ministry_id,
+              status: "draft" as const,
+            };
+            assignments.push(assignment);
 
-          // Update counts
-          const c = counts[bestVolunteer.id];
-          c.total++;
-          c.byDate[date] = (c.byDate[date] || 0) + 1;
-          const monthKey = getMonthKey(date);
-          c.byMonth[monthKey] = (c.byMonth[monthKey] || 0) + 1;
-        } else {
-          conflicts.push({
-            type: "unfilled_role",
-            service_id: service.id,
-            service_date: date,
-            role_id: role.role_id,
-            message: `No eligible volunteer found for "${role.title}" on ${date} (${service.name})`,
-          });
+            // Update counts
+            const c = counts[bestVolunteer.id];
+            c.total++;
+            c.byDate[date] = (c.byDate[date] || 0) + 1;
+            const monthKey = getMonthKey(date);
+            c.byMonth[monthKey] = (c.byMonth[monthKey] || 0) + 1;
+          } else {
+            conflicts.push({
+              type: "unfilled_role",
+              service_id: service.id,
+              service_date: date,
+              role_id: role.role_id,
+              message: `No eligible volunteer found for "${role.title}" on ${date} (${service.name})`,
+            });
+          }
         }
       }
     }
@@ -257,6 +263,7 @@ export function generateDraftSchedule(
 
 function findBestVolunteer(
   service: Service,
+  ministryId: string,
   role: ServiceRole,
   date: string,
   volunteers: Volunteer[],
@@ -267,7 +274,7 @@ function findBestVolunteer(
   // Filter eligible volunteers
   const eligible = volunteers.filter((v) => {
     // Must be in the right ministry
-    if (!canServeInMinistry(v, service.ministry_id)) return false;
+    if (!canServeInMinistry(v, ministryId)) return false;
     // Not blocked out
     if (isBlockedOut(v, date)) return false;
     // Not recurring unavailable
