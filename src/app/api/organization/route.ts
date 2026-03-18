@@ -79,7 +79,7 @@ export async function DELETE(req: NextRequest) {
     let batch = adminDb.batch();
     let deleteCount = 0;
 
-    async function addDelete(ref: FirebaseFirestore.DocumentReference) {
+    async function addDelete(ref: ReturnType<typeof adminDb.doc>) {
       batch.delete(ref);
       deleteCount++;
       if (deleteCount >= 490) {
@@ -142,7 +142,8 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true, message: "Organization deleted" });
   } catch (err) {
-    console.error("DELETE /api/organization error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("DELETE /api/organization error:", message, err);
+    return NextResponse.json({ error: `Deletion failed: ${message}` }, { status: 500 });
   }
 }

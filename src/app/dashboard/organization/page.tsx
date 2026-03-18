@@ -68,6 +68,13 @@ function OrganizationContent() {
   const [orgSuccess, setOrgSuccess] = useState("");
   const [orgError, setOrgError] = useState("");
 
+  // Track whether general settings have been modified
+  const orgDirty = church
+    ? orgName !== (church.name || "") ||
+      orgType !== (church.org_type || "church") ||
+      orgTimezone !== (church.timezone || "America/New_York")
+    : false;
+
   // Ministries state
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [showMinistryForm, setShowMinistryForm] = useState(false);
@@ -145,6 +152,10 @@ function OrganizationContent() {
         org_type: orgType,
         timezone: orgTimezone,
       });
+      // Update local church state so dirty flag resets
+      if (church) {
+        setChurch({ ...church, name: orgName, org_type: orgType, timezone: orgTimezone });
+      }
       setOrgSuccess("Organization settings updated.");
       setTimeout(() => setOrgSuccess(""), 3000);
     } catch (err) {
@@ -500,7 +511,7 @@ function OrganizationContent() {
               return (
                 <div
                   key={plan.tier}
-                  className={`rounded-xl border p-5 transition-shadow ${
+                  className={`flex flex-col rounded-xl border p-5 transition-shadow ${
                     plan.highlighted && !isCurrent
                       ? "border-vc-coral/40 bg-vc-coral/5 shadow-sm"
                       : isCurrent
@@ -518,7 +529,7 @@ function OrganizationContent() {
                     {plan.volunteers} volunteers · {plan.ministries}{" "}
                     {plan.ministries === "1" ? "team" : "teams"}
                   </p>
-                  <ul className="space-y-1.5 mb-5">
+                  <ul className="space-y-1.5 mb-5 flex-1">
                     {plan.features.map((f, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-vc-text-secondary">
                         <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -541,7 +552,7 @@ function OrganizationContent() {
                   ) : plan.tier === "enterprise" ? (
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
                       className="w-full"
                       onClick={() => (window.location.href = "mailto:info@volunteercal.com")}
                     >
@@ -624,8 +635,8 @@ function OrganizationContent() {
 
             {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
             {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
-            <Button type="submit" loading={orgSaving} size="sm">
-              Save Organization
+            <Button type="submit" loading={orgSaving} disabled={!orgDirty} size="sm">
+              Save Changes
             </Button>
           </form>
         </div>
