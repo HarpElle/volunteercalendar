@@ -2,20 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
-import { buildOrgDeletedEmail } from "@/lib/utils/email-templates";
+import { buildOrgDeletedEmail, buildOrgDeletedMembersEmail } from "@/lib/utils/email-templates";
+import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-const SUBCOLLECTIONS = [
-  "volunteers",
-  "ministries",
-  "services",
-  "events",
-  "schedules",
-  "assignments",
-  "notifications",
-  "integration_credentials",
-];
 
 /**
  * DELETE /api/organization
@@ -78,99 +68,41 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    // Delete all subcollections under the church document
-    // Firestore batches are single-use — create a new one after each commit.
-    let batch = adminDb.batch();
-    let deleteCount = 0;
-
-    async function addDelete(ref: ReturnType<typeof adminDb.doc>) {
-      batch.delete(ref);
-      deleteCount++;
-      if (deleteCount >= 490) {
-        await batch.commit();
-        batch = adminDb.batch();
-        deleteCount = 0;
-      }
-    }
-
-    for (const collection of SUBCOLLECTIONS) {
-      const snap = await adminDb.collection(`churches/${church_id}/${collection}`).get();
-      for (const d of snap.docs) {
-        await addDelete(d.ref);
-      }
-    }
-
-    // Delete all memberships for this church
-    const membershipsSnap = await adminDb
+    // Collect member info BEFORE deletion for notification emails
+    const membersSnap = await adminDb
       .collection("memberships")
       .where("church_id", "==", church_id)
+      .where("status", "==", "active")
       .get();
-    for (const d of membershipsSnap.docs) {
-      await addDelete(d.ref);
-    }
-
-    // Delete all event_signups for this church
-    const signupsSnap = await adminDb
-      .collection("event_signups")
-      .where("church_id", "==", church_id)
-      .get();
-    for (const d of signupsSnap.docs) {
-      await addDelete(d.ref);
-    }
-
-    // Delete all short_links for this church
-    const shortLinksSnap = await adminDb
-      .collection("short_links")
-      .where("church_id", "==", church_id)
-      .get();
-    for (const d of shortLinksSnap.docs) {
-      await addDelete(d.ref);
-    }
-
-    // Delete pending_invites for this church
-    const pendingSnap = await adminDb
-      .collection("pending_invites")
-      .where("church_id", "==", church_id)
-      .get();
-    for (const d of pendingSnap.docs) {
-      await addDelete(d.ref);
-    }
-
-    // Delete the church document itself
-    await addDelete(adminDb.doc(`churches/${church_id}`));
-
-    // Commit remaining
-    if (deleteCount > 0) {
-      await batch.commit();
-    }
-
-    // Clear church_id / default_church_id from all affected user profiles
-    // so they don't get stuck pointing at a deleted org.
-    const affectedUserIds = new Set<string>();
-    for (const d of membershipsSnap.docs) {
+    const memberNotifyList: Array<{ uid: string; email: string; name: string }> = [];
+    for (const d of membersSnap.docs) {
       const uid = d.data()?.user_id;
-      if (uid) affectedUserIds.add(uid);
-    }
-    // Always include the requesting user
-    affectedUserIds.add(userId);
-
-    const profileBatch = adminDb.batch();
-    for (const uid of affectedUserIds) {
-      const userRef = adminDb.doc(`users/${uid}`);
-      const userSnap = await userRef.get();
-      if (!userSnap.exists) continue;
-      const data = userSnap.data() || {};
-      const updates: Record<string, unknown> = {};
-      if (data.church_id === church_id) updates.church_id = null;
-      if (data.default_church_id === church_id) updates.default_church_id = null;
-      if (Object.keys(updates).length > 0) {
-        profileBatch.update(userRef, updates);
+      if (!uid || uid === userId) continue; // skip the owner (they get their own email)
+      const userSnap = await adminDb.doc(`users/${uid}`).get();
+      const email = userSnap.data()?.email;
+      if (email) {
+        memberNotifyList.push({ uid, email, name: userSnap.data()?.display_name || email });
       }
     }
-    await profileBatch.commit();
 
-    // Send confirmation email to the owner (best-effort, don't block on failure)
+    // Check if members have other orgs (for email content)
+    const memberOtherOrgs = new Map<string, boolean>();
+    for (const m of memberNotifyList) {
+      const otherMems = await adminDb
+        .collection("memberships")
+        .where("user_id", "==", m.uid)
+        .where("church_id", "!=", church_id)
+        .limit(1)
+        .get();
+      memberOtherOrgs.set(m.uid, !otherMems.empty);
+    }
+
+    // Cascade-delete all org data (subcollections, memberships, signups, etc.)
+    await cascadeDeleteOrg(adminDb, church_id);
+
+    // Send notification emails (best-effort, don't block on failure)
     try {
+      // Owner confirmation email
       const ownerEmail = decoded.email;
       const ownerProfile = await adminDb.doc(`users/${userId}`).get();
       const ownerName = ownerProfile.data()?.display_name || ownerEmail || "there";
@@ -187,8 +119,28 @@ export async function DELETE(req: NextRequest) {
           text,
         });
       }
+
+      // Notify all other members
+      for (const m of memberNotifyList) {
+        try {
+          const { subject, html, text } = buildOrgDeletedMembersEmail({
+            userName: m.name,
+            orgName,
+            hasOtherOrgs: memberOtherOrgs.get(m.uid) ?? false,
+          });
+          await resend.emails.send({
+            from: "VolunteerCal <noreply@volunteercal.org>",
+            to: m.email,
+            subject,
+            html,
+            text,
+          });
+        } catch (memberEmailErr) {
+          console.warn(`Failed to notify member ${m.uid}:`, memberEmailErr);
+        }
+      }
     } catch (emailErr) {
-      console.warn("Failed to send org deletion confirmation email:", emailErr);
+      console.warn("Failed to send org deletion emails:", emailErr);
     }
 
     return NextResponse.json({ success: true, message: "Organization deleted" });

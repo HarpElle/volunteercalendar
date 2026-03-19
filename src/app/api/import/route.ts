@@ -86,7 +86,154 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ saved: true });
     }
 
-    // --- Import ---
+    // --- Preview (fetch teams + people count without writing) ---
+    if (action === "preview") {
+      let creds = credentials;
+      if (!creds) {
+        const storedSnap = await adminDb
+          .doc(`churches/${church_id}/integrations/${provider}`)
+          .get();
+        if (!storedSnap.exists) {
+          return NextResponse.json(
+            { error: "No stored credentials. Connect the integration first." },
+            { status: 400 },
+          );
+        }
+        creds = storedSnap.data()?.values as Record<string, string>;
+      }
+
+      const [people, teams] = await Promise.all([
+        adapter.fetchPeople(creds),
+        adapter.fetchTeams(creds),
+      ]);
+
+      // Map member counts per team
+      const teamSummaries = teams.map((t) => ({
+        id: t.external_id,
+        name: t.name,
+        member_count: t.member_ids.length,
+      }));
+
+      return NextResponse.json({
+        total_people: people.length,
+        teams: teamSummaries,
+      });
+    }
+
+    // --- Import to Queue (write to invite_queue for review instead of volunteers) ---
+    if (action === "import_to_queue") {
+      const { team_ids } = body as { team_ids?: string[] };
+
+      let creds = credentials;
+      if (!creds) {
+        const storedSnap = await adminDb
+          .doc(`churches/${church_id}/integrations/${provider}`)
+          .get();
+        if (!storedSnap.exists) {
+          return NextResponse.json(
+            { error: "No stored credentials. Connect the integration first." },
+            { status: 400 },
+          );
+        }
+        creds = storedSnap.data()?.values as Record<string, string>;
+      }
+
+      const [people, teams] = await Promise.all([
+        adapter.fetchPeople(creds),
+        adapter.fetchTeams(creds),
+      ]);
+
+      // Filter by selected teams if provided
+      const selectedTeams = team_ids?.length
+        ? teams.filter((t) => team_ids.includes(t.external_id))
+        : teams;
+
+      // Build set of member IDs from selected teams
+      const selectedMemberIds = new Set<string>();
+      for (const team of selectedTeams) {
+        for (const mid of team.member_ids) {
+          selectedMemberIds.add(mid);
+        }
+      }
+
+      // Filter people to only those in selected teams (if filtering)
+      const filteredPeople = team_ids?.length
+        ? people.filter((p) => selectedMemberIds.has(p.external_id))
+        : people;
+
+      // Map teams to people's groups
+      for (const team of selectedTeams) {
+        for (const memberId of team.member_ids) {
+          const person = filteredPeople.find((p) => p.external_id === memberId);
+          if (person && !person.groups.includes(team.name)) {
+            person.groups.push(team.name);
+          }
+        }
+      }
+
+      // Look up existing ministries to map team names → ministry IDs
+      const ministriesSnap = await adminDb
+        .collection(`churches/${church_id}/ministries`)
+        .get();
+      const ministryNameMap = new Map<string, string>();
+      for (const d of ministriesSnap.docs) {
+        ministryNameMap.set(d.data().name?.toLowerCase(), d.id);
+      }
+
+      // Write to invite_queue
+      let batch = adminDb.batch();
+      let queued = 0;
+      let batchCount = 0;
+      const now = new Date().toISOString();
+
+      for (const person of filteredPeople) {
+        if (!person.email) continue;
+
+        const ministryIds = person.groups
+          .map((g) => ministryNameMap.get(g.toLowerCase()))
+          .filter((id): id is string => !!id);
+
+        const queueRef = adminDb
+          .collection(`churches/${church_id}/invite_queue`)
+          .doc();
+        batch.set(queueRef, {
+          church_id,
+          name: person.name,
+          email: person.email,
+          phone: person.phone || null,
+          role: "volunteer",
+          ministry_ids: ministryIds,
+          source: "chms",
+          source_provider: provider,
+          status: "pending_review",
+          volunteer_id: null,
+          error_message: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          sent_at: null,
+          created_at: now,
+        });
+        queued++;
+        batchCount++;
+        if (batchCount >= 490) {
+          await batch.commit();
+          batch = adminDb.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      return NextResponse.json({
+        queued,
+        teams_selected: selectedTeams.length,
+        total_people: people.length,
+      });
+    }
+
+    // --- Import (direct to volunteers — legacy) ---
     if (action === "import") {
       // Use provided credentials or load stored ones
       let creds = credentials;

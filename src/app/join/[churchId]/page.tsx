@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { createMembership, membershipDocId, getMembership } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -84,6 +85,14 @@ export default function JoinChurchPage() {
       });
       await refreshMemberships();
       setStatus("success");
+      // Fire-and-forget welcome-to-org email
+      getAuth().currentUser?.getIdToken().then((token) =>
+        fetch("/api/notify/welcome-to-org", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ church_id: churchId, role: "Volunteer" }),
+        }).catch(() => {}),
+      );
     } catch (err) {
       setError((err as Error).message || "Failed to submit request.");
     } finally {

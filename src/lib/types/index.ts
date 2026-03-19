@@ -458,3 +458,35 @@ export interface ServiceOccurrence {
   service: Service;
   date: string;
 }
+
+// ---------------------------------------------------------------------------
+// Invite Queue (Phase 4 — bulk import review)
+// ---------------------------------------------------------------------------
+
+export type InviteQueueStatus =
+  | "pending_review"
+  | "approved"
+  | "skipped"
+  | "sent"
+  | "failed";
+
+export type InviteQueueSource = "csv" | "chms" | "individual";
+
+export interface InviteQueueItem {
+  id: string;
+  church_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: OrgRole;
+  ministry_ids: string[];
+  source: InviteQueueSource;
+  source_provider?: string;
+  status: InviteQueueStatus;
+  volunteer_id: string | null;
+  error_message: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+}

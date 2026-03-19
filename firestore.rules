@@ -127,6 +127,12 @@ service cloud.firestore {
       // Only owner can delete a church
       allow delete: if isOrgOwner(churchId);
 
+      // ─── Invite queue (admin-only writes) ───
+      match /invite_queue/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
       // ─── Church subcollections ───
       match /{subcollection}/{docId} {
         // Active members can read all subcollection data

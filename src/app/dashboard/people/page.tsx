@@ -29,6 +29,7 @@ import type {
   Membership,
   OrgRole,
   OrgType,
+  InviteQueueItem,
 } from "@/lib/types";
 import type { IntegrationProvider, IntegrationConfig } from "@/lib/integrations/types";
 
@@ -86,6 +87,17 @@ function PeopleContent() {
   // Add People panel
   const [addMode, setAddMode] = useState<null | "individual" | "csv" | "chms">(null);
 
+  // Invite queue
+  const [queueItems, setQueueItems] = useState<InviteQueueItem[]>([]);
+  const [showQueuePanel, setShowQueuePanel] = useState(false);
+
+  async function loadQueueItems() {
+    if (!churchId) return;
+    const items = await getChurchDocuments(churchId, "invite_queue") as unknown as InviteQueueItem[];
+    const pending = items.filter((i) => i.status === "pending_review" || i.status === "approved");
+    setQueueItems(pending);
+  }
+
   useEffect(() => {
     if (!churchId) return;
     async function load() {
@@ -103,6 +115,9 @@ function PeopleContent() {
           setChurchName(churchSnap.data().name || "");
           setOrgType(churchSnap.data().org_type as OrgType);
         }
+        // Load invite queue
+        const qItems = await getChurchDocuments(churchId!, "invite_queue") as unknown as InviteQueueItem[];
+        setQueueItems(qItems.filter((i) => i.status === "pending_review" || i.status === "approved"));
       } catch {
         // silent
       } finally {
@@ -150,6 +165,14 @@ function PeopleContent() {
     setMemberships((prev) =>
       prev.map((x) => (x.id === m.id ? { ...x, status: "active" as const, updated_at: new Date().toISOString() } : x)),
     );
+    // Fire-and-forget approval notification email
+    getAuth().currentUser?.getIdToken().then((token) =>
+      fetch("/api/notify/membership-approved", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ membership_id: m.id, church_id: m.church_id }),
+      }).catch(() => {}),
+    );
   }
 
   async function handleReject(m: Membership) {
@@ -157,11 +180,22 @@ function PeopleContent() {
     setMemberships((prev) => prev.filter((x) => x.id !== m.id));
   }
 
-  async function handleChangeRole(m: Membership, newRole: OrgRole) {
-    await updateMembershipRole(m.id, newRole);
+  async function handleChangeRole(m: Membership, newRole: OrgRole, ministryScope?: string[]) {
+    const oldRole = m.role;
+    await updateMembershipRole(m.id, newRole, ministryScope);
     setMemberships((prev) =>
-      prev.map((x) => (x.id === m.id ? { ...x, role: newRole, updated_at: new Date().toISOString() } : x)),
+      prev.map((x) => (x.id === m.id ? { ...x, role: newRole, ...(ministryScope !== undefined ? { ministry_scope: ministryScope } : {}), updated_at: new Date().toISOString() } : x)),
     );
+    // Fire-and-forget role promotion notification
+    if (newRole !== oldRole) {
+      getAuth().currentUser?.getIdToken().then((token) =>
+        fetch("/api/notify/role-change", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ membership_id: m.id, old_role: oldRole, new_role: newRole, church_id: m.church_id }),
+        }).catch(() => {}),
+      );
+    }
   }
 
   async function handleRemoveMember(m: Membership) {
@@ -229,9 +263,9 @@ function PeopleContent() {
       {addMode === "csv" && canManage && (
         <CSVImportPanel
           churchId={churchId!}
-          onImported={(newVols) => {
-            setVolunteers((prev) => [...prev, ...newVols]);
+          onQueued={() => {
             setAddMode(null);
+            loadQueueItems();
           }}
           onCancel={() => setAddMode(null)}
         />
@@ -243,14 +277,45 @@ function PeopleContent() {
           user={user}
           onDone={() => {
             setAddMode(null);
-            // Refresh data
+            loadQueueItems();
+          }}
+          onCancel={() => setAddMode(null)}
+        />
+      )}
+
+      {/* Queue banner */}
+      {canManage && queueItems.length > 0 && !showQueuePanel && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-vc-coral/20 bg-vc-coral/5 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <svg className="h-5 w-5 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+            <p className="text-sm font-medium text-vc-indigo">
+              You have <strong>{queueItems.length}</strong> {queueItems.length === 1 ? "person" : "people"} pending review
+            </p>
+          </div>
+          <Button onClick={() => setShowQueuePanel(true)}>
+            Review Queue
+          </Button>
+        </div>
+      )}
+
+      {/* Queue review panel */}
+      {canManage && showQueuePanel && (
+        <InviteQueuePanel
+          churchId={churchId!}
+          user={user}
+          items={queueItems}
+          ministries={ministries}
+          onClose={() => setShowQueuePanel(false)}
+          onRefresh={() => {
+            loadQueueItems();
             if (churchId) {
               getChurchDocuments(churchId, "volunteers").then((vols) =>
                 setVolunteers(vols as unknown as Volunteer[]),
               );
             }
           }}
-          onCancel={() => setAddMode(null)}
         />
       )}
 
@@ -359,6 +424,7 @@ function PeopleContent() {
           <InviteForm
             churchId={churchId!}
             user={user}
+            ministries={ministries}
             onInvited={() => {
               if (churchId) {
                 getChurchMemberships(churchId).then(setMemberships);
@@ -376,10 +442,11 @@ function PeopleContent() {
                 <MemberRow
                   key={m.id}
                   membership={m}
+                  ministries={ministries}
                   isCurrentUser={m.user_id === user?.uid}
                   onApprove={() => handleApprove(m)}
                   onReject={() => handleReject(m)}
-                  onChangeRole={(role) => handleChangeRole(m, role)}
+                  onChangeRole={(role, scope) => handleChangeRole(m, role, scope)}
                   onRemove={() => handleRemoveMember(m)}
                 />
               ))
@@ -795,11 +862,11 @@ function AddIndividualPanel({
 
 function CSVImportPanel({
   churchId,
-  onImported,
+  onQueued,
   onCancel,
 }: {
   churchId: string;
-  onImported: (volunteers: Volunteer[]) => void;
+  onQueued: (count: number) => void;
   onCancel: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -834,9 +901,9 @@ function CSVImportPanel({
         return;
       }
 
-      let imported = 0;
+      let queued = 0;
       const errors: string[] = [];
-      const newVolunteers: Volunteer[] = [];
+      const now = new Date().toISOString();
 
       for (let i = 1; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i]);
@@ -846,45 +913,35 @@ function CSVImportPanel({
           continue;
         }
 
-        const volData: Omit<Volunteer, "id"> = {
-          name: volName,
-          email: emailIdx >= 0 ? cols[emailIdx]?.trim() || "" : "",
-          phone: phoneIdx >= 0 ? cols[phoneIdx]?.trim() || null : null,
-          church_id: churchId,
-          user_id: null,
-          ministry_ids: [],
-          role_ids: [],
-          household_id: null,
-          availability: {
-            blockout_dates: [],
-            recurring_unavailable: [],
-            preferred_frequency: 2,
-            max_roles_per_month: 4,
-          },
-          reminder_preferences: { channels: ["email"] },
-          stats: {
-            times_scheduled_last_90d: 0,
-            last_served_date: null,
-            decline_count: 0,
-            no_show_count: 0,
-          },
-          imported_from: "csv",
-          status: "active" as const,
-          membership_id: null,
-          created_at: new Date().toISOString(),
-        };
+        const email = emailIdx >= 0 ? cols[emailIdx]?.trim() || "" : "";
+        const phone = phoneIdx >= 0 ? cols[phoneIdx]?.trim() || null : null;
 
         try {
-          const ref = await addChurchDocument(churchId, "volunteers", volData);
-          newVolunteers.push({ id: ref.id, ...volData });
-          imported++;
+          await addChurchDocument(churchId, "invite_queue", {
+            church_id: churchId,
+            name: volName,
+            email,
+            phone,
+            role: "volunteer",
+            ministry_ids: [],
+            source: "csv",
+            source_provider: null,
+            status: "pending_review",
+            volunteer_id: null,
+            error_message: null,
+            reviewed_by: null,
+            reviewed_at: null,
+            sent_at: null,
+            created_at: now,
+          });
+          queued++;
         } catch {
-          errors.push(`Row ${i + 1}: failed to save "${volName}".`);
+          errors.push(`Row ${i + 1}: failed to queue "${volName}".`);
         }
       }
 
-      setImportStatus({ count: imported, errors });
-      if (imported > 0) onImported(newVolunteers);
+      setImportStatus({ count: queued, errors });
+      if (queued > 0) onQueued(queued);
     } catch {
       setImportStatus({ count: 0, errors: ["Failed to read CSV file."] });
     } finally {
@@ -897,7 +954,7 @@ function CSVImportPanel({
     <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
       <PanelHeader
         title="Import from CSV"
-        subtitle="Upload a spreadsheet with name (required), email, and phone columns."
+        subtitle="Upload a spreadsheet with name (required), email, and phone columns. People will be added to your review queue."
         onClose={onCancel}
       />
 
@@ -927,7 +984,7 @@ function CSVImportPanel({
                 Click to choose a CSV file
               </p>
               <p className="mt-1 text-xs text-vc-text-muted">
-                Columns: <strong>name</strong> (required), email, phone. Ministries can be assigned after import.
+                Columns: <strong>name</strong> (required), email, phone. You&apos;ll review and approve before invites are sent.
               </p>
             </>
           )}
@@ -940,7 +997,7 @@ function CSVImportPanel({
                 <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
               </svg>
               <p className="text-sm font-medium text-vc-sage">
-                Successfully imported {importStatus.count} {importStatus.count !== 1 ? "people" : "person"}.
+                Added {importStatus.count} {importStatus.count !== 1 ? "people" : "person"} to the review queue.
               </p>
             </div>
           )}
@@ -970,14 +1027,18 @@ function CSVImportPanel({
 // ChMS Import Panel (Planning Center, Breeze, Rock RMS)
 // ---------------------------------------------------------------------------
 
-type ChMSStep = "select" | "connect" | "testing" | "connected" | "importing" | "done";
+type ChMSStep = "select" | "connect" | "testing" | "connected" | "preview" | "select_teams" | "importing" | "done";
 
-interface ImportStats {
-  imported: number;
-  skipped: number;
-  teams_found: number;
-  people_found: number;
-  errors: string[];
+interface PreviewTeam {
+  id: string;
+  name: string;
+  member_count: number;
+}
+
+interface QueueImportStats {
+  queued: number;
+  teams_selected: number;
+  total_people: number;
 }
 
 function ChMSImportPanel({
@@ -996,7 +1057,11 @@ function ChMSImportPanel({
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
-  const [importStats, setImportStats] = useState<ImportStats | null>(null);
+  const [importStats, setImportStats] = useState<QueueImportStats | null>(null);
+  const [previewTeams, setPreviewTeams] = useState<PreviewTeam[]>([]);
+  const [previewPeopleCount, setPreviewPeopleCount] = useState(0);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectAllTeams, setSelectAllTeams] = useState(true);
   const [error, setError] = useState("");
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -1038,23 +1103,45 @@ function ChMSImportPanel({
     } catch { setError("Connection test failed. Please try again."); setStep("connect"); }
   }
 
-  async function runImport() {
+  async function runPreview() {
+    if (!selectedProvider) return;
+    setError("");
+    setStep("preview");
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "preview", provider: selectedProvider.provider, credentials, church_id: churchId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Preview failed"); setStep("connected"); return; }
+      setPreviewTeams(data.teams || []);
+      setPreviewPeopleCount(data.total_people || 0);
+      setSelectedTeamIds((data.teams || []).map((t: PreviewTeam) => t.id));
+      setSelectAllTeams(true);
+      setStep("select_teams");
+    } catch { setError("Failed to load preview. Please try again."); setStep("connected"); }
+  }
+
+  async function runImportToQueue() {
     if (!selectedProvider) return;
     setImporting(true);
     setError("");
     setStep("importing");
     try {
       const headers = await getAuthHeaders();
+      const teamIds = selectAllTeams ? undefined : selectedTeamIds;
       const res = await fetch("/api/import", {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "import", provider: selectedProvider.provider, credentials, church_id: churchId }),
+        body: JSON.stringify({ action: "import_to_queue", provider: selectedProvider.provider, credentials, church_id: churchId, team_ids: teamIds }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Import failed"); setStep("connected"); return; }
+      if (!res.ok) { setError(data.error || "Import failed"); setStep("select_teams"); return; }
       setImportStats(data);
       setStep("done");
-    } catch { setError("Import failed. Please try again."); setStep("connected"); } finally { setImporting(false); }
+    } catch { setError("Import failed. Please try again."); setStep("select_teams"); } finally { setImporting(false); }
   }
 
   function startOver() {
@@ -1063,6 +1150,10 @@ function ChMSImportPanel({
     setCredentials({});
     setTestResult(null);
     setImportStats(null);
+    setPreviewTeams([]);
+    setPreviewPeopleCount(0);
+    setSelectedTeamIds([]);
+    setSelectAllTeams(true);
     setError("");
   }
 
@@ -1070,14 +1161,16 @@ function ChMSImportPanel({
     select: "Choose platform",
     connect: "Enter credentials",
     testing: "Testing connection",
-    connected: "Ready to import",
+    connected: "Connected",
+    preview: "Loading preview",
+    select_teams: "Select teams",
     importing: "Importing",
     done: "Complete",
   };
 
-  const stepOrder: ChMSStep[] = ["select", "connect", "connected", "done"];
+  const stepOrder: ChMSStep[] = ["select", "connect", "connected", "select_teams", "done"];
   const currentStepIdx = stepOrder.indexOf(
-    step === "testing" ? "connect" : step === "importing" ? "done" : step,
+    step === "testing" ? "connect" : step === "preview" ? "select_teams" : step === "importing" ? "done" : step,
   );
 
   return (
@@ -1178,7 +1271,7 @@ function ChMSImportPanel({
         </div>
       )}
 
-      {/* Connected */}
+      {/* Connected — load preview */}
       {step === "connected" && selectedProvider && (
         <div className="max-w-lg">
           <div className="flex items-center gap-3 rounded-lg bg-vc-sage/10 px-4 py-3 mb-4">
@@ -1187,13 +1280,80 @@ function ChMSImportPanel({
             </svg>
             <div>
               <p className="text-sm font-medium text-vc-sage">Connected to {selectedProvider.label}</p>
-              <p className="text-xs text-vc-text-muted">Existing people (matched by email) will be updated, not duplicated.</p>
+              <p className="text-xs text-vc-text-muted">Next, preview your teams and choose which ones to import.</p>
             </div>
           </div>
           {error && <div className="mb-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={startOver}>Back</Button>
-            <Button onClick={runImport} loading={importing}>Import People</Button>
+            <Button onClick={runPreview}>Preview Teams</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading preview */}
+      {step === "preview" && (
+        <div className="max-w-lg text-center py-8">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
+          <h3 className="font-semibold text-vc-indigo">Loading teams from {selectedProvider?.label}...</h3>
+        </div>
+      )}
+
+      {/* Select teams */}
+      {step === "select_teams" && selectedProvider && (
+        <div className="max-w-lg">
+          <div className="mb-4 rounded-lg bg-vc-bg-warm px-4 py-3">
+            <p className="text-sm font-medium text-vc-indigo">
+              Found {previewPeopleCount} people in {previewTeams.length} team{previewTeams.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-vc-text-muted mt-0.5">
+              Select teams to import. People will be added to your review queue for approval before invites are sent.
+            </p>
+          </div>
+
+          <div className="space-y-1 mb-4">
+            <label className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-vc-bg-warm transition-colors cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectAllTeams}
+                onChange={(e) => {
+                  setSelectAllTeams(e.target.checked);
+                  setSelectedTeamIds(e.target.checked ? previewTeams.map((t) => t.id) : []);
+                }}
+                className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+              />
+              <span className="text-sm font-medium text-vc-indigo">All Teams</span>
+              <span className="ml-auto text-xs text-vc-text-muted">{previewPeopleCount} people</span>
+            </label>
+            <div className="my-1 border-t border-vc-border-light" />
+            {previewTeams.map((team) => (
+              <label key={team.id} className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-vc-bg-warm transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectAllTeams || selectedTeamIds.includes(team.id)}
+                  disabled={selectAllTeams}
+                  onChange={(e) => {
+                    setSelectedTeamIds((prev) =>
+                      e.target.checked ? [...prev, team.id] : prev.filter((id) => id !== team.id),
+                    );
+                  }}
+                  className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                />
+                <span className="text-sm text-vc-text-secondary">{team.name}</span>
+                <span className="ml-auto text-xs text-vc-text-muted">{team.member_count} people</span>
+              </label>
+            ))}
+          </div>
+
+          {error && <div className="mb-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setStep("connected")}>Back</Button>
+            <Button
+              onClick={runImportToQueue}
+              disabled={!selectAllTeams && selectedTeamIds.length === 0}
+            >
+              Import to Review Queue
+            </Button>
           </div>
         </div>
       )}
@@ -1212,20 +1372,19 @@ function ChMSImportPanel({
       {/* Done */}
       {step === "done" && importStats && (
         <div className="max-w-lg">
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard label="People found" value={importStats.people_found} />
-            <StatCard label="Imported" value={importStats.imported} />
-            <StatCard label="Teams found" value={importStats.teams_found} />
-            <StatCard label="Skipped" value={importStats.skipped} />
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="People found" value={importStats.total_people} />
+            <StatCard label="Added to queue" value={importStats.queued} />
+            <StatCard label="Teams selected" value={importStats.teams_selected} />
           </div>
-          {importStats.errors.length > 0 && (
-            <div className="mt-4 rounded-lg bg-vc-danger/5 p-4">
-              <p className="mb-1 text-xs font-semibold text-vc-danger">Issues</p>
-              {importStats.errors.map((err, i) => (
-                <p key={i} className="text-xs text-vc-danger/80">{err}</p>
-              ))}
-            </div>
-          )}
+          <div className="mt-3 rounded-lg bg-vc-sage/10 px-4 py-3">
+            <p className="text-sm font-medium text-vc-sage">
+              {importStats.queued} people added to the review queue.
+            </p>
+            <p className="text-xs text-vc-text-muted mt-0.5">
+              Review and approve them on the People page, then send invites.
+            </p>
+          </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" onClick={startOver}>Import from another source</Button>
             <Button onClick={onDone}>Done</Button>
@@ -1243,10 +1402,12 @@ function ChMSImportPanel({
 function InviteForm({
   churchId,
   user,
+  ministries,
   onInvited,
 }: {
   churchId: string;
   user: ReturnType<typeof useAuth>["user"];
+  ministries: Ministry[];
   onInvited: () => void;
 }) {
   const [inviteEmail, setInviteEmail] = useState("");
@@ -1254,6 +1415,8 @@ function InviteForm({
   const [inviteRole, setInviteRole] = useState<OrgRole>("volunteer");
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState("");
+  const [inviteScopeAll, setInviteScopeAll] = useState(true);
+  const [inviteScopeIds, setInviteScopeIds] = useState<string[]>([]);
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
@@ -1263,10 +1426,11 @@ function InviteForm({
 
     try {
       const token = await getAuth().currentUser?.getIdToken();
+      const ministryScope = inviteRole === "scheduler" && !inviteScopeAll ? inviteScopeIds : undefined;
       const res = await fetch("/api/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email: inviteEmail, name: inviteName, churchId, role: inviteRole }),
+        body: JSON.stringify({ email: inviteEmail, name: inviteName, churchId, role: inviteRole, ministryScope }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1276,6 +1440,8 @@ function InviteForm({
         setInviteEmail("");
         setInviteName("");
         setInviteRole("volunteer");
+        setInviteScopeAll(true);
+        setInviteScopeIds([]);
         onInvited();
       }
     } catch {
@@ -1324,6 +1490,42 @@ function InviteForm({
             ))}
           </div>
         </div>
+        {inviteRole === "scheduler" && ministries.length > 0 && (
+          <div>
+            <label className="text-sm font-medium text-vc-text mb-2 block">Team Access</label>
+            <label className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                checked={inviteScopeAll}
+                onChange={(e) => {
+                  setInviteScopeAll(e.target.checked);
+                  if (e.target.checked) setInviteScopeIds([]);
+                }}
+                className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+              />
+              <span className="text-sm text-vc-text-secondary">All Teams</span>
+            </label>
+            {!inviteScopeAll && (
+              <div className="space-y-2 pl-1">
+                {ministries.map((m) => (
+                  <label key={m.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={inviteScopeIds.includes(m.id)}
+                      onChange={(e) => {
+                        setInviteScopeIds((prev) =>
+                          e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id),
+                        );
+                      }}
+                      className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                    />
+                    <span className="text-sm text-vc-text-secondary">{m.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {inviteMsg && (
           <p className={`text-sm ${inviteMsg.includes("sent") || inviteMsg.includes("approved") ? "text-vc-sage" : "text-vc-danger"}`}>
             {inviteMsg}
@@ -1482,6 +1684,7 @@ function JoinLinkSection({ churchId, churchName }: { churchId: string; churchNam
 
 function MemberRow({
   membership,
+  ministries,
   isCurrentUser,
   onApprove,
   onReject,
@@ -1489,15 +1692,19 @@ function MemberRow({
   onRemove,
 }: {
   membership: Membership;
+  ministries: Ministry[];
   isCurrentUser: boolean;
   onApprove: () => void;
   onReject: () => void;
-  onChangeRole: (role: OrgRole) => void;
+  onChangeRole: (role: OrgRole, ministryScope?: string[]) => void;
   onRemove: () => void;
 }) {
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [showScopeEditor, setShowScopeEditor] = useState(false);
+  const [scopeSelection, setScopeSelection] = useState<string[]>(membership.ministry_scope || []);
+  const [scopeAll, setScopeAll] = useState(!membership.ministry_scope?.length);
 
   useEffect(() => {
     if (!membership.user_id) return;
@@ -1513,6 +1720,12 @@ function MemberRow({
 
   const statusInfo = STATUS_LABELS[membership.status] || { label: membership.status, color: "bg-gray-100 text-gray-500" };
   const isPending = membership.status === "pending_org_approval" || membership.status === "pending_volunteer_approval";
+
+  function handleSaveScopeEditor() {
+    const newScope = scopeAll ? [] : scopeSelection;
+    onChangeRole(membership.role, newScope);
+    setShowScopeEditor(false);
+  }
 
   return (
     <div className="rounded-xl border border-vc-border-light bg-white p-4">
@@ -1536,6 +1749,24 @@ function MemberRow({
             <span className="inline-flex items-center rounded-lg bg-vc-bg-warm px-2 py-0.5 text-xs font-medium capitalize text-vc-text-secondary">
               {membership.role}
             </span>
+            {membership.role === "scheduler" && (
+              <>
+                {!membership.ministry_scope?.length ? (
+                  <span className="inline-flex items-center rounded-lg bg-vc-sage/10 px-2 py-0.5 text-xs font-medium text-vc-sage">
+                    All Teams
+                  </span>
+                ) : (
+                  membership.ministry_scope.map((mid) => {
+                    const m = ministries.find((x) => x.id === mid);
+                    return m ? (
+                      <span key={mid} className="inline-flex items-center rounded-lg bg-vc-indigo/10 px-2 py-0.5 text-xs font-medium text-vc-indigo">
+                        {m.name}
+                      </span>
+                    ) : null;
+                  })
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -1567,7 +1798,7 @@ function MemberRow({
                 ...
               </button>
               {showRoleMenu && (
-                <div className="absolute right-0 top-full mt-1 z-10 w-40 rounded-xl border border-vc-border-light bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-full mt-1 z-10 w-48 rounded-xl border border-vc-border-light bg-white py-1 shadow-lg">
                   {(["volunteer", "scheduler", "admin"] as OrgRole[]).map((r) => (
                     <button
                       key={r}
@@ -1579,6 +1810,17 @@ function MemberRow({
                       {ROLE_LABELS[r]}
                     </button>
                   ))}
+                  {membership.role === "scheduler" && (
+                    <>
+                      <div className="my-1 border-t border-vc-border-light" />
+                      <button
+                        onClick={() => { setShowScopeEditor(true); setShowRoleMenu(false); }}
+                        className="w-full px-3 py-2 text-left text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm"
+                      >
+                        Manage team access
+                      </button>
+                    </>
+                  )}
                   <div className="my-1 border-t border-vc-border-light" />
                   <button
                     onClick={() => { onRemove(); setShowRoleMenu(false); }}
@@ -1592,6 +1834,308 @@ function MemberRow({
           )}
         </div>
       </div>
+
+      {/* Team scope editor */}
+      {showScopeEditor && membership.role === "scheduler" && (
+        <div className="mt-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-4">
+          <p className="text-sm font-medium text-vc-indigo mb-3">Team Access</p>
+          <label className="flex items-center gap-2 mb-3">
+            <input
+              type="checkbox"
+              checked={scopeAll}
+              onChange={(e) => {
+                setScopeAll(e.target.checked);
+                if (e.target.checked) setScopeSelection([]);
+              }}
+              className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+            />
+            <span className="text-sm text-vc-text-secondary">All Teams</span>
+          </label>
+          {!scopeAll && (
+            <div className="space-y-2 mb-3">
+              {ministries.map((m) => (
+                <label key={m.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={scopeSelection.includes(m.id)}
+                    onChange={(e) => {
+                      setScopeSelection((prev) =>
+                        e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id),
+                      );
+                    }}
+                    className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                  />
+                  <span className="text-sm text-vc-text-secondary">{m.name}</span>
+                </label>
+              ))}
+              {ministries.length === 0 && (
+                <p className="text-xs text-vc-text-muted">No teams created yet.</p>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button onClick={handleSaveScopeEditor} className="text-xs">
+              Save
+            </Button>
+            <Button variant="outline" onClick={() => setShowScopeEditor(false)} className="text-xs">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Invite Queue Review Panel
+// ---------------------------------------------------------------------------
+
+function InviteQueuePanel({
+  churchId,
+  user,
+  items,
+  ministries,
+  onClose,
+  onRefresh,
+}: {
+  churchId: string;
+  user: ReturnType<typeof useAuth>["user"];
+  items: InviteQueueItem[];
+  ministries: Ministry[];
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [localItems, setLocalItems] = useState(items);
+  const [sending, setSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; total: number } | null>(null);
+
+  useEffect(() => { setLocalItems(items); }, [items]);
+
+  const pendingReview = localItems.filter((i) => i.status === "pending_review");
+  const approved = localItems.filter((i) => i.status === "approved");
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    if (selected.size === pendingReview.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(pendingReview.map((i) => i.id)));
+    }
+  }
+
+  async function bulkUpdateStatus(ids: string[], status: "approved" | "skipped") {
+    for (const id of ids) {
+      try {
+        await updateChurchDocument(churchId, "invite_queue", id, {
+          status,
+          reviewed_by: user?.uid || null,
+          reviewed_at: new Date().toISOString(),
+        });
+      } catch { /* best effort */ }
+    }
+    setLocalItems((prev) =>
+      prev.map((i) => ids.includes(i.id) ? { ...i, status } : i),
+    );
+    setSelected(new Set());
+  }
+
+  function handleApproveSelected() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    bulkUpdateStatus(ids, "approved");
+  }
+
+  function handleSkipSelected() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    bulkUpdateStatus(ids, "skipped");
+  }
+
+  async function handleSendApproved() {
+    const approvedIds = approved.map((i) => i.id);
+    if (approvedIds.length === 0) return;
+    setSending(true);
+    setSendProgress({ sent: 0, failed: 0, total: approvedIds.length });
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      const res = await fetch("/api/invite/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId, queue_item_ids: approvedIds }),
+      });
+      const data = await res.json();
+      setSendProgress({ sent: data.sent || 0, failed: data.failed || 0, total: approvedIds.length });
+      onRefresh();
+    } catch {
+      setSendProgress((prev) => prev ? { ...prev, failed: prev.total } : null);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function handleEditRole(id: string, newRole: OrgRole) {
+    updateChurchDocument(churchId, "invite_queue", id, { role: newRole });
+    setLocalItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, role: newRole } : i)),
+    );
+  }
+
+  return (
+    <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
+      <PanelHeader
+        title="Review Import Queue"
+        subtitle={`${pendingReview.length} pending review · ${approved.length} approved`}
+        onClose={onClose}
+      />
+
+      {sendProgress && !sending && (
+        <div className="mb-4 rounded-lg bg-vc-sage/10 px-4 py-3">
+          <p className="text-sm font-medium text-vc-sage">
+            {sendProgress.sent} invite{sendProgress.sent !== 1 ? "s" : ""} sent
+            {sendProgress.failed > 0 && (
+              <span className="text-vc-danger"> · {sendProgress.failed} failed</span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Bulk actions */}
+      {pendingReview.length > 0 && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <button
+            onClick={selectAll}
+            className="rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
+          >
+            {selected.size === pendingReview.length ? "Deselect All" : "Select All"}
+          </button>
+          {selected.size > 0 && (
+            <>
+              <span className="text-xs text-vc-text-muted">{selected.size} selected</span>
+              <button
+                onClick={handleApproveSelected}
+                className="rounded-lg bg-vc-sage/15 px-3 py-1.5 text-xs font-medium text-vc-sage hover:bg-vc-sage/25 transition-colors"
+              >
+                Approve
+              </button>
+              <button
+                onClick={handleSkipSelected}
+                className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-200 transition-colors"
+              >
+                Skip
+              </button>
+            </>
+          )}
+          {approved.length > 0 && (
+            <div className="ml-auto">
+              <Button onClick={handleSendApproved} loading={sending}>
+                Send {approved.length} Invite{approved.length !== 1 ? "s" : ""}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Only approved, no pending */}
+      {pendingReview.length === 0 && approved.length > 0 && (
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-sm text-vc-text-secondary">All items reviewed. Ready to send invites.</p>
+          <Button onClick={handleSendApproved} loading={sending}>
+            Send {approved.length} Invite{approved.length !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      )}
+
+      {/* Sending progress */}
+      {sending && sendProgress && (
+        <div className="mb-4 rounded-lg bg-vc-bg-warm px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral/20 border-t-vc-coral" />
+            <p className="text-sm font-medium text-vc-indigo">
+              Sending invites... {sendProgress.sent + sendProgress.failed} of {sendProgress.total}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Queue table */}
+      {localItems.length > 0 ? (
+        <div className="overflow-x-auto rounded-lg border border-vc-border-light">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-vc-border-light bg-vc-bg-warm/50">
+                <th className="w-10 px-3 py-2" />
+                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Name</th>
+                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Email</th>
+                <th className="hidden px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted sm:table-cell">Phone</th>
+                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Source</th>
+                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Role</th>
+                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-vc-border-light">
+              {localItems.map((item) => (
+                <tr key={item.id} className="hover:bg-vc-bg-warm/30 transition-colors">
+                  <td className="px-3 py-2">
+                    {item.status === "pending_review" && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                        className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                      />
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-medium text-vc-indigo">{item.name || "\u2014"}</td>
+                  <td className="px-3 py-2 text-vc-text-secondary">{item.email || "\u2014"}</td>
+                  <td className="hidden px-3 py-2 text-vc-text-secondary sm:table-cell">{item.phone || "\u2014"}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center rounded-full bg-vc-bg-warm px-2 py-0.5 text-xs font-medium text-vc-text-secondary">
+                      {item.source === "csv" ? "CSV" : item.source === "chms" ? (item.source_provider || "ChMS") : "Manual"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={item.role}
+                      onChange={(e) => handleEditRole(item.id, e.target.value as OrgRole)}
+                      disabled={item.status !== "pending_review" && item.status !== "approved"}
+                      className="rounded-lg border border-vc-border bg-white px-2 py-1 text-xs text-vc-text-secondary focus:border-vc-coral focus:outline-none"
+                    >
+                      <option value="volunteer">Volunteer</option>
+                      <option value="scheduler">Scheduler</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-2">
+                    {item.status === "pending_review" && (
+                      <span className="inline-flex items-center rounded-full bg-vc-sand/30 px-2 py-0.5 text-xs font-medium text-vc-sand">
+                        Pending
+                      </span>
+                    )}
+                    {item.status === "approved" && (
+                      <span className="inline-flex items-center rounded-full bg-vc-sage/15 px-2 py-0.5 text-xs font-medium text-vc-sage">
+                        Approved
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-vc-border-light bg-white p-8 text-center">
+          <p className="text-vc-text-muted">Queue is empty. Import people from CSV or a ChMS to get started.</p>
+        </div>
+      )}
     </div>
   );
 }

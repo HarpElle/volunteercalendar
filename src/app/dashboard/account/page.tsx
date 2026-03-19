@@ -8,17 +8,13 @@ import {
   getChurchDocuments,
   removeChurchDocument,
   updateDocument,
-  getUserMemberships,
-  deleteMembership,
 } from "@/lib/firebase/firestore";
 import {
   updateUserDisplayName,
   changePassword,
-  deleteCurrentUser,
 } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { isOwner } from "@/lib/utils/permissions";
 import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
 
 export default function AccountPage() {
@@ -55,6 +51,8 @@ export default function AccountPage() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [soleAdminOrgs, setSoleAdminOrgs] = useState<Array<{ id: string; name: string }>>([]);
+  const [showSoleAdminWarning, setShowSoleAdminWarning] = useState(false);
 
   // Load profile data
   useEffect(() => {
@@ -139,24 +137,39 @@ export default function AccountPage() {
 
   // --- Delete account handler ---
 
-  async function handleDeleteAccount() {
+  async function handleDeleteAccount(confirmDeleteOrgs = false) {
     if (!user || deleteConfirm !== "DELETE") return;
     setDeleting(true);
     setDeleteError("");
     try {
-      const memberships = await getUserMemberships(user.uid);
-      await Promise.all(memberships.map((m) => deleteMembership(m.id)));
-      const { removeDocument } = await import("@/lib/firebase/firestore");
-      await removeDocument("users", user.uid);
-      await deleteCurrentUser();
+      const token = await user.getIdToken();
+      const res = await fetch("/api/account/delete", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ confirm_delete_orgs: confirmDeleteOrgs }),
+      });
+      const data = await res.json();
+
+      if (res.status === 409 && data.warning === "sole_admin") {
+        // Show sole-admin warning modal
+        setSoleAdminOrgs(data.orgs || []);
+        setShowSoleAdminWarning(true);
+        setDeleting(false);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete account.");
+      }
+
+      // Account deleted server-side — sign out locally and redirect
+      await signOut();
       router.push("/");
     } catch (err) {
-      const code = (err as { code?: string }).code;
-      if (code === "auth/requires-recent-login") {
-        setDeleteError("For security, please sign out, sign back in, and try again.");
-      } else {
-        setDeleteError((err as Error).message || "Failed to delete account.");
-      }
+      setDeleteError((err as Error).message || "Failed to delete account.");
       setDeleting(false);
     }
   }
@@ -442,40 +455,88 @@ export default function AccountPage() {
         )}
       </section>
 
-      {/* Danger Zone (owner only) */}
-      {isOwner(activeMembership) && (
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
-          <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
-            <h3 className="font-medium text-vc-indigo">Delete Account</h3>
-            <p className="mt-1 text-sm text-vc-text-muted">
-              Permanently delete your account, profile, and all memberships. Organization data
-              (volunteers, schedules, etc.) will remain but may become inaccessible if you are the
-              sole owner.
+      {/* Danger Zone */}
+      <section className="mb-10">
+        <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
+        <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
+          <h3 className="font-medium text-vc-indigo">Delete Account</h3>
+          <p className="mt-1 text-sm text-vc-text-muted">
+            Permanently delete your account, profile, and all memberships.
+            If you are the sole administrator of any organization, that organization
+            and all its data will also be permanently deleted.
+          </p>
+          <p className="mt-2 text-sm font-medium text-vc-danger">
+            This action cannot be undone.
+          </p>
+          <div className="mt-4 space-y-3">
+            <Input
+              label={`Type "DELETE" to confirm`}
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="DELETE"
+            />
+            {deleteError && <p className="text-sm text-vc-danger">{deleteError}</p>}
+            <Button
+              variant="outline"
+              onClick={() => handleDeleteAccount(false)}
+              loading={deleting}
+              disabled={deleteConfirm !== "DELETE"}
+              className="border-vc-danger text-vc-danger hover:bg-vc-danger/5 disabled:opacity-40"
+            >
+              Delete My Account
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Sole-admin warning modal */}
+      {showSoleAdminWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-vc-danger">
+              You&apos;re the only administrator
+            </h3>
+            <p className="mt-2 text-sm text-vc-text-muted">
+              Deleting your account will also permanently delete the following
+              organization{soleAdminOrgs.length > 1 ? "s" : ""} and all
+              {soleAdminOrgs.length > 1 ? " their" : " its"} data:
             </p>
-            <p className="mt-2 text-sm font-medium text-vc-danger">
-              This action cannot be undone.
+            <ul className="mt-3 space-y-1">
+              {soleAdminOrgs.map((org) => (
+                <li key={org.id} className="text-sm font-medium text-vc-indigo">
+                  {org.name}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-sm text-vc-text-muted">
+              You can avoid this by promoting someone else to admin first.
             </p>
-            <div className="mt-4 space-y-3">
-              <Input
-                label={`Type "DELETE" to confirm`}
-                value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
-                placeholder="DELETE"
-              />
-              {deleteError && <p className="text-sm text-vc-danger">{deleteError}</p>}
+            <div className="mt-5 flex gap-3">
               <Button
                 variant="outline"
-                onClick={handleDeleteAccount}
-                loading={deleting}
-                disabled={deleteConfirm !== "DELETE"}
-                className="border-vc-danger text-vc-danger hover:bg-vc-danger/5 disabled:opacity-40"
+                onClick={() => {
+                  setShowSoleAdminWarning(false);
+                  setDeleteConfirm("");
+                  router.push("/dashboard/people");
+                }}
+                className="flex-1"
               >
-                Delete My Account
+                Promote someone first
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowSoleAdminWarning(false);
+                  handleDeleteAccount(true);
+                }}
+                loading={deleting}
+                className="flex-1 border-vc-danger text-vc-danger hover:bg-vc-danger/5"
+              >
+                Delete everything
               </Button>
             </div>
           </div>
-        </section>
+        </div>
       )}
     </div>
   );
