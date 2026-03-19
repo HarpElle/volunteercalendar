@@ -34,7 +34,7 @@ export async function printFlyer(options: FlyerOptions) {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { margin: 0.5in; size: letter; }
+    @page { margin: 0.3in; size: letter; }
     body {
       font-family: 'DM Sans', sans-serif;
       background: white;
@@ -46,65 +46,65 @@ export async function printFlyer(options: FlyerOptions) {
       padding: 0;
     }
     .flyer {
-      max-width: 560px;
+      max-width: 540px;
       width: 100%;
       text-align: center;
       border: 3px solid #2C2E5A;
       border-radius: 20px;
-      padding: 2rem 2rem 1.5rem;
+      padding: 1.5rem 1.5rem 1rem;
     }
     .org-name {
       font-family: 'DM Serif Display', serif;
-      font-size: 1.35rem;
+      font-size: 1.2rem;
       color: #2C2E5A;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.5rem;
     }
     .title {
       font-family: 'DM Serif Display', serif;
-      font-size: 2rem;
+      font-size: 1.75rem;
       line-height: 1.2;
-      margin-bottom: 0.3rem;
+      margin-bottom: 0.2rem;
     }
     .subtitle {
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: #6B6D8A;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1rem;
     }
     .stats {
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       color: #9A9BB5;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
     .qr-container {
       display: inline-block;
-      padding: 0.75rem;
+      padding: 0.5rem;
       border: 2px solid #EDEDE9;
       border-radius: 14px;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.5rem;
     }
-    .qr-container img { width: 200px; height: 200px; }
+    .qr-container img { width: 180px; height: 180px; }
     .instructions {
       list-style: none;
-      margin: 1rem 0;
+      margin: 0.75rem 0;
       padding: 0;
     }
     .instructions li {
-      font-size: 0.9rem;
-      padding: 0.25rem 0;
+      font-size: 0.85rem;
+      padding: 0.2rem 0;
       color: #2C2E5A;
     }
     .instructions li strong { color: #E07A5F; }
     .url {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       color: #9A9BB5;
       word-break: break-all;
-      margin-top: 0.25rem;
+      margin-top: 0.15rem;
     }
     .powered {
-      margin-top: 1.25rem;
-      padding-top: 0.75rem;
+      margin-top: 0.75rem;
+      padding-top: 0.5rem;
       border-top: 1px solid #EDEDE9;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: #9A9BB5;
     }
     .powered .accent { color: #E07A5F; font-weight: 600; }

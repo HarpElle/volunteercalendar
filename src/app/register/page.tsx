@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
@@ -20,13 +20,21 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
   const prefillEmail = searchParams.get("email") || "";
-  const { signUp, error, clearError } = useAuth();
+  const { user, loading, signUp, error, clearError } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const pendingRedirect = useRef(false);
+
+  // Navigate only after auth context confirms the user is set
+  useEffect(() => {
+    if (pendingRedirect.current && !loading && user) {
+      router.replace(redirectTo || "/dashboard");
+    }
+  }, [user, loading, redirectTo, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -50,7 +58,7 @@ function RegisterForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email }),
       }).catch(() => {});
-      router.push(redirectTo || "/dashboard");
+      pendingRedirect.current = true;
     } catch {
       // error is set in context
       setSubmitting(false);

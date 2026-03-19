@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
@@ -19,17 +19,25 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
-  const { signIn, error, clearError } = useAuth();
+  const { user, loading, signIn, error, clearError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const pendingRedirect = useRef(false);
+
+  // Navigate only after auth context confirms the user is set
+  useEffect(() => {
+    if (pendingRedirect.current && !loading && user) {
+      router.replace(redirectTo || "/dashboard");
+    }
+  }, [user, loading, redirectTo, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.push(redirectTo || "/dashboard");
+      pendingRedirect.current = true;
     } catch {
       // error is set in context
       setSubmitting(false);

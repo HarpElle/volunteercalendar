@@ -191,6 +191,7 @@ export default function DashboardPage() {
     return localStorage.getItem("vc_setup_guide_dismissed") === "true";
   });
   const [guideCollapsed, setGuideCollapsed] = useState(false);
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
 
   const setupSteps = stats ? [
     { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
@@ -246,13 +247,31 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                <button
-                  onClick={dismissGuide}
-                  className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
-                  title="Dismiss setup guide"
-                >
-                  Dismiss
-                </button>
+                {confirmDismiss ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-vc-text-muted">Hide permanently?</span>
+                    <button
+                      onClick={dismissGuide}
+                      className="text-xs font-medium text-vc-danger hover:text-vc-danger/80 transition-colors"
+                    >
+                      Yes, hide
+                    </button>
+                    <button
+                      onClick={() => setConfirmDismiss(false)}
+                      className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDismiss(true)}
+                    className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+                    title="You can also collapse the guide to minimize it"
+                  >
+                    Dismiss
+                  </button>
+                )}
               </div>
 
               {/* Progress bar */}

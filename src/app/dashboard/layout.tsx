@@ -134,7 +134,13 @@ export default function DashboardLayout({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [orgType, setOrgType] = useState<OrgType>("church");
   const [churchName, setChurchName] = useState<string>("");
+  const [showGuideDot, setShowGuideDot] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Show a dot on "Home" when the setup guide hasn't been dismissed
+  useEffect(() => {
+    setShowGuideDot(!localStorage.getItem("vc_setup_guide_dismissed"));
+  }, []);
 
   // Determine the effective church ID (membership-first, legacy fallback)
   const churchId = activeMembership?.church_id || profile?.church_id;
@@ -291,6 +297,9 @@ export default function DashboardLayout({
                     >
                       {item.icon}
                       {item.label}
+                      {item.href === "/dashboard" && showGuideDot && (
+                        <span className="ml-auto h-2 w-2 rounded-full bg-vc-coral" title="Setup guide available" />
+                      )}
                     </Link>
                   );
                 })}

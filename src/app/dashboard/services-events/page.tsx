@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
+import { ShareMenu } from "@/components/ui/share-menu";
 import { isAdmin } from "@/lib/utils/permissions";
 import { TIER_LIMITS } from "@/lib/constants";
 import { getAuth } from "firebase/auth";
@@ -453,7 +454,7 @@ function ServicesTab({
 
       {/* Form */}
       {showForm && (
-        <div className="mb-8 rounded-xl border border-vc-border-light bg-white p-6">
+        <div className="mb-8 max-w-3xl rounded-xl border border-vc-border-light bg-white p-6">
           <h2 className="mb-4 text-lg font-semibold text-vc-indigo">
             {editingId ? "Edit Service" : "New Service"}
           </h2>
@@ -545,10 +546,10 @@ function ServicesTab({
                       className="rounded-xl border border-vc-border-light bg-vc-bg/30 p-4"
                       style={fm.ministry_id ? { borderLeftWidth: 4, borderLeftColor: getMinistryColor(fm.ministry_id) } : undefined}
                     >
-                      <div className="flex items-center gap-3 mb-3">
+                      <div className="flex flex-wrap items-center gap-3 mb-3">
                         <select
                           required
-                          className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                          className="min-w-0 flex-1 max-w-xs rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                           value={fm.ministry_id}
                           onChange={(e) => updateMinistryField(fm.id, "ministry_id", e.target.value)}
                         >
@@ -620,7 +621,7 @@ function ServicesTab({
                         {fm.roles.map((role, ri) => (
                           <div key={role.role_id} className="flex items-center gap-2">
                             <input
-                              className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                              className="min-w-0 flex-1 max-w-sm rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                               placeholder="Role title (e.g., Producer, Camera)"
                               value={role.title}
                               onChange={(e) => updateRoleInMinistry(fm.id, ri, "title", e.target.value)}
@@ -689,7 +690,7 @@ function ServicesTab({
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="max-w-3xl space-y-3">
           {services.map((s) => {
             const serviceRoles = getServiceAllRoles(s);
             const hasMultiMinistry = s.ministries && s.ministries.length > 1;
@@ -1010,14 +1011,14 @@ function EventsTab({
   async function printEventInvite(ev: Event) {
     const { printFlyer } = await import("@/lib/utils/print-flyer");
     const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
-    const dateStr = ev.date || "";
+    const dateDisplay = formatEventDate(ev.date || "");
     const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
     const totalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
     printFlyer({
       title: ev.name,
       subtitle: ev.all_day
-        ? `${dateStr} — All Day`
-        : `${dateStr}${timeStr}`,
+        ? `${dateDisplay} — All Day`
+        : `${dateDisplay}${timeStr}`,
       orgName: churchName,
       url: signupUrl,
       stats: totalSlots > 0 ? `${ev.roles.length} role${ev.roles.length !== 1 ? "s" : ""} · ${totalSlots} volunteer${totalSlots !== 1 ? "s" : ""} needed` : undefined,
@@ -1032,14 +1033,14 @@ function EventsTab({
   async function downloadEventSlide(ev: Event) {
     const { downloadSlide } = await import("@/lib/utils/download-slide");
     const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
-    const dateStr = ev.date || "";
-    const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
+    const slideDateDisplay = formatEventDate(ev.date || "");
+    const slideTimeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
     const slideTotalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
     downloadSlide({
       title: ev.name,
       subtitle: ev.all_day
-        ? `${dateStr} — All Day`
-        : `${dateStr}${timeStr}`,
+        ? `${slideDateDisplay} — All Day`
+        : `${slideDateDisplay}${slideTimeStr}`,
       orgName: churchName,
       url: signupUrl,
       stats: slideTotalSlots > 0 ? `${ev.roles.length} role${ev.roles.length !== 1 ? "s" : ""} · ${slideTotalSlots} volunteer${slideTotalSlots !== 1 ? "s" : ""} needed` : undefined,
@@ -1057,6 +1058,17 @@ function EventsTab({
     const ampm = hour >= 12 ? "PM" : "AM";
     const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${h12}:${m} ${ampm}`;
+  }
+
+  function formatEventDate(dateStr: string): string {
+    if (!dateStr) return "";
+    const d = new Date(dateStr + "T12:00:00");
+    const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+    const month = d.toLocaleDateString("en-US", { month: "long" });
+    const day = d.getDate();
+    const suffix = day === 11 || day === 12 || day === 13 ? "th"
+      : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th";
+    return `${weekday}, ${month} ${day}${suffix}`;
   }
 
   function copySignupLink(eventId: string) {
@@ -1110,7 +1122,7 @@ function EventsTab({
 
       {/* Form */}
       {showForm && (
-        <div className="mb-8 rounded-xl border border-vc-border-light bg-white p-6">
+        <div className="mb-8 max-w-3xl rounded-xl border border-vc-border-light bg-white p-6">
           <h2 className="mb-4 text-lg font-semibold text-vc-indigo">
             {editingId ? "Edit Event" : "New Event"}
           </h2>
@@ -1290,7 +1302,7 @@ function EventsTab({
                   <div key={role.role_id} className="rounded-lg border border-vc-border-light bg-vc-bg/50 p-3">
                     <div className="flex items-center gap-2">
                       <input
-                        className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                        className="min-w-0 flex-1 max-w-sm rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                         placeholder="Role title (e.g., Setup Crew, Greeter, Parking)"
                         value={role.title}
                         onChange={(e) => updateRole(i, "title", e.target.value)}
@@ -1412,7 +1424,7 @@ function EventsTab({
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="max-w-3xl space-y-6">
           {/* Upcoming */}
           {upcomingEvents.length > 0 && (
             <div>
@@ -1658,72 +1670,14 @@ function EventCard({
         </button>
 
         {hasSignupLink && (
-          <>
-            <button
-              onClick={onCopyLink}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                copied
-                  ? "bg-vc-sage/10 text-vc-sage"
-                  : "text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo"
-              }`}
-            >
-              {copied ? (
-                <>
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                  </svg>
-                  Share link
-                </>
-              )}
-            </button>
-            <button
-              onClick={onPrintInvite}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
-              </svg>
-              Print invite
-            </button>
-            <button
-              onClick={onDownloadSlide}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              Slide
-            </button>
-            {onCreateShortLink && (
-              <button
-                onClick={onCreateShortLink}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                </svg>
-                Short link
-              </button>
-            )}
-            {onEmailInvite && (
-              <button
-                onClick={onEmailInvite}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-                </svg>
-                Email invite
-              </button>
-            )}
-          </>
+          <ShareMenu
+            onCopyLink={onCopyLink}
+            onPrintInvite={onPrintInvite}
+            onDownloadSlide={onDownloadSlide}
+            onCreateShortLink={onCreateShortLink}
+            onEmailInvite={onEmailInvite}
+            copied={copied}
+          />
         )}
 
         <div className="ml-auto">
