@@ -163,6 +163,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          // Link account if still no memberships (guest signup → register flow)
+          if (memberships.length === 0) {
+            try {
+              const token = await user.getIdToken();
+              const res = await fetch("/api/link-account", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (res.ok) {
+                [profile, memberships] = await Promise.all([
+                  getUserProfile(user.uid),
+                  getUserMemberships(user.uid),
+                ]);
+              }
+            } catch {
+              // Non-fatal — user can still use the app without linked account
+            }
+          }
+
           const activeMembership = pickActiveMembership(memberships, profile);
           dispatch({
             type: "AUTH_STATE_CHANGED",

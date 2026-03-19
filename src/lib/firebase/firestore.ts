@@ -215,9 +215,13 @@ export async function createEventSignup(data: Omit<EventSignup, "id">): Promise<
   return ref.id;
 }
 
-/** Get all signups for a specific event. */
-export async function getEventSignups(eventId: string): Promise<EventSignup[]> {
-  const q = query(collection(db, EVENT_SIGNUPS), where("event_id", "==", eventId));
+/** Get all signups for a specific event. churchId is required for Firestore security rules. */
+export async function getEventSignups(eventId: string, churchId: string): Promise<EventSignup[]> {
+  const q = query(
+    collection(db, EVENT_SIGNUPS),
+    where("event_id", "==", eventId),
+    where("church_id", "==", churchId),
+  );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EventSignup);
 }

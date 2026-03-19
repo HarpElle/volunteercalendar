@@ -848,7 +848,7 @@ function EventsTab({
         const counts: Record<string, number> = {};
         await Promise.all(
           openEvents.map(async (e) => {
-            const signups = await getEventSignups(e.id);
+            const signups = await getEventSignups(e.id, churchId!);
             counts[e.id] = signups.filter((s) => s.status !== "cancelled").length;
           }),
         );

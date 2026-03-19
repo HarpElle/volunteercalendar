@@ -46,6 +46,17 @@ service cloud.firestore {
         .hasOnly(['status', 'responded_at']);
     }
 
+    // ─── Event Signups ───
+    match /event_signups/{docId} {
+      // Org admins can read signups for their church
+      allow read: if request.auth != null
+        && isOrgAdmin(resource.data.church_id);
+
+      // Users can read their own signups
+      allow read: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+    }
+
     // ─── Waitlist ───
     match /waitlist/{docId} {
       allow create: if true;
