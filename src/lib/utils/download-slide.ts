@@ -129,10 +129,21 @@ export async function downloadSlide(options: SlideOptions) {
     }
   }
 
-  // Footer: "Powered by VolunteerCal"
-  ctx.fillStyle = "#9A9BB5";
+  // Footer: "Powered by VolunteerCal" — two-color brand
   ctx.font = "400 18px sans-serif";
-  ctx.fillText("Powered by VolunteerCal", textX, 980);
+  ctx.fillStyle = "#9A9BB5";
+  const poweredText = "Powered by ";
+  ctx.fillText(poweredText, textX, 980);
+  const poweredWidth = ctx.measureText(poweredText).width;
+
+  ctx.font = "600 18px sans-serif";
+  ctx.fillStyle = "#2C2E5A"; // vc-indigo
+  const volText = "Volunteer";
+  ctx.fillText(volText, textX + poweredWidth, 980);
+  const volWidth = ctx.measureText(volText).width;
+
+  ctx.fillStyle = "#E07A5F"; // vc-coral
+  ctx.fillText("Cal", textX + poweredWidth + volWidth, 980);
 
   // --- Trigger download ---
   const dataUrl = canvas.toDataURL("image/png");

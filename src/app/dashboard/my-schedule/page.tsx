@@ -215,11 +215,18 @@ export default function MySchedulePage() {
             ? item.date >= today
             : item.date < today,
         )
-        .sort((a, b) =>
-          timeFilter === "upcoming"
-            ? a.date.localeCompare(b.date)
-            : b.date.localeCompare(a.date),
-        )
+        .sort((a, b) => {
+          // Primary: date (ascending for upcoming, descending for past)
+          const dateComp = a.date.localeCompare(b.date);
+          if (dateComp !== 0) return timeFilter === "upcoming" ? dateComp : -dateComp;
+          // Secondary: start time (nulls/all-day sort first)
+          const aTime = a.startTime || "";
+          const bTime = b.startTime || "";
+          const timeComp = aTime.localeCompare(bTime);
+          if (timeComp !== 0) return timeComp;
+          // Tertiary: role name
+          return a.roleName.localeCompare(b.roleName);
+        })
     : [];
 
   // --- Availability handlers ---
