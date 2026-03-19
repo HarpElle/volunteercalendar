@@ -160,7 +160,7 @@ export default function EventSignupPage() {
               <p className="text-sm text-vc-text-muted">
                 Create an account to manage your signups and get reminders.
               </p>
-              <Link href={`/register?email=${encodeURIComponent(guestEmail)}`}>
+              <Link href={`/register?email=${encodeURIComponent(guestEmail)}&name=${encodeURIComponent(guestName)}`}>
                 <Button>Create Account</Button>
               </Link>
             </div>

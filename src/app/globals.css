@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Balanced text wrapping — avoids orphaned words on last line */
+h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
+  text-wrap: balance;
+}
+
 /* VolunteerCal — Warm Editorial Brand */
 :root {
   /* Indigo — deep trust, authority */

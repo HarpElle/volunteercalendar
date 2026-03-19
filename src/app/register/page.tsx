@@ -20,8 +20,9 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
   const prefillEmail = searchParams.get("email") || "";
+  const prefillName = searchParams.get("name") || "";
   const { user, loading, signUp, error, clearError } = useAuth();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(prefillName);
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
