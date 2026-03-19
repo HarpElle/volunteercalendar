@@ -177,7 +177,7 @@ export async function DELETE(req: NextRequest) {
                 vacancies,
               });
               await resend.emails.send({
-                from: "VolunteerCal <noreply@volunteercal.org>",
+                from: "VolunteerCal <noreply@harpelle.com>",
                 to: omEmail,
                 subject,
                 html,
@@ -201,7 +201,7 @@ export async function DELETE(req: NextRequest) {
                 schedulersNotified,
               });
               await resend.emails.send({
-                from: "VolunteerCal <noreply@volunteercal.org>",
+                from: "VolunteerCal <noreply@harpelle.com>",
                 to: omEmail,
                 subject,
                 html,
@@ -242,7 +242,7 @@ export async function DELETE(req: NextRequest) {
       try {
         const { subject, html, text } = buildAccountDeletedEmail({ userName });
         await resend.emails.send({
-          from: "VolunteerCal <noreply@volunteercal.org>",
+          from: "VolunteerCal <noreply@harpelle.com>",
           to: userEmail,
           subject,
           html,

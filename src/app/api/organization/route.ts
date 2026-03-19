@@ -112,7 +112,7 @@ export async function DELETE(req: NextRequest) {
           orgName,
         });
         await resend.emails.send({
-          from: "VolunteerCal <noreply@volunteercal.org>",
+          from: "VolunteerCal <noreply@harpelle.com>",
           to: ownerEmail,
           subject,
           html,
@@ -129,7 +129,7 @@ export async function DELETE(req: NextRequest) {
             hasOtherOrgs: memberOtherOrgs.get(m.uid) ?? false,
           });
           await resend.emails.send({
-            from: "VolunteerCal <noreply@volunteercal.org>",
+            from: "VolunteerCal <noreply@harpelle.com>",
             to: m.email,
             subject,
             html,

@@ -165,9 +165,11 @@ export default function AccountPage() {
         throw new Error(data.error || "Failed to delete account.");
       }
 
-      // Account deleted server-side — sign out locally and redirect
-      await signOut();
+      // Account deleted server-side — redirect first, then sign out.
+      // If we signOut first, onAuthChange fires → dashboard redirects to /login
+      // before router.push("/") can execute.
       router.push("/");
+      signOut().catch(() => {});
     } catch (err) {
       setDeleteError((err as Error).message || "Failed to delete account.");
       setDeleting(false);
