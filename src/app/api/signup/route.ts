@@ -117,11 +117,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check visibility — internal events require auth
-    if (event.visibility === "internal" && !verifiedUid) {
+    // For guest signups (no auth), require name and email
+    if (!verifiedUid && (!volunteer_name?.trim() || !volunteer_email?.trim())) {
       return NextResponse.json(
-        { error: "You must be signed in to sign up for this event" },
-        { status: 401 },
+        { error: "Please provide your name and email to sign up" },
+        { status: 400 },
       );
     }
 
