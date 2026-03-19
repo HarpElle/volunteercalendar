@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { isAdmin } from "@/lib/utils/permissions";
+import { TIER_LIMITS } from "@/lib/constants";
 import { getAuth } from "firebase/auth";
 import type {
   Service,
@@ -94,9 +95,10 @@ function ServicesEventsContent() {
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [churchName, setChurchName] = useState("");
+  const [churchTier, setChurchTier] = useState("free");
   const [loading, setLoading] = useState(true);
 
-  // Shared data: ministries + church name
+  // Shared data: ministries + church name + tier
   useEffect(() => {
     if (!churchId) return;
     Promise.all([
@@ -109,6 +111,7 @@ function ServicesEventsContent() {
         setMinistries(mins as unknown as Ministry[]);
         if (churchSnap.exists()) {
           setChurchName(churchSnap.data().name || "");
+          setChurchTier(churchSnap.data().subscription_tier || "free");
         }
       })
       .catch(() => {})
@@ -146,9 +149,9 @@ function ServicesEventsContent() {
       </div>
 
       {tab === "services" ? (
-        <ServicesTab churchId={churchId} ministries={ministries} loading={loading} />
+        <ServicesTab churchId={churchId} churchTier={churchTier} ministries={ministries} loading={loading} />
       ) : (
-        <EventsTab churchId={churchId} churchName={churchName} user={user} activeMembership={activeMembership} ministries={ministries} loading={loading} />
+        <EventsTab churchId={churchId} churchName={churchName} churchTier={churchTier} user={user} activeMembership={activeMembership} ministries={ministries} loading={loading} />
       )}
     </div>
   );
@@ -160,10 +163,12 @@ function ServicesEventsContent() {
 
 function ServicesTab({
   churchId,
+  churchTier,
   ministries,
   loading: ministriesLoading,
 }: {
   churchId: string | undefined;
+  churchTier: string;
   ministries: Ministry[];
   loading: boolean;
 }) {
@@ -289,7 +294,16 @@ function ServicesTab({
     );
   }
 
+  const svcTierLimits = TIER_LIMITS[churchTier] || TIER_LIMITS.free;
+  const [svcTierWarning, setSvcTierWarning] = useState("");
+
   function addRoleToMinistry(fmId: string) {
+    const totalRoles = formMinistries.reduce((sum, m) => sum + m.roles.length, 0);
+    if (totalRoles >= svcTierLimits.roles_per_service) {
+      setSvcTierWarning(`Your plan allows up to ${svcTierLimits.roles_per_service} roles per service. Upgrade to add more.`);
+      return;
+    }
+    setSvcTierWarning("");
     setFormMinistries((prev) =>
       prev.map((m) =>
         m.id === fmId
@@ -553,7 +567,7 @@ function ServicesTab({
                               value={fm.start_time || ""}
                               onChange={(e) => updateMinistryField(fm.id, "start_time", e.target.value || null)}
                             />
-                            <span className="text-xs text-vc-text-muted">\u2013</span>
+                            <span className="text-xs text-vc-text-muted">–</span>
                             <input
                               type="time"
                               className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
@@ -632,10 +646,14 @@ function ServicesTab({
                             )}
                           </div>
                         ))}
+                        {svcTierWarning && (
+                          <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">{svcTierWarning}</p>
+                        )}
                         <button
                           type="button"
                           onClick={() => addRoleToMinistry(fm.id)}
-                          className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                          disabled={!!svcTierWarning}
+                          className={`text-xs font-medium transition-colors ${svcTierWarning ? "text-vc-text-muted cursor-not-allowed" : "text-vc-coral hover:text-vc-coral-dark"}`}
                         >
                           + Add role
                         </button>
@@ -685,7 +703,7 @@ function ServicesTab({
                   <div>
                     <h3 className="font-semibold text-vc-indigo">{s.name}</h3>
                     <p className="mt-1 text-sm text-vc-text-muted">
-                      {getDayName(s.day_of_week)}{s.all_day ? " \u00b7 All day" : ` \u00b7 ${s.start_time}${s.end_time ? `\u2013${s.end_time}` : ` \u00b7 ${s.duration_minutes} min`}`} \u00b7 {getServiceMinistryNames(s)}
+                      {getDayName(s.day_of_week)}{s.all_day ? " · All day" : ` · ${s.start_time}${s.end_time ? `–${s.end_time}` : ` · ${s.duration_minutes} min`}`} · {getServiceMinistryNames(s)}
                     </p>
                   </div>
                   <span className="rounded-full bg-vc-bg-warm px-3 py-1 text-xs font-medium text-vc-text-secondary capitalize">
@@ -704,12 +722,12 @@ function ServicesTab({
                         >
                           {getMinistryName(sm.ministry_id)}
                           {sm.start_time && (
-                            <span className="opacity-80 ml-1">{sm.start_time}{sm.end_time ? `\u2013${sm.end_time}` : ""}</span>
+                            <span className="opacity-80 ml-1">{sm.start_time}{sm.end_time ? `–${sm.end_time}` : ""}</span>
                           )}
                         </span>
                         {sm.roles.map((r) => (
                           <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-0.5 text-xs font-medium text-vc-indigo">
-                            {r.title} \u00d7{r.count}
+                            {r.title} ×{r.count}
                           </span>
                         ))}
                       </div>
@@ -722,7 +740,7 @@ function ServicesTab({
                       const timeStr = hasCustomTime ? ` (${r.start_time || "?"}–${r.end_time || "?"})` : "";
                       return (
                         <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo">
-                          {r.title} \u00d7{r.count}{timeStr}
+                          {r.title} ×{r.count}{timeStr}
                         </span>
                       );
                     })}
@@ -773,6 +791,7 @@ function ServicesTab({
 function EventsTab({
   churchId,
   churchName,
+  churchTier,
   user,
   activeMembership,
   ministries,
@@ -780,6 +799,7 @@ function EventsTab({
 }: {
   churchId: string | undefined;
   churchName: string;
+  churchTier: string;
   user: ReturnType<typeof useAuth>["user"];
   activeMembership: ReturnType<typeof useAuth>["activeMembership"];
   ministries: Ministry[];
@@ -881,7 +901,16 @@ function EventsTab({
     setShowForm(true);
   }
 
+  const tierLimits = TIER_LIMITS[churchTier] || TIER_LIMITS.free;
+  const [tierWarning, setTierWarning] = useState("");
+
   function addRole() {
+    const limit = tierLimits.roles_per_event;
+    if (roles.length >= limit) {
+      setTierWarning(`Your ${churchTier === "free" ? "Free" : churchTier} plan allows up to ${limit} roles per event. Upgrade to add more.`);
+      return;
+    }
+    setTierWarning("");
     setRoles((prev) => [
       ...prev,
       { role_id: crypto.randomUUID(), title: "", count: 1, ministry_id: null, allow_signup: true, start_time: null, end_time: null },
@@ -983,6 +1012,7 @@ function EventsTab({
     const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
     const dateStr = ev.date || "";
     const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
+    const totalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
     printFlyer({
       title: ev.name,
       subtitle: ev.all_day
@@ -990,12 +1020,12 @@ function EventsTab({
         : `${dateStr}${timeStr}`,
       orgName: churchName,
       url: signupUrl,
+      stats: totalSlots > 0 ? `${ev.roles.length} role${ev.roles.length !== 1 ? "s" : ""} · ${totalSlots} volunteer${totalSlots !== 1 ? "s" : ""} needed` : undefined,
       instructions: [
         "Scan the QR code with your phone camera",
         "Choose a volunteer role",
         "Sign up — new volunteers will need to create an account",
       ],
-      footer: "Powered by VolunteerCal",
     });
   }
 
@@ -1004,6 +1034,7 @@ function EventsTab({
     const signupUrl = `${window.location.origin}/events/${churchId}/${ev.id}/signup`;
     const dateStr = ev.date || "";
     const timeStr = ev.start_time ? ` at ${formatEventTime(ev.start_time)}` : "";
+    const slideTotalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
     downloadSlide({
       title: ev.name,
       subtitle: ev.all_day
@@ -1011,6 +1042,12 @@ function EventsTab({
         : `${dateStr}${timeStr}`,
       orgName: churchName,
       url: signupUrl,
+      stats: slideTotalSlots > 0 ? `${ev.roles.length} role${ev.roles.length !== 1 ? "s" : ""} · ${slideTotalSlots} volunteer${slideTotalSlots !== 1 ? "s" : ""} needed` : undefined,
+      instructions: [
+        "Scan the QR code with your phone camera",
+        "Choose a volunteer role",
+        "Sign up — we'll confirm your spot!",
+      ],
     });
   }
 
@@ -1055,8 +1092,19 @@ function EventsTab({
   return (
     <div>
       {!showForm && (
-        <div className="mb-4 flex justify-end">
-          <Button onClick={() => setShowForm(true)}>Create Event</Button>
+        <div className="mb-4 flex items-center justify-end gap-3">
+          {!editingId && events.length >= tierLimits.active_events && (
+            <p className="text-xs text-vc-danger">
+              {churchTier === "free" ? "Free" : churchTier} plan limit: {tierLimits.active_events} event{tierLimits.active_events !== 1 ? "s" : ""}.{" "}
+              <a href="/dashboard/organization" className="underline hover:text-vc-indigo">Upgrade</a>
+            </p>
+          )}
+          <Button
+            onClick={() => setShowForm(true)}
+            disabled={!editingId && events.length >= tierLimits.active_events}
+          >
+            Create Event
+          </Button>
         </div>
       )}
 
@@ -1230,6 +1278,12 @@ function EventsTab({
                 >
                   + Add role
                 </button>
+                {tierWarning && (
+                  <p className="text-xs text-vc-danger">
+                    {tierWarning}{" "}
+                    <a href="/dashboard/organization" className="underline hover:text-vc-indigo">View plans</a>
+                  </p>
+                )}
               </div>
               <div className="space-y-3">
                 {roles.map((role, i) => (
@@ -1263,7 +1317,7 @@ function EventsTab({
                     </div>
 
                     {/* Role options row */}
-                    {role.title.trim() && (
+                    {role.title.trim() && (<>
                       <div className="mt-2 flex items-center gap-3 flex-wrap">
                         <label className="flex items-center gap-1.5 text-xs text-vc-text-secondary cursor-pointer">
                           <input
@@ -1287,41 +1341,49 @@ function EventsTab({
                             ))}
                           </select>
                         )}
+                      </div>
 
-                        {/* Per-role time override */}
+                      {/* Per-role time override — separate row for mobile */}
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap ml-0 sm:ml-5">
                         <span className="text-xs text-vc-text-muted shrink-0">Times:</span>
-                        <input
-                          type="time"
-                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
-                          value={role.start_time || ""}
-                          onChange={(e) => updateRole(i, "start_time", e.target.value || null)}
-                        />
-                        <span className="text-xs text-vc-text-muted">to</span>
-                        <input
-                          type="time"
-                          className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
-                          value={role.end_time || ""}
-                          onChange={(e) => updateRole(i, "end_time", e.target.value || null)}
-                        />
-                        {(role.start_time || role.end_time) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateRole(i, "start_time", null);
-                              updateRole(i, "end_time", null);
-                            }}
-                            className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
-                          >
-                            Clear
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
+                            value={role.start_time || ""}
+                            placeholder={startTime}
+                            onFocus={(e) => { if (!e.target.value) updateRole(i, "start_time", startTime); }}
+                            onChange={(e) => updateRole(i, "start_time", e.target.value || null)}
+                          />
+                          <span className="text-xs text-vc-text-muted">to</span>
+                          <input
+                            type="time"
+                            className="rounded-md border border-vc-border bg-white px-2 py-1 text-xs text-vc-text focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/20"
+                            value={role.end_time || ""}
+                            placeholder={endTime}
+                            onFocus={(e) => { if (!e.target.value) updateRole(i, "end_time", endTime); }}
+                            onChange={(e) => updateRole(i, "end_time", e.target.value || null)}
+                          />
+                          {(role.start_time || role.end_time) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateRole(i, "start_time", null);
+                                updateRole(i, "end_time", null);
+                              }}
+                              className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                         {!role.start_time && !role.end_time && (
                           <span className="text-xs text-vc-text-muted italic">
                             {allDay ? "No times set" : "Using event default"}
                           </span>
                         )}
                       </div>
-                    )}
+                    </>)}
                   </div>
                 ))}
               </div>
@@ -1381,6 +1443,7 @@ function EventsTab({
                           churchId={churchId}
                           targetUrl={`/events/${churchId}/${ev.id}/signup`}
                           label={`Event signup — ${ev.name}`}
+                          tier={churchTier}
                           onClose={() => setShortLinkEventId(null)}
                         />
                       </div>
@@ -1432,6 +1495,7 @@ function EventsTab({
                           churchId={churchId}
                           targetUrl={`/events/${churchId}/${ev.id}/signup`}
                           label={`Event signup — ${ev.name}`}
+                          tier={churchTier}
                           onClose={() => setShortLinkEventId(null)}
                         />
                       </div>
@@ -1530,12 +1594,12 @@ function EventCard({
           <p className="mt-1 text-sm text-vc-text-muted">
             {ev.date}
             {ev.all_day
-              ? " \u00b7 All day"
+              ? " · All day"
               : ev.start_time
-                ? ` \u00b7 ${formatTime(ev.start_time)}${ev.end_time ? `\u2013${formatTime(ev.end_time)}` : ""}`
+                ? ` · ${formatTime(ev.start_time)}${ev.end_time ? `–${formatTime(ev.end_time)}` : ""}`
                 : ""}
-            {ev.event_type === "recurring" && ` \u00b7 ${ev.recurrence}`}
-            {" \u00b7 "}
+            {ev.event_type === "recurring" && ` · ${ev.recurrence}`}
+            {" · "}
             {getMinistryNames(ev.ministry_ids)}
           </p>
           {ev.description && (
@@ -1563,14 +1627,14 @@ function EventCard({
           {ev.roles.map((r) => {
             const hasCustomTime = r.start_time || r.end_time;
             const timeStr = hasCustomTime
-              ? ` (${formatTime(r.start_time)}\u2013${formatTime(r.end_time)})`
+              ? ` (${formatTime(r.start_time)}–${formatTime(r.end_time)})`
               : "";
             return (
               <span
                 key={r.role_id}
                 className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo"
               >
-                {r.title} \u00d7{r.count}
+                {r.title} ×{r.count}
                 {timeStr}
                 {r.allow_signup && (
                   <span className="ml-1 text-vc-sage" title="Open for signup">{"\u25cf"}</span>
@@ -1804,6 +1868,7 @@ function EventEmailInvite({
           Recipient emails (comma or newline separated)
         </label>
         <textarea
+          autoFocus
           value={emails}
           onChange={(e) => setEmails(e.target.value)}
           placeholder={"jane@example.com, john@example.com"}

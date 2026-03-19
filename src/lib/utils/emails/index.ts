@@ -19,3 +19,4 @@ export { buildAdminDepartureEmail } from "./admin-departure";
 export { buildRolePromotionEmail } from "./role-promotion";
 export { buildWelcomeToOrgEmail } from "./welcome-to-org";
 export { buildOrgDeletedMembersEmail } from "./org-deleted-members";
+export { buildOrgCreatedEmail } from "./org-created";

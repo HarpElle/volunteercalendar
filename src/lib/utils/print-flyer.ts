@@ -5,20 +5,26 @@ interface FlyerOptions {
   subtitle?: string;
   orgName: string;
   url: string;
+  /** Only displayed if it looks like a short URL (e.g., volunteercal.com/s/easter) */
+  shortUrl?: string;
   instructions?: string[];
-  footer?: string;
+  /** e.g., "5 roles needed · 12 volunteers sought" */
+  stats?: string;
 }
 
 /**
  * Opens a print dialog with a branded flyer containing a QR code.
- * Works entirely client-side — generates HTML and opens browser print.
+ * Designed to fit on a single printed page.
  */
 export async function printFlyer(options: FlyerOptions) {
   const qrDataUrl = await QRCode.toDataURL(options.url, {
-    width: 400,
+    width: 360,
     margin: 2,
     color: { dark: "#2C2E5A", light: "#FFFFFF" },
   });
+
+  // Only show URL text if it's a short URL
+  const displayUrl = options.shortUrl || (isShortUrl(options.url) ? options.url : "");
 
   const html = `<!DOCTYPE html>
 <html>
@@ -28,6 +34,7 @@ export async function printFlyer(options: FlyerOptions) {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { margin: 0.5in; size: letter; }
     body {
       font-family: 'DM Sans', sans-serif;
       background: white;
@@ -36,69 +43,71 @@ export async function printFlyer(options: FlyerOptions) {
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      padding: 2rem;
+      padding: 0;
     }
     .flyer {
-      max-width: 600px;
+      max-width: 560px;
       width: 100%;
       text-align: center;
       border: 3px solid #2C2E5A;
-      border-radius: 24px;
-      padding: 3rem 2.5rem;
+      border-radius: 20px;
+      padding: 2rem 2rem 1.5rem;
     }
-    .logo {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-bottom: 2rem;
+    .org-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.35rem;
+      color: #2C2E5A;
+      margin-bottom: 0.75rem;
     }
-    .logo .accent { color: #E07A5F; }
     .title {
       font-family: 'DM Serif Display', serif;
-      font-size: 2.25rem;
+      font-size: 2rem;
       line-height: 1.2;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.3rem;
     }
     .subtitle {
-      font-size: 1.1rem;
+      font-size: 1rem;
       color: #6B6D8A;
-      margin-bottom: 2rem;
+      margin-bottom: 1.25rem;
+    }
+    .stats {
+      font-size: 0.85rem;
+      color: #9A9BB5;
+      margin-bottom: 1rem;
     }
     .qr-container {
       display: inline-block;
-      padding: 1rem;
+      padding: 0.75rem;
       border: 2px solid #EDEDE9;
-      border-radius: 16px;
-      margin-bottom: 1.5rem;
+      border-radius: 14px;
+      margin-bottom: 0.75rem;
     }
-    .qr-container img { width: 250px; height: 250px; }
+    .qr-container img { width: 200px; height: 200px; }
     .instructions {
       list-style: none;
-      margin: 1.5rem 0;
+      margin: 1rem 0;
       padding: 0;
     }
     .instructions li {
-      font-size: 1rem;
-      padding: 0.4rem 0;
+      font-size: 0.9rem;
+      padding: 0.25rem 0;
       color: #2C2E5A;
     }
     .instructions li strong { color: #E07A5F; }
     .url {
-      font-size: 0.8rem;
-      color: #9A9BB5;
-      word-break: break-all;
-      margin-top: 0.5rem;
-    }
-    .footer {
-      margin-top: 2rem;
       font-size: 0.75rem;
       color: #9A9BB5;
+      word-break: break-all;
+      margin-top: 0.25rem;
     }
-    .org-name {
-      font-family: 'DM Serif Display', serif;
-      font-size: 1.5rem;
-      color: #2C2E5A;
-      margin-bottom: 1.5rem;
+    .powered {
+      margin-top: 1.25rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #EDEDE9;
+      font-size: 0.7rem;
+      color: #9A9BB5;
     }
+    .powered .accent { color: #E07A5F; font-weight: 600; }
     @media print {
       body { padding: 0; }
       .flyer { border: 3px solid #2C2E5A; }
@@ -107,20 +116,20 @@ export async function printFlyer(options: FlyerOptions) {
 </head>
 <body>
   <div class="flyer">
-    <div class="logo">Volunteer<span class="accent">Cal</span></div>
     <div class="org-name">${escapeHtml(options.orgName)}</div>
     <h1 class="title">${escapeHtml(options.title)}</h1>
     ${options.subtitle ? `<p class="subtitle">${escapeHtml(options.subtitle)}</p>` : ""}
+    ${options.stats ? `<p class="stats">${escapeHtml(options.stats)}</p>` : ""}
     <div class="qr-container">
       <img src="${qrDataUrl}" alt="QR Code" />
     </div>
+    ${displayUrl ? `<p class="url">${escapeHtml(displayUrl)}</p>` : ""}
     ${
       options.instructions && options.instructions.length > 0
         ? `<ol class="instructions">${options.instructions.map((s, i) => `<li><strong>${i + 1}.</strong> ${escapeHtml(s)}</li>`).join("")}</ol>`
         : ""
     }
-    <p class="url">${escapeHtml(options.url)}</p>
-    ${options.footer ? `<p class="footer">${escapeHtml(options.footer)}</p>` : ""}
+    <div class="powered">Powered by Volunteer<span class="accent">Cal</span></div>
   </div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
@@ -139,4 +148,14 @@ function escapeHtml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Returns true if the URL looks short enough to display on a flyer. */
+function isShortUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.pathname.length < 30;
+  } catch {
+    return url.length < 60;
+  }
 }

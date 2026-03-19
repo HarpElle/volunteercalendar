@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { setDocument, updateDocument, createMembership, getDocument } from "@/lib/firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -97,6 +98,15 @@ export default function ChurchSetupPage() {
         default_church_id: churchId,
         role: "admin",
       });
+
+      // Fire-and-forget: send org-created confirmation email
+      getAuth().currentUser?.getIdToken().then((token) =>
+        fetch("/api/notify/org-created", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ church_id: churchId }),
+        }).catch(() => {})
+      );
 
       // Full page reload so onAuthStateChanged re-fires with updated profile
       window.location.href = "/dashboard";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
@@ -185,6 +185,31 @@ export default function DashboardPage() {
 
   const hasData = stats && (stats.volunteers > 0 || stats.ministries > 0);
 
+  // Setup guide — persistent until all steps done or dismissed
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("vc_setup_guide_dismissed") === "true";
+  });
+  const [guideCollapsed, setGuideCollapsed] = useState(false);
+
+  const setupSteps = stats ? [
+    { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
+    { step: "Create a team", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/organization", done: (stats.ministries ?? 0) > 0 },
+    { step: "Add your volunteers", desc: "CSV upload, ChMS import, or add manually", href: "/dashboard/people", done: (stats.volunteers ?? 0) > 0 },
+    { step: "Set up a service or event", desc: "Recurring services with roles, or one-time events", href: "/dashboard/services-events", done: (stats.services ?? 0) > 0 },
+    { step: "Share your join link", desc: "Invite volunteers to sign up on their own", href: "/dashboard/people", done: (stats.volunteers ?? 0) >= 3 },
+    { step: "Generate your first schedule", desc: "Auto-draft a fair, conflict-free rotation", href: "/dashboard/schedules", done: (stats.activeSchedules ?? 0) > 0 },
+  ] : [];
+
+  const completedSteps = setupSteps.filter((s) => s.done).length;
+  const allDone = setupSteps.length > 0 && completedSteps === setupSteps.length;
+  const showGuide = stats && !guideDismissed && !allDone;
+
+  const dismissGuide = useCallback(() => {
+    setGuideDismissed(true);
+    localStorage.setItem("vc_setup_guide_dismissed", "true");
+  }, []);
+
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + "T12:00:00");
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -203,109 +228,160 @@ export default function DashboardPage() {
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
-      ) : !hasData ? (
+      ) : (
         <>
-          {/* Basic counts when no data */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            {[
-              { label: "Volunteers", value: stats?.volunteers ?? 0, color: "bg-vc-coral/10 text-vc-coral", href: "/dashboard/volunteers" },
-              { label: "Ministries", value: stats?.ministries ?? 0, color: "bg-vc-indigo/10 text-vc-indigo", href: "/dashboard/ministries" },
-              { label: "Services", value: stats?.services ?? 0, color: "bg-vc-sage/10 text-vc-sage", href: "/dashboard/services" },
-              { label: "Schedules", value: stats?.activeSchedules ?? 0, color: "bg-vc-sand/10 text-vc-sand-dark", href: "/dashboard/schedules" },
-            ].map((s) => (
-              <Link key={s.label} href={s.href} className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
-                <p className="text-sm font-medium text-vc-text-muted">{s.label}</p>
-                <p className={`mt-2 inline-flex rounded-lg px-3 py-1 text-2xl font-semibold ${s.color}`}>{s.value}</p>
-              </Link>
-            ))}
-          </div>
+          {/* Setup Guide — persistent until complete or dismissed */}
+          {showGuide && (
+            <div className="mb-6 rounded-xl border border-vc-coral/20 bg-vc-coral/5 p-5">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setGuideCollapsed(!guideCollapsed)}
+                  className="flex items-center gap-2"
+                >
+                  <h2 className="font-display text-lg text-vc-indigo">Setup Guide</h2>
+                  <span className="rounded-full bg-vc-coral/10 px-2.5 py-0.5 text-xs font-semibold text-vc-coral">
+                    {completedSteps}/{setupSteps.length}
+                  </span>
+                  <svg className={`h-4 w-4 text-vc-text-muted transition-transform ${guideCollapsed ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                <button
+                  onClick={dismissGuide}
+                  className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+                  title="Dismiss setup guide"
+                >
+                  Dismiss
+                </button>
+              </div>
 
-          {/* Getting started */}
-          <div className="rounded-xl border border-vc-coral/20 bg-vc-coral/5 p-6">
-            <h2 className="font-display text-xl text-vc-indigo">Next steps</h2>
-            <p className="mt-1 text-sm text-vc-text-secondary">Finish setting up to generate your first schedule.</p>
-            <ol className="mt-4 space-y-3">
-              {[
-                { step: "Add ministries", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/ministries", done: (stats?.ministries ?? 0) > 0 },
-                { step: "Configure services", desc: "Sunday 9 AM, Wednesday 7 PM, etc.", href: "/dashboard/services", done: (stats?.services ?? 0) > 0 },
-                { step: "Import volunteers", desc: "CSV upload or add them manually", href: "/dashboard/volunteers", done: (stats?.volunteers ?? 0) > 0 },
-                { step: "Generate your first schedule", desc: "Auto-draft a fair, conflict-free schedule", href: "/dashboard/schedules", done: (stats?.activeSchedules ?? 0) > 0 },
-              ].map((item, i) => (
-                <li key={i}>
-                  <Link href={item.href} className="flex items-start gap-3 rounded-lg p-2 -mx-2 hover:bg-white/60 transition-colors">
-                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                      item.done ? "bg-vc-sage/20 text-vc-sage" : "border border-vc-border bg-white text-vc-text-muted"
-                    }`}>
-                      {item.done ? (
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      ) : i + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-vc-indigo">{item.step}</p>
-                      <p className="text-xs text-vc-text-muted">{item.desc}</p>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </>
-      ) : stats && (
-        <>
-          {/* Top-level stats */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-            <Link href="/dashboard/volunteers" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
-              <p className="text-sm font-medium text-vc-text-muted">Active Volunteers</p>
-              <p className="mt-2 text-2xl font-semibold text-vc-indigo">{stats.volunteers}</p>
-              {stats.unscheduledVolunteers > 0 && (
-                <p className="mt-1 text-xs text-vc-text-muted">{stats.unscheduledVolunteers} not yet scheduled</p>
-              )}
-            </Link>
-            <Link href="/dashboard/schedules" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
-              <p className="text-sm font-medium text-vc-text-muted">Fill Rate</p>
-              <p className={`mt-2 text-2xl font-semibold ${
-                stats.fillRate >= 80 ? "text-vc-sage" : stats.fillRate >= 50 ? "text-vc-sand-dark" : "text-vc-danger"
-              }`}>{stats.fillRate}%</p>
-              <p className="mt-1 text-xs text-vc-text-muted">{stats.totalAssignments} assignments across {stats.activeSchedules} schedule{stats.activeSchedules !== 1 ? "s" : ""}</p>
-            </Link>
-            <div className="rounded-xl border border-vc-border-light bg-white p-5">
-              <p className="text-sm font-medium text-vc-text-muted">Confirmation Rate</p>
-              {stats.totalAssignments > 0 ? (
-                <>
-                  <p className="mt-2 text-2xl font-semibold text-vc-sage">
-                    {Math.round((stats.confirmed / stats.totalAssignments) * 100)}%
-                  </p>
-                  <div className="mt-2 flex gap-3 text-xs">
-                    <span className="text-vc-sage">{stats.confirmed} confirmed</span>
-                    <span className="text-vc-danger">{stats.declined} declined</span>
-                    <span className="text-vc-text-muted">{stats.pending} pending</span>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-2 text-2xl font-semibold text-vc-text-muted">—</p>
+              {/* Progress bar */}
+              <div className="mt-3 h-1.5 rounded-full bg-white/60 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-vc-coral transition-all duration-500"
+                  style={{ width: `${(completedSteps / setupSteps.length) * 100}%` }}
+                />
+              </div>
+
+              {!guideCollapsed && (
+                <ol className="mt-4 space-y-2">
+                  {setupSteps.map((item, i) => (
+                    <li key={i}>
+                      <Link href={item.href} className="flex items-start gap-3 rounded-lg p-2 -mx-2 hover:bg-white/60 transition-colors">
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                          item.done ? "bg-vc-sage/20 text-vc-sage" : "border border-vc-border bg-white text-vc-text-muted"
+                        }`}>
+                          {item.done ? (
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                          ) : i + 1}
+                        </span>
+                        <div>
+                          <p className={`text-sm font-medium ${item.done ? "text-vc-text-muted line-through" : "text-vc-indigo"}`}>{item.step}</p>
+                          <p className="text-xs text-vc-text-muted">{item.desc}</p>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ol>
               )}
             </div>
-            <div className="rounded-xl border border-vc-border-light bg-white p-5">
-              <p className="text-sm font-medium text-vc-text-muted">Resources</p>
-              <div className="mt-2 space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-vc-text-secondary">Ministries</span>
-                  <span className="font-semibold text-vc-indigo">{stats.ministries}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-vc-text-secondary">Services</span>
-                  <span className="font-semibold text-vc-indigo">{stats.services}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-vc-text-secondary">Schedules</span>
-                  <span className="font-semibold text-vc-indigo">{stats.activeSchedules}</span>
+          )}
+
+          {/* All done celebration (shows briefly before auto-dismissing) */}
+          {stats && !guideDismissed && allDone && (
+            <div className="mb-6 rounded-xl border border-vc-sage/30 bg-vc-sage/5 p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-vc-sage/20 text-vc-sage">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-vc-sage">You&apos;re all set!</p>
+                  <p className="text-xs text-vc-text-muted">Your organization is fully configured.</p>
                 </div>
               </div>
+              <button onClick={dismissGuide} className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors">Dismiss</button>
             </div>
-          </div>
+          )}
 
+          {/* Stats grid — always visible when we have stats */}
+          {stats && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              {!hasData ? (
+                <>
+                  {[
+                    { label: "Volunteers", value: stats.volunteers, color: "bg-vc-coral/10 text-vc-coral", href: "/dashboard/people" },
+                    { label: "Teams", value: stats.ministries, color: "bg-vc-indigo/10 text-vc-indigo", href: "/dashboard/organization" },
+                    { label: "Services", value: stats.services, color: "bg-vc-sage/10 text-vc-sage", href: "/dashboard/services-events" },
+                    { label: "Schedules", value: stats.activeSchedules, color: "bg-vc-sand/10 text-vc-sand-dark", href: "/dashboard/schedules" },
+                  ].map((s) => (
+                    <Link key={s.label} href={s.href} className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                      <p className="text-sm font-medium text-vc-text-muted">{s.label}</p>
+                      <p className={`mt-2 inline-flex rounded-lg px-3 py-1 text-2xl font-semibold ${s.color}`}>{s.value}</p>
+                    </Link>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Link href="/dashboard/people" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                    <p className="text-sm font-medium text-vc-text-muted">Active Volunteers</p>
+                    <p className="mt-2 text-2xl font-semibold text-vc-indigo">{stats.volunteers}</p>
+                    {stats.unscheduledVolunteers > 0 && (
+                      <p className="mt-1 text-xs text-vc-text-muted">{stats.unscheduledVolunteers} not yet scheduled</p>
+                    )}
+                  </Link>
+                  <Link href="/dashboard/schedules" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                    <p className="text-sm font-medium text-vc-text-muted">Fill Rate</p>
+                    <p className={`mt-2 text-2xl font-semibold ${
+                      stats.fillRate >= 80 ? "text-vc-sage" : stats.fillRate >= 50 ? "text-vc-sand-dark" : "text-vc-danger"
+                    }`}>{stats.fillRate}%</p>
+                    <p className="mt-1 text-xs text-vc-text-muted">{stats.totalAssignments} assignments across {stats.activeSchedules} schedule{stats.activeSchedules !== 1 ? "s" : ""}</p>
+                  </Link>
+                  <div className="rounded-xl border border-vc-border-light bg-white p-5">
+                    <p className="text-sm font-medium text-vc-text-muted">Confirmation Rate</p>
+                    {stats.totalAssignments > 0 ? (
+                      <>
+                        <p className="mt-2 text-2xl font-semibold text-vc-sage">
+                          {Math.round((stats.confirmed / stats.totalAssignments) * 100)}%
+                        </p>
+                        <div className="mt-2 flex gap-3 text-xs">
+                          <span className="text-vc-sage">{stats.confirmed} confirmed</span>
+                          <span className="text-vc-danger">{stats.declined} declined</span>
+                          <span className="text-vc-text-muted">{stats.pending} pending</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-2xl font-semibold text-vc-text-muted">—</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-vc-border-light bg-white p-5">
+                    <p className="text-sm font-medium text-vc-text-muted">Resources</p>
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-vc-text-secondary">Teams</span>
+                        <span className="font-semibold text-vc-indigo">{stats.ministries}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-vc-text-secondary">Services</span>
+                        <span className="font-semibold text-vc-indigo">{stats.services}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-vc-text-secondary">Schedules</span>
+                        <span className="font-semibold text-vc-indigo">{stats.activeSchedules}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Detail panels — shown when there's real data */}
+          {hasData && stats && (
+            <>
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Upcoming Services */}
             <div className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
@@ -411,6 +487,8 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
+          )}
+            </>
           )}
         </>
       )}

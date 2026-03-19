@@ -87,6 +87,7 @@ function OrganizationContent() {
 
   // Billing state
   const [volunteerCount, setVolunteerCount] = useState(0);
+  const [activeEventCount, setActiveEventCount] = useState(0);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
@@ -101,10 +102,11 @@ function OrganizationContent() {
     }
     async function load() {
       try {
-        const [churchSnap, minDocs, volDocs] = await Promise.all([
+        const [churchSnap, minDocs, volDocs, eventDocs] = await Promise.all([
           getDoc(doc(db, "churches", churchId!)),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "volunteers"),
+          getChurchDocuments(churchId!, "events"),
         ]);
         if (churchSnap.exists()) {
           const data = churchSnap.data();
@@ -117,6 +119,8 @@ function OrganizationContent() {
         }
         setMinistries(minDocs as unknown as Ministry[]);
         setVolunteerCount((volDocs as unknown as Volunteer[]).length);
+        const events = eventDocs as unknown as { id: string; status?: string }[];
+        setActiveEventCount(events.filter((e) => !e.status || e.status === "active" || e.status === "draft").length);
       } catch {
         // silent
       } finally {
@@ -132,6 +136,7 @@ function OrganizationContent() {
   const workflowLabel = WORKFLOW_MODES.find((m) => m.value === orgWorkflowMode)?.label || orgWorkflowMode;
   const volNearLimit = limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
   const minNearLimit = limits.ministries !== Infinity && ministries.length >= limits.ministries * 0.8;
+  const eventNearLimit = limits.active_events !== Infinity && activeEventCount >= limits.active_events * 0.8;
 
   // --- General settings handler ---
 
@@ -454,12 +459,12 @@ function OrganizationContent() {
             </div>
 
             {/* Usage meters */}
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg bg-vc-bg-warm p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-vc-text-secondary">Volunteers</span>
                   <span className="text-sm font-semibold text-vc-indigo">
-                    {volunteerCount} / {limits.volunteers === Infinity ? "\u221E" : limits.volunteers}
+                    {volunteerCount} / {limits.volunteers === Infinity ? "∞" : limits.volunteers}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-vc-border overflow-hidden">
@@ -478,7 +483,7 @@ function OrganizationContent() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-vc-text-secondary">{terms.plural}</span>
                   <span className="text-sm font-semibold text-vc-indigo">
-                    {ministries.length} / {limits.ministries === Infinity ? "\u221E" : limits.ministries}
+                    {ministries.length} / {limits.ministries === Infinity ? "∞" : limits.ministries}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-vc-border overflow-hidden">
@@ -492,6 +497,25 @@ function OrganizationContent() {
                   />
                 </div>
                 {minNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching {terms.singularLower} limit</p>}
+              </div>
+              <div className="rounded-lg bg-vc-bg-warm p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-vc-text-secondary">Active Events</span>
+                  <span className="text-sm font-semibold text-vc-indigo">
+                    {activeEventCount} / {limits.active_events === Infinity ? "∞" : limits.active_events}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${eventNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    style={{
+                      width: limits.active_events === Infinity
+                        ? "10%"
+                        : `${Math.min((activeEventCount / limits.active_events) * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+                {eventNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching event limit</p>}
               </div>
             </div>
           </div>

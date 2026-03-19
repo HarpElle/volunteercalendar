@@ -1,12 +1,19 @@
 import type { WorkflowMode, SubscriptionTier, ReminderChannel } from "@/lib/types";
 
 /** Tier limits for gating */
-export const TIER_LIMITS: Record<string, { volunteers: number; ministries: number; short_links: number }> = {
-  free: { volunteers: 20, ministries: 1, short_links: 0 },
-  starter: { volunteers: 100, ministries: 5, short_links: 3 },
-  growth: { volunteers: 250, ministries: 15, short_links: 10 },
-  pro: { volunteers: 500, ministries: Infinity, short_links: 25 },
-  enterprise: { volunteers: Infinity, ministries: Infinity, short_links: 100 },
+export const TIER_LIMITS: Record<string, {
+  volunteers: number;
+  ministries: number;
+  short_links: number;
+  roles_per_service: number;
+  active_events: number;
+  roles_per_event: number;
+}> = {
+  free:       { volunteers: 20,       ministries: 1,        short_links: 0,   roles_per_service: 3,  active_events: 1,        roles_per_event: 2 },
+  starter:    { volunteers: 100,      ministries: 5,        short_links: 3,   roles_per_service: 8,  active_events: 5,        roles_per_event: 5 },
+  growth:     { volunteers: 250,      ministries: 15,       short_links: 10,  roles_per_service: 20, active_events: 15,       roles_per_event: 15 },
+  pro:        { volunteers: 500,      ministries: Infinity,  short_links: 25,  roles_per_service: 50, active_events: Infinity,  roles_per_event: 50 },
+  enterprise: { volunteers: Infinity, ministries: Infinity,  short_links: 100, roles_per_service: Infinity, active_events: Infinity, roles_per_event: Infinity },
 };
 
 export const WORKFLOW_MODES: { value: WorkflowMode; label: string; description: string }[] = [
@@ -57,8 +64,9 @@ export const PRICING_TIERS: {
     features: [
       "Up to 20 volunteers",
       "1 team",
+      "3 roles per service",
+      "1 active event",
       "Email reminders",
-      "Basic scheduling",
       "iCal calendar feeds",
     ],
   },
@@ -71,8 +79,9 @@ export const PRICING_TIERS: {
     features: [
       "100 volunteers",
       "5 teams",
+      "8 roles per service",
+      "5 active events",
       "SMS + email reminders",
-      "Advanced rotations",
       "Analytics",
     ],
   },
@@ -86,10 +95,10 @@ export const PRICING_TIERS: {
     features: [
       "250 volunteers",
       "15 teams",
+      "20 roles per service",
+      "15 active events",
       "Full analytics",
-      "Substitution engine",
       "Integrations",
-      "Multi-team coordination",
     ],
   },
   {
@@ -101,8 +110,9 @@ export const PRICING_TIERS: {
     features: [
       "500 volunteers",
       "Unlimited teams",
+      "50 roles per service",
+      "Unlimited events",
       "API access",
-      "Custom rules",
       "White-label",
     ],
   },

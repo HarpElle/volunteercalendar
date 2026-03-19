@@ -5,14 +5,16 @@ interface SlideOptions {
   subtitle?: string;
   orgName: string;
   url: string;
-  /** Optional short URL to display (e.g., volunteercal.com/s/easter) */
+  /** Short URL to display below QR; if absent, URL is only shown when short enough. */
   shortUrl?: string;
+  /** e.g., "5 roles needed · 12 volunteers sought" */
+  stats?: string;
+  instructions?: string[];
 }
 
 /**
  * Generates a 1920×1080 branded slide image with a QR code and triggers
  * a download. Intended for display on presentation screens at venues.
- * Uses the Canvas API — runs entirely client-side.
  */
 export async function downloadSlide(options: SlideOptions) {
   const canvas = document.createElement("canvas");
@@ -35,16 +37,15 @@ export async function downloadSlide(options: SlideOptions) {
 
   // --- QR Code (right side) ---
   const qrDataUrl = await QRCode.toDataURL(options.url, {
-    width: 420,
+    width: 400,
     margin: 2,
     color: { dark: "#2C2E5A", light: "#FFFFFF" },
   });
 
   const qrImg = await loadImage(qrDataUrl);
-  // QR container with rounded border
   const qrX = 1340;
-  const qrY = 250;
-  const qrSize = 420;
+  const qrY = 220;
+  const qrSize = 400;
   const qrPadding = 24;
 
   ctx.fillStyle = "#FFFFFF";
@@ -57,59 +58,78 @@ export async function downloadSlide(options: SlideOptions) {
 
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-  // URL below QR
-  const displayUrl = options.shortUrl || options.url;
-  ctx.fillStyle = "#9A9BB5";
-  ctx.font = "400 20px sans-serif";
+  // URL below QR — only show if short
+  const displayUrl = options.shortUrl || (isShortUrl(options.url) ? options.url : "");
+  if (displayUrl) {
+    ctx.fillStyle = "#9A9BB5";
+    ctx.font = "400 20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(displayUrl, qrX + qrSize / 2, qrY + qrSize + qrPadding + 40);
+  }
+
+  // "Scan to sign up" under QR
+  ctx.fillStyle = "#E07A5F";
+  ctx.font = "500 22px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(displayUrl, qrX + qrSize / 2, qrY + qrSize + qrPadding + 40);
+  ctx.fillText("Scan to sign up", qrX + qrSize / 2, qrY + qrSize + qrPadding + (displayUrl ? 72 : 40));
 
   // --- Text content (left side) ---
   const textX = 120;
-  const maxTextWidth = 1140;
-
-  // VolunteerCal logo text
+  const maxTextWidth = 1100;
   ctx.textAlign = "left";
-  ctx.fillStyle = "#2C2E5A";
-  ctx.font = "700 28px sans-serif";
-  ctx.fillText("Volunteer", textX, 140);
-  const volunteerWidth = ctx.measureText("Volunteer").width;
-  ctx.fillStyle = "#E07A5F";
-  ctx.fillText("Cal", textX + volunteerWidth, 140);
 
   // Org name
   ctx.fillStyle = "#2C2E5A";
-  ctx.font = "400 36px serif";
-  ctx.fillText(options.orgName, textX, 280);
+  ctx.font = "400 32px serif";
+  ctx.fillText(options.orgName, textX, 140);
 
   // Title (large, possibly multi-line)
   ctx.fillStyle = "#2C2E5A";
-  ctx.font = "700 72px serif";
+  ctx.font = "700 68px serif";
   const titleLines = wrapText(ctx, options.title, maxTextWidth);
-  let titleY = 380;
+  let yPos = 260;
   for (const line of titleLines) {
-    ctx.fillText(line, textX, titleY);
-    titleY += 88;
+    ctx.fillText(line, textX, yPos);
+    yPos += 82;
   }
 
   // Subtitle
   if (options.subtitle) {
     ctx.fillStyle = "#6B6D8A";
-    ctx.font = "400 32px sans-serif";
+    ctx.font = "400 30px sans-serif";
     const subLines = wrapText(ctx, options.subtitle, maxTextWidth);
-    let subY = titleY + 20;
+    yPos += 10;
     for (const line of subLines) {
-      ctx.fillText(line, textX, subY);
-      subY += 44;
+      ctx.fillText(line, textX, yPos);
+      yPos += 40;
     }
   }
 
-  // "Scan to sign up" callout
-  ctx.fillStyle = "#E07A5F";
-  ctx.font = "500 28px sans-serif";
-  ctx.fillText("Scan the QR code to sign up \u2192", textX, 780);
+  // Stats
+  if (options.stats) {
+    yPos += 16;
+    ctx.fillStyle = "#9A9BB5";
+    ctx.font = "500 24px sans-serif";
+    ctx.fillText(options.stats, textX, yPos);
+    yPos += 36;
+  }
 
-  // Footer
+  // Instructions
+  if (options.instructions && options.instructions.length > 0) {
+    yPos += 16;
+    ctx.font = "400 24px sans-serif";
+    for (let i = 0; i < Math.min(options.instructions.length, 4); i++) {
+      ctx.fillStyle = "#E07A5F";
+      ctx.font = "700 24px sans-serif";
+      ctx.fillText(`${i + 1}.`, textX, yPos);
+      ctx.fillStyle = "#2C2E5A";
+      ctx.font = "400 24px sans-serif";
+      ctx.fillText(options.instructions[i], textX + 30, yPos);
+      yPos += 36;
+    }
+  }
+
+  // Footer: "Powered by VolunteerCal"
   ctx.fillStyle = "#9A9BB5";
   ctx.font = "400 18px sans-serif";
   ctx.fillText("Powered by VolunteerCal", textX, 980);
@@ -178,4 +198,14 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 50);
+}
+
+/** Returns true if the URL is short enough to display on a slide. */
+function isShortUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.pathname.length < 30;
+  } catch {
+    return url.length < 60;
+  }
 }

@@ -15,7 +15,7 @@ const steps = [
     number: "02",
     title: "Auto-Draft",
     description:
-      "One click generates a fair schedule across all teams for 4\u20138 weeks. Respects availability, households, and frequency limits.",
+      "One click generates a fair schedule across all teams for 4–8 weeks. Respects availability, households, and frequency limits.",
     accent: "vc-sage",
     accentBg: "bg-vc-sage",
   },

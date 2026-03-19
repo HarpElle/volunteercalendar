@@ -80,6 +80,7 @@ function PeopleContent() {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [churchName, setChurchName] = useState("");
+  const [churchTier, setChurchTier] = useState("free");
   const [orgType, setOrgType] = useState<OrgType | undefined>();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -113,6 +114,7 @@ function PeopleContent() {
         setMemberships(mems);
         if (churchSnap.exists()) {
           setChurchName(churchSnap.data().name || "");
+          setChurchTier(churchSnap.data().subscription_tier || "free");
           setOrgType(churchSnap.data().org_type as OrgType);
         }
         // Load invite queue
@@ -412,7 +414,7 @@ function PeopleContent() {
 
           {/* Share join link */}
           {canManage && (
-            <JoinLinkSection churchId={churchId!} churchName={churchName} />
+            <JoinLinkSection churchId={churchId!} churchName={churchName} churchTier={churchTier} />
           )}
         </>
       )}
@@ -1541,7 +1543,7 @@ function InviteForm({
 // Join Link Section
 // ---------------------------------------------------------------------------
 
-function JoinLinkSection({ churchId, churchName }: { churchId: string; churchName: string }) {
+function JoinLinkSection({ churchId, churchName, churchTier }: { churchId: string; churchName: string; churchTier: string }) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const joinLink = `${baseUrl}/join/${churchId}`;
   const [copied, setCopied] = useState(false);
@@ -1579,7 +1581,6 @@ function JoinLinkSection({ churchId, churchName }: { churchId: string; churchNam
         "Create a free account (or sign in)",
         "Request to join — we'll approve you shortly!",
       ],
-      footer: "Powered by VolunteerCal",
     });
   }
 
@@ -1670,6 +1671,7 @@ function JoinLinkSection({ churchId, churchName }: { churchId: string; churchNam
             churchId={churchId}
             targetUrl={`/join/${churchId}`}
             label={`Volunteer signup — ${churchName}`}
+            tier={churchTier}
             onClose={() => setShowShortLinkCreator(false)}
           />
         </div>

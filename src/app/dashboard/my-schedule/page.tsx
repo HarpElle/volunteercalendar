@@ -307,7 +307,7 @@ export default function MySchedulePage() {
                         <span className="text-xs text-vc-text-muted">All day</span>
                       ) : displayStart ? (
                         <span className="text-xs text-vc-text-muted">
-                          {formatTime(displayStart)}{displayEnd ? ` \u2013 ${formatTime(displayEnd)}` : ""}
+                          {formatTime(displayStart)}{displayEnd ? ` – ${formatTime(displayEnd)}` : ""}
                         </span>
                       ) : null}
                     </div>

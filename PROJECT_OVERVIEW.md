@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 15 — Import/invite queue system (complete) |
+| **Status** | Phase 16 — UX polish & tier enforcement (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -96,8 +96,10 @@ VolunteerCal/
 │   │       │   │   └── route.ts            # Send approval notification email
 │   │       │   ├── role-change/
 │   │       │   │   └── route.ts            # Send role promotion notification email
-│   │       │   └── welcome-to-org/
-│   │       │       └── route.ts            # Send welcome email on self-registration
+│   │       │   ├── welcome-to-org/
+│   │       │   │   └── route.ts            # Send welcome email on self-registration
+│   │       │   └── org-created/
+│   │       │       └── route.ts            # Send org creation confirmation email
 │   │       ├── calendar/
 │   │       │   └── route.ts    # iCal (.ics) feed generation
 │   │       ├── export/
@@ -150,7 +152,7 @@ VolunteerCal/
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts
-│       │   ├── emails/         # 17 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
+│       │   ├── emails/         # 18 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, SMS service
 └── docs/                       # Research outputs, architecture decisions
@@ -178,3 +180,4 @@ VolunteerCal/
 | 13 | Sharing & invite features: short links (create/resolve/manage, tier-gated), downloadable QR slides (1920×1080 Canvas), email event invites (batch send via Resend), multi-ministry scheduler migration | Complete |
 | 14 | Lifecycle workflows: account deletion for all users (sole-admin detection, server-side API), email template refactor (17 files + shared base layout), scheduler team scoping UI, lifecycle email notifications (approval, promotion, welcome-to-org, org deletion to members) | Complete |
 | 15 | Import/invite queue: CSV and ChMS imports write to review queue instead of directly creating volunteers, ChMS preview step with team selection, invite queue review UI (approve/skip/send), batch invite API, Firestore rules for invite_queue | Complete |
+| 16 | UX polish & tier enforcement: unicode rendering fixes, logout redirect to landing, email autofocus, custom time defaults, mobile layout for role times, org-creation confirmation email, print flyer/download slide redesign (one-page, bottom branding, short URLs only, stats), short link tier gate, persistent setup guide (6-step, collapsible, dismissible), tier enforcement for roles/events (roles_per_service, active_events, roles_per_event limits), usage meters on organization page | Complete |

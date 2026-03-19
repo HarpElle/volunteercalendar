@@ -7,6 +7,8 @@ interface ShortLinkCreatorProps {
   churchId: string;
   targetUrl: string;
   label: string;
+  /** Current subscription tier — used to gate access */
+  tier?: string;
   /** Called when a short link is successfully created */
   onCreated?: (slug: string, expiresAt: string) => void;
   /** Called when the creator is dismissed */
@@ -21,9 +23,42 @@ export function ShortLinkCreator({
   churchId,
   targetUrl,
   label,
+  tier,
   onCreated,
   onClose,
 }: ShortLinkCreatorProps) {
+  // Tier gate: free tier cannot create short links
+  if (tier === "free") {
+    return (
+      <div className="space-y-3 rounded-xl border border-vc-border-light bg-white p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-vc-indigo">Short links</p>
+          <button
+            onClick={onClose}
+            className="text-vc-text-muted hover:text-vc-indigo transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p className="text-sm text-vc-text-secondary">
+          Short links are available on the <strong>Starter</strong> plan and above.
+          Upgrade to create branded, trackable short links for your events and join pages.
+        </p>
+        <a
+          href="/dashboard/organization"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-3 py-2 text-sm font-medium text-white hover:bg-vc-coral/90 transition-colors"
+        >
+          View plans
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+          </svg>
+        </a>
+      </div>
+    );
+  }
+
   const [slug, setSlug] = useState("");
   const [expiryDays, setExpiryDays] = useState(30);
   const [checking, setChecking] = useState(false);
