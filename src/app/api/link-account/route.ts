@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
     let membershipsCreated = 0;
     const now = new Date().toISOString();
 
+    // Read user profile for authoritative data (user may have corrected name during registration)
+    const profileSnap = await adminDb.doc(`users/${uid}`).get();
+    const profileData = profileSnap.exists ? profileSnap.data()! : null;
+
     // --- 1. Link orphaned event_signups ---
     const orphanedSnap = await adminDb
       .collection("event_signups")
@@ -39,8 +43,17 @@ export async function POST(req: NextRequest) {
       .get();
 
     const churchIds = new Set<string>();
-    const volunteerName =
-      orphanedSnap.docs[0]?.data().volunteer_name || decoded.name || email;
+    const volunteerName = profileData?.display_name
+      || orphanedSnap.docs[0]?.data().volunteer_name
+      || decoded.name
+      || email;
+    const volunteerPhone = profileData?.phone || null;
+    const volunteerAvailability = {
+      blockout_dates: profileData?.global_availability?.blockout_dates || [],
+      recurring_unavailable: profileData?.global_availability?.recurring_unavailable || [],
+      preferred_frequency: 2,
+      max_roles_per_month: 8,
+    };
 
     for (const doc of orphanedSnap.docs) {
       await doc.ref.update({ user_id: uid });
@@ -86,25 +99,20 @@ export async function POST(req: NextRequest) {
 
       let volunteerId: string;
       if (existingVolSnap.empty) {
-        // Create volunteer record
+        // Create volunteer record with profile data
         const volRef = adminDb.collection(`churches/${churchId}/volunteers`).doc();
         await volRef.set({
           church_id: churchId,
           name: volunteerName,
           email,
-          phone: null,
+          phone: volunteerPhone,
           user_id: uid,
           membership_id: membershipId,
           status: "active",
           ministry_ids: [],
           role_ids: [],
           household_id: null,
-          availability: {
-            blockout_dates: [],
-            recurring_unavailable: [],
-            preferred_frequency: 2,
-            max_roles_per_month: 8,
-          },
+          availability: volunteerAvailability,
           reminder_preferences: { channels: ["email"] },
           stats: {
             times_scheduled_last_90d: 0,
@@ -118,10 +126,13 @@ export async function POST(req: NextRequest) {
         volunteerId = volRef.id;
       } else {
         volunteerId = existingVolSnap.docs[0].id;
-        // Link the existing volunteer to this user
+        // Link the existing volunteer and sync profile data
         await existingVolSnap.docs[0].ref.update({
           user_id: uid,
           membership_id: membershipId,
+          name: volunteerName,
+          email,
+          phone: volunteerPhone,
         });
       }
 
@@ -153,14 +164,8 @@ export async function POST(req: NextRequest) {
     }
 
     // --- 4. Update user profile default_church_id if needed ---
-    if (firstChurchId) {
-      const profileSnap = await adminDb.doc(`users/${uid}`).get();
-      if (profileSnap.exists) {
-        const profile = profileSnap.data()!;
-        if (!profile.default_church_id) {
-          await profileSnap.ref.update({ default_church_id: firstChurchId });
-        }
-      }
+    if (firstChurchId && profileData && !profileData.default_church_id) {
+      await adminDb.doc(`users/${uid}`).update({ default_church_id: firstChurchId });
     }
 
     // --- 5. Clean up consumed pending_invites ---

@@ -24,11 +24,11 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, activeMembership } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const churchId = profile?.church_id;
+  const churchId = activeMembership?.church_id || profile?.default_church_id || profile?.church_id;
   const hasOrg = !!churchId;
 
   useEffect(() => {
@@ -220,7 +220,7 @@ export default function DashboardPage() {
     <div>
       <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">
-          Welcome{profile.display_name ? `, ${profile.display_name}` : ""}
+          Welcome{profile?.display_name ? `, ${profile.display_name}` : ""}
         </h1>
         <p className="mt-1 text-vc-text-secondary">
           Here&apos;s an overview of your church&apos;s volunteer schedule.

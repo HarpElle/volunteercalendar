@@ -197,6 +197,13 @@ export default function MySchedulePage() {
           updated_at: new Date().toISOString(),
         });
       }
+      // Sync availability to linked volunteer records across all orgs
+      user.getIdToken().then((token) =>
+        fetch("/api/account/sync-profile", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {}),
+      );
       setAvailabilitySaved(true);
     } catch {
       // silent

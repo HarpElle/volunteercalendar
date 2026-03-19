@@ -99,6 +99,13 @@ export default function AccountPage() {
         display_name: displayName,
         phone: phone.trim() || null,
       });
+      // Sync profile changes to linked volunteer records across all orgs
+      user.getIdToken().then((token) =>
+        fetch("/api/account/sync-profile", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {}),
+      );
       setProfileSuccess("Profile updated.");
       setTimeout(() => setProfileSuccess(""), 3000);
     } catch (err) {
