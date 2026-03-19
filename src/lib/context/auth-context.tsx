@@ -135,41 +135,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
-        let [profile, memberships] = await Promise.all([
-          getUserProfile(user.uid),
-          getUserMemberships(user.uid),
-        ]);
+        try {
+          let [profile, memberships] = await Promise.all([
+            getUserProfile(user.uid),
+            getUserMemberships(user.uid),
+          ]);
 
-        // Repair legacy accounts: if user has a church_id but no membership, auto-create owner membership
-        const churchId = profile?.church_id || profile?.default_church_id;
-        if (churchId && memberships.length === 0) {
-          const church = await getDocument("churches", churchId);
-          if (church) {
-            const now = new Date().toISOString();
-            await createMembership({
-              user_id: user.uid,
-              church_id: churchId,
-              role: "owner",
-              ministry_scope: [],
-              status: "active",
-              invited_by: null,
-              volunteer_id: null,
-              reminder_preferences: { channels: ["email"] },
-              created_at: now,
-              updated_at: now,
-            });
-            memberships = await getUserMemberships(user.uid);
+          // Repair legacy accounts: if user has a church_id but no membership, auto-create owner membership
+          const churchId = profile?.church_id || profile?.default_church_id;
+          if (churchId && memberships.length === 0) {
+            const church = await getDocument("churches", churchId);
+            if (church) {
+              const now = new Date().toISOString();
+              await createMembership({
+                user_id: user.uid,
+                church_id: churchId,
+                role: "owner",
+                ministry_scope: [],
+                status: "active",
+                invited_by: null,
+                volunteer_id: null,
+                reminder_preferences: { channels: ["email"] },
+                created_at: now,
+                updated_at: now,
+              });
+              memberships = await getUserMemberships(user.uid);
+            }
           }
-        }
 
-        const activeMembership = pickActiveMembership(memberships, profile);
-        dispatch({
-          type: "AUTH_STATE_CHANGED",
-          user,
-          profile,
-          memberships,
-          activeMembership,
-        });
+          const activeMembership = pickActiveMembership(memberships, profile);
+          dispatch({
+            type: "AUTH_STATE_CHANGED",
+            user,
+            profile,
+            memberships,
+            activeMembership,
+          });
+        } catch (err) {
+          console.error("Error loading user data after auth:", err);
+          // Still transition out of loading state so the app isn't stuck
+          dispatch({
+            type: "AUTH_STATE_CHANGED",
+            user,
+            profile: null,
+            memberships: [],
+            activeMembership: null,
+          });
+        }
       } else {
         dispatch({
           type: "AUTH_STATE_CHANGED",

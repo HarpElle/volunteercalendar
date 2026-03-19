@@ -38,6 +38,7 @@ function LoginForm() {
     try {
       await signIn(email, password);
       pendingRedirect.current = true;
+      setSubmitting(false);
     } catch {
       // error is set in context
       setSubmitting(false);

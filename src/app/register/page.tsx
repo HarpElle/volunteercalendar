@@ -60,6 +60,7 @@ function RegisterForm() {
         body: JSON.stringify({ name, email }),
       }).catch(() => {});
       pendingRedirect.current = true;
+      setSubmitting(false);
     } catch {
       // error is set in context
       setSubmitting(false);

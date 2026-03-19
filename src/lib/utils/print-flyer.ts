@@ -112,6 +112,7 @@ export async function printFlyer(options: FlyerOptions) {
       font-size: 0.65rem;
       color: #9A9BB5;
     }
+    .powered .brand-name { color: #2C2E5A; font-weight: 600; }
     .powered .accent { color: #E07A5F; font-weight: 600; }
     @media print {
       html { height: 100%; margin: 0; padding: 0; }
@@ -141,7 +142,7 @@ export async function printFlyer(options: FlyerOptions) {
         ? `<ol class="instructions">${options.instructions.map((s, i) => `<li><strong>${i + 1}.</strong> ${escapeHtml(s)}</li>`).join("")}</ol>`
         : ""
     }
-    <div class="powered">Powered by Volunteer<span class="accent">Cal</span></div>
+    <div class="powered">Powered by <span class="brand-name">Volunteer</span><span class="accent">Cal</span></div>
   </div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
