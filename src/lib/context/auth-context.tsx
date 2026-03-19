@@ -184,10 +184,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signUp(email: string, password: string, displayName: string) {
-    dispatch({ type: "SET_LOADING", loading: true });
     dispatch({ type: "CLEAR_ERROR" });
     try {
       await fbSignUp(email, password, displayName);
+      // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;
@@ -195,10 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
-    dispatch({ type: "SET_LOADING", loading: true });
     dispatch({ type: "CLEAR_ERROR" });
     try {
       await fbSignIn(email, password);
+      // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;
@@ -206,9 +206,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    dispatch({ type: "SET_LOADING", loading: true });
     try {
       await fbSignOut();
+      // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;

@@ -19,17 +19,20 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
-  const { signIn, error, clearError, loading } = useAuth();
+  const { signIn, error, clearError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setSubmitting(true);
     try {
       await signIn(email, password);
       router.push(redirectTo || "/dashboard");
     } catch {
       // error is set in context
+      setSubmitting(false);
     }
   }
 
@@ -96,7 +99,7 @@ function LoginForm() {
               </div>
             )}
 
-            <Button type="submit" loading={loading} className="w-full">
+            <Button type="submit" loading={submitting} className="w-full">
               Sign In
             </Button>
           </form>

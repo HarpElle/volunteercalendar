@@ -20,12 +20,13 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
   const prefillEmail = searchParams.get("email") || "";
-  const { signUp, error, clearError, loading } = useAuth();
+  const { signUp, error, clearError } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -40,6 +41,7 @@ function RegisterForm() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await signUp(email, password, name);
       // Fire-and-forget welcome email
@@ -51,6 +53,7 @@ function RegisterForm() {
       router.push(redirectTo || "/dashboard");
     } catch {
       // error is set in context
+      setSubmitting(false);
     }
   }
 
@@ -137,7 +140,7 @@ function RegisterForm() {
               </div>
             )}
 
-            <Button type="submit" loading={loading} className="w-full">
+            <Button type="submit" loading={submitting} className="w-full">
               Create Account
             </Button>
 
