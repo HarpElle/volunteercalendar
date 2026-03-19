@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { formatPhone, normalizePhone } from "@/lib/utils/phone";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { INTEGRATIONS } from "@/lib/integrations/config";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
@@ -2201,19 +2202,6 @@ function InviteQueuePanel({
 // Phone formatting
 // ---------------------------------------------------------------------------
 
-function formatPhone(raw: string | null | undefined): string {
-  if (!raw) return "\u2014";
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  if (digits.length === 11 && digits[0] === "1") return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  return raw;
-}
-
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 11 && digits[0] === "1") return digits.slice(1);
-  return digits;
-}
 
 // ---------------------------------------------------------------------------
 // Shared helpers

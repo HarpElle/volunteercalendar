@@ -7,8 +7,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
-import { getOrgTerms } from "@/lib/utils/org-terms";
-import { isAdmin, isOwner, isScheduler } from "@/lib/utils/permissions";
+import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import type { OrgType, Membership } from "@/lib/types";
 
 interface NavItem {
@@ -30,13 +29,14 @@ function getNavSections(): NavSection[] {
       label: null,
       items: [
         {
-          label: "Home",
+          label: "Overview",
           href: "/dashboard",
           icon: (
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
             </svg>
           ),
+          gate: (m) => isAdmin(m),
         },
         {
           label: "My Schedule",
@@ -53,6 +53,16 @@ function getNavSections(): NavSection[] {
       label: "Scheduling",
       gate: (m) => isScheduler(m),
       items: [
+        {
+          label: "Dashboard",
+          href: "/dashboard/scheduling-dashboard",
+          icon: (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+            </svg>
+          ),
+          gate: (m) => isScheduler(m),
+        },
         {
           label: "Schedules",
           href: "/dashboard/schedules",
@@ -101,23 +111,6 @@ function getNavSections(): NavSection[] {
         },
       ],
     },
-    {
-      label: "Organization",
-      gate: (m) => isAdmin(m),
-      items: [
-        {
-          label: "Organization",
-          href: "/dashboard/organization",
-          icon: (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-            </svg>
-          ),
-          gate: (m) => isAdmin(m),
-        },
-      ],
-    },
   ];
 }
 
@@ -130,14 +123,16 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { user, profile, loading, signOut, memberships, activeMembership, switchOrg } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [orgSwitcherOpen, setOrgSwitcherOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [orgType, setOrgType] = useState<OrgType>("church");
   const [churchName, setChurchName] = useState<string>("");
+  const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map());
   const [showGuideDot, setShowGuideDot] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const orgMenuRef = useRef<HTMLDivElement>(null);
 
-  // Show a dot on "Home" when the setup guide hasn't been dismissed
+  // Show a dot on "Overview" when the setup guide hasn't been dismissed
   useEffect(() => {
     setShowGuideDot(!localStorage.getItem("vc_setup_guide_dismissed"));
   }, []);
@@ -156,22 +151,46 @@ export default function DashboardLayout({
     }).catch(() => {});
   }, [churchId]);
 
-  // Close user menu when clicking outside
+  // Load names for all orgs (for org switcher)
+  const activeMemberships = memberships.filter((m) => m.status === "active");
+  const hasMultipleOrgs = activeMemberships.length > 1;
+
+  useEffect(() => {
+    if (!hasMultipleOrgs) return;
+    async function loadOrgNames() {
+      const names = new Map<string, string>();
+      for (const m of activeMemberships) {
+        try {
+          const snap = await getDoc(doc(db, "churches", m.church_id));
+          if (snap.exists()) {
+            names.set(m.church_id, snap.data().name || m.church_id);
+          }
+        } catch {
+          // silent
+        }
+      }
+      setOrgNames(names);
+    }
+    loadOrgNames();
+  }, [hasMultipleOrgs, memberships]);
+
+  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
+      if (orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
+        setOrgMenuOpen(false);
+      }
     }
-    if (userMenuOpen) {
+    if (userMenuOpen || orgMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [userMenuOpen]);
+  }, [userMenuOpen, orgMenuOpen]);
 
   const navSections = getNavSections();
-  const activeMemberships = memberships.filter((m) => m.status === "active");
-  const hasMultipleOrgs = activeMemberships.length > 1;
 
   // Filter sections: hide sections where the gate fails or all items are gated out
   const visibleSections = navSections
@@ -185,11 +204,20 @@ export default function DashboardLayout({
     })
     .filter(Boolean) as NavSection[];
 
+  // Redirect volunteers from /dashboard to /dashboard/my-schedule
+  const isVolunteerOnly = activeMembership && !isScheduler(activeMembership);
+
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/");
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (!loading && user && isVolunteerOnly && pathname === "/dashboard") {
+      router.replace("/dashboard/my-schedule");
+    }
+  }, [loading, user, isVolunteerOnly, pathname, router]);
 
   if (loading) {
     return (
@@ -206,6 +234,8 @@ export default function DashboardLayout({
     await signOut();
     router.push("/");
   }
+
+  const orgInitial = (churchName || "O").charAt(0).toUpperCase();
 
   return (
     <div className="flex min-h-screen bg-vc-bg">
@@ -234,42 +264,6 @@ export default function DashboardLayout({
             Volunteer<span className="text-vc-coral">Cal</span>
           </span>
         </div>
-
-        {/* Org switcher (when user belongs to multiple orgs) */}
-        {hasMultipleOrgs && (
-          <div className="border-b border-vc-border-light px-3 py-3">
-            <button
-              onClick={() => setOrgSwitcherOpen(!orgSwitcherOpen)}
-              className="flex w-full items-center justify-between rounded-lg bg-vc-bg-warm px-3 py-2 text-sm font-medium text-vc-indigo hover:bg-vc-bg transition-colors"
-            >
-              <span className="truncate">{churchName || "Select org"}</span>
-              <svg className={`h-4 w-4 shrink-0 transition-transform ${orgSwitcherOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </button>
-            {orgSwitcherOpen && (
-              <div className="mt-1 space-y-0.5">
-                {activeMemberships.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      switchOrg(m.church_id);
-                      setOrgSwitcherOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                      m.church_id === churchId
-                        ? "bg-vc-coral/10 text-vc-coral font-medium"
-                        : "text-vc-text-secondary hover:bg-vc-bg-warm"
-                    }`}
-                  >
-                    <span className="truncate">{m.church_id === churchId ? churchName : m.church_id}</span>
-                    <span className="ml-auto shrink-0 text-xs capitalize text-vc-text-muted">{m.role}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Nav sections */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -308,78 +302,169 @@ export default function DashboardLayout({
           ))}
         </nav>
 
-        {/* User section with popover menu */}
-        <div className="relative border-t border-vc-border-light p-4" ref={userMenuRef}>
-          {/* User menu popover */}
-          {userMenuOpen && (
-            <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
-              <div className="border-b border-vc-border-light px-4 py-3">
+        {/* Bottom pinned area: Org Card + Account Card */}
+        <div className="mt-auto">
+          {/* Org Card */}
+          <div className="relative border-t border-vc-border-light px-3 py-3" ref={orgMenuRef}>
+            {/* Org popover */}
+            {orgMenuOpen && (
+              <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
+                <div className="border-b border-vc-border-light px-4 py-3">
+                  <p className="truncate text-sm font-medium text-vc-indigo">
+                    {churchName || "Organization"}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs capitalize text-vc-text-muted">
+                    Your role: {activeMembership?.role || "member"}
+                  </p>
+                </div>
+
+                {/* Switch org */}
+                {hasMultipleOrgs && (
+                  <div className="border-b border-vc-border-light py-1">
+                    <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+                      Switch Organization
+                    </p>
+                    {activeMemberships.map((m) => {
+                      const name = m.church_id === churchId ? churchName : (orgNames.get(m.church_id) || m.church_id);
+                      const isCurrent = m.church_id === churchId;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            switchOrg(m.church_id);
+                            setOrgMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                            isCurrent
+                              ? "text-vc-coral font-medium"
+                              : "text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo"
+                          }`}
+                        >
+                          <span className="truncate">{name}</span>
+                          {isCurrent && (
+                            <svg className="ml-auto h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                          )}
+                          {!isCurrent && (
+                            <span className="ml-auto text-xs capitalize text-vc-text-muted">{m.role}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="py-1">
+                  {isAdmin(activeMembership) && (
+                    <Link
+                      href="/dashboard/organization"
+                      onClick={() => { setOrgMenuOpen(false); setSidebarOpen(false); }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                      </svg>
+                      Organization Settings
+                    </Link>
+                  )}
+                  <Link
+                    href="/dashboard/my-orgs"
+                    onClick={() => { setOrgMenuOpen(false); setSidebarOpen(false); }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+                    </svg>
+                    My Organizations
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Org card trigger */}
+            <button
+              onClick={() => setOrgMenuOpen(!orgMenuOpen)}
+              className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-bg-warm"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-vc-coral/10 text-sm font-semibold text-vc-coral">
+                {orgInitial}
+              </div>
+              <div className="flex-1 truncate text-left">
+                <p className="truncate text-sm font-medium text-vc-indigo">
+                  {churchName || "No Organization"}
+                </p>
+                <p className="truncate text-xs capitalize text-vc-text-muted">
+                  {activeMembership?.role || "member"}
+                </p>
+              </div>
+              <svg className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${orgMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Account Card */}
+          <div className="relative border-t border-vc-border-light p-4" ref={userMenuRef}>
+            {/* User menu popover */}
+            {userMenuOpen && (
+              <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
+                <div className="border-b border-vc-border-light px-4 py-3">
+                  <p className="truncate text-sm font-medium text-vc-indigo">
+                    {profile?.display_name || "User"}
+                  </p>
+                  <p className="truncate text-xs text-vc-text-muted">
+                    {user.email}
+                  </p>
+                </div>
+                <div className="py-1">
+                  <Link
+                    href="/dashboard/account"
+                    onClick={() => { setUserMenuOpen(false); setSidebarOpen(false); }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                    </svg>
+                    Account Settings
+                  </Link>
+                </div>
+                <div className="border-t border-vc-border-light py-1">
+                  <button
+                    onClick={handleSignOut}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                    </svg>
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Avatar trigger */}
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-bg-warm"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-vc-indigo text-sm font-semibold text-white">
+                {(profile?.display_name || user.email || "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 truncate text-left">
                 <p className="truncate text-sm font-medium text-vc-indigo">
                   {profile?.display_name || "User"}
                 </p>
                 <p className="truncate text-xs text-vc-text-muted">
                   {user.email}
                 </p>
-                <p className="mt-0.5 truncate text-xs capitalize text-vc-text-muted">
-                  {activeMembership?.role || "member"}{churchName ? ` @ ${churchName}` : ""}
-                </p>
               </div>
-              <div className="py-1">
-                <Link
-                  href="/dashboard/account"
-                  onClick={() => { setUserMenuOpen(false); setSidebarOpen(false); }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                  </svg>
-                  Account Settings
-                </Link>
-                <Link
-                  href="/dashboard/my-orgs"
-                  onClick={() => { setUserMenuOpen(false); setSidebarOpen(false); }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
-                  </svg>
-                  My Organizations
-                </Link>
-              </div>
-              <div className="border-t border-vc-border-light py-1">
-                <button
-                  onClick={handleSignOut}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-                  </svg>
-                  Sign out
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Avatar trigger */}
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-bg-warm"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-vc-indigo text-sm font-semibold text-white">
-              {(profile?.display_name || user.email || "?").charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 truncate text-left">
-              <p className="truncate text-sm font-medium text-vc-indigo">
-                {profile?.display_name || "User"}
-              </p>
-              <p className="truncate text-xs capitalize text-vc-text-muted">
-                {activeMembership?.role || profile?.role || "member"}
-              </p>
-            </div>
-            <svg className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${userMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
-            </svg>
-          </button>
+              <svg className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${userMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
 

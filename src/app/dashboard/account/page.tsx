@@ -15,6 +15,7 @@ import {
 } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
 
 export default function AccountPage() {
@@ -57,7 +58,7 @@ export default function AccountPage() {
   // Load profile data
   useEffect(() => {
     setDisplayName(profile?.display_name || "");
-    setPhone(profile?.phone || "");
+    setPhone(formatPhoneInput(profile?.phone));
   }, [profile]);
 
   // Load calendar feed data
@@ -95,9 +96,10 @@ export default function AccountPage() {
     setProfileSuccess("");
     try {
       await updateUserDisplayName(displayName);
+      const normalizedPhone = normalizePhone(phone);
       await updateDocument("users", user.uid, {
         display_name: displayName,
-        phone: phone.trim() || null,
+        phone: normalizedPhone || null,
       });
       // Sync profile changes to linked volunteer records across all orgs
       user.getIdToken().then((token) =>
@@ -280,9 +282,10 @@ export default function AccountPage() {
             <Input
               label="Phone Number"
               type="tel"
-              placeholder="+1 (555) 123-4567"
+              placeholder="(555) 123-4567"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              onBlur={() => setPhone(formatPhoneInput(phone))}
             />
             <p className="text-xs text-vc-text-muted -mt-2">
               Required for SMS reminders. Include country code for international numbers.

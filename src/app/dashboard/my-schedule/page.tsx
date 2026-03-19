@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import { getChurchDocuments, updateDocument } from "@/lib/firebase/firestore";
+import { getChurchDocuments, getUserEventSignups, updateDocument } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { REMINDER_CHANNELS } from "@/lib/constants";
-import type { Assignment, Service, Ministry, ReminderChannel } from "@/lib/types";
+import type { Assignment, Service, Ministry, Event, EventSignup, ReminderChannel } from "@/lib/types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -29,6 +29,20 @@ function formatTime(time: string | null | undefined): string {
 
 const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** A unified item that can be either a scheduler assignment or an event signup. */
+interface ScheduleItem {
+  id: string;
+  kind: "assignment" | "signup";
+  date: string;
+  roleName: string;
+  eventOrServiceName: string;
+  ministryName: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  status: string;
+}
+
 type TabKey = "upcoming" | "past" | "availability";
 
 export default function MySchedulePage() {
@@ -39,6 +53,8 @@ export default function MySchedulePage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [services, setServices] = useState<Map<string, Service>>(new Map());
   const [ministries, setMinistries] = useState<Map<string, Ministry>>(new Map());
+  const [eventSignups, setEventSignups] = useState<EventSignup[]>([]);
+  const [events, setEvents] = useState<Map<string, Event>>(new Map());
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -52,20 +68,22 @@ export default function MySchedulePage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Load schedule data
+  // Load schedule data (assignments + event signups)
   useEffect(() => {
     async function loadAll() {
       const allAssignments: Assignment[] = [];
       const serviceMap = new Map<string, Service>();
       const ministryMap = new Map<string, Ministry>();
+      const eventMap = new Map<string, Event>();
 
       const activeMembers = memberships.filter((m) => m.status === "active");
       for (const m of activeMembers) {
         try {
-          const [assigns, svcs, mins] = await Promise.all([
+          const [assigns, svcs, mins, evts] = await Promise.all([
             getChurchDocuments(m.church_id, "assignments") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "ministries") as Promise<unknown[]>,
+            getChurchDocuments(m.church_id, "events") as Promise<unknown[]>,
           ]);
 
           const volId = m.volunteer_id;
@@ -78,6 +96,7 @@ export default function MySchedulePage() {
 
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
           for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
+          for (const e of evts as Event[]) eventMap.set(e.id, e);
         } catch {
           // Skip orgs that fail to load
         }
@@ -86,10 +105,11 @@ export default function MySchedulePage() {
       // Fallback: legacy profile church_id
       if (activeMembers.length === 0 && profile?.church_id) {
         try {
-          const [assigns, svcs, mins] = await Promise.all([
+          const [assigns, svcs, mins, evts] = await Promise.all([
             getChurchDocuments(profile.church_id, "assignments") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "ministries") as Promise<unknown[]>,
+            getChurchDocuments(profile.church_id, "events") as Promise<unknown[]>,
           ]);
           const vols = await getChurchDocuments(profile.church_id, "volunteers") as unknown[];
           const myVol = (vols as { id: string; user_id: string | null }[]).find(
@@ -103,14 +123,27 @@ export default function MySchedulePage() {
           }
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
           for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
+          for (const e of evts as Event[]) eventMap.set(e.id, e);
         } catch {
           // silent
+        }
+      }
+
+      // Load event signups for the current user
+      let allSignups: EventSignup[] = [];
+      if (user) {
+        try {
+          allSignups = await getUserEventSignups(user.uid);
+        } catch {
+          // silent — security rules may reject if no signups exist
         }
       }
 
       setAssignments(allAssignments);
       setServices(serviceMap);
       setMinistries(ministryMap);
+      setEventSignups(allSignups);
+      setEvents(eventMap);
       setLoading(false);
     }
     if (user) loadAll();
@@ -130,20 +163,62 @@ export default function MySchedulePage() {
     }
   }, [activeMembership]);
 
+  // --- Build unified schedule items ---
+
+  const scheduleItems: ScheduleItem[] = [];
+
+  // Assignments → schedule items
+  for (const a of assignments) {
+    const service = a.service_id ? services.get(a.service_id) : null;
+    const ministry = a.ministry_id ? ministries.get(a.ministry_id) : null;
+    const roleTime = service?.roles.find((r) => r.role_id === a.role_id);
+    scheduleItems.push({
+      id: a.id,
+      kind: "assignment",
+      date: a.service_date,
+      roleName: a.role_title,
+      eventOrServiceName: service?.name || "Service",
+      ministryName: ministry?.name || null,
+      startTime: roleTime?.start_time || service?.start_time || null,
+      endTime: roleTime?.end_time || service?.end_time || null,
+      allDay: service?.all_day || false,
+      status: a.status,
+    });
+  }
+
+  // Event signups → schedule items (exclude cancelled)
+  for (const s of eventSignups) {
+    if (s.status === "cancelled") continue;
+    const evt = events.get(s.event_id);
+    const roleSlot = evt?.roles.find((r) => r.role_id === s.role_id);
+    scheduleItems.push({
+      id: s.id,
+      kind: "signup",
+      date: evt?.date || s.signed_up_at.split("T")[0],
+      roleName: s.role_title,
+      eventOrServiceName: evt?.name || "Event",
+      ministryName: null,
+      startTime: roleSlot?.start_time || evt?.start_time || null,
+      endTime: roleSlot?.end_time || evt?.end_time || null,
+      allDay: evt?.all_day || false,
+      status: s.status,
+    });
+  }
+
   // --- Schedule filtering ---
 
   const timeFilter = activeTab === "past" ? "past" : "upcoming";
   const filtered = activeTab !== "availability"
-    ? assignments
-        .filter((a) =>
+    ? scheduleItems
+        .filter((item) =>
           timeFilter === "upcoming"
-            ? a.service_date >= today
-            : a.service_date < today,
+            ? item.date >= today
+            : item.date < today,
         )
         .sort((a, b) =>
           timeFilter === "upcoming"
-            ? a.service_date.localeCompare(b.service_date)
-            : b.service_date.localeCompare(a.service_date),
+            ? a.date.localeCompare(b.date)
+            : b.date.localeCompare(a.date),
         )
     : [];
 
@@ -267,54 +342,55 @@ export default function MySchedulePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((a) => {
-                const service = a.service_id ? services.get(a.service_id) : null;
-                const ministry = a.ministry_id ? ministries.get(a.ministry_id) : null;
-                const isPast = a.service_date < today;
+              {filtered.map((item) => {
+                const isPast = item.date < today;
                 const statusColor =
-                  a.status === "confirmed"
+                  item.status === "confirmed" || item.status === "approved"
                     ? "bg-vc-sage/15 text-vc-sage"
-                    : a.status === "declined"
+                    : item.status === "declined" || item.status === "cancelled"
                       ? "bg-vc-danger/10 text-vc-danger"
-                      : a.status === "draft"
+                      : item.status === "draft"
                         ? "bg-gray-100 text-gray-500"
                         : "bg-vc-sand/30 text-vc-sand";
-
-                const roleTime = service?.roles.find((r) => r.role_id === a.role_id);
-                const displayStart = roleTime?.start_time || service?.start_time;
-                const displayEnd = roleTime?.end_time || service?.end_time;
-                const isAllDay = service?.all_day;
+                const statusLabel = item.status === "approved" ? "confirmed" : item.status;
 
                 return (
                   <div
-                    key={a.id}
+                    key={`${item.kind}-${item.id}`}
                     className={`rounded-xl border border-vc-border-light bg-white p-4 transition-shadow hover:shadow-md ${
                       isPast ? "opacity-60" : ""
                     }`}
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-semibold text-vc-indigo">{formatDate(a.service_date)}</p>
+                        <p className="font-semibold text-vc-indigo">{formatDate(item.date)}</p>
                         <p className="mt-0.5 text-sm text-vc-text-secondary">
-                          {service?.name || "Service"}
-                          {ministry && (
-                            <span className="ml-1.5 text-vc-text-muted">&middot; {ministry.name}</span>
+                          {item.eventOrServiceName}
+                          {item.ministryName && (
+                            <span className="ml-1.5 text-vc-text-muted">&middot; {item.ministryName}</span>
                           )}
                         </p>
                       </div>
-                      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusColor}`}>
-                        {a.status}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {item.kind === "signup" && (
+                          <span className="rounded-full bg-vc-coral/10 px-2 py-0.5 text-[10px] font-medium text-vc-coral">
+                            Event
+                          </span>
+                        )}
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusColor}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-2 flex items-center gap-3 flex-wrap">
                       <span className="inline-flex items-center rounded-lg bg-vc-indigo/5 px-2 py-0.5 text-xs font-medium text-vc-indigo">
-                        {a.role_title}
+                        {item.roleName}
                       </span>
-                      {isAllDay ? (
+                      {item.allDay ? (
                         <span className="text-xs text-vc-text-muted">All day</span>
-                      ) : displayStart ? (
+                      ) : item.startTime ? (
                         <span className="text-xs text-vc-text-muted">
-                          {formatTime(displayStart)}{displayEnd ? ` – ${formatTime(displayEnd)}` : ""}
+                          {formatTime(item.startTime)}{item.endTime ? ` – ${formatTime(item.endTime)}` : ""}
                         </span>
                       ) : null}
                     </div>
@@ -333,7 +409,7 @@ export default function MySchedulePage() {
           <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-1">Weekly Availability</h2>
             <p className="text-sm text-vc-text-muted mb-4">
-              Mark days you&apos;re generally <strong>not available</strong>. Schedulers won&apos;t assign you on these days.
+              Mark days you&apos;re generally <strong>not available</strong>. Schedulers won&apos;t invite you on these days.
             </p>
             <div className="grid grid-cols-7 gap-2">
               {DAYS_OF_WEEK.map((day, i) => {
