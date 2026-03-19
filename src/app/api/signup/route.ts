@@ -130,10 +130,12 @@ export async function POST(req: NextRequest) {
       .collection("event_signups")
       .where("event_id", "==", event_id)
       .where("role_id", "==", role_id)
-      .where("status", "!=", "cancelled")
       .get();
+    const activeSignups = existingSignups.docs.filter(
+      (d) => d.data().status !== "cancelled",
+    );
 
-    if (existingSignups.size >= role.count) {
+    if (activeSignups.length >= role.count) {
       return NextResponse.json(
         { error: "This role is already full" },
         { status: 409 },
@@ -147,9 +149,11 @@ export async function POST(req: NextRequest) {
         .collection("event_signups")
         .where("event_id", "==", event_id)
         .where("user_id", "==", effectiveUserId)
-        .where("status", "!=", "cancelled")
         .get();
-      if (!dupCheck.empty) {
+      const activeDups = dupCheck.docs.filter(
+        (d) => d.data().status !== "cancelled",
+      );
+      if (activeDups.length > 0) {
         return NextResponse.json(
           { error: "You have already signed up for this event" },
           { status: 409 },

@@ -114,15 +114,16 @@ export async function printFlyer(options: FlyerOptions) {
     }
     .powered .accent { color: #E07A5F; font-weight: 600; }
     @media print {
-      body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        padding: 0;
+      html, body {
+        height: auto;
         margin: 0;
+        padding: 0;
+        display: block;
       }
-      .flyer { border: 3px solid #2C2E5A; }
+      .flyer {
+        margin: 1in auto 0;
+        border: 3px solid #2C2E5A;
+      }
     }
   </style>
 </head>
