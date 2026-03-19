@@ -34,16 +34,21 @@ export async function printFlyer(options: FlyerOptions) {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { margin: 0.3in; size: letter; }
+    @page { margin: 0; size: letter; }
     body {
       font-family: 'DM Sans', sans-serif;
       background: white;
       color: #2C2E5A;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
       padding: 0;
+      margin: 0;
+    }
+    @media screen {
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
     }
     .flyer {
       max-width: 540px;
@@ -109,7 +114,7 @@ export async function printFlyer(options: FlyerOptions) {
     }
     .powered .accent { color: #E07A5F; font-weight: 600; }
     @media print {
-      body { padding: 0; }
+      body { display: block; padding: 0.3in; margin: 0; }
       .flyer { border: 3px solid #2C2E5A; }
     }
   </style>

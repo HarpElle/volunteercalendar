@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     // Build signup URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com";
-    const signupUrl = `${baseUrl}/events/${church_id}/${event_id}`;
+    const signupUrl = `${baseUrl}/events/${church_id}/${event_id}/signup`;
 
     // Format date and time for the email
     const eventDate = event.date || "TBD";

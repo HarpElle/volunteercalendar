@@ -816,6 +816,8 @@ function EventsTab({
   const [shortLinkEventId, setShortLinkEventId] = useState<string | null>(null);
   const [emailInviteEventId, setEmailInviteEventId] = useState<string | null>(null);
   const userIsAdmin = isAdmin(activeMembership);
+  // Short link lookup: targetPath → full short link URL
+  const [shortLinkMap, setShortLinkMap] = useState<Record<string, string>>({});
 
   // Form state
   const [name, setName] = useState("");
@@ -851,6 +853,28 @@ function EventsTab({
           }),
         );
         setSignupCounts(counts);
+
+        // Fetch short links for this church
+        if (user) {
+          try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/short-links?church_id=${churchId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const map: Record<string, string> = {};
+              for (const link of data.links || []) {
+                if (link.target_url) {
+                  map[link.target_url] = `${window.location.origin}/s/${link.slug}`;
+                }
+              }
+              setShortLinkMap(map);
+            }
+          } catch {
+            // Short links are optional, fail silently
+          }
+        }
       } catch {
         // silent
       } finally {
@@ -858,7 +882,7 @@ function EventsTab({
       }
     }
     load();
-  }, [churchId]);
+  }, [churchId, user]);
 
   function resetForm() {
     setName("");
@@ -1071,11 +1095,25 @@ function EventsTab({
     return `${weekday}, ${month} ${day}${suffix}`;
   }
 
+  function getEventShortLink(eventId: string): string | undefined {
+    const targetPath = `/events/${churchId}/${eventId}/signup`;
+    return shortLinkMap[targetPath];
+  }
+
   function copySignupLink(eventId: string) {
     const url = `${window.location.origin}/events/${churchId}/${eventId}/signup`;
     navigator.clipboard.writeText(url);
     setCopiedEventId(eventId);
     setTimeout(() => setCopiedEventId(null), 2000);
+  }
+
+  function copyShortLink(eventId: string) {
+    const shortUrl = getEventShortLink(eventId);
+    if (shortUrl) {
+      navigator.clipboard.writeText(shortUrl);
+      setCopiedEventId(eventId);
+      setTimeout(() => setCopiedEventId(null), 2000);
+    }
   }
 
   function getMinistryNames(ids: string[]) {
@@ -1448,6 +1486,9 @@ function EventsTab({
                       copied={copiedEventId === ev.id}
                       getMinistryNames={getMinistryNames}
                       formatTime={formatTime}
+                      hasShortLink={!!getEventShortLink(ev.id)}
+                      shortLinkUrl={getEventShortLink(ev.id)}
+                      onCopyShortLink={() => copyShortLink(ev.id)}
                     />
                     {shortLinkEventId === ev.id && churchId && (
                       <div className="mt-2 ml-4">
@@ -1500,6 +1541,9 @@ function EventsTab({
                       getMinistryNames={getMinistryNames}
                       formatTime={formatTime}
                       isPast
+                      hasShortLink={!!getEventShortLink(ev.id)}
+                      shortLinkUrl={getEventShortLink(ev.id)}
+                      onCopyShortLink={() => copyShortLink(ev.id)}
                     />
                     {shortLinkEventId === ev.id && churchId && (
                       <div className="mt-2 ml-4">
@@ -1552,6 +1596,9 @@ function EventCard({
   getMinistryNames,
   formatTime,
   isPast,
+  hasShortLink,
+  shortLinkUrl,
+  onCopyShortLink,
 }: {
   event: Event;
   signupCount: number;
@@ -1567,6 +1614,9 @@ function EventCard({
   getMinistryNames: (ids: string[]) => string;
   formatTime: (t: string | null) => string;
   isPast?: boolean;
+  hasShortLink?: boolean;
+  shortLinkUrl?: string;
+  onCopyShortLink?: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const totalSlots = ev.roles.reduce((sum, r) => sum + r.count, 0);
@@ -1677,6 +1727,9 @@ function EventCard({
             onCreateShortLink={onCreateShortLink}
             onEmailInvite={onEmailInvite}
             copied={copied}
+            hasShortLink={hasShortLink}
+            shortLinkUrl={shortLinkUrl}
+            onCopyShortLink={onCopyShortLink}
           />
         )}
 
