@@ -17,7 +17,9 @@ import type {
   SchedulingResult,
   ServiceOccurrence,
   ScheduleStatus,
+  OnboardingStep,
 } from "@/lib/types";
+import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
 
 // --- Date Helpers ---
@@ -189,12 +191,30 @@ function isConditionalRoleSatisfied(
  * Check if a volunteer has completed all prerequisites for a ministry.
  * Returns true if no prerequisites exist or all are completed/waived.
  */
-function hasCompletedPrerequisites(volunteer: Volunteer, ministryId: string, ministries?: Ministry[]): boolean {
+function hasCompletedPrerequisites(
+  volunteer: Volunteer,
+  ministryId: string,
+  ministries?: Ministry[],
+  orgPrerequisites?: OnboardingStep[],
+): boolean {
+  const journey = volunteer.volunteer_journey || [];
+
+  // Check org-wide prerequisites
+  if (orgPrerequisites && orgPrerequisites.length > 0) {
+    const orgComplete = orgPrerequisites.every((prereq) => {
+      const step = journey.find(
+        (j) => j.step_id === prereq.id && j.ministry_id === ORG_WIDE_MINISTRY_ID,
+      );
+      return step?.status === "completed" || step?.status === "waived";
+    });
+    if (!orgComplete) return false;
+  }
+
+  // Check ministry-specific prerequisites
   if (!ministries) return true;
   const ministry = ministries.find((m) => m.id === ministryId);
   if (!ministry?.prerequisites || ministry.prerequisites.length === 0) return true;
 
-  const journey = volunteer.volunteer_journey || [];
   return ministry.prerequisites.every((prereq) => {
     const step = journey.find(
       (j) => j.step_id === prereq.id && j.ministry_id === ministryId,
@@ -250,6 +270,7 @@ export function generateDraftSchedule(
   startDate: string,
   endDate: string,
   ministries?: Ministry[],
+  orgPrerequisites?: OnboardingStep[],
 ): SchedulingResult {
   const occurrences = generateOccurrences(services, startDate, endDate);
   const assignments: DraftAssignment[] = [];
@@ -284,6 +305,7 @@ export function generateDraftSchedule(
             assignments,
             counts,
             ministries,
+            orgPrerequisites,
           );
 
           if (bestVolunteer) {
@@ -355,11 +377,12 @@ export function findBestVolunteer(
   currentAssignments: DraftAssignment[],
   counts: VolunteerAssignmentCount,
   ministries?: Ministry[],
+  orgPrerequisites?: OnboardingStep[],
 ): Volunteer | null {
   // --- Pinned volunteer: try them first ---
   if (role.pinned_volunteer_id) {
     const pinned = volunteers.find((v) => v.id === role.pinned_volunteer_id);
-    if (pinned && isEligible(pinned, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries)) {
+    if (pinned && isEligible(pinned, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries, orgPrerequisites)) {
       return pinned;
     }
     // Pinned volunteer unavailable — fall through to normal selection
@@ -367,7 +390,7 @@ export function findBestVolunteer(
 
   // Filter eligible volunteers
   const eligible = volunteers.filter((v) =>
-    isEligible(v, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries),
+    isEligible(v, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries, orgPrerequisites),
   );
 
   if (eligible.length === 0) return null;
@@ -397,6 +420,7 @@ function isEligible(
   currentAssignments: DraftAssignment[],
   counts: VolunteerAssignmentCount,
   ministries?: Ministry[],
+  orgPrerequisites?: OnboardingStep[],
 ): boolean {
   // Must be in the right ministry
   if (!canServeInMinistry(v, ministryId)) return false;
@@ -406,8 +430,8 @@ function isEligible(
   if (!canServeAtCampus(v, service)) return false;
   // Must have valid background check if ministry requires it
   if (!hasValidBackgroundCheck(v, ministryId, ministries)) return false;
-  // Must have completed all prerequisites for this ministry
-  if (!hasCompletedPrerequisites(v, ministryId, ministries)) return false;
+  // Must have completed all prerequisites (org-wide + ministry-specific)
+  if (!hasCompletedPrerequisites(v, ministryId, ministries, orgPrerequisites)) return false;
   // Not blocked out
   if (isBlockedOut(v, date)) return false;
   // Not recurring unavailable

@@ -58,9 +58,9 @@ const featureGuides: { title: string; content: string }[] = [
       "Each volunteer gets a personal iCal feed URL that syncs their assignments to any calendar app.\n\nGoogle Calendar: Settings → Add calendar → From URL → paste the feed link.\nApple Calendar: File → New Calendar Subscription → paste the feed link.\nOutlook: Settings → Calendar → Shared calendars → Subscribe from web → paste the feed link.\n\nCalendar feeds update automatically when schedules change. Volunteers can find their feed URL on the My Schedule page.",
   },
   {
-    title: "QR Check-In",
+    title: "Check-In Methods",
     content:
-      "Generate a QR code for any service date from the Scheduling Dashboard. Display it on a screen or print it out. Volunteers scan the code on their phone, confirm their identity, and attendance is logged automatically.\n\nThis replaces paper sign-in sheets and gives you real-time attendance data that feeds into Volunteer Health classifications.",
+      "VolunteerCal offers three ways for volunteers to check in:\n\n**QR Code** — Generate a QR code for any service date from the Scheduling Dashboard. Display it on a screen or print it out. Volunteers scan the code, confirm their identity, and attendance logs automatically.\n\n**Smart Check-In** — When a volunteer opens the app near a scheduled service time, a banner prompts them to check in with one tap. The time window is configurable (default: 60 minutes before, 30 minutes after service start).\n\n**Proximity Check-In** — If a campus has a street address with coordinates (entered via address autocomplete), volunteers near the venue receive a location-aware prompt. This requires the proximity setting to be enabled and the volunteer to allow location access.\n\nAll three methods log attendance automatically and feed into Volunteer Health classifications. Admins can configure check-in settings (self-check-in toggle, time windows, proximity radius) in Organization Settings.\n\n**Admin/Scheduler Attendance** — Schedulers and Admins can also mark attendance manually. On the Services & Events page, click the Roster button on any service or event card to open the roster modal. Switch to the Attendance tab to mark individuals present or use 'Mark all present.' The Attendance tab is available for both past and upcoming dates, so you can familiarize yourself with the interface before the service day.",
   },
   {
     title: "Shift Swaps",
@@ -70,7 +70,7 @@ const featureGuides: { title: string; content: string }[] = [
   {
     title: "Onboarding Pipeline",
     content:
-      "Set up prerequisite steps that volunteers must complete before being scheduled for a team — things like background checks, training classes, or orientation sessions.\n\nCreate pipeline stages in the Onboarding page, then track each volunteer's progress. Volunteers won't appear as available for scheduling until they've completed all required prerequisites for that team.",
+      "Define the requirements volunteers must complete before serving — things like background checks, training classes, or orientation sessions.\n\nOn the Onboarding page, use the \"Manage Prerequisites\" tab to set up organization-wide requirements (applied to every team) and team-specific requirements. Then switch to the \"Volunteer Progress\" tab to track each volunteer's status through the pipeline. Volunteers won't appear as available for scheduling until they've completed all required prerequisites — both org-wide and team-specific.",
   },
   {
     title: "Installing VolunteerCal as an App",

@@ -62,9 +62,7 @@ export function EventRoster({
 
   const canModify = activeMembership ? isAdmin(activeMembership) || (activeMembership.role === "scheduler") : false;
 
-  const today = new Date().toISOString().split("T")[0];
-  const isPastOrToday = event.date <= today;
-  const showAttendanceTab = canMarkAttendance && isPastOrToday;
+  const showAttendanceTab = canMarkAttendance;
 
   const loadSignups = useCallback(async () => {
     setLoading(true);

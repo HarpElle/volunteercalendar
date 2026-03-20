@@ -9,7 +9,7 @@ import {
   updateAssignmentAttendance,
   getChurchDocuments,
 } from "@/lib/firebase/firestore";
-import { isAdmin, canScheduleMinistry } from "@/lib/utils/permissions";
+import { canScheduleMinistry } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
 import { printRoster } from "@/lib/utils/print-roster";
 import type { Service, Assignment, Ministry, Volunteer, Membership } from "@/lib/types";
@@ -69,9 +69,7 @@ export function ServiceRoster({
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
-  const today = new Date().toISOString().split("T")[0];
-  const isPastOrToday = serviceDate <= today;
-  const showAttendanceTab = canMarkAttendance && isPastOrToday;
+  const showAttendanceTab = canMarkAttendance;
 
   const loadData = useCallback(async () => {
     setLoading(true);

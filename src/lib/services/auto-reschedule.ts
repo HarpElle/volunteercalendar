@@ -14,6 +14,7 @@ import type {
   Household,
   Assignment,
   Ministry,
+  OnboardingStep,
 } from "@/lib/types";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
 import type { VolunteerAssignmentCount, DraftAssignment } from "@/lib/services/scheduler";
@@ -46,12 +47,13 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
   const { churchId, scheduleId, serviceId, serviceDate, ministryId, roleId, roleTitle, declinedVolunteerId } = slot;
   const churchRef = adminDb.collection("churches").doc(churchId);
 
-  // Fetch service, all active volunteers, households, ministries, and existing assignments in parallel
-  const [serviceSnap, volSnap, householdSnap, ministrySnap, assignSnap] = await Promise.all([
+  // Fetch service, all active volunteers, households, ministries, church doc, and existing assignments in parallel
+  const [serviceSnap, volSnap, householdSnap, ministrySnap, churchSnap, assignSnap] = await Promise.all([
     churchRef.collection("services").doc(serviceId).get(),
     churchRef.collection("volunteers").where("status", "==", "active").get(),
     churchRef.collection("households").get(),
     churchRef.collection("ministries").get(),
+    churchRef.get(),
     churchRef.collection("assignments")
       .where("schedule_id", "==", scheduleId)
       .where("status", "in", ["draft", "confirmed"])
@@ -66,6 +68,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     .filter((v) => v.id !== declinedVolunteerId);
   const households: Household[] = householdSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Household));
   const ministries: Ministry[] = ministrySnap.docs.map((d) => ({ id: d.id, ...d.data() } as Ministry));
+  const orgPrerequisites: OnboardingStep[] = churchSnap.exists ? (churchSnap.data()?.org_prerequisites || []) : [];
 
   // Build existing assignment list for constraint checking
   const existingAssignments: DraftAssignment[] = assignSnap.docs.map((d) => {
@@ -119,6 +122,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     existingAssignments,
     counts,
     ministries,
+    orgPrerequisites,
   );
 
   if (!bestVolunteer) return { replaced: false };

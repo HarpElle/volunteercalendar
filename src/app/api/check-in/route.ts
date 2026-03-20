@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
     await assignDoc.ref.update({
       attended: true,
       attended_at: now,
+      check_in_method: "qr",
     });
 
     return NextResponse.json({

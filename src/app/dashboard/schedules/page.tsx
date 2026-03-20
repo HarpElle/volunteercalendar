@@ -26,7 +26,10 @@ import type {
   ScheduleConflict,
   SchedulingResult,
   MinistryApproval,
+  OnboardingStep,
 } from "@/lib/types";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 
 const VALID_TRANSITIONS: Record<string, ScheduleStatus[]> = {
   draft: ["in_review"],
@@ -45,6 +48,7 @@ export default function SchedulesPage() {
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [households, setHouseholds] = useState<Household[]>([]);
+  const [orgPrerequisites, setOrgPrerequisites] = useState<OnboardingStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -78,18 +82,22 @@ export default function SchedulesPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [scheds, svcs, vols, mins, hhs] = await Promise.all([
+        const [scheds, svcs, vols, mins, hhs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "households").catch(() => []),
+          getDoc(doc(db, "churches", churchId!)),
         ]);
         setSchedules(scheds as unknown as Schedule[]);
         setServices(svcs as unknown as Service[]);
         setVolunteers(vols as unknown as Volunteer[]);
         setMinistries(mins as unknown as Ministry[]);
         setHouseholds(hhs as unknown as Household[]);
+        if (churchSnap.exists()) {
+          setOrgPrerequisites(churchSnap.data().org_prerequisites || []);
+        }
       } catch {
         // silent
       } finally {
@@ -121,7 +129,7 @@ export default function SchedulesPage() {
       const scheduleId = schedRef.id;
 
       const result = generateDraftSchedule(
-        scheduleId, churchId, services, volunteers, households, startDate, endDate, ministries,
+        scheduleId, churchId, services, volunteers, households, startDate, endDate, ministries, orgPrerequisites,
       );
 
       const savedAssignments: Assignment[] = [];

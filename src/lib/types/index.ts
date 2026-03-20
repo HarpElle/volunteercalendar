@@ -85,13 +85,28 @@ export interface Church {
   subscription_tier: SubscriptionTier;
   stripe_customer_id: string | null;
   settings: ChurchSettings;
+  /** Org-wide prerequisites that apply to ALL teams */
+  org_prerequisites?: OnboardingStep[];
   created_at: string;
 }
+
+/** Sentinel ministry_id used for org-wide prerequisite journey steps */
+export const ORG_WIDE_MINISTRY_ID = "__org__";
 
 export interface ChurchSettings {
   default_schedule_range_weeks: number;
   default_reminder_channels: ReminderChannel[];
   require_confirmation: boolean;
+  /** Whether volunteers can self-check-in from the app without QR code */
+  self_check_in_enabled?: boolean;
+  /** Minutes before service start to open check-in window */
+  check_in_window_before?: number;
+  /** Minutes after service start to keep check-in window open */
+  check_in_window_after?: number;
+  /** Whether proximity-based check-in is active */
+  proximity_check_in_enabled?: boolean;
+  /** Geofence radius in meters */
+  proximity_radius_meters?: number;
 }
 
 // --- Campuses (Multi-Site) ---
@@ -425,6 +440,8 @@ export interface Assignment {
   attended: boolean | null;
   /** ISO timestamp when attendance was marked */
   attended_at: string | null;
+  /** How the volunteer checked in */
+  check_in_method?: "qr" | "self" | "proximity" | "manual" | null;
   /** True if this assignment was auto-created after another volunteer declined */
   auto_rescheduled?: boolean;
   /** Volunteer ID of the person who declined, triggering this auto-reschedule */

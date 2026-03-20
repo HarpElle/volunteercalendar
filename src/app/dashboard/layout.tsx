@@ -10,6 +10,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
+import { SmartCheckInBanner } from "@/components/ui/smart-check-in-banner";
 import type { OrgType, Membership } from "@/lib/types";
 
 interface NavItem {
@@ -540,6 +541,7 @@ export default function DashboardLayout({
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">
           <PwaInstallBanner />
+          <SmartCheckInBanner />
           {children}
         </main>
       </div>

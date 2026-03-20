@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 26 complete. Preparing for beta. |
+| **Status** | Phase 29 complete. Preparing for beta. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -87,7 +87,7 @@ VolunteerCal/
 │   │   │   ├── volunteer-health/
 │   │   │   │   └── page.tsx        # Volunteer health monitoring (at-risk, declining, inactive classification)
 │   │   │   ├── onboarding/
-│   │   │   │   └── page.tsx        # Volunteer journey tracking (prerequisite pipeline: class, background check, tenure)
+│   │   │   │   └── page.tsx        # Volunteer onboarding: prerequisite management (org-wide + team-specific) and volunteer progress pipeline
 │   │   ├── check-in/
 │   │   │   └── [code]/
 │   │   │       └── page.tsx        # QR code self-check-in (auto-redirect on success)
@@ -167,7 +167,9 @@ VolunteerCal/
 │   │       │   └── sync-profile/
 │   │       │       └── route.ts    # Sync user profile to all volunteer records across orgs
 │   │       ├── check-in/
-│   │       │   └── route.ts        # QR check-in API (POST attendance, GET code generation)
+│   │       │   ├── route.ts        # QR check-in API (POST attendance, GET code generation)
+│   │       │   └── self/
+│   │       │       └── route.ts    # Self/proximity check-in API (time-window validated)
 │   │       ├── church-info/
 │   │       │   └── route.ts        # Public church info endpoint (name, type for join/invite pages)
 │   │       ├── link-account/
@@ -187,7 +189,7 @@ VolunteerCal/
 │   │           └── webhook/
 │   │               └── route.ts    # Stripe webhook handler
 │   ├── components/
-│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner
+│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
 │   │   └── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal
@@ -198,7 +200,7 @@ VolunteerCal/
 │       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep)
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts
+│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts
 │       │   ├── emails/         # 23 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
@@ -238,3 +240,6 @@ VolunteerCal/
 | 24 | Feature expansion: volunteer health monitoring dashboard (at-risk/declining/inactive/no-show/healthy classification), onboarding pipeline (prerequisite tracking: class, background check, minimum service, ministry tenure, custom steps; pipeline stage management), QR code check-in system (code generation with expiration, self-check-in page, attendance marking), shift swap engine (volunteer-initiated requests, replacement acceptance, admin approval workflow), multi-site/campus support (campus model with geolocation, per-campus services, timezone overrides), auto-reschedule service, ministry-level review panel for schedule approval, additional email templates (admin departure, assignment change alerts, vacancy notifications), service multi-ministry normalization helpers | Complete |
 | 25 | UI/UX polish & design system hardening: 7 missing CSS color tokens added to globals.css, Badge/Spinner/Input/Select/Button brand token fixes, off-brand Tailwind color sweep across ~15 files (gray→vc-bg-cream, red→vc-danger, amber→vc-sand, green→vc-sage), new Skeleton/Toast/ConfirmDialog components, skeleton loaders replacing full-page spinners (scheduling-dashboard, my-schedule), toast provider with auto-dismiss + undo action, branded confirm dialog replacing window.confirm(), empty state cards (scheduling-dashboard), CheckInQR refactored to shared Modal, volunteer check-in auto-redirect countdown, calendar feed optimistic state update, setup page workflow mode disabled states, ARIA labels on icon-only buttons, 44px touch targets, responsive overflow fixes, form required indicators + inline validation (register page) | Complete |
 | 26 | Content, copy & user guidance: landing page hero rewrite (outcome-focused subheadline), features expanded from 6→9 cards (QR check-in, shift swap, volunteer health), new FAQ section (8-question accordion), waitlist form reframed as contact form ("Talk to a real person"), pain points replaced fabricated quotes with scenario descriptions, How It Works Step 4 removed unsubstantiated metric, footer enhanced (FAQ link, HarpElle attribution, contact email), navbar FAQ link, pricing tiers updated with Phase 23-24 features, new InfoTooltip component, contextual tooltips on volunteer health + onboarding pages, Help Center page (/dashboard/help) with getting-started + feature guides, Help link in sidebar nav, post-setup "What's Next?" tips, PWA install banner (Chrome/iOS detection, localStorage dismissal), offline page enhanced (logo, warmer copy), manifest.json polished, dashboard "church's" → "organization's", Household Awareness feature reframed for inclusivity, empty state copy improvements | Complete |
+| 27 | Prerequisites & onboarding enhancement: org-wide prerequisites (stored on Church document, apply to all teams), shared PrerequisiteEditor component extracted from org settings, Onboarding page upgraded with two-tab layout (Volunteer Progress + Manage Prerequisites), org-wide + team-specific prerequisite CRUD on Onboarding page, pipeline logic merges org-wide and team prerequisites for progress tracking, Organization Settings simplified to use shared component with link to Onboarding, scheduler threads org-wide prerequisites through eligibility checks (generateDraftSchedule + findBestVolunteer + isEligible + hasCompletedPrerequisites), auto-reschedule loads org prerequisites, Schedules page loads church doc for org prerequisites, Dashboard setup guide adds optional "Set up onboarding prerequisites" step with Optional badge | Complete |
+| 28 | Smart check-in & address autocomplete: time-aware self-check-in (SmartCheckInBanner prompts volunteers near scheduled service times), self-check-in API (POST /api/check-in/self with time window validation), Google Places address autocomplete on campus form (captures lat/lng), proximity-based check-in (geolocation detects volunteers near a campus), geolocation utilities (haversine distance, getCurrentPosition), check-in settings in Organization page (self-check-in toggle, window before/after, proximity toggle + radius), ChurchSettings extended with 5 check-in fields, Assignment.check_in_method field, existing QR check-in records method as "qr" | Complete |
+| 29 | Service roster & attendance access parity: Roster button added to service cards on Services & Events page (matches event card parity), ServiceRoster modal opens for next upcoming service date, Attendance tab on both service and event rosters now accessible for future dates (not gated to past/today), allows admins/schedulers to familiarize with attendance UI before service day | Complete |

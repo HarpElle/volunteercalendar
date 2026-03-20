@@ -91,6 +91,16 @@ _Costs are approximate. Actual costs depend on document sizes, query patterns, a
 
 1. **My Schedule page** (`my-schedule/page.tsx`) — Loads 5 collections per organization membership. A user in 3 orgs triggers 15+ Firestore reads. Mitigated by client-side cache (Phase 22), but still multiple round-trips on first load.
 
+### Smart Check-In & Geolocation (Phase 28)
+
+The SmartCheckInBanner evaluates every 60 seconds on the client:
+- Loads church settings (1 read, cached), today's assignments (1 constrained query), and service docs (1 per eligible assignment)
+- Geolocation (`getCurrentPosition`) and haversine distance are computed entirely client-side — no server cost
+- Campus documents loaded once per evaluation cycle when proximity is enabled (cached via `getChurchDocuments`)
+- Google Places API calls (address autocomplete) are client-side, billed per autocomplete session — only triggered during campus editing
+
+No additional Firestore indexes required. The self-check-in API (`POST /api/check-in/self`) uses Admin SDK reads (church doc, volunteer query, assignment doc, service doc) and one write — comparable to the existing QR check-in endpoint.
+
 ### Client-Side Caching (Phase 22)
 
 The `firestore.ts` `getChurchDocuments` function caches unconstrained reads (no query constraints) for 60 seconds:

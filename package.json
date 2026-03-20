@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.0.2",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "firebase": "^12.10.0",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/google.maps": "^3.58.1",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",

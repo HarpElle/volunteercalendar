@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import type { Schedule, Assignment, Service, Volunteer, Ministry } from "@/lib/types";
 import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
@@ -21,6 +23,7 @@ interface DashboardStats {
   topVolunteers: { name: string; count: number }[];
   unscheduledVolunteers: number;
   upcomingServices: { name: string; date: string; ministryColor: string; assigned: number; needed: number }[];
+  hasPrerequisites: boolean;
 }
 
 export default function DashboardPage() {
@@ -35,16 +38,19 @@ export default function DashboardPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [vols, mins, svcs, scheds, assigns] = await Promise.all([
+        const [vols, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "assignments"),
+          getDoc(doc(db, "churches", churchId!)),
         ]);
 
         const volunteers = vols as unknown as Volunteer[];
         const ministries = mins as unknown as Ministry[];
+        const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];
+        const hasPrereqs = orgPrereqs.length > 0 || ministries.some((m) => m.prerequisites && m.prerequisites.length > 0);
         const services = svcs as unknown as Service[];
         const schedules = scheds as unknown as Schedule[];
         const assignments = assigns as unknown as Assignment[];
@@ -139,6 +145,7 @@ export default function DashboardPage() {
           topVolunteers,
           unscheduledVolunteers,
           upcomingServices,
+          hasPrerequisites: hasPrereqs,
         });
       } catch {
         setStats(null);
@@ -196,14 +203,16 @@ export default function DashboardPage() {
   const setupSteps = stats ? [
     { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
     { step: "Create a team", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/organization", done: (stats.ministries ?? 0) > 0 },
+    { step: "Set up onboarding prerequisites", desc: "Background checks, training, or other requirements before serving", href: "/dashboard/onboarding", done: stats.hasPrerequisites, optional: true },
     { step: "Add your volunteers", desc: "CSV upload, ChMS import, or add manually", href: "/dashboard/people", done: (stats.volunteers ?? 0) > 0 },
     { step: "Set up a service or event", desc: "Recurring services with roles, or one-time events", href: "/dashboard/services-events", done: (stats.services ?? 0) > 0 },
     { step: "Share your join link", desc: "Invite volunteers to sign up on their own", href: "/dashboard/people", done: (stats.volunteers ?? 0) >= 3 },
     { step: "Generate your first schedule", desc: "Auto-draft a fair, conflict-free rotation", href: "/dashboard/schedules", done: (stats.activeSchedules ?? 0) > 0 },
   ] : [];
 
+  const requiredSteps = setupSteps.filter((s) => !s.optional);
   const completedSteps = setupSteps.filter((s) => s.done).length;
-  const allDone = setupSteps.length > 0 && completedSteps === setupSteps.length;
+  const allDone = requiredSteps.length > 0 && requiredSteps.every((s) => s.done);
   const showGuide = stats && !guideDismissed && !allDone;
 
   const dismissGuide = useCallback(() => {
@@ -297,7 +306,14 @@ export default function DashboardPage() {
                           ) : i + 1}
                         </span>
                         <div>
-                          <p className={`text-sm font-medium ${item.done ? "text-vc-text-muted line-through" : "text-vc-indigo"}`}>{item.step}</p>
+                          <p className={`text-sm font-medium ${item.done ? "text-vc-text-muted line-through" : "text-vc-indigo"}`}>
+                            {item.step}
+                            {item.optional && !item.done && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-vc-sand/20 px-2 py-0.5 text-[10px] font-medium text-vc-sand-dark">
+                                Optional
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs text-vc-text-muted">{item.desc}</p>
                         </div>
                       </Link>

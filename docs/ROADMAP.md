@@ -38,10 +38,15 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 - [ ] Test public pages: landing, pricing, join page, event signup, short link resolver, privacy, terms
 - [ ] Test invite flow: admin sends invite → recipient receives email → clicks accept → appears in People
 - [ ] Test event lifecycle: create event → add role slots → publish signup link → volunteer signs up → view roster → mark attendance
+- [ ] Test service roster: Services & Events → Services tab → click Roster → modal opens for next service date → view assignments → mark attendance
 - [ ] Test QR check-in: generate code from scheduling dashboard → scan on phone → check-in page → confirm → attendance marked
+- [ ] Test smart check-in: create assignment for today → open dashboard within time window → banner appears → tap "Check In" → attendance marked with method "self"
+- [ ] Test proximity check-in: enable proximity in org settings → add campus with coordinates → visit app near campus → banner shows proximity copy → check in → method "proximity"
+- [ ] Test campus address autocomplete: edit campus → type address → Google Places dropdown → select → lat/lng saved to campus document
+- [ ] Test check-in settings: toggle self-check-in on/off → adjust time windows → save → verify banner respects settings
 - [ ] Test shift swap: volunteer requests swap → eligible replacements listed → replacement accepts → admin approves
 - [ ] Test volunteer health dashboard: verify classification logic against known test data
-- [ ] Test onboarding pipeline: create prerequisite steps → track volunteer progress through pipeline
+- [ ] Test onboarding pipeline: create org-wide + team-specific prerequisites → track volunteer progress through pipeline → verify scheduler gates on incomplete prerequisites
 - [ ] Set up Firestore daily backup (Google Cloud Console → Firestore → Backups)
 - [ ] Review Firestore security rules in production console
 

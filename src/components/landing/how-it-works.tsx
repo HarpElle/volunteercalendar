@@ -31,7 +31,7 @@ const steps = [
     number: "04",
     title: "Confirm",
     description:
-      "Volunteers receive one clear notification with their assignment. They confirm or decline directly — no email threads, no phone tag. Calendar feeds sync automatically.",
+      "Volunteers receive one clear notification with their assignment. They confirm or decline directly \u2014 no email threads, no phone tag. On service day, smart check-in prompts them when it\u2019s time. Calendar feeds sync automatically.",
     accent: "vc-indigo",
     accentBg: "bg-vc-indigo",
   },

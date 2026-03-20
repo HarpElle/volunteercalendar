@@ -82,7 +82,7 @@ export const PRICING_TIERS: {
       "8 roles per service",
       "5 active events",
       "SMS + email reminders",
-      "QR check-in",
+      "Smart check-in (QR, time & proximity)",
       "Shift swap",
     ],
   },

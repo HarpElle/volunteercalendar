@@ -21,7 +21,10 @@ import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, OnboardingStepType, Campus } from "@/lib/types";
+import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, Campus } from "@/lib/types";
+import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import Link from "next/link";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -95,6 +98,7 @@ function OrganizationContent() {
   const [campusSaving, setCampusSaving] = useState(false);
   const [campusName, setCampusName] = useState("");
   const [campusAddress, setCampusAddress] = useState("");
+  const [campusLocation, setCampusLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [campusIsPrimary, setCampusIsPrimary] = useState(false);
 
   const [mutationError, setMutationError] = useState("");
@@ -104,6 +108,15 @@ function OrganizationContent() {
   const [activeEventCount, setActiveEventCount] = useState(0);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+
+  // Check-in settings state
+  const [selfCheckInEnabled, setSelfCheckInEnabled] = useState(true);
+  const [windowBefore, setWindowBefore] = useState(60);
+  const [windowAfter, setWindowAfter] = useState(30);
+  const [proximityEnabled, setProximityEnabled] = useState(false);
+  const [proximityRadius, setProximityRadius] = useState(200);
+  const [checkInSaving, setCheckInSaving] = useState(false);
+  const [checkInSuccess, setCheckInSuccess] = useState("");
 
   const billingSuccess = searchParams.get("success") === "true";
   const billingCanceled = searchParams.get("canceled") === "true";
@@ -131,6 +144,13 @@ function OrganizationContent() {
           setOrgType((data.org_type as OrgType) || "church");
           setOrgTimezone(data.timezone || "America/New_York");
           setOrgWorkflowMode((data.workflow_mode as WorkflowMode) || "centralized");
+          // Check-in settings
+          const s = data.settings || {};
+          setSelfCheckInEnabled(s.self_check_in_enabled !== false);
+          setWindowBefore(s.check_in_window_before ?? 60);
+          setWindowAfter(s.check_in_window_after ?? 30);
+          setProximityEnabled(s.proximity_check_in_enabled === true);
+          setProximityRadius(s.proximity_radius_meters ?? 200);
         }
         setMinistries(minDocs as unknown as Ministry[]);
         setCampuses(campusDocs as unknown as Campus[]);
@@ -183,6 +203,31 @@ function OrganizationContent() {
       setOrgError((err as Error).message || "Failed to update organization.");
     } finally {
       setOrgSaving(false);
+    }
+  }
+
+  // --- Check-in settings handler ---
+
+  async function handleCheckInSettingsSave() {
+    if (!churchId || !church) return;
+    setCheckInSaving(true);
+    try {
+      const updatedSettings = {
+        ...church.settings,
+        self_check_in_enabled: selfCheckInEnabled,
+        check_in_window_before: windowBefore,
+        check_in_window_after: windowAfter,
+        proximity_check_in_enabled: proximityEnabled,
+        proximity_radius_meters: proximityRadius,
+      };
+      await updateDocument("churches", churchId, { settings: updatedSettings });
+      setChurch({ ...church, settings: updatedSettings });
+      setCheckInSuccess("Check-in settings saved.");
+      setTimeout(() => setCheckInSuccess(""), 3000);
+    } catch {
+      // silent
+    } finally {
+      setCheckInSaving(false);
     }
   }
 
@@ -261,6 +306,7 @@ function OrganizationContent() {
   function resetCampusForm() {
     setCampusName("");
     setCampusAddress("");
+    setCampusLocation(null);
     setCampusIsPrimary(false);
     setEditingCampusId(null);
     setShowCampusForm(false);
@@ -269,6 +315,7 @@ function OrganizationContent() {
   function startEditCampus(c: Campus) {
     setCampusName(c.name);
     setCampusAddress(c.address || "");
+    setCampusLocation(c.location || null);
     setCampusIsPrimary(c.is_primary);
     setEditingCampusId(c.id);
     setShowCampusForm(true);
@@ -282,7 +329,7 @@ function OrganizationContent() {
       const data = {
         name: campusName,
         address: campusAddress || null,
-        location: null,
+        location: campusLocation,
         timezone: null,
         is_primary: campusIsPrimary,
         church_id: churchId,
@@ -479,90 +526,17 @@ function OrganizationContent() {
               </label>
 
               {/* Prerequisites */}
-              <div className="rounded-lg border border-vc-border-light bg-vc-bg-warm/30 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-vc-text">
-                    Onboarding Prerequisites
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMinistryPrereqs((prev) => [
-                        ...prev,
-                        { id: crypto.randomUUID(), label: "", type: "class" as OnboardingStepType },
-                      ])
-                    }
-                    className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                  >
-                    + Add prerequisite
-                  </button>
-                </div>
-                {ministryPrereqs.length === 0 && (
-                  <p className="text-xs text-vc-text-muted">
-                    No prerequisites — all volunteers can serve immediately.
-                  </p>
-                )}
-                {ministryPrereqs.map((prereq, idx) => (
-                  <div key={prereq.id} className="flex items-center gap-2">
-                    <select
-                      className="w-36 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-                      value={prereq.type}
-                      onChange={(e) =>
-                        setMinistryPrereqs((prev) =>
-                          prev.map((p, i) =>
-                            i === idx ? { ...p, type: e.target.value as OnboardingStepType } : p,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="class">Class / Training</option>
-                      <option value="background_check">Background Check</option>
-                      <option value="minimum_service">Min. Service Count</option>
-                      <option value="ministry_tenure">Ministry Tenure</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    <input
-                      className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none"
-                      placeholder="Requirement label (e.g., Complete Get Anchored class)"
-                      value={prereq.label}
-                      onChange={(e) =>
-                        setMinistryPrereqs((prev) =>
-                          prev.map((p, i) =>
-                            i === idx ? { ...p, label: e.target.value } : p,
-                          ),
-                        )
-                      }
-                    />
-                    {(prereq.type === "minimum_service" || prereq.type === "ministry_tenure") && (
-                      <input
-                        type="number"
-                        min={1}
-                        className="w-16 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-                        placeholder={prereq.type === "minimum_service" ? "Count" : "Days"}
-                        value={prereq.threshold || ""}
-                        onChange={(e) =>
-                          setMinistryPrereqs((prev) =>
-                            prev.map((p, i) =>
-                              i === idx ? { ...p, threshold: Number(e.target.value) || null } : p,
-                            ),
-                          )
-                        }
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMinistryPrereqs((prev) => prev.filter((_, i) => i !== idx))
-                      }
-                      className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <PrerequisiteEditor
+                prerequisites={ministryPrereqs}
+                onChange={setMinistryPrereqs}
+              />
+              <p className="text-xs text-vc-text-muted">
+                You can also manage prerequisites and track volunteer progress from the{" "}
+                <Link href="/dashboard/onboarding" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+                  Onboarding
+                </Link>{" "}
+                page.
+              </p>
 
               <div className="flex gap-3">
                 <Button type="submit" loading={ministrySaving}>
@@ -677,12 +651,20 @@ function OrganizationContent() {
                     onChange={(e) => setCampusName(e.target.value)}
                     placeholder="e.g., Main Campus, North Campus"
                   />
-                  <Input
-                    label="Address"
-                    value={campusAddress}
-                    onChange={(e) => setCampusAddress(e.target.value)}
-                    placeholder="123 Church St, City, ST"
-                  />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
+                      Address
+                    </label>
+                    <AddressAutocomplete
+                      value={campusAddress}
+                      onChange={setCampusAddress}
+                      onPlaceSelect={(place) => {
+                        setCampusAddress(place.address);
+                        setCampusLocation({ lat: place.lat, lng: place.lng });
+                      }}
+                      placeholder="123 Church St, City, ST"
+                    />
+                  </div>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -753,6 +735,140 @@ function OrganizationContent() {
               ))}
             </div>
           ) : null}
+        </section>
+      )}
+
+      {/* ── Check-In Settings ── */}
+      {isAdmin(activeMembership) && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Check-In Settings</h2>
+          <div className="rounded-xl border border-vc-border-light bg-white p-6">
+            <div className="space-y-5">
+              {/* Self-check-in toggle */}
+              <label className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-vc-indigo">Allow self-check-in</p>
+                  <p className="text-xs text-vc-text-muted">
+                    Volunteers can check in from the app without scanning a QR code
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={selfCheckInEnabled}
+                  onClick={() => setSelfCheckInEnabled(!selfCheckInEnabled)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    selfCheckInEnabled ? "bg-vc-sage" : "bg-gray-200"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                      selfCheckInEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </label>
+
+              {/* Window settings (only visible when enabled) */}
+              {selfCheckInEnabled && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
+                      Minutes before service
+                    </label>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={180}
+                      value={windowBefore}
+                      onChange={(e) => setWindowBefore(parseInt(e.target.value, 10) || 60)}
+                    />
+                    <p className="mt-1 text-xs text-vc-text-muted">
+                      Check-in opens this many minutes before the service starts
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
+                      Minutes after start
+                    </label>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={120}
+                      value={windowAfter}
+                      onChange={(e) => setWindowAfter(parseInt(e.target.value, 10) || 30)}
+                    />
+                    <p className="mt-1 text-xs text-vc-text-muted">
+                      Check-in window closes this many minutes after service starts
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Proximity settings — only show if at least one campus has coordinates */}
+              {selfCheckInEnabled && campuses.some((c) => c.location) && (
+                <>
+                  <div className="border-t border-vc-border-light pt-5">
+                    <label className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-vc-indigo">Enable proximity check-in</p>
+                        <p className="text-xs text-vc-text-muted">
+                          Volunteers near a campus will be prompted to check in automatically
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={proximityEnabled}
+                        onClick={() => setProximityEnabled(!proximityEnabled)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                          proximityEnabled ? "bg-vc-sage" : "bg-gray-200"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                            proximityEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
+
+                  {proximityEnabled && (
+                    <div className="max-w-xs">
+                      <label className="mb-1 block text-sm font-medium text-vc-indigo">
+                        Proximity radius (meters)
+                      </label>
+                      <Input
+                        type="number"
+                        min={50}
+                        max={2000}
+                        value={proximityRadius}
+                        onChange={(e) => setProximityRadius(parseInt(e.target.value, 10) || 200)}
+                      />
+                      <p className="mt-1 text-xs text-vc-text-muted">
+                        How close a volunteer must be to a campus to trigger proximity check-in
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Save */}
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  onClick={handleCheckInSettingsSave}
+                  loading={checkInSaving}
+                >
+                  Save Check-In Settings
+                </Button>
+                {checkInSuccess && (
+                  <span className="text-sm text-vc-sage">{checkInSuccess}</span>
+                )}
+              </div>
+            </div>
+          </div>
         </section>
       )}
 

@@ -48,4 +48,4 @@ Flexible volunteer scheduling SaaS for churches, nonprofits, and volunteer-drive
 - `docs/TEST_PLAN.md` — Manual + automated testing checklist
 
 ## Phase Roadmap
-See `PROJECT_OVERVIEW.md` for complete phase history (Phases 1–26 complete). Current status: pre-launch, preparing for beta.
+See `PROJECT_OVERVIEW.md` for complete phase history (Phases 1–29 complete). Current status: pre-launch, preparing for beta.

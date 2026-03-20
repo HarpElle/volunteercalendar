@@ -159,6 +159,9 @@ Before testing, make sure you have:
 - [ ] **Multi-ministry** — Add second ministry to service with its own roles
 - [ ] **Per-ministry time override** — Set different start/end time for a ministry
 - [ ] **Edit service** — Change name/time/recurrence → save
+- [ ] **View service roster** — Click Roster → ServiceRoster modal opens for next upcoming date → shows assigned volunteers
+- [ ] **Service attendance** — Roster modal Attendance tab → mark individual or "Mark all present" → save → attendance recorded
+- [ ] **Future date attendance** — Open Roster for a future service date → Attendance tab visible and functional (not gated to past/today)
 - [ ] **Delete service** — Delete → confirm → service removed from list
 
 **Events:**
@@ -266,7 +269,9 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Rate limit test** — Hit a public endpoint (e.g., `/api/waitlist`) 6+ times rapidly → 429 "Too many requests" response
 - [ ] **Mutation error visibility** — Disconnect network (DevTools → Network → Offline) → try saving a ministry or service → red error banner shown (not silent failure)
 
-### L. QR Check-In (~10 min)
+### L. Check-In Methods (~20 min)
+
+**QR Code Check-In**
 
 - [ ] **Generate check-in code** — Scheduling dashboard → click QR icon on an upcoming service → QR code modal opens
 - [ ] **QR code renders** — Modal shows a valid QR code with the check-in URL
@@ -277,6 +282,30 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Not logged in** — Visit check-in URL while logged out → "Sign In" button shown with redirect back to check-in page
 - [ ] **Invalid/expired code** — Visit `/check-in/badcode` → error message
 
+**Smart/Self Check-In (Time-Aware)**
+
+- [ ] **Banner appears in window** — Create confirmed assignment for today with service start within window → open dashboard → coral SmartCheckInBanner appears with service name and time
+- [ ] **Check-in succeeds** — Click "Check In" → loading state → success checkmark → banner hides → assignment.attended = true, check_in_method = "self"
+- [ ] **Dismiss persists** — Click "Not now" → banner hides → refresh page → banner remains hidden for that assignment (localStorage)
+- [ ] **Outside window (too early)** — Assignment start is 2+ hours away → banner does not appear
+- [ ] **Outside window (too late)** — Assignment start was 45+ minutes ago → banner does not appear
+- [ ] **Setting disabled** — Disable self-check-in in org settings → banner does not appear for any volunteer
+
+**Proximity Check-In**
+
+- [ ] **Proximity copy shown** — Enable proximity + campus with coordinates → visit app near campus within time window → banner shows "You're at [Campus Name]" proximity copy
+- [ ] **Method recorded** — Check in via proximity banner → assignment.check_in_method = "proximity"
+- [ ] **Fallback without location** — Deny geolocation permission → banner falls back to standard time-based prompt (method = "self")
+- [ ] **Proximity toggle** — Disable proximity in org settings → banner only shows time-based copy even when near campus
+
+**Address Autocomplete & Check-In Settings**
+
+- [ ] **Autocomplete dropdown** — With NEXT_PUBLIC_GOOGLE_MAPS_API_KEY set → edit campus → type address → Google Places dropdown appears
+- [ ] **Lat/lng captured** — Select address from dropdown → campus saved with location coordinates (check Firestore document)
+- [ ] **Graceful fallback** — Without API key → campus address field is a plain text input (no errors)
+- [ ] **Check-in settings save** — Toggle self-check-in → adjust window before/after → save → reload → values persist
+- [ ] **Proximity settings conditional** — Proximity toggle only appears when at least one campus has location coordinates
+
 ### M. Volunteer Health Dashboard (~10 min)
 
 - [ ] **Page loads** — Navigate to Volunteer Health → stats row shows health distribution
@@ -286,12 +315,17 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Responsive layout** — Resize to mobile → volunteer rows stack vertically (not cut off)
 - [ ] **Skeleton loading** — On slow connection (DevTools throttle), skeleton loader appears before data
 
-### N. Onboarding Pipeline (~10 min)
+### N. Onboarding Pipeline (~15 min)
 
-- [ ] **Page loads** — Navigate to Onboarding → pipeline stages visible (not_started, in_progress, cleared)
-- [ ] **Prerequisite steps** — Verify prerequisite types display: class, background check, minimum service, ministry tenure, custom
-- [ ] **Track progress** — Move a volunteer through pipeline stages → status updates
-- [ ] **Bulk selection** — "Select All" checkbox at top of each stage → all items in that stage selected
+- [ ] **Tabs visible** — Navigate to Onboarding → "Volunteer Progress" and "Manage Prerequisites" tabs visible (admin only)
+- [ ] **Org-wide prerequisites** — Manage Prerequisites tab → add an org-wide prerequisite → saves to church document
+- [ ] **Team-specific prerequisites** — Manage Prerequisites tab → expand a team → add a prerequisite → saves to ministry document
+- [ ] **Prerequisite types** — Verify all types available: class, background check, minimum service, ministry tenure, custom
+- [ ] **Pipeline merges both** — Volunteer Progress tab shows org-wide + team prereqs combined per team with "(X org-wide + Y team)" count
+- [ ] **Track progress** — Expand a volunteer → update org-wide step status → progress bar updates
+- [ ] **Org Settings link** — Organization page → ministry form shows prerequisites via shared editor + link to Onboarding page
+- [ ] **Scheduler gates** — Volunteer with incomplete org-wide prerequisite is NOT scheduled by auto-draft
+- [ ] **Setup guide step** — Dashboard shows optional "Set up onboarding prerequisites" step with Optional badge
 
 ### O. Shift Swap (~10 min)
 
@@ -322,7 +356,8 @@ Quick sanity check after deploying to production:
 - [ ] Can publish schedule and confirmation email arrives
 - [ ] Short link redirects work
 - [ ] Join link loads correctly
-- [ ] Check-in page loads at `/check-in/[valid-code]`
+- [ ] QR check-in page loads at `/check-in/[valid-code]`
+- [ ] Smart check-in banner appears on dashboard for volunteers with today's assignments
 - [ ] Privacy and Terms pages load
 
 ---

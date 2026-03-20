@@ -11,10 +11,10 @@ Auto-generate fair, conflict-free volunteer schedules across worship, kids, tech
 - **Household awareness** — Never schedule a parent and child at the same time in different ministries
 - **Calendar feeds** — Personal and team iCal subscriptions for Google Calendar, Outlook, Apple Calendar
 - **Configurable reminders** — Email, SMS, calendar invite, or none — each volunteer chooses
-- **QR check-in** — Generate QR codes for services; volunteers self-check-in from their phone
+- **Smart check-in** — QR codes, time-aware prompts, and proximity detection; volunteers check in from their phone automatically
 - **Shift swap** — Volunteers request swaps; eligible replacements accept; admins approve
 - **Volunteer health** — At-risk detection, declining engagement alerts, inactive classification
-- **Onboarding pipeline** — Track prerequisite completion (classes, background checks, tenure) per ministry
+- **Onboarding pipeline** — Org-wide and team-specific prerequisites (background checks, training, orientation) with volunteer progress tracking
 - **Multi-site support** — Campus-level services with optional timezone overrides
 - **PWA** — Installable on mobile with offline support
 - **Works standalone** — CSV upload or manual entry. No church management system required
