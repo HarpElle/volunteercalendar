@@ -1,27 +1,4 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "assignments",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "confirmation_token", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "calendar_feeds",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "secret_token", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "assignments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "service_id", "order": "ASCENDING" },
-        { "fieldPath": "service_date", "order": "ASCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": []
 }
