@@ -113,7 +113,7 @@ export default function MyOrgsPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">My Organizations</h1>
         <p className="mt-1 text-vc-text-secondary">
           Manage your memberships, reminders, and switch between organizations.

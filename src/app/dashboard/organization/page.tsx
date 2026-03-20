@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
@@ -273,13 +274,13 @@ function OrganizationContent() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-vc-text-muted">Loading...</div>;
+    return <div className="py-16 flex justify-center"><Spinner /></div>;
   }
 
   const ministryLimitReached = limits.ministries !== Infinity && ministries.length >= limits.ministries;
 
   return (
-    <div>
+    <div className="mx-auto max-w-5xl">
       <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">Organization</h1>
         <p className="mt-1 text-vc-text-secondary">
@@ -321,7 +322,7 @@ function OrganizationContent() {
 
         {/* Add / Edit form */}
         {showMinistryForm && (
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
             <h3 className="mb-4 font-medium text-vc-indigo">
               {editingMinistryId ? "Edit " + terms.singular : "New " + terms.singular}
             </h3>
@@ -376,7 +377,7 @@ function OrganizationContent() {
 
         {/* Ministry list */}
         {ministries.length === 0 && !showMinistryForm ? (
-          <div className="rounded-2xl border border-dashed border-vc-border bg-white p-12 text-center">
+          <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
             <p className="text-vc-text-secondary">No {terms.pluralLower} yet.</p>
             <p className="mt-1 text-sm text-vc-text-muted">
               Add your first {terms.singularLower} to start organizing volunteers.
@@ -387,7 +388,7 @@ function OrganizationContent() {
             {ministries.map((m) => (
               <div
                 key={m.id}
-                className="group relative rounded-2xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+                className="group relative rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -437,7 +438,7 @@ function OrganizationContent() {
           <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Billing & Plan</h2>
 
           {/* Current plan card */}
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
@@ -605,7 +606,7 @@ function OrganizationContent() {
       {/* ── General Settings ── */}
       <section className="mb-8">
         <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+        <div className="rounded-xl border border-vc-border-light bg-white p-6">
           <form onSubmit={handleOrgSave} className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-medium text-vc-text">Organization Type</label>
@@ -770,7 +771,7 @@ function ShortLinksSection({
   return (
     <section className="mb-8">
       <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Short Links</h2>
-      <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+      <div className="rounded-xl border border-vc-border-light bg-white p-6">
         {/* Usage meter */}
         <div className="mb-5 flex items-center justify-between">
           <div>
@@ -803,7 +804,7 @@ function ShortLinksSection({
 
         {loading && (
           <div className="flex justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-vc-border border-t-vc-coral" />
+            <Spinner />
           </div>
         )}
 
@@ -971,7 +972,7 @@ function DeleteOrgSection({
   return (
     <section className="mb-8">
       <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
-      <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
+      <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
         <h3 className="font-medium text-vc-indigo">Delete Organization</h3>
         <p className="mt-1 text-sm text-vc-text-muted">
           Permanently deleting an organization removes all its data including volunteers,

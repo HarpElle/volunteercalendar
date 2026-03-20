@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getEventSignupsBatch } from "@/lib/firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import { Spinner } from "@/components/ui/spinner";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
@@ -33,6 +34,7 @@ export default function SchedulingDashboardPage() {
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [signupCounts, setSignupCounts] = useState<Map<string, number>>(new Map());
   const [allEventSignups, setAllEventSignups] = useState<EventSignup[]>([]);
+  const [churchName, setChurchName] = useState("");
   const [rosterEvent, setRosterEvent] = useState<Event | null>(null);
   const [rosterService, setRosterService] = useState<{ service: Service; date: string } | null>(null);
 
@@ -45,12 +47,15 @@ export default function SchedulingDashboardPage() {
     }
     async function load() {
       try {
-        const [svcDocs, evtDocs, schDocs, assignDocs, minDocs] = await Promise.all([
+        const [svcDocs, evtDocs, schDocs, assignDocs, minDocs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "events"),
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "assignments"),
           getChurchDocuments(churchId!, "ministries"),
+          import("firebase/firestore").then(({ doc, getDoc }) =>
+            getDoc(doc(db, "churches", churchId!)),
+          ),
         ]);
         const svcs = svcDocs as unknown as Service[];
         const evts = evtDocs as unknown as Event[];
@@ -63,6 +68,9 @@ export default function SchedulingDashboardPage() {
         setSchedules(schs);
         setAssignments(assigns);
         setMinistries(mins);
+        if (churchSnap.exists()) {
+          setChurchName(churchSnap.data().name || "");
+        }
 
         // Load signup counts for upcoming events (batch query)
         const upcomingEvents = evts.filter((e) => e.date >= today);
@@ -158,9 +166,9 @@ export default function SchedulingDashboardPage() {
   const totalVolunteersActive = volunteerIdSet.size;
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-vc-indigo">Dashboard</h1>
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-8">
+        <h1 className="font-display text-3xl text-vc-indigo">Scheduling Dashboard</h1>
         <p className="mt-1 text-vc-text-secondary">
           Scheduling operations at a glance.
         </p>
@@ -168,41 +176,44 @@ export default function SchedulingDashboardPage() {
 
       {/* Quick Stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-indigo">{awaitingResponseCount}</p>
-          <p className="text-xs text-vc-text-muted">Awaiting Response</p>
+        <div className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-sm">
+          <p className="text-sm font-medium text-vc-text-muted">Awaiting Response</p>
+          <p className="mt-2 text-2xl font-semibold text-vc-indigo">{awaitingResponseCount}</p>
         </div>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-sage">{confirmedUpcomingCount}</p>
-          <p className="text-xs text-vc-text-muted">Confirmed Upcoming</p>
+        <div className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-sm">
+          <p className="text-sm font-medium text-vc-text-muted">Confirmed Upcoming</p>
+          <p className="mt-2 text-2xl font-semibold text-vc-sage">{confirmedUpcomingCount}</p>
         </div>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-coral">{upcomingEvents.length}</p>
-          <p className="text-xs text-vc-text-muted">Upcoming Events</p>
+        <div className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-sm">
+          <p className="text-sm font-medium text-vc-text-muted">Upcoming Events</p>
+          <p className="mt-2 text-2xl font-semibold text-vc-coral">{upcomingEvents.length}</p>
         </div>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-indigo">{totalVolunteersActive}</p>
-          <p className="text-xs text-vc-text-muted">Active Volunteers</p>
+        <div className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-sm">
+          <p className="text-sm font-medium text-vc-text-muted">Active Volunteers</p>
+          <p className="mt-2 text-2xl font-semibold text-vc-indigo">{totalVolunteersActive}</p>
         </div>
       </div>
 
       {/* Upcoming Events with Signup Status */}
-      <section className="mb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-vc-indigo">Upcoming Events</h2>
+      <section className="mb-8 rounded-xl border border-vc-border-light bg-white overflow-hidden">
+        <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
+          <h2 className="font-semibold text-vc-indigo">Upcoming Events</h2>
           <Link
             href="/dashboard/services-events"
-            className="text-sm text-vc-coral hover:underline"
+            className="text-xs text-vc-coral hover:underline"
           >
             View all
           </Link>
         </div>
         {upcomingEvents.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-vc-border bg-white p-8 text-center">
-            <p className="text-vc-text-muted">No upcoming events in the next 30 days.</p>
+          <div className="p-10 text-center">
+            <svg className="mx-auto h-8 w-8 text-vc-text-muted/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            <p className="mt-2 text-sm text-vc-text-muted">No upcoming events in the next 30 days.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-vc-border-light">
             {upcomingEvents.slice(0, 5).map((evt) => {
               const totalSlots = evt.roles.reduce((sum, r) => sum + r.count, 0);
               const signedUp = signupCounts.get(evt.id) || 0;
@@ -211,23 +222,23 @@ export default function SchedulingDashboardPage() {
                 <button
                   key={evt.id}
                   onClick={() => setRosterEvent(evt)}
-                  className="w-full rounded-xl border border-vc-border-light bg-white p-4 text-left transition-shadow hover:shadow-md"
+                  className="w-full px-5 py-4 text-left transition-colors hover:bg-vc-bg-warm/50"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-semibold text-vc-indigo">{evt.name}</p>
-                      <p className="text-sm text-vc-text-secondary">{formatDate(evt.date)}</p>
+                      <p className="text-sm font-medium text-vc-indigo">{evt.name}</p>
+                      <p className="mt-0.5 text-xs text-vc-text-muted">{formatDate(evt.date)}</p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-medium text-vc-indigo">
+                    <div className="text-right shrink-0 ml-4">
+                      <span className={`text-sm font-semibold ${fillPct >= 100 ? "text-vc-sage" : "text-vc-indigo"}`}>
                         {signedUp}/{totalSlots}
                       </span>
-                      <span className="ml-1 text-xs text-vc-text-muted">signed up</span>
+                      <p className="text-xs text-vc-text-muted">signed up</p>
                     </div>
                   </div>
-                  <div className="mt-2 h-1.5 rounded-full bg-vc-bg-warm">
+                  <div className="mt-2.5 h-2 rounded-full bg-vc-bg-warm overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-vc-sage transition-all"
+                      className={`h-full rounded-full transition-all ${fillPct >= 100 ? "bg-vc-sage" : fillPct >= 50 ? "bg-vc-sage/70" : "bg-vc-sand"}`}
                       style={{ width: `${Math.min(fillPct, 100)}%` }}
                     />
                   </div>
@@ -238,92 +249,97 @@ export default function SchedulingDashboardPage() {
         )}
       </section>
 
-      {/* Draft Assignments (awaiting response) */}
-      {draftAssignments.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Awaiting Response</h2>
-          <div className="space-y-2">
-            {draftAssignments.slice(0, 8).map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-xl border border-vc-border-light bg-white px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-vc-indigo">{a.role_title}</p>
-                  <p className="text-xs text-vc-text-muted">
-                    {formatDate(a.service_date)}
-                  </p>
+      {/* Two-column layout for secondary sections */}
+      <div className="mb-8 grid gap-6 lg:grid-cols-2">
+        {/* Draft Assignments (awaiting response) */}
+        {draftAssignments.length > 0 && (
+          <section className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
+            <div className="border-b border-vc-border-light px-5 py-3">
+              <h2 className="font-semibold text-vc-indigo">Awaiting Response</h2>
+            </div>
+            <div className="divide-y divide-vc-border-light">
+              {draftAssignments.slice(0, 8).map((a) => (
+                <div key={a.id} className="flex items-center justify-between px-5 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-vc-indigo">{a.role_title}</p>
+                    <p className="text-xs text-vc-text-muted">
+                      {formatDate(a.service_date)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-vc-sand/20 px-2.5 py-0.5 text-xs font-medium text-vc-warning">
+                    Draft
+                  </span>
                 </div>
-                <span className="rounded-full bg-vc-sand/30 px-2 py-0.5 text-xs font-medium text-vc-sand">
-                  Draft
-                </span>
-              </div>
-            ))}
-            {draftAssignments.length > 8 && (
-              <p className="text-center text-xs text-vc-text-muted">
-                +{draftAssignments.length - 8} more awaiting response
-              </p>
-            )}
-          </div>
-        </section>
-      )}
+              ))}
+              {draftAssignments.length > 8 && (
+                <div className="px-5 py-3 text-center text-xs text-vc-text-muted">
+                  +{draftAssignments.length - 8} more awaiting response
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
-      {/* Active Schedules */}
-      {showAdminSection && activeSchedules.length > 0 && (
-        <section className="mb-8">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-vc-indigo">Active Schedules</h2>
-            <Link
-              href="/dashboard/schedules"
-              className="text-sm text-vc-coral hover:underline"
-            >
-              Manage
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {activeSchedules.map((sch) => (
+        {/* Active Schedules */}
+        {showAdminSection && activeSchedules.length > 0 && (
+          <section className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
+            <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
+              <h2 className="font-semibold text-vc-indigo">Active Schedules</h2>
               <Link
-                key={sch.id}
-                href={`/dashboard/schedules/${sch.id}`}
-                className="flex items-center justify-between rounded-xl border border-vc-border-light bg-white px-4 py-3 transition-shadow hover:shadow-md"
+                href="/dashboard/schedules"
+                className="text-xs text-vc-coral hover:underline"
               >
-                <div>
+                Manage
+              </Link>
+            </div>
+            <div className="divide-y divide-vc-border-light">
+              {activeSchedules.map((sch) => (
+                <Link
+                  key={sch.id}
+                  href={`/dashboard/schedules/${sch.id}`}
+                  className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-vc-bg-warm/50"
+                >
                   <p className="text-sm font-medium text-vc-indigo">
                     {formatDate(sch.date_range_start)} – {formatDate(sch.date_range_end)}
                   </p>
-                </div>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                  sch.status === "published"
-                    ? "bg-vc-sage/15 text-vc-sage"
-                    : "bg-gray-100 text-gray-500"
-                }`}>
-                  {sch.status}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+                    sch.status === "published"
+                      ? "bg-vc-sage/15 text-vc-sage"
+                      : "bg-gray-100 text-gray-500"
+                  }`}>
+                    {sch.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
 
       {/* Recent Service Dates — for attendance tracking */}
       {recentServiceDates.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Take Attendance</h2>
-          <p className="mb-3 text-sm text-vc-text-muted">
-            Recent services with assigned volunteers — click to view roster or mark attendance.
-          </p>
-          <div className="space-y-2">
+        <section className="mb-8 rounded-xl border border-vc-border-light bg-white overflow-hidden">
+          <div className="border-b border-vc-border-light px-5 py-3">
+            <h2 className="font-semibold text-vc-indigo">Take Attendance</h2>
+            <p className="mt-0.5 text-xs text-vc-text-muted">
+              Recent services — click to view roster or mark attendance.
+            </p>
+          </div>
+          <div className="divide-y divide-vc-border-light">
             {recentServiceDates.slice(0, 8).map(({ service, date, count }) => (
               <button
                 key={`${service.id}-${date}`}
                 onClick={() => setRosterService({ service, date })}
-                className="flex w-full items-center justify-between rounded-xl border border-vc-border-light bg-white px-4 py-3 text-left transition-shadow hover:shadow-md"
+                className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-vc-bg-warm/50"
               >
                 <div>
                   <p className="text-sm font-medium text-vc-indigo">{service.name}</p>
                   <p className="text-xs text-vc-text-muted">{formatDate(date)}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-vc-text-muted">{count} assigned</span>
+                  <span className="rounded-full bg-vc-indigo/8 px-2.5 py-0.5 text-xs font-medium text-vc-indigo-muted">{count} assigned</span>
                   <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                   </svg>
                 </div>
               </button>
@@ -341,6 +357,7 @@ export default function SchedulingDashboardPage() {
           onClose={() => setRosterEvent(null)}
           canMarkAttendance={canMarkAttendance}
           activeMembership={activeMembership}
+          orgName={churchName}
         />
       )}
 
@@ -354,6 +371,7 @@ export default function SchedulingDashboardPage() {
           onClose={() => setRosterService(null)}
           canMarkAttendance={canMarkAttendance}
           activeMembership={activeMembership}
+          orgName={churchName}
         />
       )}
     </div>

@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
+import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
 
@@ -258,7 +259,7 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">Account Settings</h1>
         <p className="mt-1 text-vc-text-secondary">
           Manage your profile, password, and calendar feeds.
@@ -268,7 +269,7 @@ export default function AccountPage() {
       {/* Profile Section */}
       <section className="mb-10">
         <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Profile</h2>
-        <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+        <div className="rounded-xl border border-vc-border-light bg-white p-6">
           <form onSubmit={handleProfileSave} className="space-y-4">
             <Input
               label="Display Name"
@@ -357,7 +358,7 @@ export default function AccountPage() {
 
         {/* Create feed form */}
         {showCreate && (
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-5">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-5">
             <h3 className="mb-3 font-medium text-vc-indigo">Create Calendar Feed</h3>
             <div className="space-y-4">
               <div>
@@ -470,9 +471,9 @@ export default function AccountPage() {
 
         {/* Feed list */}
         {loading ? (
-          <div className="py-8 text-center text-vc-text-muted">Loading...</div>
+          <div className="py-8 flex justify-center"><Spinner /></div>
         ) : feeds.length === 0 && !showCreate ? (
-          <div className="rounded-2xl border border-dashed border-vc-border bg-white p-8 text-center">
+          <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
             <svg className="mx-auto mb-3 h-8 w-8 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
             </svg>
@@ -486,7 +487,7 @@ export default function AccountPage() {
             {feeds.map((feed) => {
               const url = getFeedUrl(feed);
               return (
-                <div key={feed.id} className="rounded-2xl border border-vc-border-light bg-white p-4">
+                <div key={feed.id} className="rounded-xl border border-vc-border-light bg-white p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -530,7 +531,7 @@ export default function AccountPage() {
       {/* Danger Zone */}
       <section className="mb-10">
         <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
-        <div className="rounded-2xl border border-vc-danger/30 bg-white p-6">
+        <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
           <h3 className="font-medium text-vc-indigo">Delete Account</h3>
           <p className="mt-1 text-sm text-vc-text-muted">
             Permanently delete your account, profile, and all memberships.
@@ -564,7 +565,7 @@ export default function AccountPage() {
       {/* Sole-admin warning modal */}
       {showSoleAdminWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-vc-danger">
               You&apos;re the only administrator
             </h3>

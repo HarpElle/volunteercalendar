@@ -356,7 +356,7 @@ export default function MySchedulePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">My Schedule</h1>
         <p className="mt-1 text-vc-text-secondary">
           Your assignments, availability, and reminder preferences.
@@ -364,7 +364,7 @@ export default function MySchedulePage() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
+      <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
         {([
           { key: "upcoming" as const, label: "Upcoming" },
           { key: "past" as const, label: "Past" },
@@ -508,7 +508,7 @@ export default function MySchedulePage() {
       {activeTab === "availability" && (
         <>
           {/* Recurring unavailable days */}
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-1">Weekly Availability</h2>
             <p className="text-sm text-vc-text-muted mb-4">
               Mark days you&apos;re generally <strong>not available</strong>. Schedulers won&apos;t invite you on these days.
@@ -540,7 +540,7 @@ export default function MySchedulePage() {
           </div>
 
           {/* Blockout dates */}
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-1">Blockout Dates</h2>
             <p className="text-sm text-vc-text-muted mb-4">
               Specific dates you can&apos;t serve (vacations, travel, etc.). Shared across all your organizations.
@@ -599,7 +599,7 @@ export default function MySchedulePage() {
           </div>
 
           {/* Reminder preferences */}
-          <div className="mb-6 rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-1">Reminder Preferences</h2>
             <p className="text-sm text-vc-text-muted mb-4">
               Choose how you&apos;d like to be reminded about upcoming assignments.

@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/firebase/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Select } from "@/components/ui/select";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { ShareMenu } from "@/components/ui/share-menu";
@@ -121,9 +122,9 @@ function ServicesEventsContent() {
   }, [churchId]);
 
   return (
-    <div>
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">Services & Events</h1>
         <p className="mt-1 text-vc-text-secondary">
           Configure recurring services and create events that need volunteers.
@@ -680,10 +681,13 @@ function ServicesTab({
 
       {/* Service list */}
       {isLoading ? (
-        <div className="py-12 text-center text-vc-text-muted">Loading...</div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : services.length === 0 && !showForm ? (
         <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
-          <p className="text-vc-text-secondary">No services configured.</p>
+          <svg className="mx-auto h-8 w-8 text-vc-text-muted/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          <p className="mt-3 text-vc-text-secondary">No services configured.</p>
           <p className="mt-1 text-sm text-vc-text-muted">
             {ministries.length === 0
               ? "Add ministries first, then configure services."
@@ -1461,10 +1465,13 @@ function EventsTab({
 
       {/* Event list */}
       {isLoading ? (
-        <div className="py-12 text-center text-vc-text-muted">Loading...</div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : events.length === 0 && !showForm ? (
         <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
-          <p className="text-vc-text-secondary">No events yet.</p>
+          <svg className="mx-auto h-8 w-8 text-vc-text-muted/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+          </svg>
+          <p className="mt-3 text-vc-text-secondary">No events yet.</p>
           <p className="mt-1 text-sm text-vc-text-muted">
             Create an event to let volunteers sign up for roles.
           </p>
@@ -1495,6 +1502,7 @@ function EventsTab({
                       copied={copiedEventId === ev.id}
                       getMinistryNames={getMinistryNames}
                       formatTime={formatTime}
+                      formatDate={formatEventDate}
                       hasShortLink={!!getEventShortLink(ev.id)}
                       shortLinkUrl={getEventShortLink(ev.id)}
                       onCopyShortLink={() => copyShortLink(ev.id)}
@@ -1549,6 +1557,7 @@ function EventsTab({
                       copied={copiedEventId === ev.id}
                       getMinistryNames={getMinistryNames}
                       formatTime={formatTime}
+                      formatDate={formatEventDate}
                       isPast
                       hasShortLink={!!getEventShortLink(ev.id)}
                       shortLinkUrl={getEventShortLink(ev.id)}
@@ -1618,6 +1627,7 @@ function EventCard({
   copied,
   getMinistryNames,
   formatTime,
+  formatDate,
   isPast,
   hasShortLink,
   shortLinkUrl,
@@ -1637,6 +1647,7 @@ function EventCard({
   copied: boolean;
   getMinistryNames: (ids: string[]) => string;
   formatTime: (t: string | null) => string;
+  formatDate?: (d: string) => string;
   isPast?: boolean;
   hasShortLink?: boolean;
   shortLinkUrl?: string;
@@ -1678,7 +1689,7 @@ function EventCard({
             )}
           </div>
           <p className="mt-1 text-sm text-vc-text-muted">
-            {ev.date}
+            {formatDate ? formatDate(ev.date) : ev.date}
             {ev.all_day
               ? " · All day"
               : ev.start_time

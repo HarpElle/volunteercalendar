@@ -137,7 +137,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">Notifications</h1>
           <p className="mt-1 text-vc-text-secondary">
@@ -169,7 +169,7 @@ export default function NotificationsPage() {
       {/* Send Reminders Tab */}
       {tab === "send" && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="rounded-xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-2">Send Scheduled Reminders</h2>
             <p className="text-sm text-vc-text-secondary mb-6">
               Send reminders to volunteers with upcoming assignments. Each volunteer will be notified based on their
@@ -232,7 +232,7 @@ export default function NotificationsPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-vc-border-light bg-white p-6">
+          <div className="rounded-xl border border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-2">Automation</h2>
             <p className="text-sm text-vc-text-secondary">
               To automate reminders, set up a cron job that calls <code className="rounded bg-vc-bg-warm px-1.5 py-0.5 text-xs text-vc-indigo">/api/reminders</code> with
@@ -241,7 +241,7 @@ export default function NotificationsPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-dashed border-vc-border-light bg-white p-6">
+          <div className="rounded-xl border border-dashed border-vc-border-light bg-white p-6">
             <h2 className="text-lg font-semibold text-vc-indigo mb-2">Test Email</h2>
             <p className="text-sm text-vc-text-secondary mb-4">
               Send a sample reminder email to <strong>{user?.email}</strong> to preview how it looks in your inbox.
@@ -290,7 +290,7 @@ export default function NotificationsPage() {
               <Spinner size="lg" />
             </div>
           ) : notifications.length === 0 ? (
-            <div className="rounded-2xl border border-vc-border-light bg-white p-12 text-center">
+            <div className="rounded-xl border border-vc-border-light bg-white p-12 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-vc-bg-warm">
                 <svg className="h-7 w-7 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />

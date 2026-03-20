@@ -10,6 +10,7 @@ import {
 } from "@/lib/firebase/firestore";
 import { generateDraftSchedule } from "@/lib/services/scheduler";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
@@ -371,7 +372,7 @@ export default function SchedulesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">Schedules</h1>
           <p className="mt-1 text-vc-text-secondary">
@@ -662,7 +663,7 @@ export default function SchedulesPage() {
       {!activeScheduleId && (
         <>
           {loading ? (
-            <div className="py-12 text-center text-vc-text-muted">Loading...</div>
+            <div className="py-12 flex justify-center"><Spinner /></div>
           ) : schedules.length === 0 && !showCreate ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
               <p className="text-vc-text-secondary">No schedules yet.</p>
