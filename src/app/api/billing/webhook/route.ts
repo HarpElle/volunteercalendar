@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, PRICE_TO_TIER } from "@/lib/stripe";
-import { db } from "@/lib/firebase/config";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { adminDb } from "@/lib/firebase/admin";
 import type Stripe from "stripe";
 import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
 import { Resend } from "resend";
+
+const VALID_TIERS = ["free", "starter", "growth", "pro", "enterprise"];
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -35,32 +36,40 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const churchId = session.metadata?.church_id;
         const tier = session.metadata?.tier;
-        if (churchId && tier) {
-          await updateDoc(doc(db, "churches", churchId), {
-            subscription_tier: tier,
-            stripe_customer_id: session.customer as string,
-          });
 
-          // Send purchase thank-you email (fire-and-forget)
-          if (process.env.RESEND_API_KEY && session.customer_email) {
-            const resend = new Resend(process.env.RESEND_API_KEY);
-            const churchSnap = await getDoc(doc(db, "churches", churchId));
-            const churchName = churchSnap.exists() ? (churchSnap.data().name as string) || "Your church" : "Your church";
-            const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
-            const { subject, html, text } = buildPurchaseThankYouEmail({
-              userName: session.customer_details?.name || "there",
-              planName: tierName,
-              churchName,
-            });
-            resend.emails.send({
-              from: "VolunteerCal <noreply@harpelle.com>",
-              replyTo: "info@volunteercal.com",
-              to: [session.customer_email],
-              subject,
-              html,
-              text,
-            }).catch((err) => console.error("Purchase thank-you email failed:", err));
-          }
+        if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
+          console.warn("Webhook: missing or invalid church_id in checkout metadata");
+          break;
+        }
+        if (!tier || !VALID_TIERS.includes(tier)) {
+          console.warn(`Webhook: invalid tier "${tier}" in checkout metadata`);
+          break;
+        }
+
+        await adminDb.doc(`churches/${churchId}`).update({
+          subscription_tier: tier,
+          stripe_customer_id: session.customer as string,
+        });
+
+        // Send purchase thank-you email (fire-and-forget)
+        if (process.env.RESEND_API_KEY && session.customer_email) {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+          const churchName = churchSnap.exists ? (churchSnap.data()?.name as string) || "Your church" : "Your church";
+          const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+          const { subject, html, text } = buildPurchaseThankYouEmail({
+            userName: session.customer_details?.name || "there",
+            planName: tierName,
+            churchName,
+          });
+          resend.emails.send({
+            from: "VolunteerCal <noreply@harpelle.com>",
+            replyTo: "info@volunteercal.com",
+            to: [session.customer_email],
+            subject,
+            html,
+            text,
+          }).catch((err: unknown) => console.error("Purchase thank-you email failed:", err));
         }
         break;
       }
@@ -68,27 +77,31 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const churchId = subscription.metadata?.church_id;
-        if (churchId) {
-          const priceId = subscription.items.data[0]?.price?.id || "";
-          const tier = PRICE_TO_TIER[priceId] || "free";
-          const isActive =
-            subscription.status === "active" ||
-            subscription.status === "trialing";
-          await updateDoc(doc(db, "churches", churchId), {
-            subscription_tier: isActive ? tier : "free",
-          });
+        if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
+          console.warn("Webhook: missing or invalid church_id in subscription.updated metadata");
+          break;
         }
+        const priceId = subscription.items.data[0]?.price?.id || "";
+        const tier = PRICE_TO_TIER[priceId] || "free";
+        const isActive =
+          subscription.status === "active" ||
+          subscription.status === "trialing";
+        await adminDb.doc(`churches/${churchId}`).update({
+          subscription_tier: isActive ? tier : "free",
+        });
         break;
       }
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const churchId = subscription.metadata?.church_id;
-        if (churchId) {
-          await updateDoc(doc(db, "churches", churchId), {
-            subscription_tier: "free",
-          });
+        if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
+          console.warn("Webhook: missing or invalid church_id in subscription.deleted metadata");
+          break;
         }
+        await adminDb.doc(`churches/${churchId}`).update({
+          subscription_tier: "free",
+        });
         break;
       }
     }

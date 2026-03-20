@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimit } from "@/lib/utils/rate-limit";
 import type { Event, Church, EventSignup } from "@/lib/types";
 
 /**
@@ -8,6 +9,9 @@ import type { Event, Church, EventSignup } from "@/lib/types";
  * Public endpoint — no auth required for public events.
  */
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  if (limited) return limited;
+
   const eventId = req.nextUrl.searchParams.get("eventId");
   const churchId = req.nextUrl.searchParams.get("churchId");
   if (!eventId) {
@@ -66,6 +70,9 @@ export async function GET(req: NextRequest) {
  * Authenticated users send Bearer token; public guests send name+email.
  */
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });
+  if (limited) return limited;
+
   try {
     const body = await req.json();
     const { event_id, church_id, role_id, volunteer_name, volunteer_email, user_id } = body;

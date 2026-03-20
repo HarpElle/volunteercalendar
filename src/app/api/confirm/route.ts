@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase/admin";
+import { rateLimit } from "@/lib/utils/rate-limit";
 
 export async function GET(request: Request) {
+  const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
+  if (limited) return limited;
+
   try {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
@@ -9,46 +14,26 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    const { collectionGroup, query, where, getDocs, getFirestore } = await import("firebase/firestore");
-    const { initializeApp, getApps, getApp } = await import("firebase/app");
-
-    const app = getApps().length === 0
-      ? initializeApp({
-          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-        })
-      : getApp();
-    const db = getFirestore(app);
-
-    const q = query(
-      collectionGroup(db, "assignments"),
-      where("confirmation_token", "==", token),
-    );
-    const snap = await getDocs(q);
+    const snap = await adminDb
+      .collectionGroup("assignments")
+      .where("confirmation_token", "==", token)
+      .limit(1)
+      .get();
 
     if (snap.empty) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
     const assignDoc = snap.docs[0];
-    const data = assignDoc.data() as Record<string, unknown>;
-
-    // Fetch volunteer name, service name, ministry name for the confirmation page
-    const { doc, getDoc } = await import("firebase/firestore");
+    const data = assignDoc.data();
     const churchId = data.church_id as string;
 
-    const [volSnap, svcSnap, minSnap] = await Promise.all([
-      getDoc(doc(db, "churches", churchId, "volunteers", data.volunteer_id as string)),
-      getDoc(doc(db, "churches", churchId, "services", data.service_id as string)),
-      getDoc(doc(db, "churches", churchId, "ministries", data.ministry_id as string)),
+    const [volSnap, svcSnap, minSnap, churchSnap] = await Promise.all([
+      adminDb.doc(`churches/${churchId}/volunteers/${data.volunteer_id}`).get(),
+      adminDb.doc(`churches/${churchId}/services/${data.service_id}`).get(),
+      adminDb.doc(`churches/${churchId}/ministries/${data.ministry_id}`).get(),
+      adminDb.doc(`churches/${churchId}`).get(),
     ]);
-
-    // Fetch church name
-    const churchSnap = await getDoc(doc(db, "churches", churchId));
 
     return NextResponse.json({
       assignment: {
@@ -58,10 +43,10 @@ export async function GET(request: Request) {
         role_title: data.role_title,
         responded_at: data.responded_at,
       },
-      volunteer_name: volSnap.exists() ? volSnap.data()?.name : "Volunteer",
-      service_name: svcSnap.exists() ? svcSnap.data()?.name : "Service",
-      ministry_name: minSnap.exists() ? minSnap.data()?.name : "Ministry",
-      church_name: churchSnap.exists() ? churchSnap.data()?.name : "Church",
+      volunteer_name: volSnap.exists ? volSnap.data()?.name : "Volunteer",
+      service_name: svcSnap.exists ? svcSnap.data()?.name : "Service",
+      ministry_name: minSnap.exists ? minSnap.data()?.name : "Ministry",
+      church_name: churchSnap.exists ? churchSnap.data()?.name : "Church",
     });
   } catch (error) {
     console.error("Confirm lookup error:", error);
@@ -70,6 +55,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, { limit: 10, windowMs: 60_000 });
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { token, action } = body;
@@ -82,26 +70,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const { collectionGroup, query, where, getDocs, updateDoc, getFirestore } = await import("firebase/firestore");
-    const { initializeApp, getApps, getApp } = await import("firebase/app");
-
-    const app = getApps().length === 0
-      ? initializeApp({
-          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-        })
-      : getApp();
-    const db = getFirestore(app);
-
-    const q = query(
-      collectionGroup(db, "assignments"),
-      where("confirmation_token", "==", token),
-    );
-    const snap = await getDocs(q);
+    const snap = await adminDb
+      .collectionGroup("assignments")
+      .where("confirmation_token", "==", token)
+      .limit(1)
+      .get();
 
     if (snap.empty) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
@@ -119,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     const newStatus = action === "confirm" ? "confirmed" : "declined";
-    await updateDoc(assignDoc.ref, {
+    await assignDoc.ref.update({
       status: newStatus,
       responded_at: new Date().toISOString(),
     });

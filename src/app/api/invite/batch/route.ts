@@ -47,13 +47,24 @@ export async function POST(req: NextRequest) {
     let failed = 0;
     const errors: string[] = [];
 
+    // Batch-fetch all queue items in a single round-trip
+    const queueRefs = queue_item_ids.map((id: string) =>
+      adminDb.doc(`churches/${church_id}/invite_queue/${id}`),
+    );
+    const queueSnapshots = await adminDb.getAll(...queueRefs);
+    const queueMap = new Map(
+      queueSnapshots
+        .filter((s) => s.exists)
+        .map((s) => [s.id, { ref: s.ref, data: s.data()! }]),
+    );
+
     for (const queueId of queue_item_ids) {
       try {
-        const queueRef = adminDb.doc(`churches/${church_id}/invite_queue/${queueId}`);
-        const queueSnap = await queueRef.get();
-        if (!queueSnap.exists) continue;
+        const queueEntry = queueMap.get(queueId);
+        if (!queueEntry) continue;
 
-        const item = queueSnap.data()!;
+        const queueRef = queueEntry.ref;
+        const item = queueEntry.data;
         if (item.status !== "approved") continue;
 
         const { email, name, role, ministry_ids } = item;

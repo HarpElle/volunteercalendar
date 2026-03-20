@@ -50,6 +50,7 @@ export default function SchedulesPage() {
   const [generating, setGenerating] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState("");
 
   // Create form
   const [startDate, setStartDate] = useState(() => {
@@ -139,8 +140,8 @@ export default function SchedulesPage() {
       setActiveConflicts(result.conflicts);
       setActiveStats(result.stats);
       setShowCreate(false);
-    } catch (err) {
-      console.error("Failed to generate schedule:", err);
+    } catch {
+      setMutationError("Failed to generate schedule. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -191,8 +192,9 @@ export default function SchedulesPage() {
         setActiveConflicts([]);
         setActiveStats(null);
       }
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to delete schedule. Please try again.");
     } finally {
       setDeleting(null);
     }
@@ -258,7 +260,7 @@ export default function SchedulesPage() {
         }
       }
     } catch {
-      // silent
+      setMutationError("Failed to update schedule status. Please try again.");
     } finally {
       setTransitioning(false);
     }
@@ -295,7 +297,7 @@ export default function SchedulesPage() {
         )
       );
     } catch {
-      // silent
+      setMutationError("Failed to update ministry approval. Please try again.");
     } finally {
       setTransitioning(false);
     }
@@ -316,7 +318,7 @@ export default function SchedulesPage() {
         )
       );
     } catch {
-      // silent
+      setMutationError("Failed to reassign volunteer. Please try again.");
     }
   }
 
@@ -326,7 +328,7 @@ export default function SchedulesPage() {
       await removeChurchDocument(churchId, "assignments", assignmentId);
       setActiveAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
     } catch {
-      // silent
+      setMutationError("Failed to unassign volunteer. Please try again.");
     }
   }
 
@@ -385,6 +387,12 @@ export default function SchedulesPage() {
           </Button>
         )}
       </div>
+
+      {mutationError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {mutationError}
+        </div>
+      )}
 
       {!canGenerate && !loading && (
         <div className="mb-6 rounded-lg bg-vc-sand/20 px-4 py-3 text-sm text-vc-text-secondary">

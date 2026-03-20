@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildReminderEmail, buildReminderSms } from "@/lib/utils/email-templates";
 import { sendSms } from "@/lib/services/sms";
+import { safeCompare } from "@/lib/utils/safe-compare";
 import type { NotificationType, NotificationChannel } from "@/lib/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -28,43 +30,26 @@ export async function POST(request: Request) {
     const cronSecret = request.headers.get("x-cron-secret");
     const authHeader = request.headers.get("authorization");
 
-    if (cronSecret !== process.env.CRON_SECRET && !authHeader?.startsWith("Bearer ")) {
+    if (!safeCompare(cronSecret, process.env.CRON_SECRET) && !authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // If Bearer token, verify admin role
     if (authHeader?.startsWith("Bearer ") && !cronSecret) {
-      const { adminAuth, adminDb } = await import("@/lib/firebase/admin");
       const token = authHeader.split("Bearer ")[1];
       const decoded = await adminAuth.verifyIdToken(token);
 
       const membershipId = `${decoded.uid}_${church_id}`;
       const memberSnap = await adminDb.collection("memberships").doc(membershipId).get();
       const membership = memberSnap.data();
-      if (!membership || !["owner", "admin"].includes(membership.role)) {
+      if (!membership || !["owner", "admin"].includes(membership.role as string)) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       }
     }
 
-    // Dynamic imports for Firestore (client SDK for reads/writes)
-    const { collection, getDocs, doc, getDoc, addDoc, updateDoc, getFirestore } = await import("firebase/firestore");
-    const { initializeApp, getApps, getApp } = await import("firebase/app");
-
-    const app = getApps().length === 0
-      ? initializeApp({
-          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-        })
-      : getApp();
-    const db = getFirestore(app);
-
     // Fetch church info
-    const churchSnap = await getDoc(doc(db, "churches", church_id));
-    if (!churchSnap.exists()) {
+    const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
+    if (!churchSnap.exists) {
       return NextResponse.json({ error: "Church not found" }, { status: 404 });
     }
     const church = churchSnap.data() as Record<string, unknown>;
@@ -78,7 +63,7 @@ export async function POST(request: Request) {
 
     // Fetch assignments for the target date
     type DocRecord = Record<string, unknown> & { id: string };
-    const assignSnap = await getDocs(collection(db, "churches", church_id, "assignments"));
+    const assignSnap = await adminDb.collection(`churches/${church_id}/assignments`).get();
     const allAssignments: DocRecord[] = assignSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
@@ -107,9 +92,9 @@ export async function POST(request: Request) {
 
     // Fetch volunteers, services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
-      getDocs(collection(db, "churches", church_id, "volunteers")),
-      getDocs(collection(db, "churches", church_id, "services")),
-      getDocs(collection(db, "churches", church_id, "ministries")),
+      adminDb.collection(`churches/${church_id}/volunteers`).get(),
+      adminDb.collection(`churches/${church_id}/services`).get(),
+      adminDb.collection(`churches/${church_id}/ministries`).get(),
     ]);
 
     const volunteerMap = new Map(
@@ -144,7 +129,7 @@ export async function POST(request: Request) {
       error_message: string | null;
       external_id: string | null;
     }) {
-      await addDoc(collection(db, "sent_notifications"), {
+      await adminDb.collection("sent_notifications").add({
         church_id,
         ...data,
         type: reminderType,
@@ -252,12 +237,9 @@ export async function POST(request: Request) {
 
       // Mark this reminder as sent on the assignment
       const existingSent = (assignment.reminder_sent_at as string[]) || [];
-      await updateDoc(
-        doc(db, "churches", church_id, "assignments", assignment.id),
-        {
-          reminder_sent_at: [...existingSent, `${reminderType}:${new Date().toISOString()}`],
-        },
-      );
+      await adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`).update({
+        reminder_sent_at: [...existingSent, `${reminderType}:${new Date().toISOString()}`],
+      });
     }
 
     return NextResponse.json({
@@ -298,14 +280,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { adminAuth, adminDb } = await import("@/lib/firebase/admin");
     const token = authHeader.split("Bearer ")[1];
     const decoded = await adminAuth.verifyIdToken(token);
 
     const membershipId = `${decoded.uid}_${churchId}`;
     const memberSnap = await adminDb.collection("memberships").doc(membershipId).get();
     const membership = memberSnap.data();
-    if (!membership || !["owner", "admin"].includes(membership.role)) {
+    if (!membership || !["owner", "admin"].includes(membership.role as string)) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 

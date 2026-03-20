@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
+import { rateLimit } from "@/lib/utils/rate-limit";
 
 const RESERVED_SLUGS = new Set([
   "dashboard", "login", "register", "api", "join", "events", "invites",
@@ -12,6 +13,9 @@ const RESERVED_SLUGS = new Set([
  * Public endpoint — checks if a slug is available.
  */
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, { limit: 20, windowMs: 60_000 });
+  if (limited) return limited;
+
   const slug = req.nextUrl.searchParams.get("slug")?.toLowerCase().trim();
   if (!slug) {
     return NextResponse.json({ available: false, reason: "No slug provided" });

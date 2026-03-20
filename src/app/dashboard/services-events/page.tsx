@@ -182,6 +182,7 @@ function ServicesTab({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState("");
 
   // Form state
   const [name, setName] = useState("");
@@ -381,8 +382,9 @@ function ServicesTab({
         setServices((prev) => [...prev, { id: ref.id, ...data } as Service]);
       }
       resetForm();
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to save service. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -400,8 +402,9 @@ function ServicesTab({
     try {
       await removeChurchDocument(churchId, "services", id);
       setServices((prev) => prev.filter((s) => s.id !== id));
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to delete service. Please try again.");
     } finally {
       setDeleting(null);
     }
@@ -448,6 +451,11 @@ function ServicesTab({
 
   return (
     <div>
+      {mutationError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {mutationError}
+        </div>
+      )}
       {!showForm && (
         <div className="mb-4 flex justify-end">
           <Button onClick={() => setShowForm(true)}>Add Service</Button>
@@ -821,6 +829,7 @@ function EventsTab({
   const [shortLinkEventId, setShortLinkEventId] = useState<string | null>(null);
   const [emailInviteEventId, setEmailInviteEventId] = useState<string | null>(null);
   const [rosterEvent, setRosterEvent] = useState<Event | null>(null);
+  const [mutationError, setMutationError] = useState("");
   const userIsAdmin = isAdmin(activeMembership);
   const userCanMarkAttendance = isScheduler(activeMembership);
   // Short link lookup: targetPath → full short link URL
@@ -1022,8 +1031,9 @@ function EventsTab({
         setEvents((prev) => [...prev, newEvent]);
       }
       resetForm();
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to save event. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -1035,8 +1045,9 @@ function EventsTab({
     try {
       await removeChurchDocument(churchId, "events", id);
       setEvents((prev) => prev.filter((e) => e.id !== id));
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to delete event. Please try again.");
     } finally {
       setDeleting(null);
     }
@@ -1153,6 +1164,11 @@ function EventsTab({
 
   return (
     <div>
+      {mutationError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {mutationError}
+        </div>
+      )}
       {!showForm && (
         <div className="mb-4 flex items-center justify-end gap-3">
           {!editingId && events.length >= tierLimits.active_events && (

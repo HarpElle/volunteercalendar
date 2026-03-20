@@ -16,6 +16,19 @@ import {
 } from "firebase/firestore";
 import { db } from "./config";
 
+// ─── Client-side TTL cache for unconstrained subcollection reads ───
+const CACHE_TTL_MS = 60_000; // 60 seconds
+const cache = new Map<string, { data: DocumentData[]; expiresAt: number }>();
+
+function cacheKey(churchId: string, subcollection: string) {
+  return `${churchId}/${subcollection}`;
+}
+
+/** Invalidate a specific church subcollection cache entry. */
+export function invalidateChurchCache(churchId: string, subcollection: string) {
+  cache.delete(cacheKey(churchId, subcollection));
+}
+
 /** Get a reference to a top-level collection */
 export function getCollection(path: string) {
   return collection(db, path);
@@ -38,6 +51,7 @@ export async function addChurchDocument(
   subcollection: string,
   data: DocumentData,
 ) {
+  invalidateChurchCache(churchId, subcollection);
   const ref = collection(db, "churches", churchId, subcollection);
   return addDoc(ref, data);
 }
@@ -54,14 +68,28 @@ export async function getDocument(path: string, docId: string) {
   return { id: snap.id, ...snap.data() };
 }
 
-/** Get all documents in a church subcollection */
+/** Get all documents in a church subcollection (cached for unconstrained queries) */
 export async function getChurchDocuments(
   churchId: string,
   subcollection: string,
   ...constraints: QueryConstraint[]
 ) {
   const ref = collection(db, "churches", churchId, subcollection);
-  const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
+
+  // Only cache unconstrained full-collection reads
+  if (constraints.length === 0) {
+    const key = cacheKey(churchId, subcollection);
+    const cached = cache.get(key);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+    const snap = await getDocs(query(ref));
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    return data;
+  }
+
+  const q = query(ref, ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -73,6 +101,7 @@ export async function updateChurchDocument(
   docId: string,
   data: Partial<DocumentData>,
 ) {
+  invalidateChurchCache(churchId, subcollection);
   return updateDoc(doc(db, "churches", churchId, subcollection, docId), data);
 }
 
@@ -82,6 +111,7 @@ export async function removeChurchDocument(
   subcollection: string,
   docId: string,
 ) {
+  invalidateChurchCache(churchId, subcollection);
   return deleteDoc(doc(db, "churches", churchId, subcollection, docId));
 }
 

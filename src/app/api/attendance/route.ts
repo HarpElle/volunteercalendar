@@ -70,27 +70,28 @@ export async function POST(req: NextRequest) {
     // Track volunteer no-show changes: volunteer_id → delta (+1 for new no-show, -1 for corrected)
     const noShowDeltas = new Map<string, number>();
 
-    for (const entry of entries) {
-      let docRef;
-      let previousAttended: boolean | null = null;
-      let volunteerId: string | null = null;
+    // Batch-fetch all entry documents in a single round-trip
+    const docRefs = entries.map((entry) =>
+      entry.type === "event_signup"
+        ? adminDb.doc(`event_signups/${entry.id}`)
+        : adminDb.doc(`churches/${church_id}/assignments/${entry.id}`),
+    );
+    const snapshots = await adminDb.getAll(...docRefs);
+    const snapMap = new Map(snapshots.map((snap) => [snap.ref.path, snap]));
 
-      if (entry.type === "event_signup") {
-        docRef = adminDb.doc(`event_signups/${entry.id}`);
-        const snap = await docRef.get();
-        if (!snap.exists) continue;
-        const data = snap.data()!;
-        if (data.church_id !== church_id) continue; // security: verify ownership
-        previousAttended = data.attended ?? null;
-        volunteerId = data.volunteer_id || null;
-      } else {
-        docRef = adminDb.doc(`churches/${church_id}/assignments/${entry.id}`);
-        const snap = await docRef.get();
-        if (!snap.exists) continue;
-        const data = snap.data()!;
-        previousAttended = data.attended ?? null;
-        volunteerId = data.volunteer_id || null;
-      }
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const docRef = docRefs[i];
+      const snap = snapMap.get(docRef.path);
+      if (!snap || !snap.exists) continue;
+
+      const data = snap.data()!;
+
+      // Security: verify ownership for event signups
+      if (entry.type === "event_signup" && data.church_id !== church_id) continue;
+
+      const previousAttended: boolean | null = data.attended ?? null;
+      const volunteerId: string | null = data.volunteer_id || null;
 
       batch.update(docRef, {
         attended: entry.attended,

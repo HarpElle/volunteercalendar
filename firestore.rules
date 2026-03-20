@@ -39,12 +39,9 @@ service cloud.firestore {
     }
 
     // ─── Assignments (collection group) ───
-    // Token-based volunteer confirmation: anyone who knows the token can update status
-    match /{path=**}/assignments/{assignId} {
-      allow read: if true;
-      allow update: if request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['status', 'responded_at']);
-    }
+    // Confirmation reads/writes now go through Admin SDK in /api/confirm.
+    // Dashboard reads use subcollection rules at churches/{churchId}/...
+    // No collection group rule needed.
 
     // ─── Event Signups ───
     match /event_signups/{docId} {

@@ -86,6 +86,8 @@ function OrganizationContent() {
   const [ministryColor, setMinistryColor] = useState(PRESET_COLORS[0].hex);
   const [ministryDescription, setMinistryDescription] = useState("");
 
+  const [mutationError, setMutationError] = useState("");
+
   // Billing state
   const [volunteerCount, setVolunteerCount] = useState(0);
   const [activeEventCount, setActiveEventCount] = useState(0);
@@ -213,8 +215,9 @@ function OrganizationContent() {
         setMinistries((prev) => [...prev, { id: ref.id, ...data } as Ministry]);
       }
       resetMinistryForm();
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to save ministry. Please try again.");
     } finally {
       setMinistrySaving(false);
     }
@@ -226,8 +229,9 @@ function OrganizationContent() {
     try {
       await removeChurchDocument(churchId, "ministries", id);
       setMinistries((prev) => prev.filter((m) => m.id !== id));
+      setMutationError("");
     } catch {
-      // silent
+      setMutationError("Failed to delete ministry. Please try again.");
     } finally {
       setDeletingMinistry(null);
     }
@@ -248,7 +252,7 @@ function OrganizationContent() {
         window.location.href = data.url;
       }
     } catch {
-      // silent
+      setMutationError("Failed to start checkout. Please try again.");
     } finally {
       setCheckoutLoading(null);
     }
@@ -267,7 +271,7 @@ function OrganizationContent() {
         window.location.href = data.url;
       }
     } catch {
-      // silent
+      setMutationError("Failed to open billing portal. Please try again.");
     } finally {
       setPortalLoading(false);
     }
@@ -287,6 +291,12 @@ function OrganizationContent() {
           Manage your {orgType === "church" ? "church" : "organization"} settings, {terms.pluralLower}, and billing.
         </p>
       </div>
+
+      {mutationError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {mutationError}
+        </div>
+      )}
 
       {/* Billing banners */}
       {billingSuccess && (

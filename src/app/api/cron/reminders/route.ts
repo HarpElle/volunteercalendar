@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
+import { safeCompare } from "@/lib/utils/safe-compare";
 
 /**
  * GET /api/cron/reminders?hours=48
@@ -13,7 +14,7 @@ import { adminDb } from "@/lib/firebase/admin";
 export async function GET(request: Request) {
   // Verify this is a legitimate cron call
   const authHeader = request.headers.get("authorization");
-  const isVercelCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const isVercelCron = safeCompare(authHeader, `Bearer ${process.env.CRON_SECRET}`);
 
   if (!isVercelCron) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
