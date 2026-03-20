@@ -8,6 +8,93 @@ import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
+ * POST /api/organization
+ * Create a new organization (church doc + owner membership + user profile link).
+ * Uses Admin SDK so Firestore security rules are bypassed — works for both
+ * first orgs (churchId === uid) and additional orgs (churchId === random UUID).
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const token = authHeader.slice(7);
+    const decoded = await adminAuth.verifyIdToken(token);
+    const userId = decoded.uid;
+
+    const body = await req.json();
+    const { name, org_type, timezone, workflow_mode } = body;
+
+    if (!name || !org_type || !timezone || !workflow_mode) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Determine churchId: first org uses uid, additional orgs use random UUID
+    const existingMemberships = await adminDb
+      .collection("memberships")
+      .where("user_id", "==", userId)
+      .where("status", "==", "active")
+      .limit(1)
+      .get();
+    const hasExistingOrg = !existingMemberships.empty;
+    const churchId = hasExistingOrg ? crypto.randomUUID() : userId;
+
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const now = new Date().toISOString();
+
+    // Create church doc
+    await adminDb.doc(`churches/${churchId}`).set({
+      name,
+      slug,
+      org_type,
+      workflow_mode,
+      timezone,
+      subscription_tier: "free",
+      stripe_customer_id: null,
+      settings: {
+        default_schedule_range_weeks: 4,
+        default_reminder_channels: ["email"],
+        require_confirmation: true,
+      },
+      created_at: now,
+    });
+
+    // Create owner membership
+    const membershipId = `${userId}_${churchId}`;
+    await adminDb.doc(`memberships/${membershipId}`).set({
+      user_id: userId,
+      church_id: churchId,
+      role: "owner",
+      ministry_scope: [],
+      status: "active",
+      invited_by: null,
+      volunteer_id: null,
+      reminder_preferences: { channels: ["email"] },
+      created_at: now,
+      updated_at: now,
+    });
+
+    // Link user profile to this church
+    await adminDb.doc(`users/${userId}`).update({
+      church_id: churchId,
+      default_church_id: churchId,
+      role: "admin",
+    });
+
+    return NextResponse.json({ success: true, church_id: churchId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("POST /api/organization error:", message, err);
+    return NextResponse.json({ error: `Creation failed: ${message}` }, { status: 500 });
+  }
+}
+
+/**
  * DELETE /api/organization
  * Cascading delete of an organization and all its data.
  * Requires: owner role, confirmed with org name in body.

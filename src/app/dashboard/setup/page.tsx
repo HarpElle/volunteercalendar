@@ -3,13 +3,12 @@
 import { Suspense, useState, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import { setDocument, updateDocument, createMembership, getDocument } from "@/lib/firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { Church, ChurchSettings, WorkflowMode, OrgType } from "@/lib/types";
+import type { WorkflowMode, OrgType } from "@/lib/types";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -32,7 +31,7 @@ function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isNewOrgMode = searchParams.get("mode") === "new";
-  const { user, profile, memberships } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,68 +56,33 @@ function SetupContent() {
     setError("");
 
     try {
-      const slug = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
+      const idToken = await getAuth().currentUser?.getIdToken();
+      if (!idToken) throw new Error("Not authenticated");
 
-      const settings: ChurchSettings = {
-        default_schedule_range_weeks: 4,
-        default_reminder_channels: ["email"],
-        require_confirmation: true,
-      };
-
-      const churchData: Omit<Church, "id"> = {
-        name,
-        slug,
-        org_type: orgType,
-        workflow_mode: workflowMode,
-        timezone,
-        subscription_tier: "free",
-        stripe_customer_id: null,
-        settings,
-        created_at: new Date().toISOString(),
-      };
-
-      // For first org, use user.uid for simple 1:1 mapping.
-      // For additional orgs, generate a unique ID.
-      const hasExistingOrg = memberships.some((m) => m.status === "active");
-      const churchId = hasExistingOrg ? crypto.randomUUID() : user.uid;
-
-      // Create owner membership first — this uses the bootstrap rule and enables
-      // church doc updates if a previous attempt partially created the church doc
-      const now = new Date().toISOString();
-      await createMembership({
-        user_id: user.uid,
-        church_id: churchId,
-        role: "owner",
-        ministry_scope: [],
-        status: "active",
-        invited_by: null,
-        volunteer_id: null,
-        reminder_preferences: { channels: ["email"] },
-        created_at: now,
-        updated_at: now,
+      const res = await fetch("/api/organization", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          org_type: orgType,
+          timezone,
+          workflow_mode: workflowMode,
+        }),
       });
 
-      // Create or overwrite church doc (now allowed because membership exists)
-      await setDocument("churches", churchId, churchData);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to create organization (${res.status})`);
+      }
 
-      // Link user profile to their church
-      await updateDocument("users", user.uid, {
-        church_id: churchId,
-        default_church_id: churchId,
-        role: "admin",
-      });
+      const { church_id: churchId } = await res.json();
 
       // Fire-and-forget: send org-created confirmation email
-      getAuth().currentUser?.getIdToken().then((token) =>
-        fetch("/api/notify/org-created", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ church_id: churchId }),
-        }).catch(() => {})
-      );
+      fetch("/api/notify/org-created", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId }),
+      }).catch(() => {});
 
       // Full page reload so onAuthStateChanged re-fires with updated profile
       window.location.href = "/dashboard";
