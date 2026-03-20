@@ -604,7 +604,7 @@ function OrganizationContent() {
           </div>
 
           <p className="mt-6 text-center text-xs text-vc-text-muted">
-            All paid plans include a 14-day free trial. Annual billing saves 20%.
+            All paid plans include a 14-day free trial.
             Questions?{" "}
             <a href="mailto:info@volunteercal.com" className="text-vc-coral hover:underline">
               Contact us

@@ -15,7 +15,7 @@ export function Pricing() {
             Start free, grow at your pace
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-text-secondary">
-            Generous free tier for small teams. Upgrade when you need more teams. 20% off annual plans.
+            Generous free tier for small teams. Upgrade when you need more teams.
           </p>
         </AnimateIn>
 
@@ -95,7 +95,7 @@ export function Pricing() {
 
         <AnimateIn delay={0.5}>
           <p className="mt-8 text-center text-sm text-vc-text-muted">
-            All paid plans include a 14-day free trial. Annual plans save 20%. No surprise charges.
+            All paid plans include a 14-day free trial. No surprise charges.
           </p>
         </AnimateIn>
       </div>

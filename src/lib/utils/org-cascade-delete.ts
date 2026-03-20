@@ -13,7 +13,9 @@ const SUBCOLLECTIONS = [
   "schedules",
   "assignments",
   "notifications",
-  "integration_credentials",
+  "integrations",
+  "invite_queue",
+  "import_logs",
 ];
 
 export interface CascadeDeleteResult {

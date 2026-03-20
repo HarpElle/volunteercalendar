@@ -38,15 +38,14 @@ Flexible volunteer scheduling SaaS for churches, nonprofits, and volunteer-drive
 ## Key Files
 - `src/lib/types/` — All TypeScript interfaces
 - `src/lib/firebase/config.ts` — Firebase initialization
+- `src/lib/firebase/admin.ts` — Firebase Admin SDK (server-side only)
 - `src/lib/context/auth-context.tsx` — Auth state provider
 - `src/app/page.tsx` — Public landing page
 - `src/app/dashboard/` — Auth-guarded admin routes
 - `.env.local` — Firebase credentials (never commit)
+- `docs/ROADMAP.md` — Outstanding items, pre-launch checklist, post-launch priorities
+- `docs/SCALING_ASSESSMENT.md` — Architecture capacity analysis, optimization roadmap
+- `docs/TEST_PLAN.md` — Manual + automated testing checklist
 
 ## Phase Roadmap
-- **Phase 1 (Current):** Scaffolding, landing page with waitlist, Firebase auth
-- **Phase 2:** Data model, volunteer import (CSV + manual), ministry/service config
-- **Phase 3:** Scheduling algorithm, draft matrix UI, conflict detection
-- **Phase 4:** Review/approval workflow (Mode 1: Centralized)
-- **Phase 5:** Publish, reminders (email/SMS), calendar feeds (iCal)
-- **Phase 6:** Dashboard analytics, Stripe billing, exports
+See `PROJECT_OVERVIEW.md` for complete phase history (Phases 1–22 complete). Current status: pre-launch, preparing for beta.

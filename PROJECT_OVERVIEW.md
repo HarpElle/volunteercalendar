@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 20 — UI fixes, document-style print rosters, performance optimization, scaling assessment (complete) |
+| **Status** | Phase 22 — Pre-launch hardening & optimization (complete). Preparing for beta. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -17,7 +17,7 @@ Multi-tenant SaaS for volunteer scheduling — built for churches, nonprofits, a
 
 ```
 VolunteerCal/
-├── .StartupIdeas/              # Planning documents (strategy, prompts, research)
+├── docs/                       # Scaling assessment, roadmap, test plan
 ├── middleware.ts                # Centralized route redirects (old URLs → new pages)
 ├── CLAUDE.md                   # Claude Code conventions
 ├── PROJECT_OVERVIEW.md         # This file
@@ -160,12 +160,11 @@ VolunteerCal/
 │       ├── types/              # TypeScript interfaces (incl. InviteQueueItem)
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts
+│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts
 │       │   ├── emails/         # 20 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, SMS service
-└── docs/                       # Research outputs, architecture decisions, scaling assessment
 ```
 
 ## Implementation Phases
@@ -195,3 +194,5 @@ VolunteerCal/
 | 18 | Roster viewers, attendance tracking, team schedule visibility, calendar feed enhancements: event roster modal (signup list + attendance toggles), service roster modal (team/org-level ministry pill filtering + attendance), batch attendance API (no-show stat sync), Team tab on My Schedule (ministry-grouped roster with own-row highlight, scheduler-aware links), TeamScheduleView component, CalendarFeedCta quick-subscribe card (personal/team toggle), "team" feed type in calendar API (filter by volunteer's ministry_ids), "team" option in Account feed creator, Firestore composite index for service assignment queries | Complete |
 | 19 | Dashboard fixes, print rosters, roster modifications, feed permissions, iCal aggregation, volunteer self-removal: dashboard stats include event signups (awaiting/confirmed/active counts), print button on event + service rosters (@media print CSS), admin/scheduler roster modify API (remove/move assignments + event signups with volunteer email notification), role-based calendar feed permissions (volunteers see self only, schedulers see scoped ministries, admins see all), aggregated iCal feeds for team/ministry/org (one entry per service with role→volunteer roster in description), volunteer self-removal modal with optional note to schedulers, self-remove API with multi-recipient scheduler/admin notification, self-removal from My Schedule + Team tab | Complete |
 | 20 | UI fixes, document-style print, performance optimization, scaling assessment: account settings max-w-3xl constraint, document-style roster printout utility (new-window HTML table, system fonts, no website styling), click-outside handler for roster action menus, batch event signup query (getEventSignupsBatch replaces N+1 per-event reads), parallel short-links + signup loading on Events tab, scaling assessment document (capacity estimates, optimization roadmap, cost projections) | Complete |
+| 21 | Frontend design polish: rounded-xl consistency across all cards/inputs/modals, Spinner loading states replacing inline "Loading…" text, max-w-5xl container constraints, scheduling dashboard visual overhaul (stats cards, progress bars, attendance section) | Complete |
+| 22 | Security hardening & optimization: Admin SDK migration for all server API routes (billing webhook, reminders), Firestore rules audit (removed world-readable assignment rule), rate limiting on public endpoints (waitlist, signup, confirm, short-links/check), timing-safe cron secret comparison, Stripe webhook metadata validation, client-side TTL cache (60s) for Firestore reads with write-through invalidation, batch reads in attendance + invite APIs (adminDb.getAll), silent error catch audit (mutation error banners on schedules/org/services pages) | Complete |
