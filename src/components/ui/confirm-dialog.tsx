@@ -79,14 +79,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
-              size="sm"
+              size="md"
               onClick={() => handleResponse(false)}
             >
               {state.options.cancelLabel || "Cancel"}
             </Button>
             <Button
               variant={state.options.variant === "danger" ? "danger" : "primary"}
-              size="sm"
+              size="md"
               onClick={() => handleResponse(true)}
             >
               {state.options.confirmLabel || "Confirm"}

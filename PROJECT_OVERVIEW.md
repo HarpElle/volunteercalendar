@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 29 complete. Preparing for beta. |
+| **Status** | Phase 31 complete. Preparing for beta. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -123,8 +123,10 @@ VolunteerCal/
 │   │       │   │   └── route.ts            # Send role promotion notification email
 │   │       │   ├── welcome-to-org/
 │   │       │   │   └── route.ts            # Send welcome email on self-registration
-│   │       │   └── org-created/
-│   │       │       └── route.ts            # Send org creation confirmation email
+│   │       │   ├── org-created/
+│   │       │   │   └── route.ts            # Send org creation confirmation email
+│   │       │   └── absence/
+│   │       │       └── route.ts            # Volunteer absence alert to schedulers/admins
 │   │       ├── attendance/
 │   │       │   └── route.ts    # Batch attendance updates (event signups + assignments)
 │   │       ├── calendar/
@@ -192,16 +194,16 @@ VolunteerCal/
 │   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
-│   │   └── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal
+│   │   └── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks (use-service-worker.ts)
 │       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep)
-│       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
+│       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits, scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts
-│       │   ├── emails/         # 23 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
+│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts
+│       │   ├── emails/         # 26 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert)
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, auto-reschedule, SMS service
@@ -243,3 +245,5 @@ VolunteerCal/
 | 27 | Prerequisites & onboarding enhancement: org-wide prerequisites (stored on Church document, apply to all teams), shared PrerequisiteEditor component extracted from org settings, Onboarding page upgraded with two-tab layout (Volunteer Progress + Manage Prerequisites), org-wide + team-specific prerequisite CRUD on Onboarding page, pipeline logic merges org-wide and team prerequisites for progress tracking, Organization Settings simplified to use shared component with link to Onboarding, scheduler threads org-wide prerequisites through eligibility checks (generateDraftSchedule + findBestVolunteer + isEligible + hasCompletedPrerequisites), auto-reschedule loads org prerequisites, Schedules page loads church doc for org prerequisites, Dashboard setup guide adds optional "Set up onboarding prerequisites" step with Optional badge | Complete |
 | 28 | Smart check-in & address autocomplete: time-aware self-check-in (SmartCheckInBanner prompts volunteers near scheduled service times), self-check-in API (POST /api/check-in/self with time window validation), Google Places address autocomplete on campus form (captures lat/lng), proximity-based check-in (geolocation detects volunteers near a campus), geolocation utilities (haversine distance, getCurrentPosition), check-in settings in Organization page (self-check-in toggle, window before/after, proximity toggle + radius), ChurchSettings extended with 5 check-in fields, Assignment.check_in_method field, existing QR check-in records method as "qr" | Complete |
 | 29 | Service roster & attendance access parity: Roster button added to service cards on Services & Events page (matches event card parity), ServiceRoster modal opens for next upcoming service date, Attendance tab on both service and event rosters now accessible for future dates (not gated to past/today), allows admins/schedulers to familiarize with attendance UI before service day | Complete |
+| 30 | Attendance enhancement, absence alerts & scheduler notifications: AttendanceStatus type overhaul (boolean→string enum: present/no_show/excused/null with backward-compat normalizer), shared AttendanceToggle component extracted from duplicate inline toggles, four-state toggle cycle (null→present→no_show→excused→null), "Roster & Attendance" button rename, layout shift fixes (reserved stats bar + save button space), "Can't Make It" volunteer self-service absence notification (modal + API + email template + SMS for paid tiers), scheduler/admin granular notification preferences (per-type toggles, standard/urgent channel selection, ministry scope, SMS tier-gated to Starter+), shouldNotifyScheduler utility wired into absence + self-removal API routes | Complete |
+| 31 | UI/UX consistency audit: modal close button touch target fix (28px→45px), confirm dialog buttons sm→md, Card tappable variant (hover-lift + active-press), Organization page ministry/campus cards converted from hover-reveal to tappable card pattern (chevron affordance, keyboard accessible, delete moved into edit form), check-in number inputs right-sized (max-w-[120px]), People page roster Edit/Delete + Approve/Reject touch targets to 44px minimum, My Orgs page Accept/Decline/Switch/reminder toggle touch targets to 44px, schedules page hover-reveal actions made always-visible, dashboard sub-heading size standardization, zero hover-only interaction patterns remaining | Complete |

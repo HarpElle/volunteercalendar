@@ -753,10 +753,10 @@ export default function SchedulesPage() {
                         {s.status.replace("_", " ")}
                       </Badge>
                     </div>
-                    <div className="flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => viewSchedule(s)} className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">View</button>
+                    <div className="flex gap-1">
+                      <button onClick={() => viewSchedule(s)} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">View</button>
                       {s.status === "draft" && (
-                        <button onClick={() => handleDeleteSchedule(s.id)} disabled={deleting === s.id} className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors">
+                        <button onClick={() => handleDeleteSchedule(s.id)} disabled={deleting === s.id} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors">
                           {deleting === s.id ? "..." : "Delete"}
                         </button>
                       )}

@@ -73,6 +73,16 @@ const featureGuides: { title: string; content: string }[] = [
       "Define the requirements volunteers must complete before serving — things like background checks, training classes, or orientation sessions.\n\nOn the Onboarding page, use the \"Manage Prerequisites\" tab to set up organization-wide requirements (applied to every team) and team-specific requirements. Then switch to the \"Volunteer Progress\" tab to track each volunteer's status through the pipeline. Volunteers won't appear as available for scheduling until they've completed all required prerequisites — both org-wide and team-specific.",
   },
   {
+    title: "Absence Alerts",
+    content:
+      "When a volunteer can't make a scheduled assignment, they can tap \"Can't Make It\" on their My Schedule page. They can optionally add a note explaining why.\n\nSchedulers and admins for that team are automatically notified via their preferred channels (email and/or SMS). This gives schedulers immediate visibility into gaps so they can find a replacement or adjust plans.\n\nThe volunteer's assignment is flagged but not removed — the scheduler decides next steps. If the volunteer's situation changes, the scheduler can clear the flag.",
+  },
+  {
+    title: "Scheduler Notification Preferences",
+    content:
+      "Schedulers and admins can customize which notifications they receive and how.\n\nGo to Account Settings → Scheduler Notifications to configure:\n\n**Notification Types** — Toggle on/off for each type: absence alerts, self-removals, swap requests, and swap completions. Types marked \"Urgent\" (like absence alerts) use the urgent channel; others use the standard channel.\n\n**Standard Channel** — Choose Email or None for routine notifications like completed swaps.\n\n**Urgent Channel** — Choose Email, SMS, or None for time-sensitive notifications like last-minute absences. SMS is available on Starter plans and above.\n\n**Ministry Scope** — Optionally limit notifications to specific teams. Leave empty to receive alerts for all teams you manage.\n\nPreferences are per-organization, so if you're a scheduler in multiple orgs, each has its own settings.",
+  },
+  {
     title: "Installing VolunteerCal as an App",
     content:
       "VolunteerCal is a Progressive Web App (PWA) — you can install it on any device for quick access and a native app experience.\n\nChrome (Android/Desktop): Look for the \"Install\" prompt in the address bar, or open the browser menu and select \"Install app\" or \"Add to Home Screen.\"\n\niPhone/iPad (Safari): Tap the Share button (square with arrow), then tap \"Add to Home Screen.\"\n\nOnce installed, VolunteerCal opens in its own window with an app icon on your home screen — no app store download required.",

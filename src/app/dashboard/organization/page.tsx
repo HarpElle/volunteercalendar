@@ -538,13 +538,23 @@ function OrganizationContent() {
                 page.
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex items-center gap-3">
                 <Button type="submit" loading={ministrySaving}>
                   {editingMinistryId ? "Save Changes" : "Create " + terms.singular}
                 </Button>
                 <Button type="button" variant="ghost" onClick={resetMinistryForm}>
                   Cancel
                 </Button>
+                {editingMinistryId && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMinistry(editingMinistryId)}
+                    disabled={deletingMinistry === editingMinistryId}
+                    className="ml-auto text-sm font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+                  >
+                    {deletingMinistry === editingMinistryId ? "Deleting..." : "Delete " + terms.singular}
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -563,7 +573,11 @@ function OrganizationContent() {
             {ministries.map((m) => (
               <div
                 key={m.id}
-                className="group relative rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+                role="button"
+                tabIndex={0}
+                onClick={() => startEditMinistry(m)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEditMinistry(m); } }}
+                className="relative rounded-xl border border-vc-border-light bg-white p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -594,21 +608,10 @@ function OrganizationContent() {
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => startEditMinistry(m)}
-                    className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteMinistry(m.id)}
-                    disabled={deletingMinistry === m.id}
-                    className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-                  >
-                    {deletingMinistry === m.id ? "Deleting..." : "Delete"}
-                  </button>
+                  {/* Chevron affordance */}
+                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                  </svg>
                 </div>
               </div>
             ))}
@@ -675,13 +678,22 @@ function OrganizationContent() {
                   />
                   <span className="text-sm text-vc-text-secondary">Primary campus</span>
                 </label>
-                <div className="flex gap-3">
+                <div className="flex items-center gap-3">
                   <Button type="submit" loading={campusSaving}>
                     {editingCampusId ? "Save Changes" : "Add Campus"}
                   </Button>
                   <Button type="button" variant="ghost" onClick={resetCampusForm}>
                     Cancel
                   </Button>
+                  {editingCampusId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCampus(editingCampusId)}
+                      className="ml-auto text-sm font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+                    >
+                      Delete Campus
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
@@ -699,7 +711,11 @@ function OrganizationContent() {
               {campuses.map((c) => (
                 <div
                   key={c.id}
-                  className="group relative rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => startEditCampus(c)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEditCampus(c); } }}
+                  className="relative rounded-xl border border-vc-border-light bg-white p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-vc-indigo/10 text-sm font-semibold text-vc-indigo">
@@ -716,20 +732,10 @@ function OrganizationContent() {
                         </span>
                       )}
                     </div>
-                  </div>
-                  <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => startEditCampus(c)}
-                      className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCampus(c.id)}
-                      className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-                    >
-                      Delete
-                    </button>
+                    {/* Chevron affordance */}
+                    <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
                   </div>
                 </div>
               ))}
@@ -782,6 +788,7 @@ function OrganizationContent() {
                       max={180}
                       value={windowBefore}
                       onChange={(e) => setWindowBefore(parseInt(e.target.value, 10) || 60)}
+                      className="max-w-[120px]"
                     />
                     <p className="mt-1 text-xs text-vc-text-muted">
                       Check-in opens this many minutes before the service starts
@@ -797,6 +804,7 @@ function OrganizationContent() {
                       max={120}
                       value={windowAfter}
                       onChange={(e) => setWindowAfter(parseInt(e.target.value, 10) || 30)}
+                      className="max-w-[120px]"
                     />
                     <p className="mt-1 text-xs text-vc-text-muted">
                       Check-in window closes this many minutes after service starts

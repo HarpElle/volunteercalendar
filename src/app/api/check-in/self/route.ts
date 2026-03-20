@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if already attended
-    if (assignment.attended === true) {
+    if (assignment.attended === true || assignment.attended === "present") {
       return NextResponse.json({ error: "Already checked in" }, { status: 409 });
     }
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     // Mark attendance
     const checkedInAt = new Date().toISOString();
     await assignSnap.ref.update({
-      attended: true,
+      attended: "present",
       attended_at: checkedInAt,
       check_in_method: checkInMethod,
     });

@@ -46,6 +46,32 @@ export const REMINDER_CHANNELS: { value: ReminderChannel; label: string }[] = [
   { value: "none", label: "None" },
 ];
 
+// --- Scheduler Notification Defaults ---
+
+import type { SchedulerNotificationPreferences, SchedulerNotificationType } from "@/lib/types";
+
+export const SCHEDULER_NOTIFICATION_TYPES: {
+  value: SchedulerNotificationType;
+  label: string;
+  description: string;
+  urgency: "standard" | "urgent";
+}[] = [
+  { value: "assignment_change", label: "Assignment Changes", description: "When a volunteer confirms, declines, or is reassigned", urgency: "standard" },
+  { value: "absence_alert", label: "Absence Alerts", description: "When a volunteer notifies they can't make it", urgency: "urgent" },
+  { value: "swap_request", label: "Swap Requests", description: "When a swap is requested or needs approval", urgency: "urgent" },
+  { value: "self_removal", label: "Self-Removals", description: "When a volunteer removes themselves from a role", urgency: "urgent" },
+  { value: "schedule_published", label: "Schedule Published", description: "When a new schedule is published", urgency: "standard" },
+];
+
+export const DEFAULT_SCHEDULER_NOTIFICATION_PREFS: SchedulerNotificationPreferences = {
+  enabled_types: ["assignment_change", "absence_alert", "swap_request", "self_removal"],
+  channels: {
+    standard: ["email"],
+    urgent: ["email"],
+  },
+  ministry_scope: [],
+};
+
 export const PRICING_TIERS: {
   tier: SubscriptionTier;
   name: string;

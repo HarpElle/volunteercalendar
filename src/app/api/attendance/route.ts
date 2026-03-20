@@ -4,7 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 
 interface AttendanceEntry {
   id: string;
-  attended: boolean;
+  attended: "present" | "no_show" | "excused" | null;
   /** "event_signup" or "assignment" */
   type: "event_signup" | "assignment";
 }
@@ -90,18 +90,18 @@ export async function POST(req: NextRequest) {
       // Security: verify ownership for event signups
       if (entry.type === "event_signup" && data.church_id !== church_id) continue;
 
-      const previousAttended: boolean | null = data.attended ?? null;
+      const previousAttended = data.attended ?? null;
       const volunteerId: string | null = data.volunteer_id || null;
 
       batch.update(docRef, {
         attended: entry.attended,
-        attended_at: now,
+        attended_at: entry.attended != null ? now : null,
       });
 
       // Calculate no-show delta for volunteer stats
       if (volunteerId) {
-        const wasNoShow = previousAttended === false;
-        const isNoShow = entry.attended === false;
+        const wasNoShow = previousAttended === false || previousAttended === "no_show";
+        const isNoShow = entry.attended === "no_show";
         if (!wasNoShow && isNoShow) {
           // Newly marked as no-show
           noShowDeltas.set(volunteerId, (noShowDeltas.get(volunteerId) || 0) + 1);

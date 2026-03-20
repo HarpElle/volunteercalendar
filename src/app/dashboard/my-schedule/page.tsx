@@ -11,6 +11,7 @@ import { REMINDER_CHANNELS } from "@/lib/constants";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
+import { CantMakeItModal } from "@/components/scheduling/cant-make-it-modal";
 import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, CalendarFeed, ReminderChannel } from "@/lib/types";
 
 function formatDate(iso: string): string {
@@ -67,6 +68,7 @@ export default function MySchedulePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
+  const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
 
   // Availability state
   const [blockoutDates, setBlockoutDates] = useState<string[]>([]);
@@ -463,18 +465,32 @@ export default function MySchedulePage() {
                         ) : null}
                       </div>
                       {!isPast && item.status !== "declined" && item.status !== "cancelled" && (
-                        <button
-                          onClick={() => setRemoveItem({
-                            kind: item.kind,
-                            id: item.id,
-                            roleName: item.roleName,
-                            eventOrServiceName: item.eventOrServiceName,
-                            date: item.date,
-                          })}
-                          className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
-                        >
-                          Remove
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setCantMakeItItem({
+                              kind: item.kind,
+                              id: item.id,
+                              roleName: item.roleName,
+                              eventOrServiceName: item.eventOrServiceName,
+                              date: item.date,
+                            })}
+                            className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
+                          >
+                            Can&apos;t Make It
+                          </button>
+                          <button
+                            onClick={() => setRemoveItem({
+                              kind: item.kind,
+                              id: item.id,
+                              roleName: item.roleName,
+                              eventOrServiceName: item.eventOrServiceName,
+                              date: item.date,
+                            })}
+                            className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -677,6 +693,22 @@ export default function MySchedulePage() {
             )}
           </div>
         </>
+      )}
+      {/* Can't Make It modal */}
+      {cantMakeItItem && (
+        <CantMakeItModal
+          open={!!cantMakeItItem}
+          onClose={() => setCantMakeItItem(null)}
+          onNotified={() => {
+            setCantMakeItItem(null);
+          }}
+          churchId={activeMembership?.church_id || profile?.church_id || ""}
+          itemType={cantMakeItItem.kind === "assignment" ? "assignment" : "event_signup"}
+          itemId={cantMakeItItem.id}
+          roleName={cantMakeItItem.roleName}
+          serviceName={cantMakeItItem.eventOrServiceName}
+          serviceDate={cantMakeItItem.date}
+        />
       )}
       {/* Self-removal modal */}
       {removeItem && (

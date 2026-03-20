@@ -799,17 +799,17 @@ function RosterRow({
       </td>
       {canManage && (
         <td className="px-5 py-3">
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <button
               onClick={() => setEditing(true)}
-              className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
+              className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
             >
               Edit
             </button>
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+              className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
             >
               {deleting ? "..." : "Delete"}
             </button>
@@ -2027,13 +2027,13 @@ function MemberRow({
             <>
               <button
                 onClick={onApprove}
-                className="rounded-lg bg-vc-sage/15 px-3 py-1.5 text-xs font-medium text-vc-sage hover:bg-vc-sage/25 transition-colors"
+                className="rounded-lg bg-vc-sage/15 px-3 py-2 text-sm font-medium text-vc-sage hover:bg-vc-sage/25 transition-colors min-h-[44px]"
               >
                 Approve
               </button>
               <button
                 onClick={onReject}
-                className="rounded-lg bg-vc-bg-cream px-3 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm transition-colors"
+                className="rounded-lg bg-vc-bg-cream px-3 py-2 text-sm font-medium text-vc-text-muted hover:bg-vc-bg-warm transition-colors min-h-[44px]"
               >
                 Reject
               </button>
@@ -2044,7 +2044,7 @@ function MemberRow({
             <div className="relative">
               <button
                 onClick={() => setShowRoleMenu(!showRoleMenu)}
-                className="rounded-lg border border-vc-border px-2 py-1.5 text-xs text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
+                className="rounded-lg border border-vc-border px-3 py-2 text-xs text-vc-text-secondary hover:bg-vc-bg-warm transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
               >
                 ...
               </button>

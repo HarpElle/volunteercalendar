@@ -254,6 +254,8 @@ Trigger each email and verify it arrives in the Resend dashboard:
 | - [ ] | Org Deleted (members) | Same — check other members got notified |
 | - [ ] | Account Deleted | Delete an account |
 | - [ ] | Vacancy Alert | Delete account of volunteer with future assignments |
+| - [ ] | Absence Alert | Volunteer clicks "Can't Make It" on My Schedule |
+| - [ ] | Self-Removal Alert | Volunteer removes themselves from a roster slot |
 
 ### K. Edge Cases & Error Handling (~10 min)
 
@@ -327,7 +329,39 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Scheduler gates** — Volunteer with incomplete org-wide prerequisite is NOT scheduled by auto-draft
 - [ ] **Setup guide step** — Dashboard shows optional "Set up onboarding prerequisites" step with Optional badge
 
-### O. Shift Swap (~10 min)
+### O. Attendance & Absence Alerts (~15 min)
+
+**Attendance Status Types**
+
+- [ ] **Mark present** — Service roster → Attendance tab → toggle volunteer to "Present" → green checkmark shown → Firestore `attended: true`, `attendance_status: "present"`
+- [ ] **Mark no-show** — Toggle to "No-Show" → red X shown → `attendance_status: "no_show"`
+- [ ] **Mark excused** — Toggle to "Excused" → yellow icon shown → `attendance_status: "excused"`
+- [ ] **Clear status** — Toggle again to unmark → status returns to "Not Marked"
+- [ ] **Mark all present** — Click "Mark all present" button → all volunteers in roster marked present at once
+- [ ] **Shared toggle component** — Verify the same AttendanceToggle renders consistently in service roster modal and scheduling dashboard attendance sections
+
+**Absence Alerts ("Can't Make It")**
+
+- [ ] **Volunteer submits** — My Schedule → upcoming assignment → click "Can't Make It" → modal opens → add optional note → submit → assignment marked with `cant_make_it: true`
+- [ ] **Scheduler notified (email)** — Scheduler(s) for that ministry receive absence alert email with volunteer name, service, date, and note
+- [ ] **Scheduler notified (SMS)** — On Starter+ tier with SMS enabled in scheduler preferences → scheduler also receives SMS
+- [ ] **Preference-gated** — Scheduler with `absence_alert` disabled in notification preferences → does NOT receive alert
+- [ ] **Ministry scope** — Scheduler with ministry scope set → only receives alerts for their scoped ministries
+- [ ] **Multiple schedulers** — Multiple schedulers for same ministry → each receives alert per their own preferences
+
+**Scheduler Notification Preferences**
+
+- [ ] **Section visible** — Account Settings → "Scheduler Notifications" section visible for scheduler/admin/owner roles
+- [ ] **Hidden for volunteers** — Log in as volunteer → section not visible
+- [ ] **Toggle notification types** — Toggle absence_alert, self_removal, swap_request, swap_resolved → checkboxes save to Firestore membership doc
+- [ ] **Standard channel** — Set standard channel to Email or None → save → verify preference persists on reload
+- [ ] **Urgent channel** — Set urgent channel to Email, SMS, or None → save → verify persistence
+- [ ] **SMS gated to tier** — On Free tier → SMS option disabled with "Starter+ plan required" message
+- [ ] **SMS available on Starter+** — On Starter or higher tier → SMS toggle enabled for urgent channel
+- [ ] **Ministry scope** — Select specific ministries → save → only receive alerts for those ministries
+- [ ] **All ministries (default)** — Leave scope empty → receive alerts for all ministries
+
+### P. Shift Swap (~10 min)
 
 - [ ] **Request swap** — As a volunteer, request a shift swap on an upcoming assignment
 - [ ] **Eligible replacements** — System lists eligible volunteers who could take the shift
@@ -335,7 +369,7 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Admin approval** — As admin, approve the pending swap → assignment transfers
 - [ ] **Cancel swap** — Request a swap then cancel before anyone accepts → status shows cancelled
 
-### P. Multi-Site / Campus (~5 min)
+### Q. Multi-Site / Campus (~5 min)
 
 - [ ] **Create campus** — Organization page → add a campus with name and optional address
 - [ ] **Assign service to campus** — Create/edit a service → optionally assign to a campus

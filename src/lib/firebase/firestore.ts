@@ -307,11 +307,11 @@ export async function deleteEventSignup(signupId: string): Promise<void> {
 /** Mark attendance for an event signup. */
 export async function updateSignupAttendance(
   signupId: string,
-  attended: boolean,
+  attended: "present" | "no_show" | "excused" | null,
 ): Promise<void> {
   await updateDoc(doc(db, EVENT_SIGNUPS, signupId), {
     attended,
-    attended_at: new Date().toISOString(),
+    attended_at: attended != null ? new Date().toISOString() : null,
   });
 }
 
@@ -319,13 +319,13 @@ export async function updateSignupAttendance(
 export async function updateAssignmentAttendance(
   churchId: string,
   assignmentId: string,
-  attended: boolean,
+  attended: "present" | "no_show" | "excused" | null,
 ): Promise<void> {
   await updateDoc(
     doc(db, "churches", churchId, "assignments", assignmentId),
     {
       attended,
-      attended_at: new Date().toISOString(),
+      attended_at: attended != null ? new Date().toISOString() : null,
     },
   );
 }

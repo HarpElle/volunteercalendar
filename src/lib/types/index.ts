@@ -54,8 +54,33 @@ export interface Membership {
   reminder_preferences: {
     channels: ReminderChannel[];
   };
+  /** Scheduler/admin notification preferences. Only relevant for scheduler+ roles. */
+  scheduler_notification_preferences?: SchedulerNotificationPreferences;
   created_at: string;
   updated_at: string;
+}
+
+// --- Scheduler Notification Preferences ---
+
+export type SchedulerNotificationType =
+  | "assignment_change"
+  | "absence_alert"
+  | "swap_request"
+  | "self_removal"
+  | "schedule_published";
+
+export interface SchedulerNotificationPreferences {
+  /** Which notification types this scheduler wants to receive */
+  enabled_types: SchedulerNotificationType[];
+  /** Delivery channels by urgency */
+  channels: {
+    /** Standard notifications (assignment changes, schedule published) */
+    standard: ("email" | "none")[];
+    /** Urgent notifications (absences, swap requests, self-removals) */
+    urgent: ("email" | "sms" | "none")[];
+  };
+  /** Only receive for specific ministry IDs. Empty = all ministries. */
+  ministry_scope: string[];
 }
 
 // --- Churches (Tenants) ---
@@ -407,6 +432,19 @@ export interface Schedule {
   notes?: string | null;
 }
 
+// --- Attendance ---
+
+/** Attendance status: null = not yet marked */
+export type AttendanceStatus = "present" | "no_show" | "excused" | null;
+
+/** Normalize legacy boolean attendance values to the string enum */
+export function normalizeAttendance(value: boolean | string | null | undefined): AttendanceStatus {
+  if (value === true || value === "present") return "present";
+  if (value === false || value === "no_show") return "no_show";
+  if (value === "excused") return "excused";
+  return null;
+}
+
 // --- Assignments ---
 
 export type AssignmentStatus =
@@ -436,8 +474,8 @@ export interface Assignment {
   confirmation_token: string;
   responded_at: string | null;
   reminder_sent_at: string[];
-  /** Attendance: null = not yet marked, true = present, false = no-show */
-  attended: boolean | null;
+  /** Attendance status */
+  attended: AttendanceStatus;
   /** ISO timestamp when attendance was marked */
   attended_at: string | null;
   /** How the volunteer checked in */
@@ -539,15 +577,15 @@ export interface EventSignup {
   signed_up_at: string;
   /** Admin who approved, or null for auto-approved open signups */
   approved_by: string | null;
-  /** Attendance: null = not yet marked, true = present, false = no-show */
-  attended: boolean | null;
+  /** Attendance status */
+  attended: AttendanceStatus;
   /** ISO timestamp when attendance was marked */
   attended_at: string | null;
 }
 
 // --- Sent Notifications (Tracking) ---
 
-export type NotificationType = "confirmation" | "reminder_48h" | "reminder_24h" | "custom";
+export type NotificationType = "confirmation" | "reminder_48h" | "reminder_24h" | "custom" | "absence_alert";
 export type NotificationChannel = "email" | "sms";
 export type NotificationStatus = "sent" | "delivered" | "failed" | "bounced";
 

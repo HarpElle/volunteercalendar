@@ -71,7 +71,7 @@ export function SmartCheckInBanner() {
       // Filter: not yet attended, not dismissed, has service_id
       const candidates = assignments.filter(
         (a) =>
-          a.attended !== true &&
+          a.attended !== "present" &&
           a.service_id &&
           localStorage.getItem(`vc_checkin_dismissed_${a.id}`) !== "true",
       );

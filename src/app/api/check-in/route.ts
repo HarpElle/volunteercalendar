@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     // Mark attendance
     await assignDoc.ref.update({
-      attended: true,
+      attended: "present",
       attended_at: now,
       check_in_method: "qr",
     });

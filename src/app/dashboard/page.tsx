@@ -430,7 +430,7 @@ export default function DashboardPage() {
             {/* Upcoming Services */}
             <div className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
               <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
-                <h2 className="font-semibold text-vc-indigo">Upcoming Services</h2>
+                <h2 className="text-base font-semibold text-vc-indigo">Upcoming Services</h2>
                 <Link href="/dashboard/schedules" className="text-xs text-vc-coral hover:underline">View all</Link>
               </div>
               {stats.upcomingServices.length === 0 ? (
@@ -461,7 +461,7 @@ export default function DashboardPage() {
             {/* Volunteer Equity */}
             <div className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
               <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
-                <h2 className="font-semibold text-vc-indigo">Most Scheduled Volunteers</h2>
+                <h2 className="text-base font-semibold text-vc-indigo">Most Scheduled Volunteers</h2>
                 <Link href="/dashboard/volunteers" className="text-xs text-vc-coral hover:underline">View all</Link>
               </div>
               {stats.topVolunteers.length === 0 ? (

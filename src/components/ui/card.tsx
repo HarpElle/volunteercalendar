@@ -1,7 +1,7 @@
 import { type HTMLAttributes } from "react";
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "bordered" | "elevated";
+  variant?: "default" | "bordered" | "elevated" | "tappable";
 }
 
 function Card({ variant = "default", className = "", children, ...props }: CardProps) {
@@ -9,6 +9,7 @@ function Card({ variant = "default", className = "", children, ...props }: CardP
     default: "bg-white",
     bordered: "bg-white border border-vc-border",
     elevated: "bg-white shadow-md",
+    tappable: "bg-white border border-vc-border-light cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]",
   };
 
   return (

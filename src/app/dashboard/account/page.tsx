@@ -8,7 +8,10 @@ import {
   getChurchDocuments,
   removeChurchDocument,
   updateDocument,
+  getMembership,
 } from "@/lib/firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 import {
   updateUserDisplayName,
   changePassword,
@@ -18,7 +21,8 @@ import { Input } from "@/components/ui/input";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
+import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, SchedulerNotificationPreferences } from "@/lib/types";
+import { SCHEDULER_NOTIFICATION_TYPES, DEFAULT_SCHEDULER_NOTIFICATION_PREFS } from "@/lib/constants";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -54,6 +58,14 @@ export default function AccountPage() {
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // Scheduler notification prefs state
+  const [churchTier, setChurchTier] = useState("free");
+  const [schedNotifPrefs, setSchedNotifPrefs] = useState<SchedulerNotificationPreferences>(
+    activeMembership?.scheduler_notification_preferences ?? DEFAULT_SCHEDULER_NOTIFICATION_PREFS,
+  );
+  const [schedNotifSaving, setSchedNotifSaving] = useState(false);
+  const [schedNotifSuccess, setSchedNotifSuccess] = useState("");
+
   // Delete account state
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -75,14 +87,18 @@ export default function AccountPage() {
     }
     async function load() {
       try {
-        const [feedDocs, volDocs, minDocs] = await Promise.all([
+        const [feedDocs, volDocs, minDocs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "calendar_feeds"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
+          getDoc(doc(db, "churches", churchId!)),
         ]);
         setFeeds(feedDocs as unknown as CalendarFeed[]);
         setVolunteers(volDocs as unknown as Volunteer[]);
         setMinistries(minDocs as unknown as Ministry[]);
+        if (churchSnap.exists()) {
+          setChurchTier(churchSnap.data().subscription_tier || "free");
+        }
       } catch {
         // silent
       } finally {
@@ -249,6 +265,68 @@ export default function AccountPage() {
     setCopied(feedId);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  // --- Scheduler notification preferences handler ---
+
+  async function handleSchedNotifSave() {
+    if (!activeMembership) return;
+    setSchedNotifSaving(true);
+    setSchedNotifSuccess("");
+    try {
+      await updateDocument("memberships", activeMembership.id, {
+        scheduler_notification_preferences: schedNotifPrefs,
+        updated_at: new Date().toISOString(),
+      });
+      setSchedNotifSuccess("Notification preferences saved.");
+      setTimeout(() => setSchedNotifSuccess(""), 3000);
+    } catch {
+      // silent
+    } finally {
+      setSchedNotifSaving(false);
+    }
+  }
+
+  function toggleNotifType(type: string) {
+    setSchedNotifPrefs((prev) => {
+      const enabled = prev.enabled_types.includes(type as import("@/lib/types").SchedulerNotificationType);
+      return {
+        ...prev,
+        enabled_types: enabled
+          ? prev.enabled_types.filter((t) => t !== type)
+          : [...prev.enabled_types, type as import("@/lib/types").SchedulerNotificationType],
+      };
+    });
+  }
+
+  function toggleChannel(urgency: "standard" | "urgent", channel: "email" | "sms") {
+    setSchedNotifPrefs((prev) => {
+      if (urgency === "standard") {
+        // Standard only supports "email" | "none"
+        if (channel === "sms") return prev;
+        const current = prev.channels.standard;
+        const has = current.includes(channel);
+        return {
+          ...prev,
+          channels: {
+            ...prev.channels,
+            standard: has ? current.filter((c) => c !== channel) : [...current, channel],
+          },
+        };
+      }
+      // Urgent supports "email" | "sms" | "none"
+      const current = prev.channels.urgent;
+      const has = current.includes(channel);
+      return {
+        ...prev,
+        channels: {
+          ...prev.channels,
+          urgent: has ? current.filter((c) => c !== channel) : [...current, channel],
+        },
+      };
+    });
+  }
+
+  const smsEligible = churchTier !== "free";
 
   const feedTypeLabels: Record<CalendarFeedType, string> = {
     personal: "Personal (one volunteer)",
@@ -527,6 +605,137 @@ export default function AccountPage() {
           </div>
         )}
       </section>
+
+      {/* Scheduler Notification Preferences — visible to scheduler+ roles */}
+      {(userIsScheduler || userIsAdmin) && (
+        <section className="mb-10">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Scheduler Notifications</h2>
+          <div className="rounded-xl border border-vc-border-light bg-white p-6 space-y-6">
+            <p className="text-sm text-vc-text-secondary">
+              Choose which notifications you receive and how they&apos;re delivered.
+            </p>
+
+            {/* Notification types */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-vc-indigo">Notification Types</h3>
+              {SCHEDULER_NOTIFICATION_TYPES.map((nt) => (
+                <label key={nt.value} className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={schedNotifPrefs.enabled_types.includes(nt.value)}
+                    onChange={() => toggleNotifType(nt.value)}
+                    className="mt-0.5 h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium text-vc-text">{nt.label}</span>
+                    {nt.urgency === "urgent" && (
+                      <span className="ml-2 inline-flex rounded-full bg-vc-coral/10 px-1.5 py-0.5 text-[10px] font-semibold text-vc-coral uppercase tracking-wide">
+                        Urgent
+                      </span>
+                    )}
+                    <p className="text-xs text-vc-text-muted">{nt.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Channel preferences */}
+            <div className="space-y-4 border-t border-vc-border-light pt-4">
+              <h3 className="text-sm font-medium text-vc-indigo">Delivery Channels</h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Standard notifications */}
+                <div className="rounded-lg border border-vc-border-light p-4">
+                  <p className="text-sm font-medium text-vc-text mb-2">Standard Notifications</p>
+                  <p className="text-xs text-vc-text-muted mb-3">Assignment changes, schedule published</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={schedNotifPrefs.channels.standard.includes("email")}
+                      onChange={() => toggleChannel("standard", "email")}
+                      className="h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral"
+                    />
+                    <span className="text-sm text-vc-text">Email</span>
+                  </label>
+                </div>
+
+                {/* Urgent notifications */}
+                <div className="rounded-lg border border-vc-border-light p-4">
+                  <p className="text-sm font-medium text-vc-text mb-2">Urgent Notifications</p>
+                  <p className="text-xs text-vc-text-muted mb-3">Absences, self-removals, swap requests</p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={schedNotifPrefs.channels.urgent.includes("email")}
+                        onChange={() => toggleChannel("urgent", "email")}
+                        className="h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral"
+                      />
+                      <span className="text-sm text-vc-text">Email</span>
+                    </label>
+                    <label className={`flex items-center gap-2 ${smsEligible ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
+                      <input
+                        type="checkbox"
+                        checked={schedNotifPrefs.channels.urgent.includes("sms")}
+                        onChange={() => smsEligible && toggleChannel("urgent", "sms")}
+                        disabled={!smsEligible}
+                        className="h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral"
+                      />
+                      <span className="text-sm text-vc-text">SMS</span>
+                      {!smsEligible && (
+                        <span className="text-[10px] text-vc-text-muted bg-vc-bg-warm rounded px-1.5 py-0.5">
+                          Starter+ plan
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Ministry scope (optional) */}
+            {ministries.length > 1 && (
+              <div className="space-y-3 border-t border-vc-border-light pt-4">
+                <div>
+                  <h3 className="text-sm font-medium text-vc-indigo">Ministry Scope</h3>
+                  <p className="text-xs text-vc-text-muted">
+                    Limit notifications to specific ministries. Leave all unchecked to receive notifications for all ministries.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {ministries
+                    .filter((m) => userIsAdmin || schedulerMinistryScope.length === 0 || schedulerMinistryScope.includes(m.id))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((m) => (
+                      <label key={m.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={schedNotifPrefs.ministry_scope.includes(m.id)}
+                          onChange={() => {
+                            setSchedNotifPrefs((prev) => ({
+                              ...prev,
+                              ministry_scope: prev.ministry_scope.includes(m.id)
+                                ? prev.ministry_scope.filter((id) => id !== m.id)
+                                : [...prev.ministry_scope, m.id],
+                            }));
+                          }}
+                          className="h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral"
+                        />
+                        <span className="text-sm text-vc-text">{m.name}</span>
+                      </label>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Save */}
+            {schedNotifSuccess && <p className="text-sm text-vc-sage">{schedNotifSuccess}</p>}
+            <Button size="sm" loading={schedNotifSaving} onClick={handleSchedNotifSave}>
+              Save Notification Preferences
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* Danger Zone */}
       <section className="mb-10">

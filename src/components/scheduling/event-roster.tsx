@@ -8,7 +8,9 @@ import { getEventSignups, updateSignupAttendance } from "@/lib/firebase/firestor
 import { isAdmin } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
 import { printRoster } from "@/lib/utils/print-roster";
-import type { Event, EventSignup, Membership } from "@/lib/types";
+import { normalizeAttendance } from "@/lib/types";
+import type { Event, EventSignup, Membership, AttendanceStatus } from "@/lib/types";
+import { AttendanceToggle } from "@/components/scheduling/attendance-toggle";
 
 interface EventRosterProps {
   event: Event;
@@ -53,7 +55,7 @@ export function EventRoster({
   const [loading, setLoading] = useState(true);
   const [signups, setSignups] = useState<EventSignup[]>([]);
   const [tab, setTab] = useState<Tab>("roster");
-  const [attendanceMap, setAttendanceMap] = useState<Map<string, boolean | null>>(new Map());
+  const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceStatus>>(new Map());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -70,9 +72,9 @@ export function EventRoster({
       const data = await getEventSignups(event.id, churchId);
       const active = data.filter((s) => s.status !== "cancelled");
       setSignups(active);
-      const aMap = new Map<string, boolean | null>();
+      const aMap = new Map<string, AttendanceStatus>();
       for (const s of active) {
-        aMap.set(s.id, s.attended ?? null);
+        aMap.set(s.id, normalizeAttendance(s.attended));
       }
       setAttendanceMap(aMap);
       setDirty(false);
@@ -111,15 +113,12 @@ export function EventRoster({
   const toggleAttendance = (signupId: string) => {
     setAttendanceMap((prev) => {
       const next = new Map(prev);
-      const current = next.get(signupId);
-      // cycle: null → true → false → true
-      if (current === null || current === undefined) {
-        next.set(signupId, true);
-      } else if (current === true) {
-        next.set(signupId, false);
-      } else {
-        next.set(signupId, true);
-      }
+      const current = next.get(signupId) ?? null;
+      // Cycle: null → present → no_show → excused → null
+      if (current === null) next.set(signupId, "present");
+      else if (current === "present") next.set(signupId, "no_show");
+      else if (current === "no_show") next.set(signupId, "excused");
+      else next.set(signupId, null);
       return next;
     });
     setDirty(true);
@@ -129,7 +128,7 @@ export function EventRoster({
     setAttendanceMap((prev) => {
       const next = new Map(prev);
       for (const s of signups) {
-        next.set(s.id, true);
+        next.set(s.id, "present");
       }
       return next;
     });
@@ -141,9 +140,9 @@ export function EventRoster({
     try {
       const promises: Promise<void>[] = [];
       for (const s of signups) {
-        const newVal = attendanceMap.get(s.id);
-        if (newVal !== (s.attended ?? null)) {
-          promises.push(updateSignupAttendance(s.id, newVal === true));
+        const newVal = attendanceMap.get(s.id) ?? null;
+        if (newVal !== normalizeAttendance(s.attended)) {
+          promises.push(updateSignupAttendance(s.id, newVal));
         }
       }
       await Promise.all(promises);
@@ -245,17 +244,19 @@ export function EventRoster({
       ) : (
         <>
           {/* Summary bar */}
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm text-vc-text-secondary">
-              <span className="font-semibold text-vc-indigo">{totalFilled}</span>
-              <span className="text-vc-text-muted">/{totalSlots}</span> signed up
-            </p>
+          <div className="mb-4 flex items-center justify-between min-h-[36px]">
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-vc-text-secondary">
+                <span className="font-semibold text-vc-indigo">{totalFilled}</span>
+                <span className="text-vc-text-muted">/{totalSlots}</span> signed up
+              </p>
+            </div>
             <div className="flex items-center gap-2">
-              {tab === "attendance" && (
-                <Button variant="ghost" size="sm" onClick={markAllPresent} className="no-print">
+              <div className={tab === "attendance" ? "" : "invisible"}>
+                <Button variant="outline" size="sm" onClick={markAllPresent} className="no-print">
                   Mark all present
                 </Button>
-              )}
+              </div>
               <button
                 onClick={() =>
                   printRoster({
@@ -379,9 +380,9 @@ export function EventRoster({
             ))}
           </div>
 
-          {/* Save button for attendance */}
-          {tab === "attendance" && dirty && (
-            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print">
+          {/* Save button for attendance — always reserve space to prevent layout shift */}
+          {tab === "attendance" && (
+            <div className={`mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print transition-opacity ${dirty ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
               <Button onClick={saveAttendance} loading={saving}>
                 Save Attendance
               </Button>
@@ -408,45 +409,3 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function AttendanceToggle({
-  value,
-  onClick,
-}: {
-  value: boolean | null;
-  onClick: () => void;
-}) {
-  if (value === true) {
-    return (
-      <button
-        onClick={onClick}
-        className="flex items-center gap-1 rounded-full bg-vc-sage/15 px-2.5 py-1 text-xs font-medium text-vc-sage transition-colors hover:bg-vc-sage/25"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Present
-      </button>
-    );
-  }
-  if (value === false) {
-    return (
-      <button
-        onClick={onClick}
-        className="flex items-center gap-1 rounded-full bg-vc-danger/5 px-2.5 py-1 text-xs font-medium text-vc-danger transition-colors hover:bg-vc-danger/10"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        No-show
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-full bg-vc-bg-cream px-2.5 py-1 text-xs font-medium text-vc-text-muted transition-colors hover:bg-vc-bg-warm"
-    >
-      Not marked
-    </button>
-  );
-}

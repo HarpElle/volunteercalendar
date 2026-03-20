@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
-import { buildSelfRemovalAlertEmail } from "@/lib/utils/emails";
-import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
+import { buildAbsenceAlertEmail } from "@/lib/utils/emails/absence-alert";
 import { sendSms } from "@/lib/services/sms";
+import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
 import type { Membership } from "@/lib/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-interface SelfRemoveBody {
+interface AbsenceBody {
   church_id: string;
   item_type: "assignment" | "event_signup";
   item_id: string;
@@ -16,10 +16,11 @@ interface SelfRemoveBody {
 }
 
 /**
- * POST /api/roster/self-remove
+ * POST /api/notify/absence
  *
- * Allows a volunteer to remove themselves from an assignment or event signup.
- * Sends notification to schedulers for the relevant ministry + all admins/owners.
+ * Allows a volunteer to notify their scheduler(s) that they can't make it.
+ * Marks the assignment as "excused" and sends email + optional SMS alerts
+ * to relevant schedulers and admins.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const userId = decoded.uid;
 
-    const body = (await req.json()) as SelfRemoveBody;
+    const body = (await req.json()) as AbsenceBody;
     const { church_id, item_type, item_id, note } = body;
 
     if (!church_id || !item_type || !item_id) {
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     const membership = membershipSnap.data()!;
     const userVolunteerId = membership.volunteer_id as string;
 
-    // Fetch the item and verify ownership
+    // Fetch item and verify ownership
     let volunteerId: string;
     let ministryId = "";
     let roleName = "";
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       serviceDate = data.service_date as string;
 
       if (volunteerId !== userVolunteerId) {
-        return NextResponse.json({ error: "You can only remove yourself" }, { status: 403 });
+        return NextResponse.json({ error: "You can only notify for your own assignments" }, { status: 403 });
       }
 
       // Get service name
@@ -76,8 +77,11 @@ export async function POST(req: NextRequest) {
         if (svcSnap.exists) serviceName = (svcSnap.data()!.name as string) || serviceName;
       }
 
-      // Mark as declined
-      await docRef.update({ status: "declined", responded_at: new Date().toISOString() });
+      // Mark as excused
+      await docRef.update({
+        attended: "excused",
+        attended_at: new Date().toISOString(),
+      });
     } else {
       const docRef = adminDb.doc(`event_signups/${item_id}`);
       const snap = await docRef.get();
@@ -92,7 +96,7 @@ export async function POST(req: NextRequest) {
       roleName = data.role_title as string;
 
       if (volunteerId !== userVolunteerId) {
-        return NextResponse.json({ error: "You can only remove yourself" }, { status: 403 });
+        return NextResponse.json({ error: "You can only notify for your own signups" }, { status: 403 });
       }
 
       // Get event name + date
@@ -107,8 +111,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Mark as cancelled
-      await docRef.update({ status: "cancelled" });
+      // Mark as excused
+      await docRef.update({
+        attended: "excused",
+        attended_at: new Date().toISOString(),
+      });
     }
 
     // Get volunteer name
@@ -135,7 +142,7 @@ export async function POST(req: NextRequest) {
       const mData = mDoc.data();
       const mRole = mData.role as string;
       const mUserId = mData.user_id as string;
-      if (mUserId === userId) continue; // Don't notify the person who removed themselves
+      if (mUserId === userId) continue; // Don't notify the volunteer themselves
 
       let isRecipient = false;
       if (mRole === "admin" || mRole === "owner") {
@@ -153,7 +160,7 @@ export async function POST(req: NextRequest) {
       const membershipAsType = { id: mDoc.id, ...mData } as Membership;
       const { email: sendEmail, sms: sendSmsFlag } = shouldNotifyScheduler(
         membershipAsType,
-        "self_removal",
+        "absence_alert",
         subscriptionTier,
       );
 
@@ -169,7 +176,7 @@ export async function POST(req: NextRequest) {
 
       // Send email
       if (sendEmail && recipientEmail) {
-        const email = buildSelfRemovalAlertEmail({
+        const email = buildAbsenceAlertEmail({
           recipientName,
           volunteerName,
           churchName,
@@ -195,7 +202,7 @@ export async function POST(req: NextRequest) {
 
       // Send SMS if preferences allow and recipient has a phone number
       if (sendSmsFlag && recipientPhone) {
-        const smsText = `VolunteerCal: ${volunteerName} removed themselves from ${roleName} (${serviceName}) on ${serviceDate}. Check your dashboard.`;
+        const smsText = `VolunteerCal: ${volunteerName} can't make it for ${roleName} (${serviceName}) on ${serviceDate}. Check your dashboard.`;
         try {
           await sendSms({ to: recipientPhone, body: smsText });
           smsCount++;
@@ -204,6 +211,19 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Log notification
+    await adminDb.collection("sent_notifications").add({
+      church_id,
+      volunteer_id: volunteerId,
+      volunteer_name: volunteerName,
+      type: "absence_alert",
+      channel: "email",
+      status: "sent",
+      error_message: null,
+      external_id: null,
+      sent_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       success: true,

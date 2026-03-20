@@ -1,6 +1,6 @@
 # VolunteerCal — Roadmap
 
-_Last updated: March 2026 (after Phase 25)_
+_Last updated: March 2026 (after Phase 31)_
 
 ## 1. Blocked by External Dependencies
 
@@ -38,7 +38,9 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 - [ ] Test public pages: landing, pricing, join page, event signup, short link resolver, privacy, terms
 - [ ] Test invite flow: admin sends invite → recipient receives email → clicks accept → appears in People
 - [ ] Test event lifecycle: create event → add role slots → publish signup link → volunteer signs up → view roster → mark attendance
-- [ ] Test service roster: Services & Events → Services tab → click Roster → modal opens for next service date → view assignments → mark attendance
+- [ ] Test service roster: Services & Events → Services tab → click "Roster & Attendance" → modal opens for next service date → view assignments → toggle attendance (present/no-show/excused/not marked)
+- [ ] Test absence alert: My Schedule → upcoming item → "Can't Make It" → add note → submit → scheduler receives email (+ SMS on Starter+ with SMS enabled)
+- [ ] Test scheduler notification preferences: Account → Scheduler Notifications → toggle types/channels → save → verify alerts respect preferences
 - [ ] Test QR check-in: generate code from scheduling dashboard → scan on phone → check-in page → confirm → attendance marked
 - [ ] Test smart check-in: create assignment for today → open dashboard within time window → banner appears → tap "Check In" → attendance marked with method "self"
 - [ ] Test proximity check-in: enable proximity in org settings → add campus with coordinates → visit app near campus → banner shows proximity copy → check in → method "proximity"
@@ -113,7 +115,7 @@ These are things beta users should be aware of:
 
 ---
 
-## 6. Recently Completed (Phases 23–25)
+## 6. Recently Completed (Phases 23–31)
 
 Items previously on this roadmap that are now built:
 
@@ -131,3 +133,9 @@ Items previously on this roadmap that are now built:
 | Account linking | 23 | Guest signup → registered user resolution |
 | Design system hardening | 25 | Brand token fixes, skeleton/toast/confirm-dialog components, ARIA, touch targets |
 | Admin SDK migration | 22 | All server API routes use Admin SDK (previously noted as incomplete — now done) |
+| Content, copy & user guidance | 26 | Landing page rewrite, features 6→9, FAQ section, Help Center, InfoTooltip, PWA install banner |
+| Org-wide prerequisites | 27 | Shared PrerequisiteEditor, onboarding two-tab layout, scheduler eligibility checks |
+| Smart check-in & address autocomplete | 28 | Time-aware self-check-in banner, proximity check-in, Google Places, check-in settings |
+| Service roster access parity | 29 | Roster button on service cards, attendance tab accessible for future dates |
+| Attendance overhaul & absence alerts | 30 | AttendanceStatus enum (present/no_show/excused), shared toggle component, "Can't Make It" flow, absence alert email+SMS, scheduler notification preferences |
+| UI/UX consistency audit | 31 | Tappable card patterns, 44px touch targets across all pages, hover-only interactions eliminated, input sizing, heading consistency |

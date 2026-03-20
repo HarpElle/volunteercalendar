@@ -12,7 +12,9 @@ import {
 import { canScheduleMinistry } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
 import { printRoster } from "@/lib/utils/print-roster";
-import type { Service, Assignment, Ministry, Volunteer, Membership } from "@/lib/types";
+import { normalizeAttendance } from "@/lib/types";
+import type { Service, Assignment, Ministry, Volunteer, Membership, AttendanceStatus } from "@/lib/types";
+import { AttendanceToggle } from "@/components/scheduling/attendance-toggle";
 
 interface ServiceRosterProps {
   service: Service;
@@ -63,7 +65,7 @@ export function ServiceRoster({
   const [volunteerNames, setVolunteerNames] = useState<Map<string, string>>(new Map());
   const [tab, setTab] = useState<Tab>("roster");
   const [viewLevel, setViewLevel] = useState<ViewLevel>("org");
-  const [attendanceMap, setAttendanceMap] = useState<Map<string, boolean | null>>(new Map());
+  const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceStatus>>(new Map());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -92,9 +94,9 @@ export function ServiceRoster({
       }
       setVolunteerNames(nameMap);
 
-      const aMap = new Map<string, boolean | null>();
+      const aMap = new Map<string, AttendanceStatus>();
       for (const a of active) {
-        aMap.set(a.id, a.attended ?? null);
+        aMap.set(a.id, normalizeAttendance(a.attended));
       }
       setAttendanceMap(aMap);
       setDirty(false);
@@ -147,14 +149,12 @@ export function ServiceRoster({
   const toggleAttendance = (assignmentId: string) => {
     setAttendanceMap((prev) => {
       const next = new Map(prev);
-      const current = next.get(assignmentId);
-      if (current === null || current === undefined) {
-        next.set(assignmentId, true);
-      } else if (current === true) {
-        next.set(assignmentId, false);
-      } else {
-        next.set(assignmentId, true);
-      }
+      const current = next.get(assignmentId) ?? null;
+      // Cycle: null → present → no_show → excused → null
+      if (current === null) next.set(assignmentId, "present");
+      else if (current === "present") next.set(assignmentId, "no_show");
+      else if (current === "no_show") next.set(assignmentId, "excused");
+      else next.set(assignmentId, null);
       return next;
     });
     setDirty(true);
@@ -164,7 +164,7 @@ export function ServiceRoster({
     setAttendanceMap((prev) => {
       const next = new Map(prev);
       for (const a of filtered) {
-        next.set(a.id, true);
+        next.set(a.id, "present");
       }
       return next;
     });
@@ -176,10 +176,10 @@ export function ServiceRoster({
     try {
       const promises: Promise<void>[] = [];
       for (const a of filtered) {
-        const newVal = attendanceMap.get(a.id);
-        if (newVal !== (a.attended ?? null)) {
+        const newVal = attendanceMap.get(a.id) ?? null;
+        if (newVal !== normalizeAttendance(a.attended)) {
           promises.push(
-            updateAssignmentAttendance(churchId, a.id, newVal === true),
+            updateAssignmentAttendance(churchId, a.id, newVal),
           );
         }
       }
@@ -253,8 +253,9 @@ export function ServiceRoster({
     .join(" · ");
 
   // Attendance stats
-  const presentCount = filtered.filter((a) => attendanceMap.get(a.id) === true).length;
-  const noShowCount = filtered.filter((a) => attendanceMap.get(a.id) === false).length;
+  const presentCount = filtered.filter((a) => attendanceMap.get(a.id) === "present").length;
+  const noShowCount = filtered.filter((a) => attendanceMap.get(a.id) === "no_show").length;
+  const excusedCount = filtered.filter((a) => attendanceMap.get(a.id) === "excused").length;
   const unmarkedCount = filtered.filter((a) => attendanceMap.get(a.id) == null).length;
 
   return (
@@ -322,25 +323,28 @@ export function ServiceRoster({
       ) : (
         <>
           {/* Summary bar */}
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between min-h-[36px]">
             <div className="flex items-center gap-3">
               <p className="text-sm text-vc-text-secondary">
                 <span className="font-semibold text-vc-indigo">{filtered.length}</span> assigned
               </p>
-              {tab === "attendance" && (
-                <div className="flex items-center gap-2 text-xs text-vc-text-muted">
-                  <span className="text-vc-sage">{presentCount} present</span>
-                  {noShowCount > 0 && <span className="text-vc-danger">{noShowCount} no-show</span>}
-                  {unmarkedCount > 0 && <span>{unmarkedCount} unmarked</span>}
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-xs text-vc-text-muted min-h-[20px]">
+                {tab === "attendance" ? (
+                  <>
+                    <span className="text-vc-sage">{presentCount} present</span>
+                    {noShowCount > 0 && <span className="text-vc-danger">{noShowCount} no-show</span>}
+                    {excusedCount > 0 && <span className="text-vc-sand">{excusedCount} excused</span>}
+                    {unmarkedCount > 0 && <span>{unmarkedCount} unmarked</span>}
+                  </>
+                ) : null}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              {tab === "attendance" && (
-                <Button variant="ghost" size="sm" onClick={markAllPresent} className="no-print">
+              <div className={tab === "attendance" ? "" : "invisible"}>
+                <Button variant="outline" size="sm" onClick={markAllPresent} className="no-print">
                   Mark all present
                 </Button>
-              )}
+              </div>
               <button
                 onClick={() =>
                   printRoster({
@@ -456,9 +460,9 @@ export function ServiceRoster({
             })}
           </div>
 
-          {/* Save button for attendance */}
-          {tab === "attendance" && dirty && (
-            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print">
+          {/* Save button for attendance — always reserve space to prevent layout shift */}
+          {tab === "attendance" && (
+            <div className={`mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print transition-opacity ${dirty ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
               <Button onClick={saveAttendance} loading={saving}>
                 Save Attendance
               </Button>
@@ -492,45 +496,3 @@ function AssignmentStatusBadge({ status }: { status: string }) {
   );
 }
 
-function AttendanceToggle({
-  value,
-  onClick,
-}: {
-  value: boolean | null;
-  onClick: () => void;
-}) {
-  if (value === true) {
-    return (
-      <button
-        onClick={onClick}
-        className="flex items-center gap-1 rounded-full bg-vc-sage/15 px-2.5 py-1 text-xs font-medium text-vc-sage transition-colors hover:bg-vc-sage/25"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Present
-      </button>
-    );
-  }
-  if (value === false) {
-    return (
-      <button
-        onClick={onClick}
-        className="flex items-center gap-1 rounded-full bg-vc-danger/5 px-2.5 py-1 text-xs font-medium text-vc-danger transition-colors hover:bg-vc-danger/10"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        No-show
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-full bg-vc-bg-cream px-2.5 py-1 text-xs font-medium text-vc-text-muted transition-colors hover:bg-vc-bg-warm"
-    >
-      Not marked
-    </button>
-  );
-}

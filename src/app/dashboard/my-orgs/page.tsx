@@ -151,14 +151,14 @@ export default function MyOrgsPage() {
                       <button
                         onClick={() => handleAcceptInvite(m)}
                         disabled={actionLoading === m.id}
-                        className="rounded-lg bg-vc-sage px-3 py-1.5 text-xs font-medium text-white hover:bg-vc-sage/90 transition-colors disabled:opacity-50"
+                        className="rounded-lg bg-vc-sage px-4 py-2 text-sm font-medium text-white hover:bg-vc-sage/90 transition-colors disabled:opacity-50 min-h-[44px]"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => handleDeclineInvite(m)}
                         disabled={actionLoading === m.id}
-                        className="rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors disabled:opacity-50"
+                        className="rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors disabled:opacity-50 min-h-[44px]"
                       >
                         Decline
                       </button>
@@ -237,7 +237,7 @@ export default function MyOrgsPage() {
                   {!isActive && (
                     <button
                       onClick={() => switchOrg(m.church_id)}
-                      className="rounded-lg border border-vc-coral px-3 py-1.5 text-xs font-medium text-vc-coral hover:bg-vc-coral/5 transition-colors"
+                      className="rounded-lg border border-vc-coral px-3 py-2 text-sm font-medium text-vc-coral hover:bg-vc-coral/5 transition-colors min-h-[44px]"
                     >
                       Switch to
                     </button>
@@ -253,7 +253,7 @@ export default function MyOrgsPage() {
                       <button
                         key={ch}
                         onClick={() => toggleReminder(m, ch)}
-                        className={`rounded-md border px-2 py-1 text-xs font-medium transition-all ${
+                        className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-all min-h-[44px] ${
                           isOn
                             ? "border-vc-sage/40 bg-vc-sage/10 text-vc-sage"
                             : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
