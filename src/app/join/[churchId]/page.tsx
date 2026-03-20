@@ -5,8 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { createMembership, membershipDocId, getMembership } from "@/lib/firebase/firestore";
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -27,13 +25,15 @@ export default function JoinChurchPage() {
   useEffect(() => {
     async function load() {
       try {
-        const churchSnap = await getDoc(doc(db, "churches", churchId));
-        if (!churchSnap.exists()) {
+        const res = await fetch(`/api/church-info?id=${encodeURIComponent(churchId)}`);
+        if (res.status === 404) {
           setStatus("not_found");
           setLoading(false);
           return;
         }
-        setChurchName(churchSnap.data().name || "this organization");
+        if (!res.ok) throw new Error("Failed to load");
+        const church = await res.json();
+        setChurchName(church.name || "this organization");
 
         if (user) {
           const existingId = membershipDocId(user.uid, churchId);

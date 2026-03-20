@@ -15,12 +15,12 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "./config";
 import type { UserProfile } from "@/lib/types";
 
-export async function signUp(email: string, password: string, displayName: string) {
+export async function signUp(email: string, password: string, displayName: string, phone?: string) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const profile: Omit<UserProfile, "id"> = {
     email,
     display_name: displayName,
-    phone: null,
+    phone: phone?.trim() || null,
     default_church_id: null,
     church_id: "",
     role: "admin",

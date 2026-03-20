@@ -88,7 +88,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 // --- Context ---
 
 interface AuthContextValue extends AuthState {
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string, phone?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -214,10 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
-  async function signUp(email: string, password: string, displayName: string) {
+  async function signUp(email: string, password: string, displayName: string, phone?: string) {
     dispatch({ type: "CLEAR_ERROR" });
     try {
-      await fbSignUp(email, password, displayName);
+      await fbSignUp(email, password, displayName, phone);
       // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });

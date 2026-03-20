@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 
 export default function RegisterPage() {
   return (
@@ -24,6 +25,7 @@ function RegisterForm() {
   const { user, loading, signUp, error, clearError } = useAuth();
   const [name, setName] = useState(prefillName);
   const [email, setEmail] = useState(prefillEmail);
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
@@ -52,7 +54,7 @@ function RegisterForm() {
 
     setSubmitting(true);
     try {
-      await signUp(email, password, name);
+      await signUp(email, password, name, phone ? normalizePhone(phone) : undefined);
       // Fire-and-forget welcome email
       fetch("/api/welcome", {
         method: "POST",
@@ -117,6 +119,19 @@ function RegisterForm() {
                 if (error) clearError();
                 setLocalError("");
               }}
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (error) clearError();
+                setLocalError("");
+              }}
+              onBlur={() => setPhone(formatPhoneInput(phone))}
             />
             <Input
               label="Password"

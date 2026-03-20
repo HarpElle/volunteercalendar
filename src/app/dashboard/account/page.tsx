@@ -286,7 +286,7 @@ export default function AccountPage() {
               />
             </div>
             <Input
-              label="Phone Number"
+              label="Phone"
               type="tel"
               placeholder="(555) 123-4567"
               value={phone}
