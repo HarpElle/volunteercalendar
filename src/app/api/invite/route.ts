@@ -127,7 +127,7 @@ export async function POST(request: Request) {
         });
 
         await resend.emails.send({
-          from: "VolunteerCal <noreply@harpelle.com>",
+          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
           replyTo: "info@volunteercal.com",
           to: [email],
           subject: emailContent.subject,
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
         });
 
         await resend.emails.send({
-          from: "VolunteerCal <noreply@harpelle.com>",
+          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
           replyTo: "info@volunteercal.com",
           to: [email],
           subject: emailContent.subject,

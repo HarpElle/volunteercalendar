@@ -1,6 +1,6 @@
 # VolunteerCal — Roadmap
 
-_Last updated: March 2026 (after Phase 22)_
+_Last updated: March 2026 (after Phase 25)_
 
 ## 1. Blocked by External Dependencies
 
@@ -35,9 +35,13 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 - [ ] Test CSV import with real volunteer list (Anchor Falls)
 - [ ] Test calendar feed subscription in Google Calendar and Apple Calendar
 - [ ] Test on mobile (iPhone Safari, Android Chrome)
-- [ ] Test public pages: landing, pricing, join page, event signup, short link resolver
+- [ ] Test public pages: landing, pricing, join page, event signup, short link resolver, privacy, terms
 - [ ] Test invite flow: admin sends invite → recipient receives email → clicks accept → appears in People
 - [ ] Test event lifecycle: create event → add role slots → publish signup link → volunteer signs up → view roster → mark attendance
+- [ ] Test QR check-in: generate code from scheduling dashboard → scan on phone → check-in page → confirm → attendance marked
+- [ ] Test shift swap: volunteer requests swap → eligible replacements listed → replacement accepts → admin approves
+- [ ] Test volunteer health dashboard: verify classification logic against known test data
+- [ ] Test onboarding pipeline: create prerequisite steps → track volunteer progress through pipeline
 - [ ] Set up Firestore daily backup (Google Cloud Console → Firestore → Backups)
 - [ ] Review Firestore security rules in production console
 
@@ -51,7 +55,6 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 |------|-------|
 | Firebase App Check | Prevent API abuse from non-app clients |
 | Error monitoring (Sentry) | Catch production errors before users report them |
-| Migrate remaining client-SDK routes to Admin SDK | `api/export`, `api/billing/portal`, `api/billing/checkout` still use client-side `db` |
 | Add role validation to notification routes | `api/notify`, `api/welcome`, `api/notify/org-created`, `api/notify/role-change`, `api/notify/membership-approved`, `api/notify/welcome-to-org` — verify Bearer token but don't check membership role |
 | Annual billing option | Create annual Stripe Price objects, billing interval toggle UI, discount logic — then re-add "save 20%" copy |
 | Household linking UI | Algorithm already handles household constraints; needs UI for admins to define household groups |
@@ -60,11 +63,11 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 
 | Item | Notes |
 |------|-------|
-| Substitution engine | Allow volunteers to request subs; notify eligible replacements |
 | Additional workflow modes | Ministry-first, hybrid, self-service (defined in constants, setup wizard saves choice, but only centralized is active) |
 | Overage pricing / usage-based billing | Enforce tier limits on API side, auto-prompt upgrade |
 | Pagination for large collections | Volunteers list, events list, assignment history — currently loads all |
 | Denormalize signup counts | Write `active_signup_count` on Event docs via Cloud Function trigger |
+| Push notification content | FCM infrastructure is in place (Phase 23); need to wire it into reminder delivery and shift swap notifications |
 
 ### Lower Priority (before 200 paying orgs)
 
@@ -98,8 +101,28 @@ These are things beta users should be aware of:
 
 - **Monthly billing only** — Annual billing is planned but not yet available
 - **Centralized scheduling only** — Ministry-first, hybrid, and self-service workflow modes are defined but not active. The setup wizard saves the choice for when they're built.
-- **No substitution requests** — Volunteers can self-remove but can't request a substitute
-- **No push notifications** — Reminders are email + SMS only
+- **No push notification content yet** — FCM infrastructure is wired up (token registration, service worker) but reminders and swap notifications don't send push yet (email + SMS only)
 - **English only** — No i18n/localization
-- **Single timezone per org** — All services/events use the org's configured timezone
+- **Single timezone per org** — All services/events use the org's configured timezone (campuses can override)
 - **Rate limiting is in-memory** — Resets on serverless cold starts (Vercel). Sufficient for beta; consider Redis-backed rate limiting at scale.
+
+---
+
+## 6. Recently Completed (Phases 23–25)
+
+Items previously on this roadmap that are now built:
+
+| Item | Phase | Notes |
+|------|-------|-------|
+| Shift swap / substitution engine | 24 | Full workflow: volunteer requests → eligible replacements → accept → admin approve |
+| Multi-site / campus support | 24 | Campus model with geolocation, per-campus services, timezone overrides |
+| Volunteer health monitoring | 24 | At-risk, declining, inactive, no-show, healthy classification with email outreach |
+| Onboarding pipeline | 24 | Prerequisite tracking (class, background check, tenure), pipeline stage management |
+| QR check-in | 24 | Code generation, self-check-in page, attendance marking |
+| Auto-reschedule | 24 | Service in lib/services for automatic rescheduling |
+| PWA + push infrastructure | 23 | Service worker, offline page, FCM token management |
+| Privacy policy + Terms | 23 | Legal pages at /privacy and /terms |
+| OG images + sitemap | 23 | Social sharing + SEO |
+| Account linking | 23 | Guest signup → registered user resolution |
+| Design system hardening | 25 | Brand token fixes, skeleton/toast/confirm-dialog components, ARIA, touch targets |
+| Admin SDK migration | 22 | All server API routes use Admin SDK (previously noted as incomplete — now done) |

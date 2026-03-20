@@ -17,12 +17,13 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className="text-sm font-medium text-vc-text"
           >
             {label}
+            {props.required && <span className="ml-0.5 text-vc-coral">*</span>}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={`rounded-lg border border-vc-border bg-white px-3 py-2 text-base text-vc-text placeholder:text-vc-text-muted focus:border-vc-primary-500 focus:outline-none focus:ring-2 focus:ring-vc-primary-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${error ? "border-vc-danger focus:border-vc-danger focus:ring-vc-danger/20" : ""} ${className}`}
+          className={`rounded-lg border border-vc-border bg-white px-3 py-2 text-base text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 disabled:cursor-not-allowed disabled:opacity-50 ${error ? "border-vc-danger focus:border-vc-danger focus:ring-vc-danger/20" : ""} ${className}`}
           {...props}
         />
         {error && (

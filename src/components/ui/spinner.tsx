@@ -12,7 +12,7 @@ const sizeStyles = {
 function Spinner({ size = "md", className = "" }: SpinnerProps) {
   return (
     <svg
-      className={`animate-spin text-vc-primary-600 ${sizeStyles[size]} ${className}`}
+      className={`animate-spin text-vc-coral ${sizeStyles[size]} ${className}`}
       viewBox="0 0 24 24"
       fill="none"
     >

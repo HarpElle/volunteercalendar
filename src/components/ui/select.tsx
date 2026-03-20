@@ -24,12 +24,13 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             className="text-sm font-medium text-vc-text"
           >
             {label}
+            {props.required && <span className="ml-0.5 text-vc-coral">*</span>}
           </label>
         )}
         <select
           ref={ref}
           id={selectId}
-          className={`rounded-lg border border-vc-border bg-white px-3 py-2 text-base text-vc-text focus:border-vc-primary-500 focus:outline-none focus:ring-2 focus:ring-vc-primary-500/20 disabled:cursor-not-allowed disabled:opacity-50 ${error ? "border-vc-danger" : ""} ${className}`}
+          className={`rounded-lg border border-vc-border bg-white px-3 py-2 text-base text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 disabled:cursor-not-allowed disabled:opacity-50 ${error ? "border-vc-danger" : ""} ${className}`}
           {...props}
         >
           {placeholder && (

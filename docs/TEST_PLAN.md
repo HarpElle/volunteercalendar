@@ -2,7 +2,7 @@
 
 A reusable checklist for verifying full app functionality. Reset checkboxes each time you run through the plan.
 
-**Time estimates:** Critical Path ~30 min | Full Suite ~2.5 hours | Post-Deploy Smoke ~5 min
+**Time estimates:** Critical Path ~30 min | Full Suite ~3 hours | Post-Deploy Smoke ~5 min
 
 ---
 
@@ -104,7 +104,7 @@ Before testing, make sure you have:
 - [ ] **Create ministry** — Add ministry with name, color, optional description and lead
 - [ ] **Edit ministry** — Change name/color → save → verify update in roster
 - [ ] **Delete ministry** — Delete → confirm → ministry removed
-- [ ] **Switch workflow mode** — Change between Centralized/Ministry-first/Hybrid/Self-service
+- [ ] **Workflow mode** — Verify only Centralized is selectable; other modes show "Coming soon" badge and are disabled
 - [ ] **Create short link** — Enter slug, target URL, label → created with expiry
 - [ ] **Short link slug validation** — Try reserved slug (e.g., "dashboard") → rejected
 - [ ] **Short link redirect** — Visit `/s/[your-slug]` → redirects correctly
@@ -266,6 +266,48 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Rate limit test** — Hit a public endpoint (e.g., `/api/waitlist`) 6+ times rapidly → 429 "Too many requests" response
 - [ ] **Mutation error visibility** — Disconnect network (DevTools → Network → Offline) → try saving a ministry or service → red error banner shown (not silent failure)
 
+### L. QR Check-In (~10 min)
+
+- [ ] **Generate check-in code** — Scheduling dashboard → click QR icon on an upcoming service → QR code modal opens
+- [ ] **QR code renders** — Modal shows a valid QR code with the check-in URL
+- [ ] **Copy check-in URL** — Copy the URL from the modal
+- [ ] **Self-check-in (logged in)** — Visit `/check-in/[code]` as a logged-in volunteer → "Check In Now" button appears → click → success with name and date
+- [ ] **Auto-redirect** — After success, 5-second countdown appears → auto-redirects to My Schedule
+- [ ] **View My Schedule link** — "View My Schedule" link works as immediate action (doesn't wait for countdown)
+- [ ] **Not logged in** — Visit check-in URL while logged out → "Sign In" button shown with redirect back to check-in page
+- [ ] **Invalid/expired code** — Visit `/check-in/badcode` → error message
+
+### M. Volunteer Health Dashboard (~10 min)
+
+- [ ] **Page loads** — Navigate to Volunteer Health → stats row shows health distribution
+- [ ] **Classification** — Verify volunteers are classified into categories: healthy, at-risk, declining, inactive, no-show
+- [ ] **At-risk list** — At-risk volunteers shown with details about why they're flagged
+- [ ] **Email outreach** — Click email icon on an at-risk volunteer row → opens mailto: with pre-filled subject
+- [ ] **Responsive layout** — Resize to mobile → volunteer rows stack vertically (not cut off)
+- [ ] **Skeleton loading** — On slow connection (DevTools throttle), skeleton loader appears before data
+
+### N. Onboarding Pipeline (~10 min)
+
+- [ ] **Page loads** — Navigate to Onboarding → pipeline stages visible (not_started, in_progress, cleared)
+- [ ] **Prerequisite steps** — Verify prerequisite types display: class, background check, minimum service, ministry tenure, custom
+- [ ] **Track progress** — Move a volunteer through pipeline stages → status updates
+- [ ] **Bulk selection** — "Select All" checkbox at top of each stage → all items in that stage selected
+
+### O. Shift Swap (~10 min)
+
+- [ ] **Request swap** — As a volunteer, request a shift swap on an upcoming assignment
+- [ ] **Eligible replacements** — System lists eligible volunteers who could take the shift
+- [ ] **Accept swap** — As replacement volunteer, accept the swap request
+- [ ] **Admin approval** — As admin, approve the pending swap → assignment transfers
+- [ ] **Cancel swap** — Request a swap then cancel before anyone accepts → status shows cancelled
+
+### P. Multi-Site / Campus (~5 min)
+
+- [ ] **Create campus** — Organization page → add a campus with name and optional address
+- [ ] **Assign service to campus** — Create/edit a service → optionally assign to a campus
+- [ ] **Campus list** — Multiple campuses shown in organization settings
+- [ ] **Delete campus** — Remove a campus → confirm → campus removed
+
 ---
 
 ## 4. Post-Deploy Smoke Test (~5 min)
@@ -280,6 +322,8 @@ Quick sanity check after deploying to production:
 - [ ] Can publish schedule and confirmation email arrives
 - [ ] Short link redirects work
 - [ ] Join link loads correctly
+- [ ] Check-in page loads at `/check-in/[valid-code]`
+- [ ] Privacy and Terms pages load
 
 ---
 

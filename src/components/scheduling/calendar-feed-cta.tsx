@@ -25,12 +25,13 @@ export function CalendarFeedCta({
   const [choice, setChoice] = useState<FeedChoice>("personal");
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [localFeeds, setLocalFeeds] = useState<CalendarFeed[]>(existingFeeds);
 
   // Find existing feeds for this volunteer
-  const personalFeed = existingFeeds.find(
+  const personalFeed = localFeeds.find(
     (f) => f.type === "personal" && f.target_id === volunteerId,
   );
-  const teamFeed = existingFeeds.find(
+  const teamFeed = localFeeds.find(
     (f) => f.type === "team" && f.target_id === volunteerId,
   );
 
@@ -43,15 +44,24 @@ export function CalendarFeedCta({
   async function createFeed() {
     setCreating(true);
     try {
+      const token = crypto.randomUUID();
+      const newFeed: CalendarFeed = {
+        id: crypto.randomUUID(),
+        church_id: churchId,
+        type: choice,
+        target_id: volunteerId,
+        secret_token: token,
+        created_at: new Date().toISOString(),
+      };
       await addChurchDocument(churchId, "calendar_feeds", {
         church_id: churchId,
         type: choice,
         target_id: volunteerId,
-        secret_token: crypto.randomUUID(),
-        created_at: new Date().toISOString(),
+        secret_token: token,
+        created_at: newFeed.created_at,
       });
-      // Force a page reload to pick up the new feed
-      window.location.reload();
+      // Optimistic update — add feed to local state without page reload
+      setLocalFeeds((prev) => [...prev, newFeed]);
     } catch {
       // silent
     } finally {

@@ -3,7 +3,7 @@
 export { wrapInLayout, formatDateLong, detailCard, detailRow, ctaButton, mutedCenter, onBehalfFooter } from "./base-layout";
 export type { LayoutOptions } from "./base-layout";
 
-export { buildWelcomeEmail } from "./welcome";
+export { buildWelcomeEmail, buildAccountCreatedEmail } from "./welcome";
 export { buildConfirmationEmail } from "./confirmation";
 export { buildPurchaseThankYouEmail } from "./purchase-thank-you";
 export { buildReEngagementEmail } from "./re-engagement";

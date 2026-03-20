@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { setDocument, updateDocument, createMembership, getDocument } from "@/lib/firebase/firestore";
 import { getAuth } from "firebase/auth";
@@ -21,8 +21,18 @@ const TIMEZONE_OPTIONS = [
 ];
 
 export default function ChurchSetupPage() {
+  return (
+    <Suspense>
+      <SetupContent />
+    </Suspense>
+  );
+}
+
+function SetupContent() {
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const searchParams = useSearchParams();
+  const isNewOrgMode = searchParams.get("mode") === "new";
+  const { user, profile, memberships } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -33,12 +43,12 @@ export default function ChurchSetupPage() {
 
   const selectedWorkflow = WORKFLOW_MODES.find((m) => m.value === workflowMode);
 
-  // Redirect if user already has an org set up
+  // Redirect if user already has an org set up — unless they're creating an additional org
   useEffect(() => {
-    if (profile?.church_id) {
+    if (profile?.church_id && !isNewOrgMode) {
       router.replace("/dashboard");
     }
-  }, [profile, router]);
+  }, [profile, router, isNewOrgMode]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,8 +80,10 @@ export default function ChurchSetupPage() {
         created_at: new Date().toISOString(),
       };
 
-      // Use the user's UID as the church ID for simple 1:1 mapping during MVP
-      const churchId = user.uid;
+      // For first org, use user.uid for simple 1:1 mapping.
+      // For additional orgs, generate a unique ID.
+      const hasExistingOrg = memberships.some((m) => m.status === "active");
+      const churchId = hasExistingOrg ? crypto.randomUUID() : user.uid;
 
       // Create owner membership first — this uses the bootstrap rule and enables
       // church doc updates if a previous attempt partially created the church doc
@@ -170,28 +182,35 @@ export default function ChurchSetupPage() {
         <div className="space-y-3">
           <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
           <div className="grid gap-3 sm:grid-cols-2">
-            {WORKFLOW_MODES.map((mode) => (
-              <button
-                key={mode.value}
-                type="button"
-                onClick={() => setWorkflowMode(mode.value)}
-                className={`rounded-xl border p-4 text-left transition-all ${
-                  workflowMode === mode.value
-                    ? "border-vc-coral bg-vc-coral/5 ring-1 ring-vc-coral"
-                    : "border-vc-border hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
-                }`}
-              >
-                <p className="text-sm font-semibold text-vc-indigo">{mode.label}</p>
-                <p className="mt-1 text-xs text-vc-text-muted leading-relaxed">{mode.description}</p>
-              </button>
-            ))}
+            {WORKFLOW_MODES.map((mode) => {
+              const isAvailable = mode.value === "centralized";
+              return (
+                <button
+                  key={mode.value}
+                  type="button"
+                  onClick={() => isAvailable && setWorkflowMode(mode.value)}
+                  disabled={!isAvailable}
+                  className={`rounded-xl border p-4 text-left transition-all ${
+                    workflowMode === mode.value
+                      ? "border-vc-coral bg-vc-coral/5 ring-1 ring-vc-coral"
+                      : isAvailable
+                        ? "border-vc-border hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
+                        : "border-vc-border-light opacity-60 cursor-not-allowed"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-vc-indigo">{mode.label}</p>
+                    {!isAvailable && (
+                      <span className="rounded-full bg-vc-bg-cream px-2 py-0.5 text-[10px] font-medium text-vc-text-muted">
+                        Coming soon
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-vc-text-muted leading-relaxed">{mode.description}</p>
+                </button>
+              );
+            })}
           </div>
-          {selectedWorkflow && workflowMode !== "centralized" && (
-            <p className="rounded-lg bg-vc-sand/20 px-3 py-2 text-xs text-vc-text-secondary">
-              The MVP focuses on Centralized mode. Other modes will unlock as we build them out —
-              your choice is saved and will apply when ready.
-            </p>
-          )}
         </div>
 
         {error && (

@@ -3,6 +3,8 @@ import { DM_Sans, DM_Serif_Display } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/lib/context/auth-context";
+import { ToastProvider } from "@/components/ui/toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -67,7 +69,11 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${dmSerifDisplay.variable} font-sans antialiased`}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <ConfirmProvider>{children}</ConfirmProvider>
+          </ToastProvider>
+        </AuthProvider>
         <Analytics />
         <SpeedInsights />
       </body>

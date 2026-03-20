@@ -82,7 +82,8 @@ export const PRICING_TIERS: {
       "8 roles per service",
       "5 active events",
       "SMS + email reminders",
-      "Analytics",
+      "QR check-in",
+      "Shift swap",
     ],
   },
   {
@@ -97,8 +98,8 @@ export const PRICING_TIERS: {
       "15 teams",
       "20 roles per service",
       "15 active events",
-      "Full analytics",
-      "Integrations",
+      "Volunteer health dashboard",
+      "Onboarding pipeline",
     ],
   },
   {
@@ -112,8 +113,8 @@ export const PRICING_TIERS: {
       "Unlimited teams",
       "50 roles per service",
       "Unlimited events",
+      "Multi-site support",
       "API access",
-      "White-label",
     ],
   },
   {
@@ -123,9 +124,9 @@ export const PRICING_TIERS: {
     volunteers: "1000+",
     ministries: "Unlimited",
     features: [
-      "Multi-site support",
+      "Everything in Pro",
       "1000+ volunteers",
-      "Dedicated support",
+      "Dedicated onboarding",
       "White-label",
       "Custom integrations",
     ],

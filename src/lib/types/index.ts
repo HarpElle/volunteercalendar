@@ -94,6 +94,56 @@ export interface ChurchSettings {
   require_confirmation: boolean;
 }
 
+// --- Campuses (Multi-Site) ---
+
+export interface Campus {
+  id: string;
+  church_id: string;
+  name: string;
+  /** Physical address */
+  address: string | null;
+  /** Lat/lng for geofencing (QR check-in) */
+  location: { lat: number; lng: number } | null;
+  /** Timezone override. Null = inherits from org. */
+  timezone: string | null;
+  /** Whether this is the primary/main campus */
+  is_primary: boolean;
+  created_at: string;
+}
+
+// --- Onboarding / Journey Tracking ---
+
+export type OnboardingStepType =
+  | "class"              // e.g., "Get Anchored" membership class
+  | "background_check"   // cleared background check
+  | "minimum_service"    // served X times in another ministry
+  | "ministry_tenure"    // active in a prerequisite ministry for N days
+  | "custom";            // admin-defined freeform requirement
+
+export interface OnboardingStep {
+  id: string;
+  /** Human-readable label (e.g., "Complete Get Anchored class") */
+  label: string;
+  type: OnboardingStepType;
+  /** For "class": class name. For "ministry_tenure"/"minimum_service": ministry_id. */
+  reference_id?: string | null;
+  /** For "minimum_service": minimum number of times served. For "ministry_tenure": minimum days. */
+  threshold?: number | null;
+}
+
+export type JourneyStepStatus = "pending" | "in_progress" | "completed" | "waived";
+
+export interface VolunteerJourneyStep {
+  step_id: string;
+  /** Which ministry's prerequisite this satisfies */
+  ministry_id: string;
+  status: JourneyStepStatus;
+  completed_at?: string | null;
+  /** Admin who waived or verified completion */
+  verified_by?: string | null;
+  notes?: string | null;
+}
+
 // --- Ministries ---
 
 export interface Ministry {
@@ -104,6 +154,10 @@ export interface Ministry {
   description: string;
   lead_user_id: string;
   lead_email: string;
+  /** Whether volunteers must have a cleared background check to serve in this ministry */
+  requires_background_check?: boolean;
+  /** Prerequisites volunteers must complete before serving in this ministry */
+  prerequisites?: OnboardingStep[];
   created_at: string;
 }
 
@@ -121,6 +175,8 @@ export interface RoleSlot {
   start_time: string | null;
   /** Per-role end time override (HH:mm). Null = inherits from service/event. */
   end_time: string | null;
+  /** Always schedule this volunteer first for this role (unless unavailable) */
+  pinned_volunteer_id?: string | null;
 }
 
 /** @deprecated Use RoleSlot instead. Kept as alias for backward compat. */
@@ -132,6 +188,8 @@ export interface ServiceRole {
   start_time?: string | null;
   /** Per-role end time (HH:mm). Null = derived from service duration. */
   end_time?: string | null;
+  /** Always schedule this volunteer first for this role (unless unavailable) */
+  pinned_volunteer_id?: string | null;
 }
 
 // --- Services ---
@@ -153,6 +211,8 @@ export interface Service {
   church_id: string;
   /** @deprecated Primary ministry. Use `ministries` array for multi-ministry services. */
   ministry_id: string;
+  /** Campus this service belongs to. Null = all campuses / org-wide. */
+  campus_id?: string | null;
   name: string;
   recurrence: RecurrencePattern;
   day_of_week: number;
@@ -238,6 +298,14 @@ export interface VolunteerStats {
   no_show_count: number;
 }
 
+/** Conditional role dependency — e.g., Vocals requires Guitar or Keys */
+export interface ConditionalRole {
+  /** The role that has a dependency (e.g., Vocals role_id) */
+  role_id: string;
+  /** Must also be assigned one of these roles in the same service (e.g., [Guitar, Keys]) */
+  requires_any: string[];
+}
+
 export interface Volunteer {
   id: string;
   church_id: string;
@@ -250,6 +318,8 @@ export interface Volunteer {
   status: VolunteerStatus;
   ministry_ids: string[];
   role_ids: string[];
+  /** Campus IDs this volunteer can serve at. Empty = all campuses. */
+  campus_ids?: string[];
   household_id: string | null;
   availability: VolunteerAvailability;
   reminder_preferences: {
@@ -257,6 +327,22 @@ export interface Volunteer {
   };
   stats: VolunteerStats;
   imported_from: ImportSource;
+  /** Background check status for ministries that require clearance */
+  background_check?: {
+    status: "cleared" | "pending" | "expired" | "not_required";
+    expires_at?: string | null;
+    provider?: string | null;
+    checked_at?: string | null;
+  };
+  /** Advanced role constraints for worship/music teams */
+  role_constraints?: {
+    /** Roles this volunteer can only fill if also assigned a companion role */
+    conditional_roles?: ConditionalRole[];
+    /** Allow this volunteer to fill multiple role slots in the same service */
+    allow_multi_role?: boolean;
+  };
+  /** Onboarding journey steps completed/pending for this volunteer */
+  volunteer_journey?: VolunteerJourneyStep[];
   created_at: string;
 }
 
@@ -302,6 +388,8 @@ export interface Schedule {
   created_at: string;
   published_at: string | null;
   ministry_approvals: Record<string, MinistryApproval>;
+  /** Free-form notes for this schedule period (set lists, resource links, etc.) */
+  notes?: string | null;
 }
 
 // --- Assignments ---
@@ -337,6 +425,10 @@ export interface Assignment {
   attended: boolean | null;
   /** ISO timestamp when attendance was marked */
   attended_at: string | null;
+  /** True if this assignment was auto-created after another volunteer declined */
+  auto_rescheduled?: boolean;
+  /** Volunteer ID of the person who declined, triggering this auto-reschedule */
+  replaced_volunteer_id?: string;
 }
 
 // --- Calendar Feeds ---
@@ -465,6 +557,44 @@ export interface SentNotification {
 export interface ServiceOccurrence {
   service: Service;
   date: string;
+}
+
+// ---------------------------------------------------------------------------
+// Swap Requests (Shift Swap Engine)
+// ---------------------------------------------------------------------------
+
+export type SwapRequestStatus =
+  | "open"            // volunteer requested, waiting for a replacement to accept
+  | "pending_admin"   // replacement accepted, waiting for admin approval
+  | "approved"        // admin approved, assignment transferred
+  | "auto_approved"   // auto-approved (org setting), assignment transferred
+  | "cancelled"       // requester cancelled
+  | "expired";        // no one picked it up before the service date
+
+export interface SwapRequest {
+  id: string;
+  church_id: string;
+  assignment_id: string;
+  schedule_id: string;
+  service_id: string;
+  service_date: string;
+  role_id: string;
+  role_title: string;
+  ministry_id: string;
+  /** Volunteer who can't make it */
+  requester_volunteer_id: string;
+  requester_name: string;
+  /** Volunteer who offered to take the shift */
+  replacement_volunteer_id: string | null;
+  replacement_name: string | null;
+  status: SwapRequestStatus;
+  /** Optional message from the requester */
+  reason: string | null;
+  /** Admin who approved/rejected */
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ---------------------------------------------------------------------------

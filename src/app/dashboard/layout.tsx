@@ -8,6 +8,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { useServiceWorker } from "@/lib/hooks/use-service-worker";
+import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import type { OrgType, Membership } from "@/lib/types";
 
 interface NavItem {
@@ -100,6 +102,26 @@ function getNavSections(): NavSection[] {
           gate: (m) => isScheduler(m),
         },
         {
+          label: "Volunteer Health",
+          href: "/dashboard/volunteer-health",
+          icon: (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+            </svg>
+          ),
+          gate: (m) => isScheduler(m),
+        },
+        {
+          label: "Onboarding",
+          href: "/dashboard/onboarding",
+          icon: (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
+            </svg>
+          ),
+          gate: (m) => isAdmin(m),
+        },
+        {
           label: "Notifications",
           href: "/dashboard/notifications",
           icon: (
@@ -108,6 +130,20 @@ function getNavSections(): NavSection[] {
             </svg>
           ),
           gate: (m) => isAdmin(m),
+        },
+      ],
+    },
+    {
+      label: null,
+      items: [
+        {
+          label: "Help",
+          href: "/dashboard/help",
+          icon: (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+            </svg>
+          ),
         },
       ],
     },
@@ -131,6 +167,9 @@ export default function DashboardLayout({
   const [showGuideDot, setShowGuideDot] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const orgMenuRef = useRef<HTMLDivElement>(null);
+
+  // Register service worker for PWA + push notifications
+  useServiceWorker();
 
   // Show a dot on "Overview" when the setup guide hasn't been dismissed
   useEffect(() => {
@@ -244,6 +283,8 @@ export default function DashboardLayout({
         <div
           className="fixed inset-0 z-40 bg-black/30 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          role="button"
+          aria-label="Close navigation"
         />
       )}
 
@@ -266,7 +307,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Nav sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Dashboard navigation">
           {visibleSections.map((section, sIdx) => (
             <div key={sIdx} className={sIdx > 0 ? "mt-2" : ""}>
               {section.label && (
@@ -379,6 +420,16 @@ export default function DashboardLayout({
                     </svg>
                     My Organizations
                   </Link>
+                  <Link
+                    href="/dashboard/setup?mode=new"
+                    onClick={() => { setOrgMenuOpen(false); setSidebarOpen(false); }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-coral hover:bg-vc-coral/5 transition-colors font-medium"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Create New Organization
+                  </Link>
                 </div>
               </div>
             )}
@@ -475,6 +526,7 @@ export default function DashboardLayout({
           <button
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 text-vc-text-secondary hover:bg-vc-bg-warm"
+            aria-label="Open navigation"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -487,6 +539,7 @@ export default function DashboardLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <PwaInstallBanner />
           {children}
         </main>
       </div>

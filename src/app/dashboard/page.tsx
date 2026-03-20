@@ -223,7 +223,7 @@ export default function DashboardPage() {
           Welcome{profile?.display_name ? `, ${profile.display_name}` : ""}
         </h1>
         <p className="mt-1 text-vc-text-secondary">
-          Here&apos;s an overview of your church&apos;s volunteer schedule.
+          Here&apos;s an overview of your organization&apos;s volunteer schedule.
         </p>
       </div>
 
@@ -317,9 +317,18 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
                 </span>
-                <div>
-                  <p className="text-sm font-semibold text-vc-sage">You&apos;re all set!</p>
-                  <p className="text-xs text-vc-text-muted">Your organization is fully configured.</p>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-vc-sage">You&apos;re all set! Here&apos;s what to explore next:</p>
+                  <ul className="mt-1.5 space-y-1 text-xs text-vc-text-muted">
+                    <li>
+                      <Link href="/dashboard/volunteer-health" className="text-vc-coral hover:underline">Volunteer Health</Link>
+                      {" "}— monitor engagement and spot burnout early
+                    </li>
+                    <li>
+                      <Link href="/dashboard/help" className="text-vc-coral hover:underline">Help Center</Link>
+                      {" "}— guides on calendar feeds, QR check-in, and more
+                    </li>
+                  </ul>
                 </div>
               </div>
               <button onClick={dismissGuide} className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors">Dismiss</button>
@@ -440,7 +449,7 @@ export default function DashboardPage() {
                 <Link href="/dashboard/volunteers" className="text-xs text-vc-coral hover:underline">View all</Link>
               </div>
               {stats.topVolunteers.length === 0 ? (
-                <div className="p-5 text-center text-sm text-vc-text-muted">No assignments yet.</div>
+                <div className="p-5 text-center text-sm text-vc-text-muted">No assignments yet. Generate your first schedule to see who&apos;s serving.</div>
               ) : (
                 <div className="divide-y divide-vc-border-light">
                   {stats.topVolunteers.map((vol, i) => {

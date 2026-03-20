@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
           });
 
           await resend.emails.send({
-            from: "VolunteerCal <noreply@harpelle.com>",
+            from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
             to: email,
             subject: emailContent.subject,
             html: emailContent.html,

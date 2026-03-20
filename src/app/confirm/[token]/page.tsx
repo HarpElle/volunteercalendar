@@ -7,6 +7,7 @@ import Link from "next/link";
 interface ConfirmationData {
   assignment: {
     id: string;
+    church_id: string;
     status: string;
     service_date: string;
     role_title: string;
@@ -29,6 +30,8 @@ export default function ConfirmPage() {
   const [responseStatus, setResponseStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [swapRequested, setSwapRequested] = useState(false);
+  const [swapLoading, setSwapLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -84,6 +87,32 @@ export default function ConfirmPage() {
       setError("Network error — please try again");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleSwapRequest() {
+    if (!data) return;
+    setSwapLoading(true);
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          church_id: data.assignment.church_id,
+          assignment_id: data.assignment.id,
+          confirmation_token: token,
+        }),
+      });
+      if (res.ok) {
+        setSwapRequested(true);
+      } else {
+        const json = await res.json();
+        setError(json.error || "Failed to request swap");
+      }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setSwapLoading(false);
     }
   }
 
@@ -245,6 +274,23 @@ export default function ConfirmPage() {
                     {data.service_name} &middot; {formatDate(data.assignment.service_date)}
                   </p>
                 )}
+                {data && !swapRequested && (
+                  <button
+                    onClick={handleSwapRequest}
+                    disabled={swapLoading}
+                    className="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-coral/30 hover:text-vc-coral disabled:opacity-50"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                    </svg>
+                    {swapLoading ? "Requesting..." : "Can\u2019t make it? Find a replacement"}
+                  </button>
+                )}
+                {swapRequested && (
+                  <p className="mt-4 rounded-lg bg-vc-sage/10 px-3 py-2 text-sm text-vc-sage">
+                    Swap request submitted! Eligible team members will be notified.
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -286,6 +332,23 @@ export default function ConfirmPage() {
                 </span>
               )}.
             </p>
+            {responseStatus === "confirmed" && data && !swapRequested && (
+              <button
+                onClick={handleSwapRequest}
+                disabled={swapLoading}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-coral/30 hover:text-vc-coral disabled:opacity-50"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+                {swapLoading ? "Requesting..." : "Can\u2019t make it? Find a replacement"}
+              </button>
+            )}
+            {swapRequested && (
+              <p className="mt-4 rounded-lg bg-vc-sage/10 px-3 py-2 text-sm text-vc-sage">
+                Swap request submitted! Eligible team members will be notified.
+              </p>
+            )}
             <p className="mt-4 text-xs text-vc-text-muted">
               Need to change your response? Contact your church administrator.
             </p>

@@ -48,6 +48,15 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --vc-text-muted: #9A9BB5;
   --vc-text-on-dark: #FEFCF9;
   --vc-text-on-coral: #FFFFFF;
+
+  /* Alias tokens — referenced by shared UI components */
+  --vc-primary-100: #ECEDF4;
+  --vc-primary-500: var(--vc-coral);
+  --vc-primary-600: var(--vc-coral);
+  --vc-primary-700: var(--vc-indigo);
+  --vc-accent-100: #FDF0E0;
+  --vc-accent-700: var(--vc-warning);
+  --vc-bg-muted: var(--vc-bg-cream);
 }
 
 @theme inline {
@@ -86,6 +95,14 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --color-vc-text-on-dark: var(--vc-text-on-dark);
   --color-vc-text-on-coral: var(--vc-text-on-coral);
 
+  --color-vc-primary-100: var(--vc-primary-100);
+  --color-vc-primary-500: var(--vc-primary-500);
+  --color-vc-primary-600: var(--vc-primary-600);
+  --color-vc-primary-700: var(--vc-primary-700);
+  --color-vc-accent-100: var(--vc-accent-100);
+  --color-vc-accent-700: var(--vc-accent-700);
+  --color-vc-bg-muted: var(--vc-bg-muted);
+
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-dm-serif-display), Georgia, "Times New Roman", serif;
 }
@@ -114,6 +131,15 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
     linear-gradient(var(--vc-border-light) 1px, transparent 1px),
     linear-gradient(90deg, var(--vc-border-light) 1px, transparent 1px);
   background-size: 48px 48px;
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@utility animate-shimmer {
+  animation: shimmer 1.8s ease-in-out infinite;
 }
 
 /* Smooth scroll */

@@ -1,8 +1,12 @@
 /** Welcome email — sent when a new user creates an account. */
 
-import { wrapInLayout, P, ctaButton } from "./base-layout";
+import { wrapInLayout, P, ctaButton, P_LAST } from "./base-layout";
 
 export interface WelcomeEmailData {
+  userName: string;
+}
+
+export interface AccountCreatedEmailData {
   userName: string;
 }
 
@@ -44,8 +48,8 @@ export function buildWelcomeEmail(data: WelcomeEmailData): {
                 <tr>
                   <td style="padding:20px 24px;">
                     <table width="100%" cellpadding="0" cellspacing="0">
-                      ${stepRow(1, "Set up your church", "Name, timezone, and scheduling preferences.")}
-                      ${stepRow(2, "Add a ministry", "Create your first ministry and assign it a color.")}
+                      ${stepRow(1, "Set up your organization", "Name, timezone, and scheduling preferences.")}
+                      ${stepRow(2, "Add a team or ministry", "Create your first team and assign it a color.")}
                       ${stepRow(3, "Add your volunteers", "Import from CSV or add them one at a time.")}
                       ${stepRow(4, "Generate your first schedule", "Pick a date range and let the scheduler do the rest.", true)}
                     </table>
@@ -74,14 +78,61 @@ Thanks for creating your account. VolunteerCal was built to take the guesswork o
 
 Here's how to get started:
 
-1. Set up your church \u2014 name, timezone, and scheduling preferences.
-2. Add a ministry \u2014 create your first ministry and assign it a color.
+1. Set up your organization \u2014 name, timezone, and scheduling preferences.
+2. Add a team or ministry \u2014 create your first team and assign it a color.
 3. Add your volunteers \u2014 import from CSV or add them one at a time.
 4. Generate your first schedule \u2014 pick a date range and let the scheduler do the rest.
 
 Go to your dashboard: https://volunteercal.com/dashboard
 
 If you have any questions, just reply to this email \u2014 we're happy to help.
+
+\u2014
+VolunteerCal \u00b7 Thoughtfully built by HarpElle`;
+
+  return { subject, html, text };
+}
+
+/**
+ * Lightweight account confirmation — sent when a user registers via a join link.
+ * The full welcome messaging comes from the welcome-to-org email after they join.
+ */
+export function buildAccountCreatedEmail(data: AccountCreatedEmailData): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const firstName = data.userName.split(" ")[0] || "there";
+
+  const subject = "Your VolunteerCal account is ready";
+
+  const body = `<p ${P}>
+                Hi ${firstName},
+              </p>
+              <p ${P}>
+                Your VolunteerCal account has been created. You can now view your schedule, set your availability, and stay connected with your team.
+              </p>
+              <p ${P_LAST}>
+                Once you join an organization, you'll be able to see your assignments, manage blockout dates, and confirm or decline when you're scheduled to serve.
+              </p>
+
+              ${ctaButton("https://volunteercal.com/dashboard", "Go to Your Dashboard")}`;
+
+  const html = wrapInLayout({
+    headerText: 'Welcome to Volunteer<span style="color:#E87461;">Cal</span>',
+    body,
+    footerHtml: `Sent by <span style="color:#E87461;">VolunteerCal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+  });
+
+  const text = `Your VolunteerCal account is ready
+
+Hi ${firstName},
+
+Your VolunteerCal account has been created. You can now view your schedule, set your availability, and stay connected with your team.
+
+Once you join an organization, you'll be able to see your assignments, manage blockout dates, and confirm or decline when you're scheduled to serve.
+
+Go to your dashboard: https://volunteercal.com/dashboard
 
 \u2014
 VolunteerCal \u00b7 Thoughtfully built by HarpElle`;

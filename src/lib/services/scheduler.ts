@@ -11,6 +11,7 @@ import type {
   Service,
   ServiceRole,
   Household,
+  Ministry,
   Assignment,
   ScheduleConflict,
   SchedulingResult,
@@ -77,7 +78,7 @@ export function generateOccurrences(
 
 // --- Constraint Checking ---
 
-interface VolunteerAssignmentCount {
+export interface VolunteerAssignmentCount {
   [volunteerId: string]: {
     total: number;
     byDate: Record<string, number>;
@@ -142,6 +143,85 @@ function canServeInMinistry(volunteer: Volunteer, ministryId: string): boolean {
   return volunteer.ministry_ids.length === 0 || volunteer.ministry_ids.includes(ministryId);
 }
 
+function canServeInRole(volunteer: Volunteer, roleId: string): boolean {
+  // If volunteer has no specific role_ids, they can fill any role in their ministry
+  return volunteer.role_ids.length === 0 || volunteer.role_ids.includes(roleId);
+}
+
+function canServeAtCampus(volunteer: Volunteer, service: Service): boolean {
+  // If service has no campus (org-wide), anyone can serve
+  if (!service.campus_id) return true;
+  // If volunteer has no campus preference, they can serve anywhere
+  const campusIds = volunteer.campus_ids;
+  if (!campusIds || campusIds.length === 0) return true;
+  return campusIds.includes(service.campus_id);
+}
+
+/**
+ * Check if a conditional role dependency is satisfied.
+ * E.g., if volunteer has "Vocals requires any of [Guitar, Keys]",
+ * they can only be assigned Vocals if also assigned Guitar or Keys in the same service/date.
+ */
+function isConditionalRoleSatisfied(
+  volunteer: Volunteer,
+  roleId: string,
+  serviceId: string,
+  date: string,
+  currentAssignments: DraftAssignment[],
+): boolean {
+  const constraints = volunteer.role_constraints?.conditional_roles;
+  if (!constraints || constraints.length === 0) return true;
+
+  const conditional = constraints.find((c) => c.role_id === roleId);
+  if (!conditional) return true; // No constraint on this role
+
+  // Check if the volunteer is already assigned one of the required companion roles
+  return currentAssignments.some(
+    (a) =>
+      a.volunteer_id === volunteer.id &&
+      a.service_date === date &&
+      a.service_id === serviceId &&
+      conditional.requires_any.includes(a.role_id),
+  );
+}
+
+/**
+ * Check if a volunteer has completed all prerequisites for a ministry.
+ * Returns true if no prerequisites exist or all are completed/waived.
+ */
+function hasCompletedPrerequisites(volunteer: Volunteer, ministryId: string, ministries?: Ministry[]): boolean {
+  if (!ministries) return true;
+  const ministry = ministries.find((m) => m.id === ministryId);
+  if (!ministry?.prerequisites || ministry.prerequisites.length === 0) return true;
+
+  const journey = volunteer.volunteer_journey || [];
+  return ministry.prerequisites.every((prereq) => {
+    const step = journey.find(
+      (j) => j.step_id === prereq.id && j.ministry_id === ministryId,
+    );
+    return step?.status === "completed" || step?.status === "waived";
+  });
+}
+
+/** Whether a volunteer allows multi-role assignments in the same service */
+function allowsMultiRole(volunteer: Volunteer): boolean {
+  return volunteer.role_constraints?.allow_multi_role === true;
+}
+
+function hasValidBackgroundCheck(volunteer: Volunteer, ministryId: string, ministries?: Ministry[]): boolean {
+  if (!ministries) return true;
+  const ministry = ministries.find((m) => m.id === ministryId);
+  if (!ministry?.requires_background_check) return true;
+  const check = volunteer.background_check;
+  if (!check || check.status !== "cleared") return false;
+  // Check expiry
+  if (check.expires_at) {
+    const today = new Date().toISOString().split("T")[0];
+    if (check.expires_at < today) return false;
+  }
+  return true;
+}
+
 // --- Scoring ---
 
 function fairnessScore(counts: VolunteerAssignmentCount, volunteerIds: string[]): number {
@@ -157,7 +237,7 @@ function fairnessScore(counts: VolunteerAssignmentCount, volunteerIds: string[])
 
 // --- Draft Assignment (internal) ---
 
-type DraftAssignment = Omit<Assignment, "id" | "confirmation_token" | "responded_at" | "reminder_sent_at">;
+export type DraftAssignment = Omit<Assignment, "id" | "confirmation_token" | "responded_at" | "reminder_sent_at">;
 
 // --- Main Algorithm ---
 
@@ -169,6 +249,7 @@ export function generateDraftSchedule(
   households: Household[],
   startDate: string,
   endDate: string,
+  ministries?: Ministry[],
 ): SchedulingResult {
   const occurrences = generateOccurrences(services, startDate, endDate);
   const assignments: DraftAssignment[] = [];
@@ -202,6 +283,7 @@ export function generateDraftSchedule(
             households,
             assignments,
             counts,
+            ministries,
           );
 
           if (bestVolunteer) {
@@ -263,7 +345,7 @@ export function generateDraftSchedule(
   };
 }
 
-function findBestVolunteer(
+export function findBestVolunteer(
   service: Service,
   ministryId: string,
   role: ServiceRole,
@@ -272,30 +354,21 @@ function findBestVolunteer(
   households: Household[],
   currentAssignments: DraftAssignment[],
   counts: VolunteerAssignmentCount,
+  ministries?: Ministry[],
 ): Volunteer | null {
-  // Filter eligible volunteers
-  const eligible = volunteers.filter((v) => {
-    // Must be in the right ministry
-    if (!canServeInMinistry(v, ministryId)) return false;
-    // Not blocked out
-    if (isBlockedOut(v, date)) return false;
-    // Not recurring unavailable
-    if (isRecurringUnavailable(v, service.day_of_week)) return false;
-    // Not over frequency cap
-    if (isOverFrequencyCap(v, date, counts)) return false;
-    // No household conflict
-    if (hasHouseholdConflict(v, date, service.id, households, currentAssignments)) return false;
-    // Not already assigned to this service on this date
-    if (currentAssignments.some(
-      (a) => a.volunteer_id === v.id && a.service_date === date && a.service_id === service.id
-    )) return false;
-    // Not double-booked at the same time on the same date
-    if (currentAssignments.some(
-      (a) => a.volunteer_id === v.id && a.service_date === date && a.service_id !== service.id
-    )) return false;
+  // --- Pinned volunteer: try them first ---
+  if (role.pinned_volunteer_id) {
+    const pinned = volunteers.find((v) => v.id === role.pinned_volunteer_id);
+    if (pinned && isEligible(pinned, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries)) {
+      return pinned;
+    }
+    // Pinned volunteer unavailable — fall through to normal selection
+  }
 
-    return true;
-  });
+  // Filter eligible volunteers
+  const eligible = volunteers.filter((v) =>
+    isEligible(v, service, ministryId, role, date, volunteers, households, currentAssignments, counts, ministries),
+  );
 
   if (eligible.length === 0) return null;
 
@@ -310,6 +383,59 @@ function findBestVolunteer(
   });
 
   return eligible[0];
+}
+
+/** Check all eligibility constraints for a volunteer + role + date */
+function isEligible(
+  v: Volunteer,
+  service: Service,
+  ministryId: string,
+  role: ServiceRole,
+  date: string,
+  _volunteers: Volunteer[],
+  households: Household[],
+  currentAssignments: DraftAssignment[],
+  counts: VolunteerAssignmentCount,
+  ministries?: Ministry[],
+): boolean {
+  // Must be in the right ministry
+  if (!canServeInMinistry(v, ministryId)) return false;
+  // Must be qualified for this specific role
+  if (!canServeInRole(v, role.role_id)) return false;
+  // Must be available at this campus
+  if (!canServeAtCampus(v, service)) return false;
+  // Must have valid background check if ministry requires it
+  if (!hasValidBackgroundCheck(v, ministryId, ministries)) return false;
+  // Must have completed all prerequisites for this ministry
+  if (!hasCompletedPrerequisites(v, ministryId, ministries)) return false;
+  // Not blocked out
+  if (isBlockedOut(v, date)) return false;
+  // Not recurring unavailable
+  if (isRecurringUnavailable(v, service.day_of_week)) return false;
+  // Not over frequency cap
+  if (isOverFrequencyCap(v, date, counts)) return false;
+  // No household conflict
+  if (hasHouseholdConflict(v, date, service.id, households, currentAssignments)) return false;
+
+  // Conditional role check (e.g., Vocals requires Guitar or Keys in same service)
+  if (!isConditionalRoleSatisfied(v, role.role_id, service.id, date, currentAssignments)) return false;
+
+  // Same-service duplicate check — relaxed for multi-role volunteers
+  const alreadyInService = currentAssignments.some(
+    (a) => a.volunteer_id === v.id && a.service_date === date && a.service_id === service.id,
+  );
+  if (alreadyInService && !allowsMultiRole(v)) return false;
+  // Even multi-role volunteers can't fill the exact same role twice
+  if (currentAssignments.some(
+    (a) => a.volunteer_id === v.id && a.service_date === date && a.service_id === service.id && a.role_id === role.role_id,
+  )) return false;
+
+  // Not double-booked at a different service on the same date (unless multi-role)
+  if (!allowsMultiRole(v) && currentAssignments.some(
+    (a) => a.volunteer_id === v.id && a.service_date === date && a.service_id !== service.id,
+  )) return false;
+
+  return true;
 }
 
 function detectConflicts(
@@ -398,9 +524,11 @@ function trySwap(
 
     // Check if toId can take this slot
     if (!canServeInMinistry(toVol, a.ministry_id)) continue;
+    if (!canServeInRole(toVol, a.role_id)) continue;
     if (isBlockedOut(toVol, a.service_date)) continue;
     if (isRecurringUnavailable(toVol, new Date(a.service_date).getDay())) continue;
     if (hasHouseholdConflict(toVol, a.service_date, a.service_id || "", households, assignments)) continue;
+    if (!isConditionalRoleSatisfied(toVol, a.role_id, a.service_id || "", a.service_date, assignments)) continue;
     if (assignments.some(
       (other) => other.volunteer_id === toId && other.service_date === a.service_date
     )) continue;

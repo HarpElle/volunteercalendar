@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getEventSignupsBatch } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { Spinner } from "@/components/ui/spinner";
+import { SkeletonStats, SkeletonList } from "@/components/ui/skeleton";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
@@ -97,8 +98,13 @@ export default function SchedulingDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8">
+          <h1 className="font-display text-3xl text-vc-indigo">Scheduling Dashboard</h1>
+          <p className="mt-1 text-vc-text-secondary">Scheduling operations at a glance.</p>
+        </div>
+        <SkeletonStats count={4} className="mb-8" />
+        <SkeletonList rows={4} />
       </div>
     );
   }
@@ -251,6 +257,28 @@ export default function SchedulingDashboardPage() {
 
       {/* Two-column layout for secondary sections */}
       <div className="mb-8 grid gap-6 lg:grid-cols-2">
+        {/* Empty state when both sections have no data */}
+        {draftAssignments.length === 0 && (showAdminSection ? activeSchedules.length === 0 : true) && (
+          <div className="lg:col-span-2 rounded-xl border border-vc-border-light bg-white p-10 text-center">
+            <svg className="mx-auto h-8 w-8 text-vc-sage/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+            <p className="mt-2 text-sm font-medium text-vc-indigo">All caught up!</p>
+            <p className="mt-1 text-xs text-vc-text-muted">No draft assignments or pending responses right now.</p>
+            {showAdminSection && (
+              <Link
+                href="/dashboard/schedules"
+                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+              >
+                Create a schedule
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                </svg>
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Draft Assignments (awaiting response) */}
         {draftAssignments.length > 0 && (
           <section className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
@@ -305,7 +333,7 @@ export default function SchedulingDashboardPage() {
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                     sch.status === "published"
                       ? "bg-vc-sage/15 text-vc-sage"
-                      : "bg-gray-100 text-gray-500"
+                      : "bg-vc-bg-cream text-vc-text-muted"
                   }`}>
                     {sch.status}
                   </span>

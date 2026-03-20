@@ -31,6 +31,7 @@ import type {
   RecurrencePattern,
   RoleSlot,
   Ministry,
+  Volunteer,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -176,6 +177,7 @@ function ServicesTab({
   loading: boolean;
 }) {
   const [services, setServices] = useState<Service[]>([]);
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -192,6 +194,10 @@ function ServicesTab({
   const [endTime, setEndTime] = useState("10:30");
   const [allDay, setAllDay] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState("90");
+  const [campusId, setCampusId] = useState<string>("");
+
+  // Campuses
+  const [campuses, setCampuses] = useState<{ id: string; name: string }[]>([]);
 
   // Multi-ministry form state
   type FormMinistry = {
@@ -213,8 +219,16 @@ function ServicesTab({
 
   useEffect(() => {
     if (!churchId) return;
-    getChurchDocuments(churchId, "services")
-      .then((svcs) => setServices(svcs as unknown as Service[]))
+    Promise.all([
+      getChurchDocuments(churchId, "services"),
+      getChurchDocuments(churchId, "volunteers"),
+      getChurchDocuments(churchId, "campuses"),
+    ])
+      .then(([svcs, vols, camps]) => {
+        setServices(svcs as unknown as Service[]);
+        setVolunteers((vols as unknown as Volunteer[]).filter((v) => v.status === "active"));
+        setCampuses((camps as unknown as { id: string; name: string }[]).map((c) => ({ id: c.id, name: c.name })));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [churchId]);
@@ -227,6 +241,7 @@ function ServicesTab({
     setEndTime("10:30");
     setAllDay(false);
     setDurationMinutes("90");
+    setCampusId("");
     setFormMinistries([
       {
         id: crypto.randomUUID(),
@@ -248,6 +263,7 @@ function ServicesTab({
     setEndTime(s.end_time || "");
     setAllDay(s.all_day || false);
     setDurationMinutes(String(s.duration_minutes));
+    setCampusId(s.campus_id || "");
 
     // Load ministries from new format or legacy
     if (s.ministries && s.ministries.length > 0) {
@@ -361,6 +377,7 @@ function ServicesTab({
         name,
         church_id: churchId,
         ministry_id: primaryMinistryId,
+        campus_id: campusId || null,
         recurrence,
         day_of_week: Number(dayOfWeek),
         start_time: allDay ? "00:00" : startTime,
@@ -452,7 +469,7 @@ function ServicesTab({
   return (
     <div>
       {mutationError && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
           {mutationError}
         </div>
       )}
@@ -469,13 +486,30 @@ function ServicesTab({
             {editingId ? "Edit Service" : "New Service"}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Service Name"
-              required
-              placeholder="e.g., Sunday Morning Worship"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div className={campuses.length > 0 ? "grid gap-4 sm:grid-cols-2" : ""}>
+              <Input
+                label="Service Name"
+                required
+                placeholder="e.g., Sunday Morning Worship"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              {campuses.length > 0 && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-vc-text">Campus</label>
+                  <select
+                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                    value={campusId}
+                    onChange={(e) => setCampusId(e.target.value)}
+                  >
+                    <option value="">All campuses</option>
+                    {campuses.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
               <Select
@@ -628,8 +662,13 @@ function ServicesTab({
 
                       {/* Roles for this ministry */}
                       <div className="space-y-2">
-                        {fm.roles.map((role, ri) => (
-                          <div key={role.role_id} className="flex items-center gap-2">
+                        {fm.roles.map((role, ri) => {
+                          // Filter volunteers to those in this ministry
+                          const ministryVols = volunteers.filter(
+                            (vol) => vol.ministry_ids.length === 0 || vol.ministry_ids.includes(fm.ministry_id),
+                          );
+                          return (
+                          <div key={role.role_id} className="flex items-center gap-2 flex-wrap">
                             <input
                               className="min-w-0 flex-1 max-w-sm rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                               placeholder="Role title (e.g., Producer, Camera)"
@@ -644,6 +683,17 @@ function ServicesTab({
                               value={role.count}
                               onChange={(e) => updateRoleInMinistry(fm.id, ri, "count", Number(e.target.value))}
                             />
+                            <select
+                              className="max-w-[180px] rounded-lg border border-vc-border bg-white px-2 py-2 text-xs text-vc-text-secondary focus:border-vc-coral focus:outline-none"
+                              value={role.pinned_volunteer_id || ""}
+                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "pinned_volunteer_id", e.target.value || null)}
+                              title="Pin a default volunteer to this role"
+                            >
+                              <option value="">No pinned volunteer</option>
+                              {ministryVols.map((vol) => (
+                                <option key={vol.id} value={vol.id}>{vol.name}</option>
+                              ))}
+                            </select>
                             {fm.roles.length > 1 && (
                               <button
                                 type="button"
@@ -656,9 +706,10 @@ function ServicesTab({
                               </button>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                         {svcTierWarning && (
-                          <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">{svcTierWarning}</p>
+                          <p className="text-xs text-vc-warning bg-vc-sand/20 rounded px-2 py-1">{svcTierWarning}</p>
                         )}
                         <button
                           type="button"
@@ -1165,7 +1216,7 @@ function EventsTab({
   return (
     <div>
       {mutationError && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
           {mutationError}
         </div>
       )}

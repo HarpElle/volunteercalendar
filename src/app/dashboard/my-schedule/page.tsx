@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getUserEventSignups, updateDocument } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { SkeletonList } from "@/components/ui/skeleton";
 import { REMINDER_CHANNELS } from "@/lib/constants";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
@@ -348,8 +349,17 @@ export default function MySchedulePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-8">
+          <div className="h-9 w-48 rounded-lg bg-vc-bg-cream animate-shimmer" />
+          <div className="mt-2 h-5 w-72 rounded-lg bg-vc-bg-cream animate-shimmer" />
+        </div>
+        <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-9 flex-1 rounded-lg bg-vc-bg-cream animate-shimmer" />
+          ))}
+        </div>
+        <SkeletonList rows={4} />
       </div>
     );
   }
@@ -407,7 +417,7 @@ export default function MySchedulePage() {
                     : item.status === "declined" || item.status === "cancelled"
                       ? "bg-vc-danger/10 text-vc-danger"
                       : item.status === "draft"
-                        ? "bg-gray-100 text-gray-500"
+                        ? "bg-vc-bg-cream text-vc-text-muted"
                         : "bg-vc-sand/30 text-vc-sand";
                 const statusLabel = item.status === "approved" ? "confirmed" : item.status;
 
@@ -461,7 +471,7 @@ export default function MySchedulePage() {
                             eventOrServiceName: item.eventOrServiceName,
                             date: item.date,
                           })}
-                          className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                          className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
                         >
                           Remove
                         </button>
@@ -522,7 +532,7 @@ export default function MySchedulePage() {
                     key={i}
                     type="button"
                     onClick={() => toggleDay(dayStr)}
-                    className={`rounded-xl border px-2 py-3 text-center text-xs font-medium transition-all ${
+                    className={`min-h-[44px] rounded-xl border px-2 py-3 text-center text-xs font-medium transition-all ${
                       isUnavailable
                         ? "border-vc-danger/30 bg-vc-danger/5 text-vc-danger"
                         : "border-vc-border text-vc-text-secondary hover:border-vc-sage/50 hover:bg-vc-sage/5"
@@ -576,7 +586,7 @@ export default function MySchedulePage() {
                       </span>
                       <button
                         onClick={() => removeBlockout(date)}
-                        className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                        className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
                       >
                         Remove
                       </button>

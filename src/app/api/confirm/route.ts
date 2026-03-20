@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { autoReschedule } from "@/lib/services/auto-reschedule";
+import { buildConfirmationEmail } from "@/lib/utils/email-templates";
 
 export async function GET(request: Request) {
   const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
@@ -38,6 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       assignment: {
         id: assignDoc.id,
+        church_id: churchId,
         status: data.status,
         service_date: data.service_date,
         role_title: data.role_title,
@@ -97,7 +101,67 @@ export async function POST(request: Request) {
       responded_at: new Date().toISOString(),
     });
 
-    return NextResponse.json({ success: true, status: newStatus });
+    // Auto-reschedule: find a replacement when a volunteer declines
+    let rescheduled = false;
+    if (action === "decline" && current.service_id && current.schedule_id) {
+      try {
+        const result = await autoReschedule({
+          churchId: current.church_id,
+          scheduleId: current.schedule_id,
+          serviceId: current.service_id,
+          serviceDate: current.service_date,
+          ministryId: current.ministry_id,
+          roleId: current.role_id,
+          roleTitle: current.role_title,
+          declinedVolunteerId: current.volunteer_id,
+        });
+
+        if (result.replaced && result.newVolunteerEmail && result.confirmationToken) {
+          rescheduled = true;
+
+          // Send confirmation email to the new volunteer (fire-and-forget)
+          if (process.env.RESEND_API_KEY) {
+            const churchId = current.church_id as string;
+            const [svcSnap, minSnap, churchSnap] = await Promise.all([
+              adminDb.doc(`churches/${churchId}/services/${current.service_id}`).get(),
+              adminDb.doc(`churches/${churchId}/ministries/${current.ministry_id}`).get(),
+              adminDb.doc(`churches/${churchId}`).get(),
+            ]);
+
+            const churchName = churchSnap.exists ? (churchSnap.data()?.name as string) || "Church" : "Church";
+            const origin = request.headers.get("origin")
+              || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
+              || "https://volunteercal.com";
+
+            const { subject, html, text } = buildConfirmationEmail({
+              volunteerName: result.newVolunteerName || "Volunteer",
+              churchName,
+              serviceName: svcSnap.exists ? (svcSnap.data()?.name as string) || "Service" : "Service",
+              ministryName: minSnap.exists ? (minSnap.data()?.name as string) || "Ministry" : "Ministry",
+              roleTitle: current.role_title,
+              serviceDate: current.service_date,
+              startTime: svcSnap.exists ? (svcSnap.data()?.start_time as string) || "" : "",
+              confirmUrl: `${origin}/confirm/${result.confirmationToken}`,
+            });
+
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            resend.emails.send({
+              from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+              replyTo: "info@volunteercal.com",
+              to: [result.newVolunteerEmail],
+              subject,
+              html,
+              text,
+            }).catch((err) => console.error("Auto-reschedule email failed:", err));
+          }
+        }
+      } catch (err) {
+        // Auto-reschedule is best-effort — don't fail the decline
+        console.error("Auto-reschedule error:", err);
+      }
+    }
+
+    return NextResponse.json({ success: true, status: newStatus, rescheduled });
   } catch (error) {
     console.error("Confirm action error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

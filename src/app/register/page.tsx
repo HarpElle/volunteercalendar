@@ -55,11 +55,11 @@ function RegisterForm() {
     setSubmitting(true);
     try {
       await signUp(email, password, name, phone ? normalizePhone(phone) : undefined);
-      // Fire-and-forget welcome email
+      // Fire-and-forget welcome email (skip admin setup guide if joining via link)
       fetch("/api/welcome", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ name, email, redirect: redirectTo || undefined }),
       }).catch(() => {});
       pendingRedirect.current = true;
       setSubmitting(false);
@@ -133,31 +133,45 @@ function RegisterForm() {
               }}
               onBlur={() => setPhone(formatPhoneInput(phone))}
             />
-            <Input
-              label="Password"
-              type="password"
-              required
-              autoComplete="new-password"
-              placeholder="At least 6 characters"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) clearError();
-                setLocalError("");
-              }}
-            />
-            <Input
-              label="Confirm Password"
-              type="password"
-              required
-              autoComplete="new-password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value);
-                setLocalError("");
-              }}
-            />
+            <div>
+              <Input
+                label="Password"
+                type="password"
+                required
+                autoComplete="new-password"
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) clearError();
+                  setLocalError("");
+                }}
+              />
+              {password.length > 0 && (
+                <p className={`mt-1 text-xs ${password.length >= 6 ? "text-vc-sage-dark" : "text-vc-text-muted"}`}>
+                  {password.length >= 6 ? "✓ " : ""}At least 6 characters
+                </p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Confirm Password"
+                type="password"
+                required
+                autoComplete="new-password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setLocalError("");
+                }}
+              />
+              {confirmPassword.length > 0 && (
+                <p className={`mt-1 text-xs ${confirmPassword === password ? "text-vc-sage-dark" : "text-vc-danger"}`}>
+                  {confirmPassword === password ? "✓ Passwords match" : "Passwords don't match"}
+                </p>
+              )}
+            </div>
 
             {displayError && (
               <div className="rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">

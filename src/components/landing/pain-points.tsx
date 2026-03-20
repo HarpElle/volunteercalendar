@@ -14,7 +14,7 @@ const painPoints = [
       </svg>
     ),
     title: "Siloed tools cause double-books & burnout",
-    quote: "Our volunteers were double-booked across two teams on the same day. We had no visibility across departments.",
+    quote: "When each team uses a different tool, conflicts fall through the cracks. A volunteer gets scheduled for worship and outreach on the same morning — and nobody knows until Sunday.",
   },
   {
     borderColor: "border-vc-sand/20",
@@ -26,8 +26,8 @@ const painPoints = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
       </svg>
     ),
-    title: "Manual rotations waste 5-10 hours weekly",
-    quote: "I was copying spreadsheets, emailing people manually, chasing down confirmations. No one was happy.",
+    title: "Manual rotations waste 5–10 hours weekly",
+    quote: "Copying spreadsheets, emailing people one by one, chasing down responses. The admin spends 5–10 hours a week on something a system should handle.",
   },
   {
     borderColor: "border-vc-indigo/5",
@@ -40,7 +40,7 @@ const painPoints = [
       </svg>
     ),
     title: "No-shows leave your team short-handed",
-    quote: "We had a 30% no-show rate. We needed a tool that tracks responses and alerts us before it\u2019s too late.",
+    quote: "No-shows leave teams scrambling. Without tracking who confirmed, you don\u2019t know you\u2019re short-handed until it\u2019s too late.",
   },
 ];
 
@@ -76,9 +76,9 @@ export function PainPoints() {
                   {point.title}
                 </h3>
 
-                <div className="pull-quote relative mt-auto">
-                  <p className="text-sm leading-relaxed text-vc-text-secondary italic">
-                    &ldquo;{point.quote}&rdquo;
+                <div className="relative mt-auto">
+                  <p className="text-sm leading-relaxed text-vc-text-secondary">
+                    {point.quote}
                   </p>
                 </div>
               </div>

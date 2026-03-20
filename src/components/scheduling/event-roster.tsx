@@ -331,6 +331,7 @@ export function EventRoster({
                               <button
                                 onClick={() => setActionMenuId(actionMenuId === signup.id ? null : signup.id)}
                                 className="rounded p-1 text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo"
+                                aria-label="More actions"
                               >
                                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
@@ -341,7 +342,7 @@ export function EventRoster({
                                   <button
                                     onClick={() => handleRemove(signup.id)}
                                     disabled={removing === signup.id}
-                                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    className="w-full px-3 py-2 text-left text-sm text-vc-danger hover:bg-vc-danger/5 disabled:opacity-50"
                                   >
                                     {removing === signup.id ? "Removing..." : "Remove from role"}
                                   </button>
@@ -398,11 +399,11 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     confirmed: "bg-vc-sage/15 text-vc-sage",
     waitlisted: "bg-vc-sand/15 text-vc-sand",
-    cancelled: "bg-gray-100 text-gray-500",
+    cancelled: "bg-vc-bg-cream text-vc-text-muted",
   };
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || "bg-gray-100 text-gray-500"}`}
+      className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || "bg-vc-bg-cream text-vc-text-muted"}`}
     >
       {status}
     </span>
@@ -433,7 +434,7 @@ function AttendanceToggle({
     return (
       <button
         onClick={onClick}
-        className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+        className="flex items-center gap-1 rounded-full bg-vc-danger/5 px-2.5 py-1 text-xs font-medium text-vc-danger transition-colors hover:bg-vc-danger/10"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -445,7 +446,7 @@ function AttendanceToggle({
   return (
     <button
       onClick={onClick}
-      className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-200"
+      className="rounded-full bg-vc-bg-cream px-2.5 py-1 text-xs font-medium text-vc-text-muted transition-colors hover:bg-vc-bg-warm"
     >
       Not marked
     </button>

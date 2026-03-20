@@ -21,7 +21,7 @@ import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import type { Ministry, OrgType, WorkflowMode, Church, Volunteer } from "@/lib/types";
+import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, OnboardingStepType, Campus } from "@/lib/types";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -85,6 +85,17 @@ function OrganizationContent() {
   const [ministryName, setMinistryName] = useState("");
   const [ministryColor, setMinistryColor] = useState(PRESET_COLORS[0].hex);
   const [ministryDescription, setMinistryDescription] = useState("");
+  const [ministryRequiresBgCheck, setMinistryRequiresBgCheck] = useState(false);
+  const [ministryPrereqs, setMinistryPrereqs] = useState<OnboardingStep[]>([]);
+
+  // Campuses state
+  const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [showCampusForm, setShowCampusForm] = useState(false);
+  const [editingCampusId, setEditingCampusId] = useState<string | null>(null);
+  const [campusSaving, setCampusSaving] = useState(false);
+  const [campusName, setCampusName] = useState("");
+  const [campusAddress, setCampusAddress] = useState("");
+  const [campusIsPrimary, setCampusIsPrimary] = useState(false);
 
   const [mutationError, setMutationError] = useState("");
 
@@ -105,11 +116,12 @@ function OrganizationContent() {
     }
     async function load() {
       try {
-        const [churchSnap, minDocs, volDocs, eventDocs] = await Promise.all([
+        const [churchSnap, minDocs, volDocs, eventDocs, campusDocs] = await Promise.all([
           getDoc(doc(db, "churches", churchId!)),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "events"),
+          getChurchDocuments(churchId!, "campuses"),
         ]);
         if (churchSnap.exists()) {
           const data = churchSnap.data();
@@ -121,6 +133,7 @@ function OrganizationContent() {
           setOrgWorkflowMode((data.workflow_mode as WorkflowMode) || "centralized");
         }
         setMinistries(minDocs as unknown as Ministry[]);
+        setCampuses(campusDocs as unknown as Campus[]);
         setVolunteerCount((volDocs as unknown as Volunteer[]).length);
         const events = eventDocs as unknown as { id: string; status?: string }[];
         setActiveEventCount(events.filter((e) => !e.status || e.status === "active" || e.status === "draft").length);
@@ -179,6 +192,8 @@ function OrganizationContent() {
     setMinistryName("");
     setMinistryColor(PRESET_COLORS[0].hex);
     setMinistryDescription("");
+    setMinistryRequiresBgCheck(false);
+    setMinistryPrereqs([]);
     setEditingMinistryId(null);
     setShowMinistryForm(false);
   }
@@ -187,6 +202,8 @@ function OrganizationContent() {
     setMinistryName(m.name);
     setMinistryColor(m.color);
     setMinistryDescription(m.description);
+    setMinistryRequiresBgCheck(m.requires_background_check || false);
+    setMinistryPrereqs(m.prerequisites || []);
     setEditingMinistryId(m.id);
     setShowMinistryForm(true);
   }
@@ -200,6 +217,8 @@ function OrganizationContent() {
         name: ministryName,
         color: ministryColor,
         description: ministryDescription,
+        requires_background_check: ministryRequiresBgCheck,
+        prerequisites: ministryPrereqs.filter((p) => p.label.trim()),
         church_id: churchId,
         lead_user_id: user.uid,
         lead_email: user.email || "",
@@ -234,6 +253,80 @@ function OrganizationContent() {
       setMutationError("Failed to delete ministry. Please try again.");
     } finally {
       setDeletingMinistry(null);
+    }
+  }
+
+  // --- Campus handlers ---
+
+  function resetCampusForm() {
+    setCampusName("");
+    setCampusAddress("");
+    setCampusIsPrimary(false);
+    setEditingCampusId(null);
+    setShowCampusForm(false);
+  }
+
+  function startEditCampus(c: Campus) {
+    setCampusName(c.name);
+    setCampusAddress(c.address || "");
+    setCampusIsPrimary(c.is_primary);
+    setEditingCampusId(c.id);
+    setShowCampusForm(true);
+  }
+
+  async function handleCampusSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!churchId) return;
+    setCampusSaving(true);
+    try {
+      const data = {
+        name: campusName,
+        address: campusAddress || null,
+        location: null,
+        timezone: null,
+        is_primary: campusIsPrimary,
+        church_id: churchId,
+        ...(editingCampusId ? {} : { created_at: new Date().toISOString() }),
+      };
+      // If setting as primary, unset other primaries
+      if (campusIsPrimary) {
+        for (const existing of campuses) {
+          if (existing.is_primary && existing.id !== editingCampusId) {
+            await updateChurchDocument(churchId, "campuses", existing.id, { is_primary: false });
+          }
+        }
+      }
+      if (editingCampusId) {
+        await updateChurchDocument(churchId, "campuses", editingCampusId, data);
+        setCampuses((prev) => prev.map((c) => {
+          if (c.id === editingCampusId) return { ...c, ...data };
+          if (campusIsPrimary && c.is_primary) return { ...c, is_primary: false };
+          return c;
+        }));
+      } else {
+        const ref = await addChurchDocument(churchId, "campuses", data);
+        setCampuses((prev) => {
+          const updated = campusIsPrimary
+            ? prev.map((c) => c.is_primary ? { ...c, is_primary: false } : c)
+            : prev;
+          return [...updated, { id: ref.id, ...data } as Campus];
+        });
+      }
+      resetCampusForm();
+    } catch {
+      setMutationError("Failed to save campus.");
+    } finally {
+      setCampusSaving(false);
+    }
+  }
+
+  async function handleDeleteCampus(id: string) {
+    if (!churchId) return;
+    try {
+      await removeChurchDocument(churchId, "campuses", id);
+      setCampuses((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      setMutationError("Failed to delete campus.");
     }
   }
 
@@ -293,7 +386,7 @@ function OrganizationContent() {
       </div>
 
       {mutationError && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
           {mutationError}
         </div>
       )}
@@ -373,6 +466,104 @@ function OrganizationContent() {
                   ))}
                 </div>
               </div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ministryRequiresBgCheck}
+                  onChange={(e) => setMinistryRequiresBgCheck(e.target.checked)}
+                  className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                />
+                <span className="text-sm text-vc-text-secondary">
+                  Require background check clearance to serve in this {terms.singularLower}
+                </span>
+              </label>
+
+              {/* Prerequisites */}
+              <div className="rounded-lg border border-vc-border-light bg-vc-bg-warm/30 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-vc-text">
+                    Onboarding Prerequisites
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMinistryPrereqs((prev) => [
+                        ...prev,
+                        { id: crypto.randomUUID(), label: "", type: "class" as OnboardingStepType },
+                      ])
+                    }
+                    className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                  >
+                    + Add prerequisite
+                  </button>
+                </div>
+                {ministryPrereqs.length === 0 && (
+                  <p className="text-xs text-vc-text-muted">
+                    No prerequisites — all volunteers can serve immediately.
+                  </p>
+                )}
+                {ministryPrereqs.map((prereq, idx) => (
+                  <div key={prereq.id} className="flex items-center gap-2">
+                    <select
+                      className="w-36 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+                      value={prereq.type}
+                      onChange={(e) =>
+                        setMinistryPrereqs((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, type: e.target.value as OnboardingStepType } : p,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="class">Class / Training</option>
+                      <option value="background_check">Background Check</option>
+                      <option value="minimum_service">Min. Service Count</option>
+                      <option value="ministry_tenure">Ministry Tenure</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <input
+                      className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none"
+                      placeholder="Requirement label (e.g., Complete Get Anchored class)"
+                      value={prereq.label}
+                      onChange={(e) =>
+                        setMinistryPrereqs((prev) =>
+                          prev.map((p, i) =>
+                            i === idx ? { ...p, label: e.target.value } : p,
+                          ),
+                        )
+                      }
+                    />
+                    {(prereq.type === "minimum_service" || prereq.type === "ministry_tenure") && (
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-16 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+                        placeholder={prereq.type === "minimum_service" ? "Count" : "Days"}
+                        value={prereq.threshold || ""}
+                        onChange={(e) =>
+                          setMinistryPrereqs((prev) =>
+                            prev.map((p, i) =>
+                              i === idx ? { ...p, threshold: Number(e.target.value) || null } : p,
+                            ),
+                          )
+                        }
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMinistryPrereqs((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex gap-3">
                 <Button type="submit" loading={ministrySaving}>
                   {editingMinistryId ? "Save Changes" : "Create " + terms.singular}
@@ -410,6 +601,24 @@ function OrganizationContent() {
                     {m.description && (
                       <p className="mt-1 text-sm text-vc-text-muted">{m.description}</p>
                     )}
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {m.requires_background_check && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-vc-sand/20 px-2 py-0.5 text-[10px] font-medium text-vc-text-secondary">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                          </svg>
+                          Background check required
+                        </span>
+                      )}
+                      {m.prerequisites && m.prerequisites.length > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-vc-indigo/10 px-2 py-0.5 text-[10px] font-medium text-vc-indigo/70">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
+                          </svg>
+                          {m.prerequisites.length} prerequisite{m.prerequisites.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -440,6 +649,111 @@ function OrganizationContent() {
           currentTier={currentTier}
           shortLinksLimit={limits.short_links}
         />
+      )}
+
+      {/* ── Campuses / Sites ── */}
+      {isAdmin(activeMembership) && (
+        <section className="mb-8">
+          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-vc-indigo">Campuses</h2>
+              <p className="text-sm text-vc-text-muted">Manage multiple sites or locations within your organization.</p>
+            </div>
+            {!showCampusForm && (
+              <Button size="sm" onClick={() => setShowCampusForm(true)}>
+                Add Campus
+              </Button>
+            )}
+          </div>
+
+          {showCampusForm && (
+            <div className="mb-6 rounded-xl border border-vc-border bg-white p-5">
+              <form onSubmit={handleCampusSubmit} className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Campus Name"
+                    required
+                    value={campusName}
+                    onChange={(e) => setCampusName(e.target.value)}
+                    placeholder="e.g., Main Campus, North Campus"
+                  />
+                  <Input
+                    label="Address"
+                    value={campusAddress}
+                    onChange={(e) => setCampusAddress(e.target.value)}
+                    placeholder="123 Church St, City, ST"
+                  />
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={campusIsPrimary}
+                    onChange={(e) => setCampusIsPrimary(e.target.checked)}
+                    className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+                  />
+                  <span className="text-sm text-vc-text-secondary">Primary campus</span>
+                </label>
+                <div className="flex gap-3">
+                  <Button type="submit" loading={campusSaving}>
+                    {editingCampusId ? "Save Changes" : "Add Campus"}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={resetCampusForm}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {campuses.length === 0 && !showCampusForm ? (
+            <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
+              <p className="text-vc-text-secondary">No campuses configured.</p>
+              <p className="mt-1 text-sm text-vc-text-muted">
+                Single-site organizations don&apos;t need campuses. Add one if you have multiple locations.
+              </p>
+            </div>
+          ) : campuses.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {campuses.map((c) => (
+                <div
+                  key={c.id}
+                  className="group relative rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-vc-indigo/10 text-sm font-semibold text-vc-indigo">
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-vc-indigo">{c.name}</h3>
+                      {c.address && (
+                        <p className="mt-0.5 text-sm text-vc-text-muted">{c.address}</p>
+                      )}
+                      {c.is_primary && (
+                        <span className="mt-1.5 inline-flex items-center rounded-full bg-vc-coral/10 px-2 py-0.5 text-[10px] font-medium text-vc-coral">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEditCampus(c)}
+                      className="text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCampus(c.id)}
+                      className="text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
       )}
 
       {/* ── Billing & Plan ── */}
@@ -895,8 +1209,8 @@ function ShortLinksSection({
                   key={link.id}
                   className="flex items-center gap-3 rounded-xl border border-vc-border-light bg-vc-bg-warm/50 p-3 opacity-60"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-vc-bg-cream">
+                    <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                     </svg>
                   </div>

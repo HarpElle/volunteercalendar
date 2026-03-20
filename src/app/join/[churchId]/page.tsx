@@ -24,6 +24,7 @@ export default function JoinChurchPage() {
   // Load church info and check existing membership
   useEffect(() => {
     async function load() {
+      // 1. Fetch church info
       try {
         const res = await fetch(`/api/church-info?id=${encodeURIComponent(churchId)}`);
         if (res.status === 404) {
@@ -34,8 +35,16 @@ export default function JoinChurchPage() {
         if (!res.ok) throw new Error("Failed to load");
         const church = await res.json();
         setChurchName(church.name || "this organization");
+      } catch {
+        setError("Failed to load organization info.");
+        setLoading(false);
+        return;
+      }
 
-        if (user) {
+      // 2. Check existing membership (separate try/catch so a failure here
+      //    doesn't clobber the successfully-loaded church info)
+      if (user) {
+        try {
           const existingId = membershipDocId(user.uid, churchId);
           const existing = await getMembership(existingId);
           if (existing) {
@@ -49,9 +58,10 @@ export default function JoinChurchPage() {
               return;
             }
           }
+        } catch {
+          // Membership check failed — not critical, allow join form to show
+          console.warn("Could not check existing membership");
         }
-      } catch {
-        setError("Failed to load organization info.");
       }
       setLoading(false);
     }
@@ -156,6 +166,7 @@ export default function JoinChurchPage() {
               <p className="text-center text-vc-text-secondary">
                 Your request to join <strong className="text-vc-indigo">{churchName}</strong> is waiting for admin approval. You'll get an email when you're approved.
               </p>
+              <p className="mt-2 text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
             </>
           )}
 
@@ -172,6 +183,7 @@ export default function JoinChurchPage() {
               <p className="text-center text-vc-text-secondary">
                 Your request to join <strong className="text-vc-indigo">{churchName}</strong> has been sent to the admin team. You'll receive an email once you're approved.
               </p>
+              <p className="mt-2 text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
             </>
           )}
 

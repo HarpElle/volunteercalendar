@@ -111,24 +111,24 @@ export function WaitlistForm() {
                 </motion.svg>
               </div>
               <h2 className="font-display text-3xl text-vc-indigo">
-                You&apos;re on the list!
+                Thanks for reaching out!
               </h2>
               <p className="mt-3 text-lg text-vc-text-secondary">
-                Thanks for signing up. We&apos;ll be in touch soon with early
-                access details and next steps.
+                We&apos;ll be in touch within one business day to help you
+                evaluate the fit and get started.
               </p>
             </motion.div>
           ) : (
             <motion.div key="form" exit={{ opacity: 0, y: -20 }}>
               <AnimateIn>
                 <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-coral">
-                  Have Questions?
+                  Need Help Getting Started?
                 </p>
                 <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
-                  Tell us about your organization
+                  Talk to a real person
                 </h2>
                 <p className="mx-auto mt-4 max-w-md text-center text-lg text-vc-text-secondary">
-                  Not ready to dive in yet? Share your info and we&apos;ll reach out to help you get started.
+                  Not sure if VolunteerCal is right for your organization? Share your details and we&apos;ll reach out to help you evaluate the fit.
                 </p>
               </AnimateIn>
 
@@ -264,12 +264,12 @@ export function WaitlistForm() {
                         Joining...
                       </span>
                     ) : (
-                      "Join the Waitlist"
+                      "Send My Info"
                     )}
                   </button>
 
                   <p className="text-center text-xs text-vc-text-muted">
-                    No spam, ever. We&apos;ll only reach out about VolunteerCal.
+                    No spam, ever. We&apos;ll only reach out to help with VolunteerCal.
                   </p>
                 </form>
               </AnimateIn>

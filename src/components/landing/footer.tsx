@@ -35,6 +35,9 @@ export function Footer() {
             <a href="#pricing" className="text-vc-text-secondary transition-colors hover:text-vc-indigo">
               Pricing
             </a>
+            <a href="#faq" className="text-vc-text-secondary transition-colors hover:text-vc-indigo">
+              FAQ
+            </a>
             <a href="/login" className="text-vc-text-secondary transition-colors hover:text-vc-indigo">
               Log In
             </a>
@@ -68,7 +71,7 @@ export function Footer() {
             &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
           </p>
           <p>
-            Created by{" "}
+            A{" "}
             <a
               href="https://harpelle.com"
               target="_blank"
@@ -76,6 +79,15 @@ export function Footer() {
               className="text-vc-coral transition-colors hover:text-vc-coral-dark"
             >
               HarpElle
+            </a>
+            {" "}product &middot; Thoughtfully built.
+          </p>
+          <p>
+            <a
+              href="mailto:hello@volunteercal.com"
+              className="transition-colors hover:text-vc-indigo"
+            >
+              hello@volunteercal.com
             </a>
           </p>
         </div>

@@ -19,7 +19,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   ghost:
     "text-vc-text-secondary hover:bg-vc-bg-warm focus-visible:ring-vc-coral",
   danger:
-    "bg-vc-danger text-white hover:bg-red-700 focus-visible:ring-red-500 shadow-sm",
+    "bg-vc-danger text-white hover:bg-vc-coral-dark focus-visible:ring-vc-danger shadow-sm",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

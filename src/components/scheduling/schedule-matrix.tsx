@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import type { Assignment, Service, Volunteer, Ministry, Schedule } from "@/lib/types";
 import { getServiceMinistryIds } from "@/lib/utils/service-helpers";
 
@@ -28,8 +28,53 @@ export function ScheduleMatrix({
   const [viewMode, setViewMode] = useState<ViewMode>("by-date");
   const [filterMinistry, setFilterMinistry] = useState<string>("all");
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
   const isDraft = schedule.status === "draft";
+
+  // Drag-and-drop handlers for reassigning volunteers between slots
+  function handleDragStart(e: DragEvent, assignment: Assignment) {
+    e.dataTransfer.setData("text/plain", JSON.stringify({
+      assignmentId: assignment.id,
+      volunteerId: assignment.volunteer_id,
+      roleId: assignment.role_id,
+    }));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragOver(e: DragEvent, targetKey: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverTarget(targetKey);
+  }
+
+  function handleDragLeave() {
+    setDragOverTarget(null);
+  }
+
+  function handleDrop(e: DragEvent, targetAssignment: Assignment) {
+    e.preventDefault();
+    setDragOverTarget(null);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+      if (!data.assignmentId || !data.volunteerId) return;
+      // Swap: reassign the dragged assignment to take the target's volunteer,
+      // and the target assignment to take the dragged volunteer
+      if (data.assignmentId !== targetAssignment.id) {
+        onReassign?.(data.assignmentId, targetAssignment.volunteer_id);
+        onReassign?.(targetAssignment.id, data.volunteerId);
+      }
+    } catch {
+      // Invalid drag data
+    }
+  }
+
+  function handleDropOnEmpty(e: DragEvent, _roleId: string) {
+    e.preventDefault();
+    setDragOverTarget(null);
+    // For empty slots, we could allow dropping a volunteer from another slot
+    // but this requires more complex logic — for now just clear the drag state
+  }
 
   const serviceMap = useMemo(
     () => new Map(services.map((s) => [s.id, s])),
@@ -221,7 +266,18 @@ export function ScheduleMatrix({
                             return (
                               <div
                                 key={a.id}
-                                className="group/chip inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-vc-bg px-3 py-1.5 text-sm"
+                                draggable={isDraft && !!onReassign}
+                                onDragStart={isDraft && onReassign ? (e) => handleDragStart(e, a) : undefined}
+                                onDragOver={isDraft && onReassign ? (e) => handleDragOver(e, a.id) : undefined}
+                                onDragLeave={isDraft && onReassign ? handleDragLeave : undefined}
+                                onDrop={isDraft && onReassign ? (e) => handleDrop(e, a) : undefined}
+                                className={`group/chip inline-flex items-center gap-1.5 rounded-lg border bg-vc-bg px-3 py-1.5 text-sm transition-all ${
+                                  isDraft && onReassign ? "cursor-grab active:cursor-grabbing" : ""
+                                } ${
+                                  dragOverTarget === a.id
+                                    ? "border-vc-coral ring-2 ring-vc-coral/20 scale-105"
+                                    : "border-vc-border-light"
+                                }`}
                               >
                                 <span className="font-medium text-vc-indigo">
                                   {vol?.name || "Unknown"}

@@ -71,6 +71,8 @@ export default function SchedulesPage() {
   const [activeStats, setActiveStats] = useState<SchedulingResult["stats"] | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [notifyResult, setNotifyResult] = useState<string | null>(null);
+  const [scheduleNotes, setScheduleNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   useEffect(() => {
     if (!churchId) return;
@@ -113,12 +115,13 @@ export default function SchedulesPage() {
         created_at: new Date().toISOString(),
         published_at: null,
         ministry_approvals: {},
+        notes: null,
       };
       const schedRef = await addChurchDocument(churchId, "schedules", scheduleData);
       const scheduleId = schedRef.id;
 
       const result = generateDraftSchedule(
-        scheduleId, churchId, services, volunteers, households, startDate, endDate,
+        scheduleId, churchId, services, volunteers, households, startDate, endDate, ministries,
       );
 
       const savedAssignments: Assignment[] = [];
@@ -152,6 +155,7 @@ export default function SchedulesPage() {
     setActiveScheduleId(schedule.id);
     setActiveStats(null);
     setShowReview(false);
+    setScheduleNotes(schedule.notes || "");
 
     try {
       const allAssignments = await getChurchDocuments(churchId, "assignments");
@@ -197,6 +201,24 @@ export default function SchedulesPage() {
       setMutationError("Failed to delete schedule. Please try again.");
     } finally {
       setDeleting(null);
+    }
+  }
+
+  async function saveNotes() {
+    if (!churchId || !activeScheduleId) return;
+    setSavingNotes(true);
+    try {
+      await updateChurchDocument(churchId, "schedules", activeScheduleId, {
+        notes: scheduleNotes || null,
+      });
+      // Update local state
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === activeScheduleId ? { ...s, notes: scheduleNotes || null } : s)),
+      );
+    } catch {
+      setMutationError("Failed to save notes.");
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -389,7 +411,7 @@ export default function SchedulesPage() {
       </div>
 
       {mutationError && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
           {mutationError}
         </div>
       )}
@@ -637,6 +659,34 @@ export default function SchedulesPage() {
               </ul>
             </div>
           )}
+
+          {/* Service Notes */}
+          <div className="mb-6 rounded-xl border border-vc-border-light bg-white overflow-hidden shadow-sm">
+            <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-vc-indigo">Service Notes</h3>
+              {scheduleNotes !== (activeSchedule.notes || "") && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={savingNotes}
+                  onClick={saveNotes}
+                >
+                  Save Notes
+                </Button>
+              )}
+            </div>
+            <div className="p-4">
+              <textarea
+                className="w-full rounded-lg border border-vc-border-light bg-vc-bg px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral/30 transition-colors min-h-[100px] resize-y"
+                placeholder="Set list, resource links, announcements, or any notes for this schedule period..."
+                value={scheduleNotes}
+                onChange={(e) => setScheduleNotes(e.target.value)}
+              />
+              <p className="mt-1.5 text-xs text-vc-text-muted">
+                Notes are visible to schedulers and team leads. Use for set lists, rehearsal times, or resource links.
+              </p>
+            </div>
+          </div>
 
           {/* Ministry Review Panel */}
           {showReview && activeSchedule.status === "in_review" && (

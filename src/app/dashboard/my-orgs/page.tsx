@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   updateMembershipStatus,
@@ -11,6 +12,7 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { Membership, ReminderChannel } from "@/lib/types";
 
 interface OrgInfo {
@@ -27,6 +29,7 @@ const ROLE_DISPLAY: Record<string, string> = {
 
 export default function MyOrgsPage() {
   const { memberships, activeMembership, switchOrg, refreshMemberships, user } = useAuth();
+  const { confirm } = useConfirm();
   const [orgInfo, setOrgInfo] = useState<Map<string, OrgInfo>>(new Map());
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -82,7 +85,13 @@ export default function MyOrgsPage() {
   }
 
   async function handleLeaveOrg(m: Membership) {
-    if (!confirm(`Leave ${orgInfo.get(m.church_id)?.name || "this organization"}? This can't be undone.`)) return;
+    const ok = await confirm({
+      title: "Leave Organization",
+      message: "Are you sure you want to leave this organization? You'll need a new invitation to rejoin.",
+      confirmLabel: "Leave",
+      variant: "danger",
+    });
+    if (!ok) return;
     setActionLoading(m.id);
     try {
       await deleteMembership(m.id);
@@ -197,7 +206,7 @@ export default function MyOrgsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 mb-6">
           {activeMems.map((m) => {
             const info = orgInfo.get(m.church_id);
             const isActive = activeMembership?.id === m.id;
@@ -273,6 +282,22 @@ export default function MyOrgsPage() {
           })}
         </div>
       )}
+
+      {/* Create New Organization */}
+      <Link
+        href="/dashboard/setup?mode=new"
+        className="mt-6 flex items-center gap-3 rounded-xl border border-dashed border-vc-coral/30 bg-vc-coral/5 p-5 text-vc-coral hover:bg-vc-coral/10 transition-colors"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        <div>
+          <p className="font-semibold">Create New Organization</p>
+          <p className="text-sm text-vc-text-muted">
+            Start a new church or organization on VolunteerCal.
+          </p>
+        </div>
+      </Link>
     </div>
   );
 }

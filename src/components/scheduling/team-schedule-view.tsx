@@ -266,10 +266,10 @@ export function TeamScheduleView({
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     confirmed: "bg-vc-sage/15 text-vc-sage",
-    draft: "bg-gray-100 text-gray-500",
+    draft: "bg-vc-bg-cream text-vc-text-muted",
     declined: "bg-vc-danger/10 text-vc-danger",
-    no_show: "bg-red-50 text-red-600",
-    substitute_requested: "bg-blue-50 text-blue-600",
+    no_show: "bg-vc-danger/5 text-vc-danger",
+    substitute_requested: "bg-vc-indigo/10 text-vc-indigo",
   };
   const labels: Record<string, string> = {
     draft: "Awaiting",
@@ -278,7 +278,7 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || "bg-gray-100 text-gray-500"}`}
+      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || "bg-vc-bg-cream text-vc-text-muted"}`}
     >
       {labels[status] || status}
     </span>
