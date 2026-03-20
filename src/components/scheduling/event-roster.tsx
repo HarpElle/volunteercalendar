@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { getEventSignups, updateSignupAttendance } from "@/lib/firebase/firestore";
 import { isAdmin } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
+import { printRoster } from "@/lib/utils/print-roster";
 import type { Event, EventSignup, Membership } from "@/lib/types";
 
 interface EventRosterProps {
@@ -16,6 +17,7 @@ interface EventRosterProps {
   onClose: () => void;
   canMarkAttendance?: boolean;
   activeMembership?: Membership | null;
+  orgName?: string;
 }
 
 type Tab = "roster" | "attendance";
@@ -45,6 +47,7 @@ export function EventRoster({
   onClose,
   canMarkAttendance = false,
   activeMembership,
+  orgName = "Organization",
 }: EventRosterProps) {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -85,6 +88,18 @@ export function EventRoster({
   useEffect(() => {
     if (open) loadSignups();
   }, [open, loadSignups]);
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!actionMenuId) return;
+    function handler(e: MouseEvent) {
+      if (!(e.target as HTMLElement).closest("[data-action-menu]")) {
+        setActionMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [actionMenuId]);
 
   // Group signups by role
   const roleGroups = event.roles.map((role) => {
@@ -202,12 +217,6 @@ export function EventRoster({
 
   return (
     <Modal open={open} onClose={onClose} title={event.name} subtitle={subtitle}>
-      {/* Print-only header (hidden on screen) */}
-      <div className="print-only hidden mb-4">
-        <h1 className="text-xl font-bold">{event.name}</h1>
-        <p className="text-sm text-gray-600">{subtitle}</p>
-      </div>
-
       {/* Tab bar */}
       {showAttendanceTab && (
         <div className="mb-4 flex gap-1 rounded-lg bg-vc-bg-warm p-1 no-print">
@@ -250,7 +259,22 @@ export function EventRoster({
                 </Button>
               )}
               <button
-                onClick={() => window.print()}
+                onClick={() =>
+                  printRoster({
+                    title: event.name,
+                    subtitle,
+                    orgName,
+                    roles: roleGroups.map(({ role, signups: rs }) => ({
+                      roleName: role.title,
+                      totalSlots: role.count,
+                      volunteers: rs.map((s) => ({
+                        name: s.volunteer_name || "Unknown",
+                        email: s.volunteer_email || undefined,
+                        status: s.status,
+                      })),
+                    })),
+                  })
+                }
                 className="no-print flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
                 title="Print roster"
               >
@@ -303,7 +327,7 @@ export function EventRoster({
                             />
                           )}
                           {canModify && tab === "roster" && (
-                            <div className="relative no-print">
+                            <div className="relative no-print" data-action-menu>
                               <button
                                 onClick={() => setActionMenuId(actionMenuId === signup.id ? null : signup.id)}
                                 className="rounded p-1 text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo"

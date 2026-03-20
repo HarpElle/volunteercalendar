@@ -11,6 +11,7 @@ import {
 } from "@/lib/firebase/firestore";
 import { isAdmin, canScheduleMinistry } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
+import { printRoster } from "@/lib/utils/print-roster";
 import type { Service, Assignment, Ministry, Volunteer, Membership } from "@/lib/types";
 
 interface ServiceRosterProps {
@@ -21,6 +22,7 @@ interface ServiceRosterProps {
   onClose: () => void;
   canMarkAttendance?: boolean;
   activeMembership?: Membership | null;
+  orgName?: string;
 }
 
 type Tab = "roster" | "attendance";
@@ -52,6 +54,7 @@ export function ServiceRoster({
   onClose,
   canMarkAttendance = false,
   activeMembership,
+  orgName = "Organization",
 }: ServiceRosterProps) {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -107,6 +110,18 @@ export function ServiceRoster({
   useEffect(() => {
     if (open) loadData();
   }, [open, loadData]);
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!actionMenuId) return;
+    function handler(e: MouseEvent) {
+      if (!(e.target as HTMLElement).closest("[data-action-menu]")) {
+        setActionMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [actionMenuId]);
 
   // Build ministry name lookup
   const ministryNames = new Map<string, string>();
@@ -246,12 +261,6 @@ export function ServiceRoster({
 
   return (
     <Modal open={open} onClose={onClose} title={service.name} subtitle={subtitle} maxWidth="max-w-3xl">
-      {/* Print-only header (hidden on screen) */}
-      <div className="print-only hidden mb-4">
-        <h1 className="text-xl font-bold">{service.name}</h1>
-        <p className="text-sm text-gray-600">{subtitle}</p>
-      </div>
-
       {/* View level selector (Team / Org) */}
       {ministryIds.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-1.5 no-print">
@@ -335,7 +344,20 @@ export function ServiceRoster({
                 </Button>
               )}
               <button
-                onClick={() => window.print()}
+                onClick={() =>
+                  printRoster({
+                    title: service.name,
+                    subtitle,
+                    orgName,
+                    roles: [...roleGroups.entries()].map(([, roleAssignments]) => ({
+                      roleName: roleAssignments[0]?.role_title || "Role",
+                      volunteers: roleAssignments.map((a) => ({
+                        name: volunteerNames.get(a.volunteer_id) || "Unassigned",
+                        status: a.status,
+                      })),
+                    })),
+                  })
+                }
                 className="no-print flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
                 title="Print roster"
               >
@@ -387,7 +409,7 @@ export function ServiceRoster({
                             />
                           )}
                           {activeMembership && canScheduleMinistry(activeMembership, assignment.ministry_id) && tab === "roster" && (
-                            <div className="relative no-print">
+                            <div className="relative no-print" data-action-menu>
                               <button
                                 onClick={() => setActionMenuId(actionMenuId === assignment.id ? null : assignment.id)}
                                 className="rounded p-1 text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo"

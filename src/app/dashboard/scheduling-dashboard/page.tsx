@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
-import { getChurchDocuments, getEventSignups } from "@/lib/firebase/firestore";
+import { getChurchDocuments, getEventSignupsBatch } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
@@ -64,21 +64,20 @@ export default function SchedulingDashboardPage() {
         setAssignments(assigns);
         setMinistries(mins);
 
-        // Load signup counts for upcoming events
+        // Load signup counts for upcoming events (batch query)
         const upcomingEvents = evts.filter((e) => e.date >= today);
+        const upcomingIds = upcomingEvents.map((e) => e.id);
+        const allSignups = upcomingIds.length > 0
+          ? await getEventSignupsBatch(upcomingIds, churchId!)
+          : [];
         const counts = new Map<string, number>();
-        const collectedSignups: EventSignup[] = [];
-        for (const evt of upcomingEvents) {
-          try {
-            const signups = await getEventSignups(evt.id, churchId!);
-            counts.set(evt.id, signups.filter((s) => s.status !== "cancelled").length);
-            collectedSignups.push(...signups);
-          } catch {
-            counts.set(evt.id, 0);
+        for (const s of allSignups) {
+          if (s.status !== "cancelled") {
+            counts.set(s.event_id, (counts.get(s.event_id) || 0) + 1);
           }
         }
         setSignupCounts(counts);
-        setAllEventSignups(collectedSignups);
+        setAllEventSignups(allSignups);
       } catch {
         // silent
       } finally {

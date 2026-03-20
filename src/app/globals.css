@@ -187,17 +187,4 @@ body {
     border-color: #ddd !important;
     box-shadow: none !important;
   }
-  /* Roster print — show modal content full-page, hide backdrop/chrome */
-  [data-print-roster] {
-    position: static !important;
-    overflow: visible !important;
-    max-height: none !important;
-  }
-  [data-print-roster] .no-print {
-    display: none !important;
-  }
-  /* Print-only header */
-  .print-only {
-    display: block !important;
-  }
 }

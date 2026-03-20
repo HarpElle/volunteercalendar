@@ -8,7 +8,7 @@ import {
   getChurchDocuments,
   updateChurchDocument,
   removeChurchDocument,
-  getEventSignups,
+  getEventSignupsBatch,
 } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { Button } from "@/components/ui/button";
@@ -847,36 +847,41 @@ function EventsTab({
         const typedEvents = evts as unknown as Event[];
         setEvents(typedEvents);
 
+        // Load signup counts + short links in parallel
         const openEvents = typedEvents.filter((e) => e.signup_mode !== "scheduled");
+        const openIds = openEvents.map((e) => e.id);
+
+        const [allSignups, shortLinksResult] = await Promise.all([
+          openIds.length > 0
+            ? getEventSignupsBatch(openIds, churchId!)
+            : Promise.resolve([]),
+          user
+            ? user.getIdToken().then(async (token) => {
+                const res = await fetch(`/api/short-links?church_id=${churchId}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.ok) return res.json();
+                return null;
+              }).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+
         const counts: Record<string, number> = {};
-        await Promise.all(
-          openEvents.map(async (e) => {
-            const signups = await getEventSignups(e.id, churchId!);
-            counts[e.id] = signups.filter((s) => s.status !== "cancelled").length;
-          }),
-        );
+        for (const s of allSignups) {
+          if (s.status !== "cancelled") {
+            counts[s.event_id] = (counts[s.event_id] || 0) + 1;
+          }
+        }
         setSignupCounts(counts);
 
-        // Fetch short links for this church
-        if (user) {
-          try {
-            const token = await user.getIdToken();
-            const res = await fetch(`/api/short-links?church_id=${churchId}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const map: Record<string, string> = {};
-              for (const link of data.links || []) {
-                if (link.target_url) {
-                  map[link.target_url] = `${window.location.origin}/s/${link.slug}`;
-                }
-              }
-              setShortLinkMap(map);
+        if (shortLinksResult) {
+          const map: Record<string, string> = {};
+          for (const link of shortLinksResult.links || []) {
+            if (link.target_url) {
+              map[link.target_url] = `${window.location.origin}/s/${link.slug}`;
             }
-          } catch {
-            // Short links are optional, fail silently
           }
+          setShortLinkMap(map);
         }
       } catch {
         // silent
@@ -1587,6 +1592,7 @@ function EventsTab({
           onClose={() => setRosterEvent(null)}
           canMarkAttendance={userCanMarkAttendance}
           activeMembership={activeMembership}
+          orgName={churchName}
         />
       )}
     </div>

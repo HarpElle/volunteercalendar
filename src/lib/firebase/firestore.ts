@@ -226,6 +226,35 @@ export async function getEventSignups(eventId: string, churchId: string): Promis
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EventSignup);
 }
 
+/**
+ * Batch-fetch signups for multiple events in a single query (or chunked queries
+ * for >30 events). Much faster than calling getEventSignups per-event.
+ */
+export async function getEventSignupsBatch(
+  eventIds: string[],
+  churchId: string,
+): Promise<EventSignup[]> {
+  if (eventIds.length === 0) return [];
+  // Firestore "in" operator supports up to 30 values per query
+  const CHUNK_SIZE = 30;
+  const chunks: string[][] = [];
+  for (let i = 0; i < eventIds.length; i += CHUNK_SIZE) {
+    chunks.push(eventIds.slice(i, i + CHUNK_SIZE));
+  }
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const q = query(
+        collection(db, EVENT_SIGNUPS),
+        where("church_id", "==", churchId),
+        where("event_id", "in", chunk),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EventSignup);
+    }),
+  );
+  return results.flat();
+}
+
 /** Get signups by a specific user across all events. */
 export async function getUserEventSignups(userId: string): Promise<EventSignup[]> {
   const q = query(collection(db, EVENT_SIGNUPS), where("user_id", "==", userId));

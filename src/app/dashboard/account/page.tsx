@@ -257,7 +257,7 @@ export default function AccountPage() {
   };
 
   return (
-    <div>
+    <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <h1 className="font-display text-3xl text-vc-indigo">Account Settings</h1>
         <p className="mt-1 text-vc-text-secondary">
