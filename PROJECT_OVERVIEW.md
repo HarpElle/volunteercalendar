@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 18 — Roster viewers, attendance tracking, team schedule, calendar feeds (complete) |
+| **Status** | Phase 19 — Dashboard fixes, print rosters, roster modifications, feed permissions, iCal aggregation, volunteer self-removal (complete) |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -133,6 +133,11 @@ VolunteerCal/
 │   │       │   └── route.ts        # Send event invite emails (batch, admin+)
 │   │       ├── organization/
 │   │       │   └── route.ts        # Org management API (cascading delete + member notification)
+│   │       ├── roster/
+│   │       │   ├── modify/
+│   │       │   │   └── route.ts    # Admin/scheduler roster modification (remove/move) + volunteer notification
+│   │       │   └── self-remove/
+│   │       │       └── route.ts    # Volunteer self-removal API + scheduler/admin notification
 │   │       ├── account/
 │   │       │   └── delete/
 │   │       │       └── route.ts    # Server-side account deletion (sole-admin detection, cascade)
@@ -147,7 +152,7 @@ VolunteerCal/
 │   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, short-link-creator, share-menu
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections
-│   │   └── scheduling/         # Schedule matrix, draft view, approval cards, event-roster, service-roster, team-schedule-view, calendar-feed-cta
+│   │   └── scheduling/         # Schedule matrix, draft view, approval cards, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
@@ -156,7 +161,7 @@ VolunteerCal/
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts
-│       │   ├── emails/         # 18 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
+│       │   ├── emails/         # 20 email templates + base-layout.ts (barrel: email-templates.ts re-exports)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, SMS service
 └── docs/                       # Research outputs, architecture decisions
@@ -187,3 +192,4 @@ VolunteerCal/
 | 16 | UX polish & tier enforcement: unicode rendering fixes, logout redirect to landing, email autofocus, custom time defaults, mobile layout for role times, org-creation confirmation email, print flyer/download slide redesign (one-page, bottom branding, short URLs only, stats), short link tier gate, persistent setup guide (6-step, collapsible, dismissible), tier enforcement for roles/events (roles_per_service, active_events, roles_per_event limits), usage meters on organization page | Complete |
 | 17 | Login fix, layout polish, share menu: fix login/register redirect race condition (useEffect-based navigation), setup guide sidebar dot indicator, dismiss confirmation dialog, event date formatting for print/slide ("Thursday, March 19th at..."), tighter print margins (one-page fit), input width constraints (max-w-3xl forms, max-w-xs ministry select, max-w-sm role inputs), unified ShareMenu dropdown component for events | Complete |
 | 18 | Roster viewers, attendance tracking, team schedule visibility, calendar feed enhancements: event roster modal (signup list + attendance toggles), service roster modal (team/org-level ministry pill filtering + attendance), batch attendance API (no-show stat sync), Team tab on My Schedule (ministry-grouped roster with own-row highlight, scheduler-aware links), TeamScheduleView component, CalendarFeedCta quick-subscribe card (personal/team toggle), "team" feed type in calendar API (filter by volunteer's ministry_ids), "team" option in Account feed creator, Firestore composite index for service assignment queries | Complete |
+| 19 | Dashboard fixes, print rosters, roster modifications, feed permissions, iCal aggregation, volunteer self-removal: dashboard stats include event signups (awaiting/confirmed/active counts), print button on event + service rosters (@media print CSS), admin/scheduler roster modify API (remove/move assignments + event signups with volunteer email notification), role-based calendar feed permissions (volunteers see self only, schedulers see scoped ministries, admins see all), aggregated iCal feeds for team/ministry/org (one entry per service with role→volunteer roster in description), volunteer self-removal modal with optional note to schedulers, self-remove API with multi-recipient scheduler/admin notification, self-removal from My Schedule + Team tab | Complete |

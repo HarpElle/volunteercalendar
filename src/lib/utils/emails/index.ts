@@ -20,3 +20,5 @@ export { buildRolePromotionEmail } from "./role-promotion";
 export { buildWelcomeToOrgEmail } from "./welcome-to-org";
 export { buildOrgDeletedMembersEmail } from "./org-deleted-members";
 export { buildOrgCreatedEmail } from "./org-created";
+export { buildAssignmentChangeEmail } from "./assignment-change";
+export { buildSelfRemovalAlertEmail } from "./self-removal-alert";

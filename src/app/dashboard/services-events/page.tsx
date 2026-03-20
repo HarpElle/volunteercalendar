@@ -1586,6 +1586,7 @@ function EventsTab({
           open={!!rosterEvent}
           onClose={() => setRosterEvent(null)}
           canMarkAttendance={userCanMarkAttendance}
+          activeMembership={activeMembership}
         />
       )}
     </div>

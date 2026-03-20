@@ -96,26 +96,67 @@ export async function GET(request: Request) {
     // "org" type returns all assignments
 
     // Build iCal events
-    const events = assignments.map((a) => {
-      const data = a as Record<string, unknown>;
-      const service = serviceMap.get(data.service_id as string) as Record<string, unknown> | undefined;
-      const ministry = ministryMap.get(data.ministry_id as string) as Record<string, unknown> | undefined;
-      const volunteer = volunteerMap.get(data.volunteer_id as string) as Record<string, unknown> | undefined;
+    let events;
 
-      return {
-        uid: a.id,
-        summary: `${data.role_title} - ${service?.name || "Service"}`,
-        description: [
-          `Ministry: ${ministry?.name || "Unknown"}`,
-          `Volunteer: ${volunteer?.name || "Unknown"}`,
-          `Role: ${data.role_title}`,
-          `Status: ${data.status}`,
-        ].join("\\n"),
-        dtstart: data.service_date as string,
-        startTime: (service?.start_time as string) || "09:00",
-        durationMinutes: (service?.duration_minutes as number) || 90,
-      };
-    });
+    if (feedType === "personal") {
+      // Personal feed: one event per assignment
+      events = assignments.map((a) => {
+        const data = a as Record<string, unknown>;
+        const service = serviceMap.get(data.service_id as string) as Record<string, unknown> | undefined;
+        const ministry = ministryMap.get(data.ministry_id as string) as Record<string, unknown> | undefined;
+
+        return {
+          uid: a.id,
+          summary: `${data.role_title} - ${service?.name || "Service"}`,
+          description: [
+            `Ministry: ${ministry?.name || "Unknown"}`,
+            `Role: ${data.role_title}`,
+            `Status: ${data.status}`,
+          ].join("\\n"),
+          dtstart: data.service_date as string,
+          startTime: (service?.start_time as string) || "09:00",
+          durationMinutes: (service?.duration_minutes as number) || 90,
+        };
+      });
+    } else {
+      // Team/ministry/org feeds: aggregate by service + date, list people by role
+      const grouped = new Map<string, typeof assignments>();
+      for (const a of assignments) {
+        const data = a as Record<string, unknown>;
+        const key = `${data.service_id}|${data.service_date}`;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(a);
+      }
+
+      events = [...grouped.entries()].map(([key, groupAssignments]) => {
+        const [serviceId, serviceDate] = key.split("|");
+        const service = serviceMap.get(serviceId) as Record<string, unknown> | undefined;
+
+        // Group by role, sorted alphabetically
+        const roleMap = new Map<string, string[]>();
+        for (const a of groupAssignments) {
+          const data = a as Record<string, unknown>;
+          const roleTitle = (data.role_title as string) || "Unknown Role";
+          const volName = ((volunteerMap.get(data.volunteer_id as string) as Record<string, unknown>)?.name as string) || "Unknown";
+          if (!roleMap.has(roleTitle)) roleMap.set(roleTitle, []);
+          roleMap.get(roleTitle)!.push(volName);
+        }
+
+        // Build description with roles and names
+        const descLines = [...roleMap.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([role, names]) => `${role}: ${names.sort().join(", ")}`);
+
+        return {
+          uid: `${serviceId}_${serviceDate}`,
+          summary: (service?.name as string) || "Service",
+          description: descLines.join("\\n"),
+          dtstart: serviceDate,
+          startTime: (service?.start_time as string) || "09:00",
+          durationMinutes: (service?.duration_minutes as number) || 90,
+        };
+      });
+    }
 
     const ical = generateICalFeed(calendarName, events, timezone);
 

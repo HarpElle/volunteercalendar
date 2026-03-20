@@ -9,7 +9,9 @@ import {
   updateAssignmentAttendance,
   getChurchDocuments,
 } from "@/lib/firebase/firestore";
-import type { Service, Assignment, Ministry, Volunteer } from "@/lib/types";
+import { isAdmin, canScheduleMinistry } from "@/lib/utils/permissions";
+import { useAuth } from "@/lib/context/auth-context";
+import type { Service, Assignment, Ministry, Volunteer, Membership } from "@/lib/types";
 
 interface ServiceRosterProps {
   service: Service;
@@ -18,6 +20,7 @@ interface ServiceRosterProps {
   open: boolean;
   onClose: () => void;
   canMarkAttendance?: boolean;
+  activeMembership?: Membership | null;
 }
 
 type Tab = "roster" | "attendance";
@@ -48,7 +51,9 @@ export function ServiceRoster({
   open,
   onClose,
   canMarkAttendance = false,
+  activeMembership,
 }: ServiceRosterProps) {
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
@@ -58,6 +63,8 @@ export function ServiceRoster({
   const [attendanceMap, setAttendanceMap] = useState<Map<string, boolean | null>>(new Map());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
   const isPastOrToday = serviceDate <= today;
@@ -172,6 +179,59 @@ export function ServiceRoster({
     }
   };
 
+  const handleRemoveAssignment = async (assignmentId: string) => {
+    setRemoving(assignmentId);
+    try {
+      const idToken = await user?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch("/api/roster/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          action: "remove",
+          item_type: "assignment",
+          item_id: assignmentId,
+          initiated_by_name: profile?.display_name || "Admin",
+        }),
+      });
+      if (res.ok) await loadData();
+    } catch {
+      // silent
+    } finally {
+      setRemoving(null);
+      setActionMenuId(null);
+    }
+  };
+
+  const handleMoveAssignment = async (assignmentId: string, newRoleId: string, newRoleTitle: string) => {
+    try {
+      const idToken = await user?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch("/api/roster/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          action: "move",
+          item_type: "assignment",
+          item_id: assignmentId,
+          new_role_id: newRoleId,
+          new_role_title: newRoleTitle,
+          initiated_by_name: profile?.display_name || "Admin",
+        }),
+      });
+      if (res.ok) await loadData();
+    } catch {
+      // silent
+    } finally {
+      setActionMenuId(null);
+    }
+  };
+
+  // Get all distinct role_id + role_title combos from assignments for "Move to..." options
+  const allRoles = [...new Map(assignments.map((a) => [a.role_id, a.role_title])).entries()];
+
   const subtitle = [
     formatDate(serviceDate),
     service.start_time ? formatTime(service.start_time) : service.all_day ? "All day" : null,
@@ -186,9 +246,15 @@ export function ServiceRoster({
 
   return (
     <Modal open={open} onClose={onClose} title={service.name} subtitle={subtitle} maxWidth="max-w-3xl">
+      {/* Print-only header (hidden on screen) */}
+      <div className="print-only hidden mb-4">
+        <h1 className="text-xl font-bold">{service.name}</h1>
+        <p className="text-sm text-gray-600">{subtitle}</p>
+      </div>
+
       {/* View level selector (Team / Org) */}
       {ministryIds.length > 1 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
+        <div className="mb-4 flex flex-wrap gap-1.5 no-print">
           <button
             onClick={() => setViewLevel("org")}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
@@ -217,7 +283,7 @@ export function ServiceRoster({
 
       {/* Tab bar */}
       {showAttendanceTab && (
-        <div className="mb-4 flex gap-1 rounded-lg bg-vc-bg-warm p-1">
+        <div className="mb-4 flex gap-1 rounded-lg bg-vc-bg-warm p-1 no-print">
           {(["roster", "attendance"] as Tab[]).map((t) => (
             <button
               key={t}
@@ -262,11 +328,23 @@ export function ServiceRoster({
                 </div>
               )}
             </div>
-            {tab === "attendance" && (
-              <Button variant="ghost" size="sm" onClick={markAllPresent}>
-                Mark all present
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {tab === "attendance" && (
+                <Button variant="ghost" size="sm" onClick={markAllPresent} className="no-print">
+                  Mark all present
+                </Button>
+              )}
+              <button
+                onClick={() => window.print()}
+                className="no-print flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                title="Print roster"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.25 7.034l-.25-.004" />
+                </svg>
+                Print
+              </button>
+            </div>
           </div>
 
           {/* Role groups */}
@@ -299,14 +377,56 @@ export function ServiceRoster({
                               : assignment.role_title}
                           </p>
                         </div>
-                        {tab === "roster" ? (
-                          <AssignmentStatusBadge status={assignment.status} />
-                        ) : (
-                          <AttendanceToggle
-                            value={attendanceMap.get(assignment.id) ?? null}
-                            onClick={() => toggleAttendance(assignment.id)}
-                          />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {tab === "roster" ? (
+                            <AssignmentStatusBadge status={assignment.status} />
+                          ) : (
+                            <AttendanceToggle
+                              value={attendanceMap.get(assignment.id) ?? null}
+                              onClick={() => toggleAttendance(assignment.id)}
+                            />
+                          )}
+                          {activeMembership && canScheduleMinistry(activeMembership, assignment.ministry_id) && tab === "roster" && (
+                            <div className="relative no-print">
+                              <button
+                                onClick={() => setActionMenuId(actionMenuId === assignment.id ? null : assignment.id)}
+                                className="rounded p-1 text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo"
+                              >
+                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                              </button>
+                              {actionMenuId === assignment.id && (
+                                <div className="absolute right-0 top-8 z-10 w-44 rounded-lg border border-vc-border bg-white py-1 shadow-lg">
+                                  <button
+                                    onClick={() => handleRemoveAssignment(assignment.id)}
+                                    disabled={removing === assignment.id}
+                                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    {removing === assignment.id ? "Removing..." : "Remove from role"}
+                                  </button>
+                                  {allRoles.filter(([rid]) => rid !== roleId).length > 0 && (
+                                    <>
+                                      <div className="mx-2 my-1 border-t border-vc-border-light" />
+                                      <p className="px-3 py-1 text-[11px] font-medium uppercase text-vc-text-muted">Move to...</p>
+                                      {allRoles
+                                        .filter(([rid]) => rid !== roleId)
+                                        .map(([rid, rtitle]) => (
+                                          <button
+                                            key={rid}
+                                            onClick={() => handleMoveAssignment(assignment.id, rid, rtitle)}
+                                            className="w-full px-3 py-2 text-left text-sm text-vc-text hover:bg-vc-bg-warm"
+                                          >
+                                            {rtitle}
+                                          </button>
+                                        ))}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -317,7 +437,7 @@ export function ServiceRoster({
 
           {/* Save button for attendance */}
           {tab === "attendance" && dirty && (
-            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4">
+            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print">
               <Button onClick={saveAttendance} loading={saving}>
                 Save Attendance
               </Button>

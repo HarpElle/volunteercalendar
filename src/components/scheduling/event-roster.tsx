@@ -5,7 +5,9 @@ import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { getEventSignups, updateSignupAttendance } from "@/lib/firebase/firestore";
-import type { Event, EventSignup } from "@/lib/types";
+import { isAdmin } from "@/lib/utils/permissions";
+import { useAuth } from "@/lib/context/auth-context";
+import type { Event, EventSignup, Membership } from "@/lib/types";
 
 interface EventRosterProps {
   event: Event;
@@ -13,6 +15,7 @@ interface EventRosterProps {
   open: boolean;
   onClose: () => void;
   canMarkAttendance?: boolean;
+  activeMembership?: Membership | null;
 }
 
 type Tab = "roster" | "attendance";
@@ -41,13 +44,20 @@ export function EventRoster({
   open,
   onClose,
   canMarkAttendance = false,
+  activeMembership,
 }: EventRosterProps) {
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [signups, setSignups] = useState<EventSignup[]>([]);
   const [tab, setTab] = useState<Tab>("roster");
   const [attendanceMap, setAttendanceMap] = useState<Map<string, boolean | null>>(new Map());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [movingSignup, setMovingSignup] = useState<EventSignup | null>(null);
+
+  const canModify = activeMembership ? isAdmin(activeMembership) || (activeMembership.role === "scheduler") : false;
 
   const today = new Date().toISOString().split("T")[0];
   const isPastOrToday = event.date <= today;
@@ -132,6 +142,57 @@ export function EventRoster({
     }
   };
 
+  const handleRemove = async (signupId: string) => {
+    setRemoving(signupId);
+    try {
+      const idToken = await user?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch("/api/roster/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          action: "remove",
+          item_type: "event_signup",
+          item_id: signupId,
+          initiated_by_name: profile?.display_name || "Admin",
+        }),
+      });
+      if (res.ok) await loadSignups();
+    } catch {
+      // silent
+    } finally {
+      setRemoving(null);
+      setActionMenuId(null);
+    }
+  };
+
+  const handleMove = async (signup: EventSignup, newRoleId: string, newRoleTitle: string) => {
+    try {
+      const idToken = await user?.getIdToken();
+      if (!idToken) return;
+      const res = await fetch("/api/roster/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          action: "move",
+          item_type: "event_signup",
+          item_id: signup.id,
+          new_role_id: newRoleId,
+          new_role_title: newRoleTitle,
+          initiated_by_name: profile?.display_name || "Admin",
+        }),
+      });
+      if (res.ok) await loadSignups();
+    } catch {
+      // silent
+    } finally {
+      setMovingSignup(null);
+      setActionMenuId(null);
+    }
+  };
+
   const subtitle = [
     formatDate(event.date),
     event.start_time ? formatTime(event.start_time) : event.all_day ? "All day" : null,
@@ -141,9 +202,15 @@ export function EventRoster({
 
   return (
     <Modal open={open} onClose={onClose} title={event.name} subtitle={subtitle}>
+      {/* Print-only header (hidden on screen) */}
+      <div className="print-only hidden mb-4">
+        <h1 className="text-xl font-bold">{event.name}</h1>
+        <p className="text-sm text-gray-600">{subtitle}</p>
+      </div>
+
       {/* Tab bar */}
       {showAttendanceTab && (
-        <div className="mb-4 flex gap-1 rounded-lg bg-vc-bg-warm p-1">
+        <div className="mb-4 flex gap-1 rounded-lg bg-vc-bg-warm p-1 no-print">
           {(["roster", "attendance"] as Tab[]).map((t) => (
             <button
               key={t}
@@ -176,11 +243,23 @@ export function EventRoster({
               <span className="font-semibold text-vc-indigo">{totalFilled}</span>
               <span className="text-vc-text-muted">/{totalSlots}</span> signed up
             </p>
-            {tab === "attendance" && (
-              <Button variant="ghost" size="sm" onClick={markAllPresent}>
-                Mark all present
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {tab === "attendance" && (
+                <Button variant="ghost" size="sm" onClick={markAllPresent} className="no-print">
+                  Mark all present
+                </Button>
+              )}
+              <button
+                onClick={() => window.print()}
+                className="no-print flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+                title="Print roster"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.25 7.034l-.25-.004" />
+                </svg>
+                Print
+              </button>
+            </div>
           </div>
 
           {/* Role groups */}
@@ -214,14 +293,56 @@ export function EventRoster({
                             {signup.volunteer_email}
                           </p>
                         </div>
-                        {tab === "roster" ? (
-                          <StatusBadge status={signup.status} />
-                        ) : (
-                          <AttendanceToggle
-                            value={attendanceMap.get(signup.id) ?? null}
-                            onClick={() => toggleAttendance(signup.id)}
-                          />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {tab === "roster" ? (
+                            <StatusBadge status={signup.status} />
+                          ) : (
+                            <AttendanceToggle
+                              value={attendanceMap.get(signup.id) ?? null}
+                              onClick={() => toggleAttendance(signup.id)}
+                            />
+                          )}
+                          {canModify && tab === "roster" && (
+                            <div className="relative no-print">
+                              <button
+                                onClick={() => setActionMenuId(actionMenuId === signup.id ? null : signup.id)}
+                                className="rounded p-1 text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo"
+                              >
+                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                              </button>
+                              {actionMenuId === signup.id && (
+                                <div className="absolute right-0 top-8 z-10 w-44 rounded-lg border border-vc-border bg-white py-1 shadow-lg">
+                                  <button
+                                    onClick={() => handleRemove(signup.id)}
+                                    disabled={removing === signup.id}
+                                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    {removing === signup.id ? "Removing..." : "Remove from role"}
+                                  </button>
+                                  {event.roles.filter((r) => r.role_id !== role.role_id).length > 0 && (
+                                    <>
+                                      <div className="mx-2 my-1 border-t border-vc-border-light" />
+                                      <p className="px-3 py-1 text-[11px] font-medium uppercase text-vc-text-muted">Move to...</p>
+                                      {event.roles
+                                        .filter((r) => r.role_id !== role.role_id)
+                                        .map((r) => (
+                                          <button
+                                            key={r.role_id}
+                                            onClick={() => handleMove(signup, r.role_id, r.title)}
+                                            className="w-full px-3 py-2 text-left text-sm text-vc-text hover:bg-vc-bg-warm"
+                                          >
+                                            {r.title}
+                                          </button>
+                                        ))}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -237,7 +358,7 @@ export function EventRoster({
 
           {/* Save button for attendance */}
           {tab === "attendance" && dirty && (
-            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4">
+            <div className="mt-6 flex justify-end border-t border-vc-border-light pt-4 no-print">
               <Button onClick={saveAttendance} loading={saving}>
                 Save Attendance
               </Button>

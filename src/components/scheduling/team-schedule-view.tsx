@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Assignment, Service, Ministry, Volunteer, Membership } from "@/lib/types";
 import { canScheduleMinistry } from "@/lib/utils/permissions";
+import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import Link from "next/link";
 
 interface TeamScheduleViewProps {
@@ -13,6 +14,8 @@ interface TeamScheduleViewProps {
   ministries: Map<string, Ministry>;
   volunteers: Map<string, Volunteer>;
   activeMembership: Membership | null;
+  churchId?: string;
+  onAssignmentRemoved?: (assignmentId: string) => void;
 }
 
 function formatDate(iso: string): string {
@@ -50,8 +53,11 @@ export function TeamScheduleView({
   ministries,
   volunteers,
   activeMembership,
+  churchId,
+  onAssignmentRemoved,
 }: TeamScheduleViewProps) {
   const [selectedMinistry, setSelectedMinistry] = useState<string>("all");
+  const [removeItem, setRemoveItem] = useState<{ id: string; roleName: string; serviceName: string; date: string } | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -208,7 +214,22 @@ export function TeamScheduleView({
                                 </p>
                               )}
                             </div>
-                            <StatusBadge status={a.status} />
+                            <div className="flex items-center gap-2 shrink-0">
+                              <StatusBadge status={a.status} />
+                              {isMe && a.status !== "declined" && churchId && (
+                                <button
+                                  onClick={() => setRemoveItem({
+                                    id: a.id,
+                                    roleName: a.role_title,
+                                    serviceName: group.serviceName,
+                                    date: group.date,
+                                  })}
+                                  className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -219,6 +240,24 @@ export function TeamScheduleView({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Self-removal modal */}
+      {removeItem && churchId && (
+        <SelfRemoveModal
+          open={!!removeItem}
+          onClose={() => setRemoveItem(null)}
+          onRemoved={() => {
+            onAssignmentRemoved?.(removeItem.id);
+            setRemoveItem(null);
+          }}
+          churchId={churchId}
+          itemType="assignment"
+          itemId={removeItem.id}
+          roleName={removeItem.roleName}
+          serviceName={removeItem.serviceName}
+          serviceDate={removeItem.date}
+        />
       )}
     </div>
   );

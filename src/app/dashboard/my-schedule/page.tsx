@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { REMINDER_CHANNELS } from "@/lib/constants";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
+import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, CalendarFeed, ReminderChannel } from "@/lib/types";
 
 function formatDate(iso: string): string {
@@ -64,6 +65,7 @@ export default function MySchedulePage() {
   const [calendarFeeds, setCalendarFeeds] = useState<CalendarFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
 
   // Availability state
   const [blockoutDates, setBlockoutDates] = useState<string[]>([]);
@@ -437,17 +439,33 @@ export default function MySchedulePage() {
                         </span>
                       </div>
                     </div>
-                    <div className="mt-2 flex items-center gap-3 flex-wrap">
-                      <span className="inline-flex items-center rounded-lg bg-vc-indigo/5 px-2 py-0.5 text-xs font-medium text-vc-indigo">
-                        {item.roleName}
-                      </span>
-                      {item.allDay ? (
-                        <span className="text-xs text-vc-text-muted">All day</span>
-                      ) : item.startTime ? (
-                        <span className="text-xs text-vc-text-muted">
-                          {formatTime(item.startTime)}{item.endTime ? ` – ${formatTime(item.endTime)}` : ""}
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="inline-flex items-center rounded-lg bg-vc-indigo/5 px-2 py-0.5 text-xs font-medium text-vc-indigo">
+                          {item.roleName}
                         </span>
-                      ) : null}
+                        {item.allDay ? (
+                          <span className="text-xs text-vc-text-muted">All day</span>
+                        ) : item.startTime ? (
+                          <span className="text-xs text-vc-text-muted">
+                            {formatTime(item.startTime)}{item.endTime ? ` – ${formatTime(item.endTime)}` : ""}
+                          </span>
+                        ) : null}
+                      </div>
+                      {!isPast && item.status !== "declined" && item.status !== "cancelled" && (
+                        <button
+                          onClick={() => setRemoveItem({
+                            kind: item.kind,
+                            id: item.id,
+                            roleName: item.roleName,
+                            eventOrServiceName: item.eventOrServiceName,
+                            date: item.date,
+                          })}
+                          className="text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -467,6 +485,11 @@ export default function MySchedulePage() {
           ministries={ministries}
           volunteers={volunteerMap}
           activeMembership={activeMembership}
+          churchId={activeMembership?.church_id || profile?.church_id || ""}
+          onAssignmentRemoved={(id) => {
+            setAssignments((prev) => prev.filter((a) => a.id !== id));
+            setAllChurchAssignments((prev) => prev.filter((a) => a.id !== id));
+          }}
         />
       )}
 
@@ -644,6 +667,28 @@ export default function MySchedulePage() {
             )}
           </div>
         </>
+      )}
+      {/* Self-removal modal */}
+      {removeItem && (
+        <SelfRemoveModal
+          open={!!removeItem}
+          onClose={() => setRemoveItem(null)}
+          onRemoved={() => {
+            if (removeItem.kind === "assignment") {
+              setAssignments((prev) => prev.filter((a) => a.id !== removeItem.id));
+              setAllChurchAssignments((prev) => prev.filter((a) => a.id !== removeItem.id));
+            } else {
+              setEventSignups((prev) => prev.filter((s) => s.id !== removeItem.id));
+            }
+            setRemoveItem(null);
+          }}
+          churchId={activeMembership?.church_id || profile?.church_id || ""}
+          itemType={removeItem.kind === "assignment" ? "assignment" : "event_signup"}
+          itemId={removeItem.id}
+          roleName={removeItem.roleName}
+          serviceName={removeItem.eventOrServiceName}
+          serviceDate={removeItem.date}
+        />
       )}
     </div>
   );

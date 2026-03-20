@@ -16,12 +16,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
+import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer } from "@/lib/types";
 
 export default function AccountPage() {
   const router = useRouter();
   const { user, profile, activeMembership, signOut } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
+  const userIsAdmin = isAdmin(activeMembership);
+  const userIsScheduler = isScheduler(activeMembership);
+  const myVolunteerId = activeMembership?.volunteer_id || null;
+  const schedulerMinistryScope = activeMembership?.ministry_scope || [];
 
   // Calendar feeds state
   const [feeds, setFeeds] = useState<CalendarFeed[]>([]);
@@ -335,7 +340,16 @@ export default function AccountPage() {
             </p>
           </div>
           {!showCreate && (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Button size="sm" onClick={() => {
+              setShowCreate(true);
+              setFeedType("personal");
+              // Auto-set target for non-admin users
+              if (!userIsAdmin && myVolunteerId) {
+                setTargetId(myVolunteerId);
+              } else {
+                setTargetId("");
+              }
+            }}>
               New Feed
             </Button>
           )}
@@ -351,55 +365,77 @@ export default function AccountPage() {
                 <select
                   value={feedType}
                   onChange={(e) => {
-                    setFeedType(e.target.value as CalendarFeedType);
-                    setTargetId("");
+                    const newType = e.target.value as CalendarFeedType;
+                    setFeedType(newType);
+                    // Auto-set target for non-admins on personal/team feeds
+                    if ((newType === "personal" || newType === "team") && !userIsAdmin) {
+                      setTargetId(myVolunteerId || "");
+                    } else {
+                      setTargetId("");
+                    }
                   }}
                   className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                 >
                   <option value="personal">{feedTypeLabels.personal}</option>
                   <option value="team">My Teams (all ministries for one volunteer)</option>
-                  <option value="ministry">{feedTypeLabels.ministry}</option>
-                  <option value="org">{feedTypeLabels.org}</option>
+                  {(userIsAdmin || userIsScheduler) && (
+                    <option value="ministry">{feedTypeLabels.ministry}</option>
+                  )}
+                  {userIsAdmin && (
+                    <option value="org">{feedTypeLabels.org}</option>
+                  )}
                 </select>
               </div>
 
               {feedType === "personal" && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-vc-text">Volunteer</label>
-                  <select
-                    value={targetId}
-                    onChange={(e) => setTargetId(e.target.value)}
-                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                  >
-                    <option value="">Select a volunteer...</option>
-                    {volunteers
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((v) => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ))}
-                  </select>
-                </div>
+                userIsAdmin ? (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-vc-text">Volunteer</label>
+                    <select
+                      value={targetId}
+                      onChange={(e) => setTargetId(e.target.value)}
+                      className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                    >
+                      <option value="">Select a volunteer...</option>
+                      {volunteers
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((v) => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-sm text-vc-text-muted">
+                    This feed will include your personal schedule.
+                  </p>
+                )
               )}
 
               {feedType === "team" && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-vc-text">Volunteer</label>
-                  <select
-                    value={targetId}
-                    onChange={(e) => setTargetId(e.target.value)}
-                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                  >
-                    <option value="">Select a volunteer...</option>
-                    {volunteers
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((v) => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ))}
-                  </select>
-                  <p className="mt-1 text-xs text-vc-text-muted">
-                    Feed will include all assignments for this volunteer&apos;s ministries.
+                userIsAdmin ? (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-vc-text">Volunteer</label>
+                    <select
+                      value={targetId}
+                      onChange={(e) => setTargetId(e.target.value)}
+                      className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                    >
+                      <option value="">Select a volunteer...</option>
+                      {volunteers
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((v) => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-xs text-vc-text-muted">
+                      Feed will include all assignments for this volunteer&apos;s ministries.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-vc-text-muted">
+                    This feed will include all assignments for your teams.
                   </p>
-                </div>
+                )
               )}
 
               {feedType === "ministry" && (
@@ -411,9 +447,11 @@ export default function AccountPage() {
                     className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                   >
                     <option value="">Select a ministry...</option>
-                    {ministries.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
+                    {ministries
+                      .filter((m) => userIsAdmin || schedulerMinistryScope.length === 0 || schedulerMinistryScope.includes(m.id))
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
                   </select>
                 </div>
               )}

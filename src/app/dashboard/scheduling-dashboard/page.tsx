@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import type { Service, Event, Schedule, Assignment, Ministry } from "@/lib/types";
+import type { Service, Event, Schedule, Assignment, Ministry, EventSignup } from "@/lib/types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -32,6 +32,7 @@ export default function SchedulingDashboardPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [signupCounts, setSignupCounts] = useState<Map<string, number>>(new Map());
+  const [allEventSignups, setAllEventSignups] = useState<EventSignup[]>([]);
   const [rosterEvent, setRosterEvent] = useState<Event | null>(null);
   const [rosterService, setRosterService] = useState<{ service: Service; date: string } | null>(null);
 
@@ -66,15 +67,18 @@ export default function SchedulingDashboardPage() {
         // Load signup counts for upcoming events
         const upcomingEvents = evts.filter((e) => e.date >= today);
         const counts = new Map<string, number>();
+        const collectedSignups: EventSignup[] = [];
         for (const evt of upcomingEvents) {
           try {
             const signups = await getEventSignups(evt.id, churchId!);
             counts.set(evt.id, signups.filter((s) => s.status !== "cancelled").length);
+            collectedSignups.push(...signups);
           } catch {
             counts.set(evt.id, 0);
           }
         }
         setSignupCounts(counts);
+        setAllEventSignups(collectedSignups);
       } catch {
         // silent
       } finally {
@@ -134,14 +138,25 @@ export default function SchedulingDashboardPage() {
     b.date.localeCompare(a.date),
   );
 
-  // Stats
-  const totalVolunteersAssigned = new Set(assignments.map((a) => a.volunteer_id)).size;
+  // Stats — combine service assignments + event signups
+  const eventDateMap = new Map(events.map((e) => [e.id, e.date]));
+  const activeSignups = allEventSignups.filter((s) => s.status !== "cancelled" && (eventDateMap.get(s.event_id) || "") >= today);
+
   const draftAssignments = assignments.filter(
     (a) => a.status === "draft" && a.service_date >= today,
   );
+  const waitlistedSignups = activeSignups.filter((s) => s.status === "waitlisted");
+  const awaitingResponseCount = draftAssignments.length + waitlistedSignups.length;
+
   const confirmedAssignments = assignments.filter(
     (a) => a.status === "confirmed" && a.service_date >= today,
   );
+  const confirmedSignups = activeSignups.filter((s) => s.status === "confirmed");
+  const confirmedUpcomingCount = confirmedAssignments.length + confirmedSignups.length;
+
+  const volunteerIdSet = new Set(assignments.map((a) => a.volunteer_id));
+  for (const s of activeSignups) volunteerIdSet.add(s.volunteer_id);
+  const totalVolunteersActive = volunteerIdSet.size;
 
   return (
     <div>
@@ -155,11 +170,11 @@ export default function SchedulingDashboardPage() {
       {/* Quick Stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-indigo">{draftAssignments.length}</p>
+          <p className="text-2xl font-semibold text-vc-indigo">{awaitingResponseCount}</p>
           <p className="text-xs text-vc-text-muted">Awaiting Response</p>
         </div>
         <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-sage">{confirmedAssignments.length}</p>
+          <p className="text-2xl font-semibold text-vc-sage">{confirmedUpcomingCount}</p>
           <p className="text-xs text-vc-text-muted">Confirmed Upcoming</p>
         </div>
         <div className="rounded-2xl border border-vc-border-light bg-white p-4">
@@ -167,7 +182,7 @@ export default function SchedulingDashboardPage() {
           <p className="text-xs text-vc-text-muted">Upcoming Events</p>
         </div>
         <div className="rounded-2xl border border-vc-border-light bg-white p-4">
-          <p className="text-2xl font-semibold text-vc-indigo">{totalVolunteersAssigned}</p>
+          <p className="text-2xl font-semibold text-vc-indigo">{totalVolunteersActive}</p>
           <p className="text-xs text-vc-text-muted">Active Volunteers</p>
         </div>
       </div>
@@ -326,6 +341,7 @@ export default function SchedulingDashboardPage() {
           open={!!rosterEvent}
           onClose={() => setRosterEvent(null)}
           canMarkAttendance={canMarkAttendance}
+          activeMembership={activeMembership}
         />
       )}
 
@@ -338,6 +354,7 @@ export default function SchedulingDashboardPage() {
           open={!!rosterService}
           onClose={() => setRosterService(null)}
           canMarkAttendance={canMarkAttendance}
+          activeMembership={activeMembership}
         />
       )}
     </div>
