@@ -245,4 +245,45 @@ export async function deleteEventSignup(signupId: string): Promise<void> {
   await deleteDoc(doc(db, EVENT_SIGNUPS, signupId));
 }
 
+/** Mark attendance for an event signup. */
+export async function updateSignupAttendance(
+  signupId: string,
+  attended: boolean,
+): Promise<void> {
+  await updateDoc(doc(db, EVENT_SIGNUPS, signupId), {
+    attended,
+    attended_at: new Date().toISOString(),
+  });
+}
+
+/** Mark attendance for a service assignment. */
+export async function updateAssignmentAttendance(
+  churchId: string,
+  assignmentId: string,
+  attended: boolean,
+): Promise<void> {
+  await updateDoc(
+    doc(db, "churches", churchId, "assignments", assignmentId),
+    {
+      attended,
+      attended_at: new Date().toISOString(),
+    },
+  );
+}
+
+/** Get assignments for a specific service on a specific date. */
+export async function getServiceAssignments(
+  churchId: string,
+  serviceId: string,
+  serviceDate: string,
+): Promise<import("@/lib/types").Assignment[]> {
+  const q = query(
+    collection(db, "churches", churchId, "assignments"),
+    where("service_id", "==", serviceId),
+    where("service_date", "==", serviceDate),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as import("@/lib/types").Assignment);
+}
+
 export { where, orderBy, limit };

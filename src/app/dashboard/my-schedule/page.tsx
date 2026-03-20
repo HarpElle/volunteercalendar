@@ -7,7 +7,9 @@ import { getChurchDocuments, getUserEventSignups, updateDocument } from "@/lib/f
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { REMINDER_CHANNELS } from "@/lib/constants";
-import type { Assignment, Service, Ministry, Event, EventSignup, ReminderChannel } from "@/lib/types";
+import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
+import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
+import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, CalendarFeed, ReminderChannel } from "@/lib/types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -43,7 +45,7 @@ interface ScheduleItem {
   status: string;
 }
 
-type TabKey = "upcoming" | "past" | "availability";
+type TabKey = "upcoming" | "past" | "availability" | "team";
 
 export default function MySchedulePage() {
   const { user, profile, activeMembership, memberships } = useAuth();
@@ -55,6 +57,11 @@ export default function MySchedulePage() {
   const [ministries, setMinistries] = useState<Map<string, Ministry>>(new Map());
   const [eventSignups, setEventSignups] = useState<EventSignup[]>([]);
   const [events, setEvents] = useState<Map<string, Event>>(new Map());
+  const [allChurchAssignments, setAllChurchAssignments] = useState<Assignment[]>([]);
+  const [volunteerMap, setVolunteerMap] = useState<Map<string, Volunteer>>(new Map());
+  const [myMinistryIds, setMyMinistryIds] = useState<string[]>([]);
+  const [myVolunteerId, setMyVolunteerId] = useState<string>("");
+  const [calendarFeeds, setCalendarFeeds] = useState<CalendarFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
@@ -71,27 +78,44 @@ export default function MySchedulePage() {
   // Load schedule data (assignments + event signups)
   useEffect(() => {
     async function loadAll() {
-      const allAssignments: Assignment[] = [];
+      const myAssignments: Assignment[] = [];
+      const churchAssignments: Assignment[] = [];
       const serviceMap = new Map<string, Service>();
       const ministryMap = new Map<string, Ministry>();
       const eventMap = new Map<string, Event>();
+      const volMap = new Map<string, Volunteer>();
+      let ministryIds: string[] = [];
+      let volId = "";
 
       const activeMembers = memberships.filter((m) => m.status === "active");
       for (const m of activeMembers) {
         try {
-          const [assigns, svcs, mins, evts] = await Promise.all([
+          const [assigns, svcs, mins, evts, vols] = await Promise.all([
             getChurchDocuments(m.church_id, "assignments") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "events") as Promise<unknown[]>,
+            getChurchDocuments(m.church_id, "volunteers") as Promise<unknown[]>,
           ]);
 
-          const volId = m.volunteer_id;
-          if (volId) {
-            const myAssignments = (assigns as Assignment[]).filter(
-              (a) => a.volunteer_id === volId,
+          // Store all assignments for team view
+          churchAssignments.push(...(assigns as Assignment[]));
+
+          // Build volunteer name map
+          for (const v of vols as Volunteer[]) volMap.set(v.id, v);
+
+          if (m.volunteer_id) {
+            const myFiltered = (assigns as Assignment[]).filter(
+              (a) => a.volunteer_id === m.volunteer_id,
             );
-            allAssignments.push(...myAssignments);
+            myAssignments.push(...myFiltered);
+
+            // Get this user's ministry_ids from their volunteer record
+            const myVol = volMap.get(m.volunteer_id);
+            if (myVol) {
+              ministryIds = myVol.ministry_ids || [];
+              volId = myVol.id;
+            }
           }
 
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
@@ -105,21 +129,27 @@ export default function MySchedulePage() {
       // Fallback: legacy profile church_id
       if (activeMembers.length === 0 && profile?.church_id) {
         try {
-          const [assigns, svcs, mins, evts] = await Promise.all([
+          const [assigns, svcs, mins, evts, vols] = await Promise.all([
             getChurchDocuments(profile.church_id, "assignments") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "events") as Promise<unknown[]>,
+            getChurchDocuments(profile.church_id, "volunteers") as Promise<unknown[]>,
           ]);
-          const vols = await getChurchDocuments(profile.church_id, "volunteers") as unknown[];
-          const myVol = (vols as { id: string; user_id: string | null }[]).find(
+
+          churchAssignments.push(...(assigns as Assignment[]));
+          for (const v of vols as Volunteer[]) volMap.set(v.id, v);
+
+          const myVol = (vols as Volunteer[]).find(
             (v) => v.user_id === user?.uid,
           );
           if (myVol) {
-            const myAssigns = (assigns as Assignment[]).filter(
+            const myFiltered = (assigns as Assignment[]).filter(
               (a) => a.volunteer_id === myVol.id,
             );
-            allAssignments.push(...myAssigns);
+            myAssignments.push(...myFiltered);
+            ministryIds = myVol.ministry_ids || [];
+            volId = myVol.id;
           }
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
           for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
@@ -139,11 +169,28 @@ export default function MySchedulePage() {
         }
       }
 
-      setAssignments(allAssignments);
+      // Load calendar feeds for the active membership's church
+      let feeds: CalendarFeed[] = [];
+      const feedChurchId = activeMembers[0]?.church_id || profile?.church_id;
+      if (feedChurchId && volId) {
+        try {
+          const feedDocs = await getChurchDocuments(feedChurchId, "calendar_feeds") as unknown[];
+          feeds = (feedDocs as CalendarFeed[]).filter((f) => f.target_id === volId);
+        } catch {
+          // silent
+        }
+      }
+
+      setAssignments(myAssignments);
+      setAllChurchAssignments(churchAssignments);
       setServices(serviceMap);
       setMinistries(ministryMap);
       setEventSignups(allSignups);
       setEvents(eventMap);
+      setVolunteerMap(volMap);
+      setMyMinistryIds(ministryIds);
+      setMyVolunteerId(volId);
+      setCalendarFeeds(feeds);
       setLoading(false);
     }
     if (user) loadAll();
@@ -208,7 +255,7 @@ export default function MySchedulePage() {
   // --- Schedule filtering ---
 
   const timeFilter = activeTab === "past" ? "past" : "upcoming";
-  const filtered = activeTab !== "availability"
+  const filtered = (activeTab === "upcoming" || activeTab === "past")
     ? scheduleItems
         .filter((item) =>
           timeFilter === "upcoming"
@@ -319,6 +366,7 @@ export default function MySchedulePage() {
         {([
           { key: "upcoming" as const, label: "Upcoming" },
           { key: "past" as const, label: "Past" },
+          { key: "team" as const, label: "Team" },
           { key: "availability" as const, label: "Availability" },
         ]).map((tab) => (
           <button
@@ -334,7 +382,7 @@ export default function MySchedulePage() {
       </div>
 
       {/* Schedule list (Upcoming / Past tabs) */}
-      {activeTab !== "availability" && (
+      {(activeTab === "upcoming" || activeTab === "past") && (
         <>
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
@@ -407,6 +455,30 @@ export default function MySchedulePage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Team tab */}
+      {activeTab === "team" && (
+        <TeamScheduleView
+          myMinistryIds={myMinistryIds}
+          myVolunteerId={myVolunteerId}
+          allAssignments={allChurchAssignments}
+          services={services}
+          ministries={ministries}
+          volunteers={volunteerMap}
+          activeMembership={activeMembership}
+        />
+      )}
+
+      {/* Calendar Feed CTA (Upcoming + Team tabs) */}
+      {(activeTab === "upcoming" || activeTab === "team") && myVolunteerId && (
+        <CalendarFeedCta
+          churchId={activeMembership?.church_id || profile?.church_id || ""}
+          volunteerId={myVolunteerId}
+          myMinistryIds={myMinistryIds}
+          ministries={ministries}
+          existingFeeds={calendarFeeds}
+        />
       )}
 
       {/* Availability tab */}

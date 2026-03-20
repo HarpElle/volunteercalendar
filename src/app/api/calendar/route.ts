@@ -84,6 +84,14 @@ export async function GET(request: Request) {
       assignments = assignments.filter((a) => (a as Record<string, unknown>).ministry_id === targetId);
       const min = ministryMap.get(targetId);
       calendarName = `${(min as Record<string, unknown>)?.name || "Ministry"} Schedule - ${churchName}`;
+    } else if (feedType === "team") {
+      // All assignments for ministries the target volunteer belongs to
+      const vol = volunteerMap.get(targetId);
+      const volMinistries = (vol as Record<string, unknown>)?.ministry_ids as string[] || [];
+      assignments = assignments.filter((a) =>
+        volMinistries.includes((a as Record<string, unknown>).ministry_id as string)
+      );
+      calendarName = `Team Schedule - ${(vol as Record<string, unknown>)?.name || "Volunteer"} - ${churchName}`;
     }
     // "org" type returns all assignments
 

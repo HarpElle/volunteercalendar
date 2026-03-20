@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getEventSignups } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
-import { isAdmin } from "@/lib/utils/permissions";
-import type { Service, Event, Schedule, EventSignup, Assignment, Ministry } from "@/lib/types";
+import { EventRoster } from "@/components/scheduling/event-roster";
+import { ServiceRoster } from "@/components/scheduling/service-roster";
+import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import type { Service, Event, Schedule, Assignment, Ministry } from "@/lib/types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -21,6 +23,7 @@ export default function SchedulingDashboardPage() {
   const { profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
   const showAdminSection = isAdmin(activeMembership);
+  const canMarkAttendance = isScheduler(activeMembership);
 
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
@@ -29,6 +32,8 @@ export default function SchedulingDashboardPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [signupCounts, setSignupCounts] = useState<Map<string, number>>(new Map());
+  const [rosterEvent, setRosterEvent] = useState<Event | null>(null);
+  const [rosterService, setRosterService] = useState<{ service: Service; date: string } | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -105,6 +110,30 @@ export default function SchedulingDashboardPage() {
     (s) => s.status === "published" || s.status === "draft",
   );
 
+  // Recent service dates for attendance (past 14 days + today)
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const pastCutoff = fourteenDaysAgo.toISOString().split("T")[0];
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+  const serviceDateMap = new Map<string, { service: Service; date: string; count: number }>();
+  for (const a of assignments) {
+    if (a.service_id && a.service_date >= pastCutoff && a.service_date <= today && a.status !== "declined") {
+      const key = `${a.service_id}-${a.service_date}`;
+      const existing = serviceDateMap.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        const svc = serviceMap.get(a.service_id);
+        if (svc) {
+          serviceDateMap.set(key, { service: svc, date: a.service_date, count: 1 });
+        }
+      }
+    }
+  }
+  const recentServiceDates = [...serviceDateMap.values()].sort((a, b) =>
+    b.date.localeCompare(a.date),
+  );
+
   // Stats
   const totalVolunteersAssigned = new Set(assignments.map((a) => a.volunteer_id)).size;
   const draftAssignments = assignments.filter(
@@ -165,7 +194,11 @@ export default function SchedulingDashboardPage() {
               const signedUp = signupCounts.get(evt.id) || 0;
               const fillPct = totalSlots > 0 ? Math.round((signedUp / totalSlots) * 100) : 0;
               return (
-                <div key={evt.id} className="rounded-xl border border-vc-border-light bg-white p-4">
+                <button
+                  key={evt.id}
+                  onClick={() => setRosterEvent(evt)}
+                  className="w-full rounded-xl border border-vc-border-light bg-white p-4 text-left transition-shadow hover:shadow-md"
+                >
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-semibold text-vc-indigo">{evt.name}</p>
@@ -184,7 +217,7 @@ export default function SchedulingDashboardPage() {
                       style={{ width: `${Math.min(fillPct, 100)}%` }}
                     />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -253,6 +286,59 @@ export default function SchedulingDashboardPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Recent Service Dates — for attendance tracking */}
+      {recentServiceDates.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Take Attendance</h2>
+          <p className="mb-3 text-sm text-vc-text-muted">
+            Recent services with assigned volunteers — click to view roster or mark attendance.
+          </p>
+          <div className="space-y-2">
+            {recentServiceDates.slice(0, 8).map(({ service, date, count }) => (
+              <button
+                key={`${service.id}-${date}`}
+                onClick={() => setRosterService({ service, date })}
+                className="flex w-full items-center justify-between rounded-xl border border-vc-border-light bg-white px-4 py-3 text-left transition-shadow hover:shadow-md"
+              >
+                <div>
+                  <p className="text-sm font-medium text-vc-indigo">{service.name}</p>
+                  <p className="text-xs text-vc-text-muted">{formatDate(date)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-vc-text-muted">{count} assigned</span>
+                  <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                  </svg>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Event Roster Modal */}
+      {rosterEvent && churchId && (
+        <EventRoster
+          event={rosterEvent}
+          churchId={churchId}
+          open={!!rosterEvent}
+          onClose={() => setRosterEvent(null)}
+          canMarkAttendance={canMarkAttendance}
+        />
+      )}
+
+      {/* Service Roster Modal */}
+      {rosterService && churchId && (
+        <ServiceRoster
+          service={rosterService.service}
+          serviceDate={rosterService.date}
+          churchId={churchId}
+          open={!!rosterService}
+          onClose={() => setRosterService(null)}
+          canMarkAttendance={canMarkAttendance}
+        />
       )}
     </div>
   );

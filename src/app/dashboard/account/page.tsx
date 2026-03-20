@@ -357,6 +357,7 @@ export default function AccountPage() {
                   className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
                 >
                   <option value="personal">{feedTypeLabels.personal}</option>
+                  <option value="team">My Teams (all ministries for one volunteer)</option>
                   <option value="ministry">{feedTypeLabels.ministry}</option>
                   <option value="org">{feedTypeLabels.org}</option>
                 </select>
@@ -377,6 +378,27 @@ export default function AccountPage() {
                         <option key={v.id} value={v.id}>{v.name}</option>
                       ))}
                   </select>
+                </div>
+              )}
+
+              {feedType === "team" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-vc-text">Volunteer</label>
+                  <select
+                    value={targetId}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                  >
+                    <option value="">Select a volunteer...</option>
+                    {volunteers
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-xs text-vc-text-muted">
+                    Feed will include all assignments for this volunteer&apos;s ministries.
+                  </p>
                 </div>
               )}
 

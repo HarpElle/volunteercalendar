@@ -217,6 +217,8 @@ export function generateDraftSchedule(
               role_title: role.title,
               ministry_id: sm.ministry_id,
               status: "draft" as const,
+              attended: null,
+              attended_at: null,
             };
             assignments.push(assignment);
 

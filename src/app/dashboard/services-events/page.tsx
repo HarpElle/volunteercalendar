@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { ShareMenu } from "@/components/ui/share-menu";
-import { isAdmin } from "@/lib/utils/permissions";
+import { EventRoster } from "@/components/scheduling/event-roster";
+import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { TIER_LIMITS } from "@/lib/constants";
 import { getAuth } from "firebase/auth";
 import type {
@@ -815,7 +816,9 @@ function EventsTab({
   const [signupCounts, setSignupCounts] = useState<Record<string, number>>({});
   const [shortLinkEventId, setShortLinkEventId] = useState<string | null>(null);
   const [emailInviteEventId, setEmailInviteEventId] = useState<string | null>(null);
+  const [rosterEvent, setRosterEvent] = useState<Event | null>(null);
   const userIsAdmin = isAdmin(activeMembership);
+  const userCanMarkAttendance = isScheduler(activeMembership);
   // Short link lookup: targetPath → full short link URL
   const [shortLinkMap, setShortLinkMap] = useState<Record<string, string>>({});
 
@@ -1482,6 +1485,7 @@ function EventsTab({
                       onDownloadSlide={() => downloadEventSlide(ev)}
                       onCreateShortLink={userIsAdmin ? () => setShortLinkEventId(ev.id) : undefined}
                       onEmailInvite={userIsAdmin ? () => setEmailInviteEventId(ev.id) : undefined}
+                      onViewRoster={() => setRosterEvent(ev)}
                       deleting={deleting === ev.id}
                       copied={copiedEventId === ev.id}
                       getMinistryNames={getMinistryNames}
@@ -1573,6 +1577,17 @@ function EventsTab({
           )}
         </div>
       )}
+
+      {/* Event Roster Modal */}
+      {rosterEvent && churchId && (
+        <EventRoster
+          event={rosterEvent}
+          churchId={churchId}
+          open={!!rosterEvent}
+          onClose={() => setRosterEvent(null)}
+          canMarkAttendance={userCanMarkAttendance}
+        />
+      )}
     </div>
   );
 }
@@ -1591,6 +1606,7 @@ function EventCard({
   onDownloadSlide,
   onCreateShortLink,
   onEmailInvite,
+  onViewRoster,
   deleting,
   copied,
   getMinistryNames,
@@ -1609,6 +1625,7 @@ function EventCard({
   onDownloadSlide: () => void;
   onCreateShortLink?: () => void;
   onEmailInvite?: () => void;
+  onViewRoster?: () => void;
   deleting: boolean;
   copied: boolean;
   getMinistryNames: (ids: string[]) => string;
@@ -1676,9 +1693,12 @@ function EventCard({
             {ev.event_type === "recurring" ? ev.recurrence : "one-time"}
           </span>
           {ev.signup_mode !== "scheduled" && totalSlots > 0 && (
-            <span className="text-xs text-vc-text-muted">
+            <button
+              onClick={onViewRoster}
+              className="text-xs text-vc-text-muted underline decoration-dotted hover:text-vc-indigo transition-colors"
+            >
               {signupCount}/{totalSlots} signed up
-            </span>
+            </button>
           )}
         </div>
       </div>
@@ -1718,6 +1738,18 @@ function EventCard({
           </svg>
           Edit
         </button>
+
+        {onViewRoster && (
+          <button
+            onClick={onViewRoster}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+            </svg>
+            Roster
+          </button>
+        )}
 
         {hasSignupLink && (
           <ShareMenu

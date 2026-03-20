@@ -333,6 +333,10 @@ export interface Assignment {
   confirmation_token: string;
   responded_at: string | null;
   reminder_sent_at: string[];
+  /** Attendance: null = not yet marked, true = present, false = no-show */
+  attended: boolean | null;
+  /** ISO timestamp when attendance was marked */
+  attended_at: string | null;
 }
 
 // --- Calendar Feeds ---
@@ -426,6 +430,10 @@ export interface EventSignup {
   signed_up_at: string;
   /** Admin who approved, or null for auto-approved open signups */
   approved_by: string | null;
+  /** Attendance: null = not yet marked, true = present, false = no-show */
+  attended: boolean | null;
+  /** ISO timestamp when attendance was marked */
+  attended_at: string | null;
 }
 
 // --- Sent Notifications (Tracking) ---
