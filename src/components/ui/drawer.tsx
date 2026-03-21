@@ -3,24 +3,24 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
-interface ModalProps {
+interface DrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
   subtitle?: string;
   children: ReactNode;
-  /** Max width class. Defaults to "max-w-2xl". */
+  /** Width class. Defaults to "max-w-xl". */
   maxWidth?: string;
 }
 
-export function Modal({
+export function Drawer({
   open,
   onClose,
   title,
   subtitle,
   children,
-  maxWidth = "max-w-2xl",
-}: ModalProps) {
+  maxWidth = "max-w-xl",
+}: DrawerProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function Modal({
       {open && (
         <motion.div
           ref={overlayRef}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -51,18 +51,20 @@ export function Modal({
           }}
         >
           <motion.div
-            className={`relative mx-4 flex max-h-[85vh] w-full flex-col rounded-2xl border border-vc-border-light bg-white shadow-xl ${maxWidth}`}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
+            className={`fixed inset-y-0 right-0 flex w-full flex-col border-l border-vc-border-light bg-white shadow-xl ${maxWidth}`}
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
           >
             {/* Header */}
             <div className="flex items-start justify-between border-b border-vc-border-light px-6 py-4">
               <div>
                 <h2 className="font-display text-xl text-vc-indigo">{title}</h2>
                 {subtitle && (
-                  <p className="mt-0.5 text-sm text-vc-text-secondary">{subtitle}</p>
+                  <p className="mt-0.5 text-sm text-vc-text-secondary">
+                    {subtitle}
+                  </p>
                 )}
               </div>
               <button

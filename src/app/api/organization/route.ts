@@ -79,6 +79,44 @@ export async function POST(req: NextRequest) {
       updated_at: now,
     });
 
+    // Create volunteer record so owner appears on the scheduling roster
+    const userSnap = await adminDb.doc(`users/${userId}`).get();
+    const userData = userSnap.data() || {};
+    const volRef = adminDb.collection(`churches/${churchId}/volunteers`).doc();
+    await volRef.set({
+      church_id: churchId,
+      name: userData.display_name || decoded.name || decoded.email || "Owner",
+      email: decoded.email || userData.email || "",
+      phone: userData.phone || null,
+      user_id: userId,
+      membership_id: membershipId,
+      status: "active",
+      ministry_ids: [],
+      role_ids: [],
+      campus_ids: [],
+      household_id: null,
+      availability: {
+        blockout_dates: [],
+        recurring_unavailable: [],
+        preferred_frequency: 2,
+        max_roles_per_month: 8,
+      },
+      reminder_preferences: { channels: ["email"] },
+      stats: {
+        times_scheduled_last_90d: 0,
+        last_served_date: null,
+        decline_count: 0,
+        no_show_count: 0,
+      },
+      imported_from: null,
+      created_at: now,
+    });
+
+    // Link membership to volunteer record
+    await adminDb.doc(`memberships/${membershipId}`).update({
+      volunteer_id: volRef.id,
+    });
+
     // Link user profile to this church
     await adminDb.doc(`users/${userId}`).update({
       church_id: churchId,

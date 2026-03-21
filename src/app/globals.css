@@ -5,6 +5,11 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   text-wrap: balance;
 }
 
+/* Google Places Autocomplete dropdown — ensure it renders above modals/overlays */
+.pac-container {
+  z-index: 10000 !important;
+}
+
 /* VolunteerCal — Warm Editorial Brand */
 :root {
   /* Indigo — deep trust, authority */

@@ -16,9 +16,9 @@ const faqs = [
       "VolunteerCal is designed to complement your existing tools. You can import your volunteer roster via CSV, and we're building direct integrations with Planning Center, Breeze, and Rock RMS. Many organizations use a ChMS for membership and VolunteerCal specifically for scheduling.",
   },
   {
-    question: "Is there really a free tier?",
+    question: "Is there really a free plan?",
     answer:
-      "Yes — the Starter plan is free forever. It includes up to 25 volunteers, 2 teams, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
+      "Yes — the Free plan is yours forever. It includes up to 20 volunteers, 1 team with 3 roles per service, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
   },
   {
     question: "How does auto-draft scheduling work?",
@@ -28,7 +28,7 @@ const faqs = [
   {
     question: "Can volunteers see only their own schedule?",
     answer:
-      "Yes. Volunteers log in to see their upcoming assignments, confirm or decline, request shift swaps, and subscribe to a personal calendar feed. They only see what's relevant to them — admins and schedulers see the full picture.",
+      "By default, volunteers see a clean personal view — their upcoming assignments, confirm or decline options, shift swap requests, and a personal calendar feed. But they can also view the full schedule for any team they belong to, so they always have context on who else is serving alongside them.",
   },
   {
     question: "Does it work on phones?",

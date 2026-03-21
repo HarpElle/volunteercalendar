@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   addChurchDocument,
@@ -11,8 +11,8 @@ import {
 import { generateDraftSchedule } from "@/lib/services/scheduler";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { CreateScheduleModal } from "@/components/forms/create-schedule-modal";
 import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
 import type {
@@ -56,18 +56,6 @@ export default function SchedulesPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState("");
 
-  // Create form
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + (7 - d.getDay()));
-    return d.toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + (7 - d.getDay()) + 27);
-    return d.toISOString().split("T")[0];
-  });
-
   // Active schedule view
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [activeAssignments, setActiveAssignments] = useState<Assignment[]>([]);
@@ -107,8 +95,7 @@ export default function SchedulesPage() {
     load();
   }, [churchId]);
 
-  async function handleGenerate(e: FormEvent) {
-    e.preventDefault();
+  async function handleGenerate(startDate: string, endDate: string) {
     if (!churchId || !user) return;
     setGenerating(true);
 
@@ -430,29 +417,14 @@ export default function SchedulesPage() {
         </div>
       )}
 
-      {/* Create form */}
-      {showCreate && (
-        <div className="mb-8 rounded-xl border border-vc-border-light bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Generate Draft Schedule</h2>
-          <form onSubmit={handleGenerate} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Start Date" type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <Input label="End Date" type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </div>
-            <div className="rounded-lg bg-vc-bg-warm px-4 py-3 text-sm text-vc-text-secondary">
-              <strong>{services.length}</strong> service{services.length !== 1 ? "s" : ""} and{" "}
-              <strong>{volunteers.length}</strong> volunteer{volunteers.length !== 1 ? "s" : ""} will
-              be included.
-            </div>
-            <div className="flex gap-3">
-              <Button type="submit" loading={generating}>
-                {generating ? "Generating..." : "Generate Draft"}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-            </div>
-          </form>
-        </div>
-      )}
+      <CreateScheduleModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onGenerate={handleGenerate}
+        generating={generating}
+        serviceCount={services.length}
+        volunteerCount={volunteers.length}
+      />
 
       {/* Active schedule view */}
       {activeScheduleId && activeSchedule && (

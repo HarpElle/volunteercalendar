@@ -19,6 +19,7 @@ import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { ShareMenu } from "@/components/ui/share-menu";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
+import { ServiceFormModal, type ServiceFormData, type ServiceFormValues } from "@/components/forms/service-form-modal";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { TIER_LIMITS } from "@/lib/constants";
 import { getAuth } from "firebase/auth";
@@ -206,36 +207,8 @@ function ServicesTab({
   const [rosterService, setRosterService] = useState<{ service: Service; date: string } | null>(null);
   const userCanMarkAttendance = isScheduler(activeMembership);
 
-  // Form state
-  const [name, setName] = useState("");
-  const [recurrence, setRecurrence] = useState<RecurrencePattern>("weekly");
-  const [dayOfWeek, setDayOfWeek] = useState("0");
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("10:30");
-  const [allDay, setAllDay] = useState(false);
-  const [durationMinutes, setDurationMinutes] = useState("90");
-  const [campusId, setCampusId] = useState<string>("");
-
   // Campuses
   const [campuses, setCampuses] = useState<{ id: string; name: string }[]>([]);
-
-  // Multi-ministry form state
-  type FormMinistry = {
-    id: string; // local form ID
-    ministry_id: string;
-    roles: ServiceRole[];
-    start_time: string | null;
-    end_time: string | null;
-  };
-  const [formMinistries, setFormMinistries] = useState<FormMinistry[]>([
-    {
-      id: crypto.randomUUID(),
-      ministry_id: "",
-      roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
-      start_time: null,
-      end_time: null,
-    },
-  ]);
 
   useEffect(() => {
     if (!churchId) return;
@@ -253,51 +226,35 @@ function ServicesTab({
       .finally(() => setLoading(false));
   }, [churchId]);
 
-  function resetForm() {
-    setName("");
-    setRecurrence("weekly");
-    setDayOfWeek("0");
-    setStartTime("09:00");
-    setEndTime("10:30");
-    setAllDay(false);
-    setDurationMinutes("90");
-    setCampusId("");
-    setFormMinistries([
-      {
-        id: crypto.randomUUID(),
-        ministry_id: "",
-        roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
-        start_time: null,
-        end_time: null,
-      },
-    ]);
+  const svcTierLimits = TIER_LIMITS[churchTier] || TIER_LIMITS.free;
+
+  function closeForm() {
     setEditingId(null);
     setShowForm(false);
   }
 
   function startEdit(s: Service) {
-    setName(s.name);
-    setRecurrence(s.recurrence);
-    setDayOfWeek(String(s.day_of_week));
-    setStartTime(s.start_time);
-    setEndTime(s.end_time || "");
-    setAllDay(s.all_day || false);
-    setDurationMinutes(String(s.duration_minutes));
-    setCampusId(s.campus_id || "");
+    setEditingId(s.id);
+    setShowForm(true);
+  }
 
-    // Load ministries from new format or legacy
+  // Compute initialValues for the modal from the service being edited
+  function getInitialValues(): ServiceFormValues | undefined {
+    if (!editingId) return undefined;
+    const s = services.find((svc) => svc.id === editingId);
+    if (!s) return undefined;
+
+    let fmList: ServiceFormValues["formMinistries"];
     if (s.ministries && s.ministries.length > 0) {
-      setFormMinistries(
-        s.ministries.map((m) => ({
-          id: crypto.randomUUID(),
-          ministry_id: m.ministry_id,
-          roles: m.roles.length > 0 ? m.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
-          start_time: m.start_time,
-          end_time: m.end_time,
-        })),
-      );
+      fmList = s.ministries.map((m) => ({
+        id: crypto.randomUUID(),
+        ministry_id: m.ministry_id,
+        roles: m.roles.length > 0 ? m.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
+        start_time: m.start_time,
+        end_time: m.end_time,
+      }));
     } else {
-      setFormMinistries([
+      fmList = [
         {
           id: crypto.randomUUID(),
           ministry_id: s.ministry_id,
@@ -305,82 +262,29 @@ function ServicesTab({
           start_time: null,
           end_time: null,
         },
-      ]);
+      ];
     }
-    setEditingId(s.id);
-    setShowForm(true);
+
+    return {
+      name: s.name,
+      recurrence: s.recurrence,
+      dayOfWeek: String(s.day_of_week),
+      startTime: s.start_time,
+      endTime: s.end_time || "",
+      allDay: s.all_day || false,
+      durationMinutes: String(s.duration_minutes),
+      campusId: s.campus_id || "",
+      formMinistries: fmList,
+    };
   }
 
-  function addMinistrySection() {
-    setFormMinistries((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        ministry_id: "",
-        roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
-        start_time: null,
-        end_time: null,
-      },
-    ]);
-  }
-
-  function removeMinistrySection(fmId: string) {
-    setFormMinistries((prev) => prev.filter((m) => m.id !== fmId));
-  }
-
-  function updateMinistryField(fmId: string, field: string, value: string | null) {
-    setFormMinistries((prev) =>
-      prev.map((m) => (m.id === fmId ? { ...m, [field]: value } : m)),
-    );
-  }
-
-  const svcTierLimits = TIER_LIMITS[churchTier] || TIER_LIMITS.free;
-  const [svcTierWarning, setSvcTierWarning] = useState("");
-
-  function addRoleToMinistry(fmId: string) {
-    const totalRoles = formMinistries.reduce((sum, m) => sum + m.roles.length, 0);
-    if (totalRoles >= svcTierLimits.roles_per_service) {
-      setSvcTierWarning(`Your plan allows up to ${svcTierLimits.roles_per_service} roles per service. Upgrade to add more.`);
-      return;
-    }
-    setSvcTierWarning("");
-    setFormMinistries((prev) =>
-      prev.map((m) =>
-        m.id === fmId
-          ? { ...m, roles: [...m.roles, { role_id: crypto.randomUUID(), title: "", count: 1 }] }
-          : m,
-      ),
-    );
-  }
-
-  function updateRoleInMinistry(fmId: string, roleIdx: number, field: string, value: string | number | null) {
-    setFormMinistries((prev) =>
-      prev.map((m) =>
-        m.id === fmId
-          ? { ...m, roles: m.roles.map((r, i) => (i === roleIdx ? { ...r, [field]: value } : r)) }
-          : m,
-      ),
-    );
-  }
-
-  function removeRoleFromMinistry(fmId: string, roleIdx: number) {
-    setFormMinistries((prev) =>
-      prev.map((m) =>
-        m.id === fmId
-          ? { ...m, roles: m.roles.filter((_, i) => i !== roleIdx) }
-          : m,
-      ),
-    );
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(formData: ServiceFormData) {
     if (!churchId) return;
     setSaving(true);
 
     try {
       // Build ministries array
-      const builtMinistries = formMinistries
+      const builtMinistries = formData.formMinistries
         .filter((m) => m.ministry_id)
         .map((m) => ({
           ministry_id: m.ministry_id,
@@ -394,16 +298,16 @@ function ServicesTab({
       const primaryMinistryId = builtMinistries[0]?.ministry_id || "";
 
       const data = {
-        name,
+        name: formData.name,
         church_id: churchId,
         ministry_id: primaryMinistryId,
-        campus_id: campusId || null,
-        recurrence,
-        day_of_week: Number(dayOfWeek),
-        start_time: allDay ? "00:00" : startTime,
-        end_time: allDay ? null : (endTime || null),
-        all_day: allDay,
-        duration_minutes: Number(durationMinutes),
+        campus_id: formData.campusId || null,
+        recurrence: formData.recurrence,
+        day_of_week: Number(formData.dayOfWeek),
+        start_time: formData.allDay ? "00:00" : formData.startTime,
+        end_time: formData.allDay ? null : (formData.endTime || null),
+        all_day: formData.allDay,
+        duration_minutes: Number(formData.durationMinutes),
         roles: allRoles,
         ministries: builtMinistries,
         ...(editingId ? {} : { created_at: new Date().toISOString() }),
@@ -418,7 +322,7 @@ function ServicesTab({
         const ref = await addChurchDocument(churchId, "services", data);
         setServices((prev) => [...prev, { id: ref.id, ...data } as Service]);
       }
-      resetForm();
+      closeForm();
       setMutationError("");
     } catch {
       setMutationError("Failed to save service. Please try again.");
@@ -484,7 +388,6 @@ function ServicesTab({
   }
 
   const isLoading = loading || ministriesLoading;
-  const usedMinistryIds = formMinistries.map((m) => m.ministry_id).filter(Boolean);
 
   return (
     <div>
@@ -493,275 +396,28 @@ function ServicesTab({
           {mutationError}
         </div>
       )}
-      {!showForm && (
-        <div className="mb-4 flex justify-end">
-          <Button onClick={() => setShowForm(true)}>Add Service</Button>
-        </div>
-      )}
+      <div className="mb-4 flex justify-end">
+        <Button onClick={() => setShowForm(true)}>Add Service</Button>
+      </div>
 
-      {/* Form */}
-      {showForm && (
-        <div className="mb-8 max-w-3xl rounded-xl border border-vc-border-light bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">
-            {editingId ? "Edit Service" : "New Service"}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className={campuses.length > 0 ? "grid gap-4 sm:grid-cols-2" : ""}>
-              <Input
-                label="Service Name"
-                required
-                placeholder="e.g., Sunday Morning Worship"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              {campuses.length > 0 && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-vc-text">Campus</label>
-                  <select
-                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                    value={campusId}
-                    onChange={(e) => setCampusId(e.target.value)}
-                  >
-                    <option value="">All campuses</option>
-                    {campuses.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Select
-                label="Day"
-                options={DAYS}
-                value={dayOfWeek}
-                onChange={(e) => setDayOfWeek(e.target.value)}
-              />
-              <Select
-                label="Recurrence"
-                options={RECURRENCE_OPTIONS}
-                value={recurrence}
-                onChange={(e) => setRecurrence(e.target.value as RecurrencePattern)}
-              />
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 rounded-lg border border-vc-border px-3 py-2.5 text-sm cursor-pointer hover:bg-vc-bg-warm transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={allDay}
-                    onChange={(e) => setAllDay(e.target.checked)}
-                    className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral/30"
-                  />
-                  <span className="text-vc-text">All day</span>
-                </label>
-              </div>
-            </div>
-
-            {!allDay && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Default Start Time"
-                  type="time"
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                />
-                <Input
-                  label="Default End Time"
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            )}
-
-            <p className="text-xs text-vc-text-muted -mt-2">
-              {allDay
-                ? "No specific times \u2014 each ministry can set its own time window below."
-                : "Default times for the service. Each ministry can override these below."}
-            </p>
-
-            {/* Ministry sections */}
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <label className="text-sm font-semibold text-vc-indigo">
-                  Ministries & Roles
-                </label>
-                {ministries.length > formMinistries.length && (
-                  <button
-                    type="button"
-                    onClick={addMinistrySection}
-                    className="text-sm font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                  >
-                    + Add ministry
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                {formMinistries.map((fm) => {
-                  const availableMinistries = ministries.filter(
-                    (m) => m.id === fm.ministry_id || !usedMinistryIds.includes(m.id),
-                  );
-
-                  return (
-                    <div
-                      key={fm.id}
-                      className="rounded-xl border border-vc-border-light bg-vc-bg/30 p-4"
-                      style={fm.ministry_id ? { borderLeftWidth: 4, borderLeftColor: getMinistryColor(fm.ministry_id) } : undefined}
-                    >
-                      <div className="flex flex-wrap items-center gap-3 mb-3">
-                        <select
-                          required
-                          className="min-w-0 flex-1 max-w-xs rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                          value={fm.ministry_id}
-                          onChange={(e) => updateMinistryField(fm.id, "ministry_id", e.target.value)}
-                        >
-                          <option value="">Select ministry...</option>
-                          {availableMinistries.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-
-                        {/* Per-ministry time override toggle */}
-                        {(fm.start_time || fm.end_time) ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="time"
-                              className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-                              value={fm.start_time || ""}
-                              onChange={(e) => updateMinistryField(fm.id, "start_time", e.target.value || null)}
-                            />
-                            <span className="text-xs text-vc-text-muted">–</span>
-                            <input
-                              type="time"
-                              className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-                              value={fm.end_time || ""}
-                              onChange={(e) => updateMinistryField(fm.id, "end_time", e.target.value || null)}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateMinistryField(fm.id, "start_time", null);
-                                updateMinistryField(fm.id, "end_time", null);
-                              }}
-                              className="ml-1 text-xs text-vc-text-muted hover:text-vc-danger"
-                              title="Use service default time"
-                            >
-                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        ) : !allDay ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateMinistryField(fm.id, "start_time", startTime);
-                              updateMinistryField(fm.id, "end_time", endTime);
-                            }}
-                            className="text-xs text-vc-text-muted hover:text-vc-coral transition-colors whitespace-nowrap"
-                          >
-                            Custom time
-                          </button>
-                        ) : null}
-
-                        {formMinistries.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeMinistrySection(fm.id)}
-                            className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
-                            title="Remove ministry"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Roles for this ministry */}
-                      <div className="space-y-2">
-                        {fm.roles.map((role, ri) => {
-                          // Filter volunteers to those in this ministry
-                          const ministryVols = volunteers.filter(
-                            (vol) => vol.ministry_ids.length === 0 || vol.ministry_ids.includes(fm.ministry_id),
-                          );
-                          return (
-                          <div key={role.role_id} className="flex items-center gap-2 flex-wrap">
-                            <input
-                              className="min-w-0 flex-1 max-w-sm rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                              placeholder="Role title (e.g., Producer, Camera)"
-                              value={role.title}
-                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "title", e.target.value)}
-                            />
-                            <input
-                              type="number"
-                              min={1}
-                              className="w-20 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                              placeholder="Qty"
-                              value={role.count}
-                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "count", Number(e.target.value))}
-                            />
-                            <select
-                              className="max-w-[180px] rounded-lg border border-vc-border bg-white px-2 py-2 text-xs text-vc-text-secondary focus:border-vc-coral focus:outline-none"
-                              value={role.pinned_volunteer_id || ""}
-                              onChange={(e) => updateRoleInMinistry(fm.id, ri, "pinned_volunteer_id", e.target.value || null)}
-                              title="Pin a default volunteer to this role"
-                            >
-                              <option value="">No pinned volunteer</option>
-                              {ministryVols.map((vol) => (
-                                <option key={vol.id} value={vol.id}>{vol.name}</option>
-                              ))}
-                            </select>
-                            {fm.roles.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeRoleFromMinistry(fm.id, ri)}
-                                className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
-                              >
-                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                          );
-                        })}
-                        {svcTierWarning && (
-                          <p className="text-xs text-vc-warning bg-vc-sand/20 rounded px-2 py-1">{svcTierWarning}</p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => addRoleToMinistry(fm.id)}
-                          disabled={!!svcTierWarning}
-                          className={`text-xs font-medium transition-colors ${svcTierWarning ? "text-vc-text-muted cursor-not-allowed" : "text-vc-coral hover:text-vc-coral-dark"}`}
-                        >
-                          + Add role
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" loading={saving}>
-                {editingId ? "Save Changes" : "Create Service"}
-              </Button>
-              <Button type="button" variant="ghost" onClick={resetForm}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Service Form Modal */}
+      <ServiceFormModal
+        open={showForm}
+        onClose={closeForm}
+        onSubmit={handleSubmit}
+        saving={saving}
+        initialValues={getInitialValues()}
+        isEditing={!!editingId}
+        ministries={ministries}
+        volunteers={volunteers}
+        campuses={campuses}
+        tierLimits={svcTierLimits}
+      />
 
       {/* Service list */}
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
-      ) : services.length === 0 && !showForm ? (
+      ) : services.length === 0 ? (
         <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
           <svg className="mx-auto h-8 w-8 text-vc-text-muted/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />

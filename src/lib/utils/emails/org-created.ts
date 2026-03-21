@@ -82,7 +82,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
     headerText: "You're All Set!",
     headerSubtitle: `${data.orgName} is ready to go`,
     body,
-    footerHtml: `Sent by <span style="color:#E87461;">VolunteerCal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `${data.orgName} is live on VolunteerCal

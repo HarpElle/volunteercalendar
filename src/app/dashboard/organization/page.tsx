@@ -22,9 +22,8 @@ import { db } from "@/lib/firebase/config";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, Campus } from "@/lib/types";
-import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
-import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import Link from "next/link";
+import { CampusFormModal, type CampusFormData } from "@/components/forms/campus-form-modal";
+import { MinistryFormModal, type MinistryFormData } from "@/components/forms/ministry-form-modal";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -35,16 +34,6 @@ const TIMEZONE_OPTIONS = [
   { value: "Pacific/Honolulu", label: "Hawaii (HT)" },
 ];
 
-const PRESET_COLORS = [
-  { hex: "#E07A5F", name: "Coral" },
-  { hex: "#2D3047", name: "Indigo" },
-  { hex: "#81B29A", name: "Sage" },
-  { hex: "#F2CC8F", name: "Sand" },
-  { hex: "#7B68EE", name: "Purple" },
-  { hex: "#E84855", name: "Red" },
-  { hex: "#3D8BF2", name: "Blue" },
-  { hex: "#F29E4C", name: "Orange" },
-];
 
 export default function OrganizationPage() {
   return (
@@ -85,21 +74,12 @@ function OrganizationContent() {
   const [editingMinistryId, setEditingMinistryId] = useState<string | null>(null);
   const [ministrySaving, setMinistrySaving] = useState(false);
   const [deletingMinistry, setDeletingMinistry] = useState<string | null>(null);
-  const [ministryName, setMinistryName] = useState("");
-  const [ministryColor, setMinistryColor] = useState(PRESET_COLORS[0].hex);
-  const [ministryDescription, setMinistryDescription] = useState("");
-  const [ministryRequiresBgCheck, setMinistryRequiresBgCheck] = useState(false);
-  const [ministryPrereqs, setMinistryPrereqs] = useState<OnboardingStep[]>([]);
 
   // Campuses state
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [showCampusForm, setShowCampusForm] = useState(false);
   const [editingCampusId, setEditingCampusId] = useState<string | null>(null);
   const [campusSaving, setCampusSaving] = useState(false);
-  const [campusName, setCampusName] = useState("");
-  const [campusAddress, setCampusAddress] = useState("");
-  const [campusLocation, setCampusLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [campusIsPrimary, setCampusIsPrimary] = useState(false);
 
   const [mutationError, setMutationError] = useState("");
 
@@ -233,37 +213,26 @@ function OrganizationContent() {
 
   // --- Ministry handlers ---
 
-  function resetMinistryForm() {
-    setMinistryName("");
-    setMinistryColor(PRESET_COLORS[0].hex);
-    setMinistryDescription("");
-    setMinistryRequiresBgCheck(false);
-    setMinistryPrereqs([]);
+  function closeMinistryForm() {
     setEditingMinistryId(null);
     setShowMinistryForm(false);
   }
 
   function startEditMinistry(m: Ministry) {
-    setMinistryName(m.name);
-    setMinistryColor(m.color);
-    setMinistryDescription(m.description);
-    setMinistryRequiresBgCheck(m.requires_background_check || false);
-    setMinistryPrereqs(m.prerequisites || []);
     setEditingMinistryId(m.id);
     setShowMinistryForm(true);
   }
 
-  async function handleMinistrySubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleMinistrySubmit(formData: MinistryFormData) {
     if (!churchId || !user) return;
     setMinistrySaving(true);
     try {
       const data = {
-        name: ministryName,
-        color: ministryColor,
-        description: ministryDescription,
-        requires_background_check: ministryRequiresBgCheck,
-        prerequisites: ministryPrereqs.filter((p) => p.label.trim()),
+        name: formData.name,
+        color: formData.color,
+        description: formData.description,
+        requires_background_check: formData.requiresBgCheck,
+        prerequisites: formData.prereqs.filter((p) => p.label.trim()),
         church_id: churchId,
         lead_user_id: user.uid,
         lead_email: user.email || "",
@@ -278,7 +247,7 @@ function OrganizationContent() {
         const ref = await addChurchDocument(churchId, "ministries", data);
         setMinistries((prev) => [...prev, { id: ref.id, ...data } as Ministry]);
       }
-      resetMinistryForm();
+      closeMinistryForm();
       setMutationError("");
     } catch {
       setMutationError("Failed to save ministry. Please try again.");
@@ -303,40 +272,31 @@ function OrganizationContent() {
 
   // --- Campus handlers ---
 
-  function resetCampusForm() {
-    setCampusName("");
-    setCampusAddress("");
-    setCampusLocation(null);
-    setCampusIsPrimary(false);
+  function closeCampusForm() {
     setEditingCampusId(null);
     setShowCampusForm(false);
   }
 
   function startEditCampus(c: Campus) {
-    setCampusName(c.name);
-    setCampusAddress(c.address || "");
-    setCampusLocation(c.location || null);
-    setCampusIsPrimary(c.is_primary);
     setEditingCampusId(c.id);
     setShowCampusForm(true);
   }
 
-  async function handleCampusSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleCampusSubmit(formData: CampusFormData) {
     if (!churchId) return;
     setCampusSaving(true);
     try {
       const data = {
-        name: campusName,
-        address: campusAddress || null,
-        location: campusLocation,
+        name: formData.name,
+        address: formData.address || null,
+        location: formData.location,
         timezone: null,
-        is_primary: campusIsPrimary,
+        is_primary: formData.isPrimary,
         church_id: churchId,
         ...(editingCampusId ? {} : { created_at: new Date().toISOString() }),
       };
       // If setting as primary, unset other primaries
-      if (campusIsPrimary) {
+      if (formData.isPrimary) {
         for (const existing of campuses) {
           if (existing.is_primary && existing.id !== editingCampusId) {
             await updateChurchDocument(churchId, "campuses", existing.id, { is_primary: false });
@@ -347,19 +307,19 @@ function OrganizationContent() {
         await updateChurchDocument(churchId, "campuses", editingCampusId, data);
         setCampuses((prev) => prev.map((c) => {
           if (c.id === editingCampusId) return { ...c, ...data };
-          if (campusIsPrimary && c.is_primary) return { ...c, is_primary: false };
+          if (formData.isPrimary && c.is_primary) return { ...c, is_primary: false };
           return c;
         }));
       } else {
         const ref = await addChurchDocument(churchId, "campuses", data);
         setCampuses((prev) => {
-          const updated = campusIsPrimary
+          const updated = formData.isPrimary
             ? prev.map((c) => c.is_primary ? { ...c, is_primary: false } : c)
             : prev;
           return [...updated, { id: ref.id, ...data } as Campus];
         });
       }
-      resetCampusForm();
+      closeCampusForm();
     } catch {
       setMutationError("Failed to save campus.");
     } finally {
@@ -369,10 +329,13 @@ function OrganizationContent() {
 
   async function handleDeleteCampus(id: string) {
     if (!churchId) return;
+    if (!window.confirm("Delete this campus? This cannot be undone.")) return;
     try {
       await removeChurchDocument(churchId, "campuses", id);
       setCampuses((prev) => prev.filter((c) => c.id !== id));
-    } catch {
+      closeCampusForm();
+    } catch (err) {
+      console.error("Delete campus failed:", err);
       setMutationError("Failed to delete campus.");
     }
   }
@@ -454,111 +417,34 @@ function OrganizationContent() {
       <section className="mb-8">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-vc-indigo">{terms.plural}</h2>
-          {!showMinistryForm && (
-            ministryLimitReached ? (
-              <Button variant="outline" size="sm" onClick={() => {
-                const el = document.getElementById("billing-section");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}>
-                Upgrade to Add More {terms.plural}
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => setShowMinistryForm(true)}>
-                Add {terms.singular}
-              </Button>
-            )
+          {ministryLimitReached ? (
+            <Button variant="outline" size="sm" onClick={() => {
+              const el = document.getElementById("billing-section");
+              el?.scrollIntoView({ behavior: "smooth" });
+            }}>
+              Upgrade to Add More {terms.plural}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => setShowMinistryForm(true)}>
+              Add {terms.singular}
+            </Button>
           )}
         </div>
 
-        {/* Add / Edit form */}
-        {showMinistryForm && (
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-            <h3 className="mb-4 font-medium text-vc-indigo">
-              {editingMinistryId ? "Edit " + terms.singular : "New " + terms.singular}
-            </h3>
-            <form onSubmit={handleMinistrySubmit} className="space-y-4">
-              <Input
-                label={terms.singular + " Name"}
-                required
-                placeholder={orgType === "church" ? "e.g., Worship, Kids, Tech" : "e.g., Events, Marketing, Outreach"}
-                value={ministryName}
-                onChange={(e) => setMinistryName(e.target.value)}
-              />
-              <Input
-                label="Description"
-                placeholder={"Brief description of this " + terms.singularLower}
-                value={ministryDescription}
-                onChange={(e) => setMinistryDescription(e.target.value)}
-              />
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-vc-text">Color</label>
-                <div className="flex flex-wrap gap-3">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c.hex}
-                      type="button"
-                      onClick={() => setMinistryColor(c.hex)}
-                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-all ${
-                        ministryColor === c.hex
-                          ? "ring-2 ring-offset-2 ring-vc-indigo bg-vc-bg-warm font-medium"
-                          : "hover:bg-vc-bg-warm/50"
-                      }`}
-                    >
-                      <span
-                        className="h-5 w-5 shrink-0 rounded-full"
-                        style={{ backgroundColor: c.hex }}
-                      />
-                      <span className="text-vc-text-secondary">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ministryRequiresBgCheck}
-                  onChange={(e) => setMinistryRequiresBgCheck(e.target.checked)}
-                  className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                />
-                <span className="text-sm text-vc-text-secondary">
-                  Require background check clearance to serve in this {terms.singularLower}
-                </span>
-              </label>
-
-              {/* Prerequisites */}
-              <PrerequisiteEditor
-                prerequisites={ministryPrereqs}
-                onChange={setMinistryPrereqs}
-              />
-              <p className="text-xs text-vc-text-muted">
-                You can also manage prerequisites and track volunteer progress from the{" "}
-                <Link href="/dashboard/onboarding" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
-                  Onboarding
-                </Link>{" "}
-                page.
-              </p>
-
-              <div className="flex items-center gap-3">
-                <Button type="submit" loading={ministrySaving}>
-                  {editingMinistryId ? "Save Changes" : "Create " + terms.singular}
-                </Button>
-                <Button type="button" variant="ghost" onClick={resetMinistryForm}>
-                  Cancel
-                </Button>
-                {editingMinistryId && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteMinistry(editingMinistryId)}
-                    disabled={deletingMinistry === editingMinistryId}
-                    className="ml-auto text-sm font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-                  >
-                    {deletingMinistry === editingMinistryId ? "Deleting..." : "Delete " + terms.singular}
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-        )}
+        <MinistryFormModal
+          open={showMinistryForm}
+          onClose={closeMinistryForm}
+          onSubmit={handleMinistrySubmit}
+          onDelete={editingMinistryId ? () => handleDeleteMinistry(editingMinistryId) : undefined}
+          saving={ministrySaving}
+          deleting={deletingMinistry === editingMinistryId}
+          isEditing={!!editingMinistryId}
+          terms={terms}
+          initialValues={(() => {
+            const m = editingMinistryId ? ministries.find((x) => x.id === editingMinistryId) : null;
+            return m ? { name: m.name, color: m.color, description: m.description, requiresBgCheck: m.requires_background_check || false, prereqs: m.prerequisites || [] } : undefined;
+          })()}
+        />
 
         {/* Ministry list */}
         {ministries.length === 0 && !showMinistryForm ? (
@@ -636,68 +522,23 @@ function OrganizationContent() {
               <h2 className="text-lg font-semibold text-vc-indigo">Campuses</h2>
               <p className="text-sm text-vc-text-muted">Manage multiple sites or locations within your organization.</p>
             </div>
-            {!showCampusForm && (
-              <Button size="sm" onClick={() => setShowCampusForm(true)}>
-                Add Campus
-              </Button>
-            )}
+            <Button size="sm" onClick={() => setShowCampusForm(true)}>
+              Add Campus
+            </Button>
           </div>
 
-          {showCampusForm && (
-            <div className="mb-6 rounded-xl border border-vc-border bg-white p-5">
-              <form onSubmit={handleCampusSubmit} className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Campus Name"
-                    required
-                    value={campusName}
-                    onChange={(e) => setCampusName(e.target.value)}
-                    placeholder="e.g., Main Campus, North Campus"
-                  />
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                      Address
-                    </label>
-                    <AddressAutocomplete
-                      value={campusAddress}
-                      onChange={setCampusAddress}
-                      onPlaceSelect={(place) => {
-                        setCampusAddress(place.address);
-                        setCampusLocation({ lat: place.lat, lng: place.lng });
-                      }}
-                      placeholder="123 Church St, City, ST"
-                    />
-                  </div>
-                </div>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={campusIsPrimary}
-                    onChange={(e) => setCampusIsPrimary(e.target.checked)}
-                    className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                  />
-                  <span className="text-sm text-vc-text-secondary">Primary campus</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button type="submit" loading={campusSaving}>
-                    {editingCampusId ? "Save Changes" : "Add Campus"}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={resetCampusForm}>
-                    Cancel
-                  </Button>
-                  {editingCampusId && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCampus(editingCampusId)}
-                      className="ml-auto text-sm font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-                    >
-                      Delete Campus
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          )}
+          <CampusFormModal
+            open={showCampusForm}
+            onClose={closeCampusForm}
+            onSubmit={handleCampusSubmit}
+            onDelete={editingCampusId ? () => handleDeleteCampus(editingCampusId) : undefined}
+            saving={campusSaving}
+            isEditing={!!editingCampusId}
+            initialValues={(() => {
+              const c = editingCampusId ? campuses.find((x) => x.id === editingCampusId) : null;
+              return c ? { name: c.name, address: c.address || "", location: c.location || null, isPrimary: c.is_primary } : undefined;
+            })()}
+          />
 
           {campuses.length === 0 && !showCampusForm ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">

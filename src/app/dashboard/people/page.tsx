@@ -20,10 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import { formatPhone, normalizePhone } from "@/lib/utils/phone";
+import { formatPhone } from "@/lib/utils/phone";
+import { VolunteerEditModal } from "@/components/forms/volunteer-edit-modal";
+import { InviteQueueDrawer } from "@/components/forms/invite-queue-drawer";
 import { getOrgTerms } from "@/lib/utils/org-terms";
-import { INTEGRATIONS } from "@/lib/integrations/config";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
+import { CSVImportModal } from "@/components/forms/csv-import-modal";
+import { ChMSImportModal } from "@/components/forms/chms-import-modal";
 import type {
   Volunteer,
   Ministry,
@@ -34,7 +37,6 @@ import type {
   InviteQueueItem,
 } from "@/lib/types";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
-import type { IntegrationProvider, IntegrationConfig } from "@/lib/integrations/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,6 +90,9 @@ function PeopleContent() {
   const [orgType, setOrgType] = useState<OrgType | undefined>();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterMinistries, setFilterMinistries] = useState<string[]>([]);
+  const [filterRoles, setFilterRoles] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Add People panel
   const [addMode, setAddMode] = useState<null | "individual" | "csv" | "chms">(null);
@@ -126,6 +131,51 @@ function PeopleContent() {
         // Load invite queue
         const qItems = await getChurchDocuments(churchId!, "invite_queue") as unknown as InviteQueueItem[];
         setQueueItems(qItems.filter((i) => i.status === "pending_review" || i.status === "approved"));
+
+        // Auto-sync: ensure active members have volunteer records on the roster
+        const volsByEmail = new Set((vols as unknown as Volunteer[]).map((v) => v.email?.toLowerCase()));
+        const volsByUserId = new Set((vols as unknown as Volunteer[]).map((v) => v.user_id).filter(Boolean));
+        const missingMembers = mems.filter(
+          (m) => m.status === "active" && m.user_id && !volsByUserId.has(m.user_id),
+        );
+        for (const mem of missingMembers) {
+          const memUser = await getDoc(doc(db, "users", mem.user_id));
+          const memEmail = memUser?.data()?.email?.toLowerCase() || "";
+          if (volsByEmail.has(memEmail)) continue; // already on roster by email
+          const now = new Date().toISOString();
+          const volData = {
+            church_id: churchId!,
+            name: memUser?.data()?.display_name || memEmail || "Member",
+            email: memUser?.data()?.email || "",
+            phone: memUser?.data()?.phone || null,
+            user_id: mem.user_id,
+            membership_id: mem.id,
+            status: "active" as const,
+            ministry_ids: [] as string[],
+            role_ids: [] as string[],
+            campus_ids: [] as string[],
+            household_id: null,
+            availability: {
+              blockout_dates: [] as string[],
+              recurring_unavailable: [] as string[],
+              preferred_frequency: 2,
+              max_roles_per_month: 8,
+            },
+            reminder_preferences: { channels: ["email" as const] },
+            stats: {
+              times_scheduled_last_90d: 0,
+              last_served_date: null,
+              decline_count: 0,
+              no_show_count: 0,
+            },
+            imported_from: null,
+            created_at: now,
+          };
+          const newRef = await addChurchDocument(churchId!, "volunteers", volData);
+          setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Volunteer]);
+          volsByEmail.add(memEmail);
+          volsByUserId.add(mem.user_id);
+        }
       } catch {
         // silent
       } finally {
@@ -167,13 +217,25 @@ function PeopleContent() {
     return { volunteer: v, membership: mem };
   });
 
-  const filteredRoster = searchQuery
-    ? rosterPeople.filter(
-        ({ volunteer: v }) =>
-          v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.email.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : rosterPeople;
+  const filteredRoster = rosterPeople.filter(({ volunteer: v }) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const digits = q.replace(/\D/g, "");
+      const nameMatch = v.name.toLowerCase().includes(q);
+      const emailMatch = v.email.toLowerCase().includes(q);
+      const phoneMatch = digits.length > 0 && v.phone?.replace(/\D/g, "").includes(digits);
+      if (!nameMatch && !emailMatch && !phoneMatch) return false;
+    }
+    if (filterMinistries.length > 0) {
+      if (!v.ministry_ids?.some((id) => filterMinistries.includes(id))) return false;
+    }
+    if (filterRoles.length > 0) {
+      if (!v.role_ids?.some((id) => filterRoles.includes(id))) return false;
+    }
+    return true;
+  });
+
+  const activeFilterCount = filterMinistries.length + filterRoles.length;
 
   // Helpers
   function getMinistryName(id: string) {
@@ -277,29 +339,27 @@ function PeopleContent() {
         )}
       </div>
 
-      {/* Add People panels */}
-      {addMode === "csv" && canManage && (
-        <CSVImportPanel
-          churchId={churchId!}
-          onQueued={() => {
-            setAddMode(null);
-            loadQueueItems();
-          }}
-          onCancel={() => setAddMode(null)}
-        />
-      )}
+      {/* Import modals */}
+      <CSVImportModal
+        open={addMode === "csv" && canManage}
+        churchId={churchId!}
+        onQueued={() => {
+          setAddMode(null);
+          loadQueueItems();
+        }}
+        onCancel={() => setAddMode(null)}
+      />
 
-      {addMode === "chms" && canManage && (
-        <ChMSImportPanel
-          churchId={churchId!}
-          user={user}
-          onDone={() => {
-            setAddMode(null);
-            loadQueueItems();
-          }}
-          onCancel={() => setAddMode(null)}
-        />
-      )}
+      <ChMSImportModal
+        open={addMode === "chms" && canManage}
+        churchId={churchId!}
+        user={user}
+        onDone={() => {
+          setAddMode(null);
+          loadQueueItems();
+        }}
+        onCancel={() => setAddMode(null)}
+      />
 
       {/* Queue banner */}
       {canManage && queueItems.length > 0 && !showQueuePanel && (
@@ -318,14 +378,15 @@ function PeopleContent() {
         </div>
       )}
 
-      {/* Queue review panel */}
-      {canManage && showQueuePanel && (
-        <InviteQueuePanel
+      {/* Queue review drawer */}
+      {canManage && (
+        <InviteQueueDrawer
+          open={showQueuePanel}
+          onClose={() => setShowQueuePanel(false)}
           churchId={churchId!}
           user={user}
           items={queueItems}
           ministries={ministries}
-          onClose={() => setShowQueuePanel(false)}
           onRefresh={() => {
             loadQueueItems();
             if (churchId) {
@@ -362,18 +423,110 @@ function PeopleContent() {
       {/* === ROSTER TAB === */}
       {tab === "roster" && (
         <>
-          {/* Search */}
-          {volunteers.length > 5 && (
-            <div className="mb-4">
+          {/* Search & Filters */}
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center gap-2">
               <input
                 type="search"
-                placeholder="Search people..."
+                placeholder="Search by name, email, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full max-w-sm rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-3 py-2.5 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
               />
+              {(ministries.length > 0 || uniqueRoles.length > 0) && (
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    showFilters || activeFilterCount > 0
+                      ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                      : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                  </svg>
+                  Filter
+                  {activeFilterCount > 0 && (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-vc-coral text-[10px] font-bold text-white">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
-          )}
+
+            {showFilters && (
+              <div className="rounded-xl border border-vc-border-light bg-white p-4 space-y-4">
+                {ministries.length > 0 && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                      {terms.plural}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {ministries.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() =>
+                            setFilterMinistries((prev) =>
+                              prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id],
+                            )
+                          }
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                            filterMinistries.includes(m.id)
+                              ? "border-transparent text-white"
+                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                          }`}
+                          style={filterMinistries.includes(m.id) ? { backgroundColor: m.color } : undefined}
+                        >
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: filterMinistries.includes(m.id) ? "white" : m.color }}
+                          />
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {uniqueRoles.length > 0 && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                      Roles
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {uniqueRoles.map((r) => (
+                        <button
+                          key={r.role_id}
+                          onClick={() =>
+                            setFilterRoles((prev) =>
+                              prev.includes(r.role_id) ? prev.filter((x) => x !== r.role_id) : [...prev, r.role_id],
+                            )
+                          }
+                          className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                            filterRoles.includes(r.role_id)
+                              ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                          }`}
+                        >
+                          {r.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); }}
+                    className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {volunteers.length === 0 && addMode === null ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
@@ -421,9 +574,17 @@ function PeopleContent() {
                   </tbody>
                 </table>
               </div>
-              {filteredRoster.length === 0 && searchQuery && (
+              {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0) && (
                 <div className="px-5 py-8 text-center text-sm text-vc-text-muted">
-                  No people match &ldquo;{searchQuery}&rdquo;
+                  No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setSearchQuery(""); }}
+                      className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -478,7 +639,7 @@ function PeopleContent() {
 }
 
 // ---------------------------------------------------------------------------
-// Roster Row (with inline edit)
+// Roster Row
 // ---------------------------------------------------------------------------
 
 function RosterRow({
@@ -505,318 +666,70 @@ function RosterRow({
   onUpdated: (v: Volunteer) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(v.name);
-  const [email, setEmail] = useState(v.email);
-  const [phone, setPhone] = useState(v.phone || "");
-  const [selectedMinistries, setSelectedMinistries] = useState<string[]>(v.ministry_ids);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(v.role_ids);
-  const [bgCheckStatus, setBgCheckStatus] = useState<string>(v.background_check?.status || "not_required");
-  const [bgCheckExpiry, setBgCheckExpiry] = useState(v.background_check?.expires_at || "");
-  const [allowMultiRole, setAllowMultiRole] = useState(v.role_constraints?.allow_multi_role || false);
-  const [conditionalRoles, setConditionalRoles] = useState<Array<{ role_id: string; requires_any: string[] }>>(
-    v.role_constraints?.conditional_roles || [],
-  );
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  function toggleMinistry(id: string) {
-    setSelectedMinistries((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
-    );
-  }
-
-  function toggleRole(id: string) {
-    setSelectedRoles((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
-    );
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const background_check = bgCheckStatus === "not_required" ? undefined : {
-        status: bgCheckStatus as "cleared" | "pending" | "expired" | "not_required",
-        expires_at: bgCheckExpiry || null,
-        provider: v.background_check?.provider || null,
-        checked_at: bgCheckStatus === "cleared" && v.background_check?.status !== "cleared"
-          ? new Date().toISOString()
-          : v.background_check?.checked_at || null,
-      };
-      const roleConstraints = (allowMultiRole || conditionalRoles.length > 0)
-        ? {
-            allow_multi_role: allowMultiRole,
-            conditional_roles: conditionalRoles,
-          }
-        : undefined;
-      const updateData = {
-        name,
-        email,
-        phone: phone ? normalizePhone(phone) : null,
-        ministry_ids: selectedMinistries,
-        role_ids: selectedRoles,
-        background_check: background_check || undefined,
-        role_constraints: roleConstraints,
-      };
-      await updateChurchDocument(churchId, "volunteers", v.id, updateData);
-      onUpdated({ ...v, ...updateData });
-      setEditing(false);
-    } catch {
-      // silent
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    setDeleting(true);
-    await onDelete();
-    setDeleting(false);
-  }
-
-  if (editing) {
-    return (
-      <tr>
-        <td colSpan={6} className="px-5 py-4">
-          <div className="space-y-3 rounded-lg border border-vc-border-light bg-vc-bg/50 p-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => { if (phone) setPhone(formatPhone(phone)); }} />
-            </div>
-            {ministries.length > 0 && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-vc-text">
-                  {getMinistryName("__label__") === "__label__" ? "Teams" : "Ministries"}
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {ministries.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleMinistry(m.id)}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
-                        selectedMinistries.includes(m.id)
-                          ? "border-transparent text-white"
-                          : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                      }`}
-                      style={
-                        selectedMinistries.includes(m.id)
-                          ? { backgroundColor: m.color }
-                          : undefined
-                      }
-                    >
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: selectedMinistries.includes(m.id) ? "white" : m.color }}
-                      />
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Roles (filtered to selected ministries) */}
-            {(() => {
-              const relevantRoles = availableRoles.filter(
-                (r) => selectedMinistries.includes(r.ministry_id),
-              );
-              if (relevantRoles.length === 0) return null;
-              return (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-vc-text">
-                    Qualified Roles
-                  </label>
-                  <p className="mb-2 text-xs text-vc-text-muted">
-                    Leave all unchecked to allow any role. Check specific roles to restrict scheduling.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {relevantRoles.map((r) => (
-                      <button
-                        key={r.role_id}
-                        type="button"
-                        onClick={() => toggleRole(r.role_id)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
-                          selectedRoles.includes(r.role_id)
-                            ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
-                            : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                        }`}
-                      >
-                        {selectedRoles.includes(r.role_id) && (
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        )}
-                        {r.title}
-                        <span className="text-[10px] text-vc-text-muted">
-                          ({getMinistryName(r.ministry_id)})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {/* Background Check */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-vc-text">Background Check</label>
-                <select
-                  className="w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none"
-                  value={bgCheckStatus}
-                  onChange={(e) => setBgCheckStatus(e.target.value)}
-                >
-                  <option value="not_required">Not Required</option>
-                  <option value="pending">Pending</option>
-                  <option value="cleared">Cleared</option>
-                  <option value="expired">Expired</option>
-                </select>
-              </div>
-              {(bgCheckStatus === "cleared" || bgCheckStatus === "expired") && (
-                <Input
-                  label="Expiry Date"
-                  type="date"
-                  value={bgCheckExpiry}
-                  onChange={(e) => setBgCheckExpiry(e.target.value)}
-                />
-              )}
-            </div>
-            {/* Advanced Role Constraints (worship/music teams) */}
-            {selectedRoles.length >= 2 && (
-              <div className="rounded-lg border border-vc-border-light bg-vc-bg-warm/30 p-3 space-y-3">
-                <label className="block text-sm font-medium text-vc-text">
-                  Advanced Role Settings
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowMultiRole}
-                    onChange={(e) => setAllowMultiRole(e.target.checked)}
-                    className="h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                  />
-                  <span className="text-sm text-vc-text-secondary">
-                    Allow multiple roles in the same service <span className="text-xs text-vc-text-muted">(e.g., Guitar + Vocals)</span>
-                  </span>
-                </label>
-                <div>
-                  <p className="mb-2 text-xs text-vc-text-muted">
-                    Conditional roles — e.g., &quot;Vocals&quot; only when also assigned &quot;Guitar&quot; or &quot;Keys&quot;
-                  </p>
-                  {selectedRoles.map((roleId) => {
-                    const roleInfo = availableRoles.find((r) => r.role_id === roleId);
-                    if (!roleInfo) return null;
-                    const existing = conditionalRoles.find((c) => c.role_id === roleId);
-                    const otherRoles = selectedRoles.filter((r) => r !== roleId);
-                    if (otherRoles.length === 0) return null;
-                    return (
-                      <div key={roleId} className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="text-sm text-vc-text font-medium w-24 shrink-0">{roleInfo.title}</span>
-                        <span className="text-xs text-vc-text-muted">requires:</span>
-                        {otherRoles.map((otherId) => {
-                          const otherInfo = availableRoles.find((r) => r.role_id === otherId);
-                          const isRequired = existing?.requires_any.includes(otherId) || false;
-                          return (
-                            <button
-                              key={otherId}
-                              type="button"
-                              onClick={() => {
-                                setConditionalRoles((prev) => {
-                                  const clone = prev.map((c) => ({ ...c, requires_any: [...c.requires_any] }));
-                                  const idx = clone.findIndex((c) => c.role_id === roleId);
-                                  if (isRequired) {
-                                    if (idx >= 0) {
-                                      clone[idx].requires_any = clone[idx].requires_any.filter((r) => r !== otherId);
-                                      if (clone[idx].requires_any.length === 0) clone.splice(idx, 1);
-                                    }
-                                  } else {
-                                    if (idx >= 0) {
-                                      clone[idx].requires_any.push(otherId);
-                                    } else {
-                                      clone.push({ role_id: roleId, requires_any: [otherId] });
-                                    }
-                                  }
-                                  return clone;
-                                });
-                              }}
-                              className={`rounded px-2 py-1 text-xs font-medium border transition-all ${
-                                isRequired
-                                  ? "border-vc-sage bg-vc-sage/10 text-vc-sage"
-                                  : "border-vc-border text-vc-text-muted hover:border-vc-sage/30"
-                              }`}
-                            >
-                              {otherInfo?.title || otherId}
-                            </button>
-                          );
-                        })}
-                        {!existing && <span className="text-xs text-vc-text-muted italic">no dependency</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Button size="sm" loading={saving} onClick={handleSave}>Save</Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-            </div>
-          </div>
-        </td>
-      </tr>
-    );
-  }
 
   return (
-    <tr className="hover:bg-vc-bg-warm/50 transition-colors">
-      <td className="px-5 py-3 font-medium text-vc-indigo">{v.name}</td>
-      <td className="px-5 py-3 text-vc-text-secondary">{v.email || "\u2014"}</td>
-      <td className="hidden px-5 py-3 text-vc-text-secondary sm:table-cell">{formatPhone(v.phone)}</td>
-      <td className="px-5 py-3">
-        {mem ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            STATUS_LABELS[mem.status]?.color || "bg-vc-bg-cream text-vc-text-muted"
-          }`}>
-            {ROLE_LABELS[mem.role]}
-          </span>
-        ) : (
-          <span className="text-xs text-vc-text-muted">Roster only</span>
-        )}
-      </td>
-      <td className="px-5 py-3">
-        <div className="flex flex-wrap gap-1">
-          {v.ministry_ids.length > 0 ? (
-            v.ministry_ids.map((mid) => (
-              <span
-                key={mid}
-                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium"
-                style={{ backgroundColor: getMinistryColor(mid) + "15", color: getMinistryColor(mid) }}
-              >
-                {getMinistryName(mid)}
-              </span>
-            ))
-          ) : (
-            <span className="text-xs text-vc-text-muted">None</span>
-          )}
-        </div>
-      </td>
-      {canManage && (
+    <>
+      <tr className="hover:bg-vc-bg-warm/50 transition-colors">
+        <td className="px-5 py-3 font-medium text-vc-indigo">{v.name}</td>
+        <td className="px-5 py-3 text-vc-text-secondary">{v.email || "\u2014"}</td>
+        <td className="hidden px-5 py-3 text-vc-text-secondary sm:table-cell">{formatPhone(v.phone)}</td>
         <td className="px-5 py-3">
-          <div className="flex gap-1">
+          {mem ? (
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+              STATUS_LABELS[mem.status]?.color || "bg-vc-bg-cream text-vc-text-muted"
+            }`}>
+              {ROLE_LABELS[mem.role]}
+            </span>
+          ) : (
+            <span className="text-xs text-vc-text-muted">Roster only</span>
+          )}
+        </td>
+        <td className="px-5 py-3">
+          <div className="flex flex-wrap gap-1">
+            {v.ministry_ids.length > 0 ? (
+              v.ministry_ids.map((mid) => (
+                <span
+                  key={mid}
+                  className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium"
+                  style={{ backgroundColor: getMinistryColor(mid) + "15", color: getMinistryColor(mid) }}
+                >
+                  {getMinistryName(mid)}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-vc-text-muted">None</span>
+            )}
+          </div>
+        </td>
+        {canManage && (
+          <td className="px-5 py-3">
             <button
               onClick={() => setEditing(true)}
               className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
             >
               Edit
             </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
-            >
-              {deleting ? "..." : "Delete"}
-            </button>
-          </div>
-        </td>
+          </td>
+        )}
+      </tr>
+      {canManage && (
+        <VolunteerEditModal
+          open={editing}
+          onClose={() => setEditing(false)}
+          volunteer={v}
+          churchId={churchId}
+          ministries={ministries}
+          availableRoles={availableRoles}
+          getMinistryName={getMinistryName}
+          getMinistryColor={getMinistryColor}
+          onUpdated={(updated) => {
+            onUpdated(updated);
+            setEditing(false);
+          }}
+          onDelete={onDelete}
+        />
       )}
-    </tr>
+    </>
   );
 }
 
@@ -884,706 +797,7 @@ function AddPeopleMenu({ onSelect }: { onSelect: (mode: "individual" | "csv" | "
   );
 }
 
-function PanelHeader({
-  title,
-  subtitle,
-  onClose,
-}: {
-  title: string;
-  subtitle?: string;
-  onClose: () => void;
-}) {
-  return (
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
-        <h2 className="text-lg font-semibold text-vc-indigo">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-sm text-vc-text-muted">{subtitle}</p>}
-      </div>
-      <button
-        onClick={onClose}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-vc-text-muted hover:bg-vc-bg-warm hover:text-vc-indigo transition-colors"
-        title="Close"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  );
-}
 
-function AddIndividualPanel({
-  churchId,
-  ministries,
-  onAdded,
-  onCancel,
-}: {
-  churchId: string;
-  ministries: Ministry[];
-  onAdded: (v: Volunteer) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [selectedMinistries, setSelectedMinistries] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
-
-  function toggleMinistry(id: string) {
-    setSelectedMinistries((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
-    );
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-
-    try {
-      const data: Omit<Volunteer, "id"> = {
-        name,
-        email,
-        phone: phone || null,
-        church_id: churchId,
-        user_id: null,
-        ministry_ids: selectedMinistries,
-        role_ids: [],
-        household_id: null,
-        availability: {
-          blockout_dates: [],
-          recurring_unavailable: [],
-          preferred_frequency: 2,
-          max_roles_per_month: 4,
-        },
-        reminder_preferences: { channels: ["email"] },
-        stats: {
-          times_scheduled_last_90d: 0,
-          last_served_date: null,
-          decline_count: 0,
-          no_show_count: 0,
-        },
-        imported_from: "manual",
-        status: "active" as const,
-        membership_id: null,
-        created_at: new Date().toISOString(),
-      };
-
-      const ref = await addChurchDocument(churchId, "volunteers", data);
-      onAdded({ id: ref.id, ...data });
-    } catch {
-      // silent
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <PanelHeader title="Add Person" subtitle="Add someone to your roster manually." onClose={onCancel} />
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Input
-            label="Full Name"
-            required
-            placeholder="Jane Smith"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Input
-            label="Email"
-            type="email"
-            placeholder="jane@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <Input
-            label="Phone"
-            type="tel"
-            placeholder="(555) 123-4567"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </div>
-
-        {ministries.length > 0 && (
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-vc-text">
-              Assign to ministries
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {ministries.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => toggleMinistry(m.id)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
-                    selectedMinistries.includes(m.id)
-                      ? "border-transparent text-white"
-                      : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                  }`}
-                  style={
-                    selectedMinistries.includes(m.id)
-                      ? { backgroundColor: m.color }
-                      : undefined
-                  }
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: selectedMinistries.includes(m.id) ? "white" : m.color }}
-                  />
-                  {m.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end pt-2">
-          <Button type="submit" loading={saving}>Add Person</Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// CSV Import Panel
-// ---------------------------------------------------------------------------
-
-function CSVImportPanel({
-  churchId,
-  onQueued,
-  onCancel,
-}: {
-  churchId: string;
-  onQueued: (count: number) => void;
-  onCancel: () => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [saving, setSaving] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [importStatus, setImportStatus] = useState<{ count: number; errors: string[] } | null>(null);
-
-  async function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    setSaving(true);
-    setImportStatus(null);
-
-    try {
-      const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      if (lines.length < 2) {
-        setImportStatus({ count: 0, errors: ["CSV file is empty or has no data rows."] });
-        setSaving(false);
-        return;
-      }
-
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-      const nameIdx = headers.findIndex((h) => h === "name" || h === "full name" || h === "volunteer");
-      const emailIdx = headers.findIndex((h) => h === "email" || h === "email address");
-      const phoneIdx = headers.findIndex((h) => h === "phone" || h === "phone number" || h === "mobile");
-
-      if (nameIdx === -1) {
-        setImportStatus({ count: 0, errors: ["CSV must have a 'name' column."] });
-        setSaving(false);
-        return;
-      }
-
-      let queued = 0;
-      const errors: string[] = [];
-      const now = new Date().toISOString();
-
-      for (let i = 1; i < lines.length; i++) {
-        const cols = parseCSVLine(lines[i]);
-        const volName = cols[nameIdx]?.trim();
-        if (!volName) {
-          errors.push(`Row ${i + 1}: missing name, skipped.`);
-          continue;
-        }
-
-        const email = emailIdx >= 0 ? cols[emailIdx]?.trim() || "" : "";
-        const phone = phoneIdx >= 0 ? cols[phoneIdx]?.trim() || null : null;
-
-        try {
-          await addChurchDocument(churchId, "invite_queue", {
-            church_id: churchId,
-            name: volName,
-            email,
-            phone,
-            role: "volunteer",
-            ministry_ids: [],
-            source: "csv",
-            source_provider: null,
-            status: "pending_review",
-            volunteer_id: null,
-            error_message: null,
-            reviewed_by: null,
-            reviewed_at: null,
-            sent_at: null,
-            created_at: now,
-          });
-          queued++;
-        } catch {
-          errors.push(`Row ${i + 1}: failed to queue "${volName}".`);
-        }
-      }
-
-      setImportStatus({ count: queued, errors });
-      if (queued > 0) onQueued(queued);
-    } catch {
-      setImportStatus({ count: 0, errors: ["Failed to read CSV file."] });
-    } finally {
-      setSaving(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  return (
-    <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <PanelHeader
-        title="Import from CSV"
-        subtitle="Upload a spreadsheet with name (required), email, and phone columns. People will be added to your review queue."
-        onClose={onCancel}
-      />
-
-      {!importStatus ? (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="cursor-pointer rounded-xl border-2 border-dashed border-vc-border bg-vc-bg/50 px-6 py-10 text-center transition-colors hover:border-vc-coral/40 hover:bg-vc-coral/5"
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleCSVImport}
-            className="hidden"
-          />
-          {saving ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
-              <p className="text-sm font-medium text-vc-indigo">Importing {fileName}...</p>
-            </div>
-          ) : (
-            <>
-              <svg className="mx-auto h-10 w-10 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-              </svg>
-              <p className="mt-3 text-sm font-medium text-vc-indigo">
-                Click to choose a CSV file
-              </p>
-              <p className="mt-1 text-xs text-vc-text-muted">
-                Columns: <strong>name</strong> (required), email, phone. You&apos;ll review and approve before invites are sent.
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <div>
-          {importStatus.count > 0 && (
-            <div className="flex items-center gap-3 rounded-lg bg-vc-sage/10 px-4 py-3">
-              <svg className="h-5 w-5 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-              <p className="text-sm font-medium text-vc-sage">
-                Added {importStatus.count} {importStatus.count !== 1 ? "people" : "person"} to the review queue.
-              </p>
-            </div>
-          )}
-          {importStatus.errors.length > 0 && (
-            <div className="mt-3 rounded-lg bg-vc-danger/5 p-4">
-              <p className="mb-1 text-xs font-semibold text-vc-danger">Issues</p>
-              <div className="space-y-0.5">
-                {importStatus.errors.map((err, i) => (
-                  <p key={i} className="text-xs text-vc-danger/80">{err}</p>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setImportStatus(null); setFileName(null); }}>
-              Import more
-            </Button>
-            <Button onClick={onCancel}>Done</Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ChMS Import Panel (Planning Center, Breeze, Rock RMS)
-// ---------------------------------------------------------------------------
-
-type ChMSStep = "select" | "connect" | "testing" | "connected" | "preview" | "select_teams" | "importing" | "done";
-
-interface PreviewTeam {
-  id: string;
-  name: string;
-  member_count: number;
-}
-
-interface QueueImportStats {
-  queued: number;
-  teams_selected: number;
-  total_people: number;
-}
-
-function ChMSImportPanel({
-  churchId,
-  user,
-  onDone,
-  onCancel,
-}: {
-  churchId: string;
-  user: ReturnType<typeof useAuth>["user"];
-  onDone: () => void;
-  onCancel: () => void;
-}) {
-  const [step, setStep] = useState<ChMSStep>("select");
-  const [selectedProvider, setSelectedProvider] = useState<IntegrationConfig | null>(null);
-  const [credentials, setCredentials] = useState<Record<string, string>>({});
-  const [testResult, setTestResult] = useState<boolean | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importStats, setImportStats] = useState<QueueImportStats | null>(null);
-  const [previewTeams, setPreviewTeams] = useState<PreviewTeam[]>([]);
-  const [previewPeopleCount, setPreviewPeopleCount] = useState(0);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
-  const [selectAllTeams, setSelectAllTeams] = useState(true);
-  const [error, setError] = useState("");
-
-  async function getAuthHeaders(): Promise<Record<string, string>> {
-    if (!user) return {};
-    const token = await user.getIdToken();
-    return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-  }
-
-  function selectProvider(config: IntegrationConfig) {
-    setSelectedProvider(config);
-    setCredentials({});
-    setTestResult(null);
-    setError("");
-    setStep("connect");
-  }
-
-  async function testConnection() {
-    if (!selectedProvider) return;
-    setStep("testing");
-    setError("");
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/import", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "test", provider: selectedProvider.provider, credentials, church_id: churchId }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Connection test failed"); setTestResult(false); setStep("connect"); return; }
-      setTestResult(data.connected);
-      if (data.connected) {
-        await fetch("/api/import", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ action: "save_creds", provider: selectedProvider.provider, credentials, church_id: churchId }),
-        });
-        setStep("connected");
-      } else { setError("Could not connect. Please check your credentials."); setStep("connect"); }
-    } catch { setError("Connection test failed. Please try again."); setStep("connect"); }
-  }
-
-  async function runPreview() {
-    if (!selectedProvider) return;
-    setError("");
-    setStep("preview");
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/import", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "preview", provider: selectedProvider.provider, credentials, church_id: churchId }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Preview failed"); setStep("connected"); return; }
-      setPreviewTeams(data.teams || []);
-      setPreviewPeopleCount(data.total_people || 0);
-      setSelectedTeamIds((data.teams || []).map((t: PreviewTeam) => t.id));
-      setSelectAllTeams(true);
-      setStep("select_teams");
-    } catch { setError("Failed to load preview. Please try again."); setStep("connected"); }
-  }
-
-  async function runImportToQueue() {
-    if (!selectedProvider) return;
-    setImporting(true);
-    setError("");
-    setStep("importing");
-    try {
-      const headers = await getAuthHeaders();
-      const teamIds = selectAllTeams ? undefined : selectedTeamIds;
-      const res = await fetch("/api/import", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ action: "import_to_queue", provider: selectedProvider.provider, credentials, church_id: churchId, team_ids: teamIds }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Import failed"); setStep("select_teams"); return; }
-      setImportStats(data);
-      setStep("done");
-    } catch { setError("Import failed. Please try again."); setStep("select_teams"); } finally { setImporting(false); }
-  }
-
-  function startOver() {
-    setStep("select");
-    setSelectedProvider(null);
-    setCredentials({});
-    setTestResult(null);
-    setImportStats(null);
-    setPreviewTeams([]);
-    setPreviewPeopleCount(0);
-    setSelectedTeamIds([]);
-    setSelectAllTeams(true);
-    setError("");
-  }
-
-  const STEP_LABELS: Record<ChMSStep, string> = {
-    select: "Choose platform",
-    connect: "Enter credentials",
-    testing: "Testing connection",
-    connected: "Connected",
-    preview: "Loading preview",
-    select_teams: "Select teams",
-    importing: "Importing",
-    done: "Complete",
-  };
-
-  const stepOrder: ChMSStep[] = ["select", "connect", "connected", "select_teams", "done"];
-  const currentStepIdx = stepOrder.indexOf(
-    step === "testing" ? "connect" : step === "preview" ? "select_teams" : step === "importing" ? "done" : step,
-  );
-
-  return (
-    <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <PanelHeader
-        title="Import from ChMS"
-        subtitle="One-time import from your church management system. Your existing data will not be affected."
-        onClose={step === "importing" ? () => {} : onCancel}
-      />
-
-      {/* Step indicator */}
-      {step !== "select" && (
-        <div className="mb-6 flex items-center gap-2">
-          {stepOrder.map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              {i > 0 && <div className={`h-px w-6 ${i <= currentStepIdx ? "bg-vc-coral" : "bg-vc-border-light"}`} />}
-              <div
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                  i < currentStepIdx
-                    ? "bg-vc-sage text-white"
-                    : i === currentStepIdx
-                      ? "bg-vc-coral text-white"
-                      : "bg-vc-bg-warm text-vc-text-muted"
-                }`}
-              >
-                {i < currentStepIdx ? (
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span className={`text-xs font-medium ${i === currentStepIdx ? "text-vc-indigo" : "text-vc-text-muted"}`}>
-                {STEP_LABELS[s]}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Select Provider */}
-      {step === "select" && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {INTEGRATIONS.map((config) => (
-            <button
-              key={config.provider}
-              onClick={() => selectProvider(config)}
-              className="group rounded-xl border border-vc-border-light bg-vc-bg/50 p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/[0.03] hover:border-vc-coral/40"
-            >
-              <ProviderIcon provider={config.provider} />
-              <h3 className="mt-3 font-semibold text-vc-indigo">{config.label}</h3>
-              <p className="mt-1 text-sm text-vc-text-secondary">{config.description}</p>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Enter Credentials */}
-      {(step === "connect" || step === "testing") && selectedProvider && (
-        <div className="max-w-lg">
-          <div className="flex items-center gap-3 mb-4">
-            <ProviderIcon provider={selectedProvider.provider} />
-            <div>
-              <h3 className="font-semibold text-vc-indigo">{selectedProvider.label}</h3>
-              <p className="text-xs text-vc-text-muted">Credentials are stored securely and only used for importing.</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {selectedProvider.authFields.map((field) => (
-              <div key={field.key}>
-                <label className="mb-1.5 block text-sm font-medium text-vc-text">
-                  {field.label}
-                  {field.required && <span className="text-vc-coral ml-0.5">*</span>}
-                </label>
-                <input
-                  type={field.type}
-                  placeholder={field.placeholder}
-                  required={field.required}
-                  value={credentials[field.key] || ""}
-                  onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-base text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-                />
-              </div>
-            ))}
-          </div>
-          {error && <div className="mt-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={startOver}>Back</Button>
-            <Button
-              onClick={testConnection}
-              loading={step === "testing"}
-              disabled={selectedProvider.authFields.some((f) => f.required && !credentials[f.key]?.trim())}
-            >
-              Test Connection
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Connected — load preview */}
-      {step === "connected" && selectedProvider && (
-        <div className="max-w-lg">
-          <div className="flex items-center gap-3 rounded-lg bg-vc-sage/10 px-4 py-3 mb-4">
-            <svg className="h-5 w-5 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-vc-sage">Connected to {selectedProvider.label}</p>
-              <p className="text-xs text-vc-text-muted">Next, preview your teams and choose which ones to import.</p>
-            </div>
-          </div>
-          {error && <div className="mb-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={startOver}>Back</Button>
-            <Button onClick={runPreview}>Preview Teams</Button>
-          </div>
-        </div>
-      )}
-
-      {/* Loading preview */}
-      {step === "preview" && (
-        <div className="max-w-lg text-center py-8">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
-          <h3 className="font-semibold text-vc-indigo">Loading teams from {selectedProvider?.label}...</h3>
-        </div>
-      )}
-
-      {/* Select teams */}
-      {step === "select_teams" && selectedProvider && (
-        <div className="max-w-lg">
-          <div className="mb-4 rounded-lg bg-vc-bg-warm px-4 py-3">
-            <p className="text-sm font-medium text-vc-indigo">
-              Found {previewPeopleCount} people in {previewTeams.length} team{previewTeams.length !== 1 ? "s" : ""}
-            </p>
-            <p className="text-xs text-vc-text-muted mt-0.5">
-              Select teams to import. People will be added to your review queue for approval before invites are sent.
-            </p>
-          </div>
-
-          <div className="space-y-1 mb-4">
-            <label className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-vc-bg-warm transition-colors cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selectAllTeams}
-                onChange={(e) => {
-                  setSelectAllTeams(e.target.checked);
-                  setSelectedTeamIds(e.target.checked ? previewTeams.map((t) => t.id) : []);
-                }}
-                className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-              />
-              <span className="text-sm font-medium text-vc-indigo">All Teams</span>
-              <span className="ml-auto text-xs text-vc-text-muted">{previewPeopleCount} people</span>
-            </label>
-            <div className="my-1 border-t border-vc-border-light" />
-            {previewTeams.map((team) => (
-              <label key={team.id} className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-vc-bg-warm transition-colors cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectAllTeams || selectedTeamIds.includes(team.id)}
-                  disabled={selectAllTeams}
-                  onChange={(e) => {
-                    setSelectedTeamIds((prev) =>
-                      e.target.checked ? [...prev, team.id] : prev.filter((id) => id !== team.id),
-                    );
-                  }}
-                  className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                />
-                <span className="text-sm text-vc-text-secondary">{team.name}</span>
-                <span className="ml-auto text-xs text-vc-text-muted">{team.member_count} people</span>
-              </label>
-            ))}
-          </div>
-
-          {error && <div className="mb-3 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">{error}</div>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setStep("connected")}>Back</Button>
-            <Button
-              onClick={runImportToQueue}
-              disabled={!selectAllTeams && selectedTeamIds.length === 0}
-            >
-              Import to Review Queue
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Importing */}
-      {step === "importing" && (
-        <div className="max-w-lg text-center py-8">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-vc-coral/20 border-t-vc-coral" />
-          <h3 className="font-semibold text-vc-indigo">Importing from {selectedProvider?.label}...</h3>
-          <p className="mt-1 text-sm text-vc-text-secondary">
-            This may take a minute for large organizations.
-          </p>
-        </div>
-      )}
-
-      {/* Done */}
-      {step === "done" && importStats && (
-        <div className="max-w-lg">
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard label="People found" value={importStats.total_people} />
-            <StatCard label="Added to queue" value={importStats.queued} />
-            <StatCard label="Teams selected" value={importStats.teams_selected} />
-          </div>
-          <div className="mt-3 rounded-lg bg-vc-sage/10 px-4 py-3">
-            <p className="text-sm font-medium text-vc-sage">
-              {importStats.queued} people added to the review queue.
-            </p>
-            <p className="text-xs text-vc-text-muted mt-0.5">
-              Review and approve them on the People page, then send invites.
-            </p>
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={startOver}>Import from another source</Button>
-            <Button onClick={onDone}>Done</Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Invite Form (for Invites tab)
@@ -2138,310 +1352,4 @@ function MemberRow({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Invite Queue Review Panel
-// ---------------------------------------------------------------------------
 
-function InviteQueuePanel({
-  churchId,
-  user,
-  items,
-  ministries,
-  onClose,
-  onRefresh,
-}: {
-  churchId: string;
-  user: ReturnType<typeof useAuth>["user"];
-  items: InviteQueueItem[];
-  ministries: Ministry[];
-  onClose: () => void;
-  onRefresh: () => void;
-}) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [localItems, setLocalItems] = useState(items);
-  const [sending, setSending] = useState(false);
-  const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; total: number } | null>(null);
-
-  useEffect(() => { setLocalItems(items); }, [items]);
-
-  const pendingReview = localItems.filter((i) => i.status === "pending_review");
-  const approved = localItems.filter((i) => i.status === "approved");
-
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  function selectAll() {
-    if (selected.size === pendingReview.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(pendingReview.map((i) => i.id)));
-    }
-  }
-
-  async function bulkUpdateStatus(ids: string[], status: "approved" | "skipped") {
-    for (const id of ids) {
-      try {
-        await updateChurchDocument(churchId, "invite_queue", id, {
-          status,
-          reviewed_by: user?.uid || null,
-          reviewed_at: new Date().toISOString(),
-        });
-      } catch { /* best effort */ }
-    }
-    setLocalItems((prev) =>
-      prev.map((i) => ids.includes(i.id) ? { ...i, status } : i),
-    );
-    setSelected(new Set());
-  }
-
-  function handleApproveSelected() {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
-    bulkUpdateStatus(ids, "approved");
-  }
-
-  function handleSkipSelected() {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
-    bulkUpdateStatus(ids, "skipped");
-  }
-
-  async function handleSendApproved() {
-    const approvedIds = approved.map((i) => i.id);
-    if (approvedIds.length === 0) return;
-    setSending(true);
-    setSendProgress({ sent: 0, failed: 0, total: approvedIds.length });
-    try {
-      const token = await getAuth().currentUser?.getIdToken();
-      const res = await fetch("/api/invite/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ church_id: churchId, queue_item_ids: approvedIds }),
-      });
-      const data = await res.json();
-      setSendProgress({ sent: data.sent || 0, failed: data.failed || 0, total: approvedIds.length });
-      onRefresh();
-    } catch {
-      setSendProgress((prev) => prev ? { ...prev, failed: prev.total } : null);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function handleEditRole(id: string, newRole: OrgRole) {
-    updateChurchDocument(churchId, "invite_queue", id, { role: newRole });
-    setLocalItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, role: newRole } : i)),
-    );
-  }
-
-  return (
-    <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-      <PanelHeader
-        title="Review Import Queue"
-        subtitle={`${pendingReview.length} pending review · ${approved.length} approved`}
-        onClose={onClose}
-      />
-
-      {sendProgress && !sending && (
-        <div className="mb-4 rounded-lg bg-vc-sage/10 px-4 py-3">
-          <p className="text-sm font-medium text-vc-sage">
-            {sendProgress.sent} invite{sendProgress.sent !== 1 ? "s" : ""} sent
-            {sendProgress.failed > 0 && (
-              <span className="text-vc-danger"> · {sendProgress.failed} failed</span>
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Bulk actions */}
-      {pendingReview.length > 0 && (
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <button
-            onClick={selectAll}
-            className="rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
-          >
-            {selected.size === pendingReview.length ? "Deselect All" : "Select All"}
-          </button>
-          {selected.size > 0 && (
-            <>
-              <span className="text-xs text-vc-text-muted">{selected.size} selected</span>
-              <button
-                onClick={handleApproveSelected}
-                className="rounded-lg bg-vc-sage/15 px-3 py-1.5 text-xs font-medium text-vc-sage hover:bg-vc-sage/25 transition-colors"
-              >
-                Approve
-              </button>
-              <button
-                onClick={handleSkipSelected}
-                className="rounded-lg bg-vc-bg-cream px-3 py-1.5 text-xs font-medium text-vc-text-muted hover:bg-vc-bg-warm transition-colors"
-              >
-                Skip
-              </button>
-            </>
-          )}
-          {approved.length > 0 && (
-            <div className="ml-auto">
-              <Button onClick={handleSendApproved} loading={sending}>
-                Send {approved.length} Invite{approved.length !== 1 ? "s" : ""}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Only approved, no pending */}
-      {pendingReview.length === 0 && approved.length > 0 && (
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-vc-text-secondary">All items reviewed. Ready to send invites.</p>
-          <Button onClick={handleSendApproved} loading={sending}>
-            Send {approved.length} Invite{approved.length !== 1 ? "s" : ""}
-          </Button>
-        </div>
-      )}
-
-      {/* Sending progress */}
-      {sending && sendProgress && (
-        <div className="mb-4 rounded-lg bg-vc-bg-warm px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral/20 border-t-vc-coral" />
-            <p className="text-sm font-medium text-vc-indigo">
-              Sending invites... {sendProgress.sent + sendProgress.failed} of {sendProgress.total}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Queue table */}
-      {localItems.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-vc-border-light">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-vc-border-light bg-vc-bg-warm/50">
-                <th className="w-10 px-3 py-2" />
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Name</th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Email</th>
-                <th className="hidden px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted sm:table-cell">Phone</th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Source</th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Role</th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-vc-border-light">
-              {localItems.map((item) => (
-                <tr key={item.id} className="hover:bg-vc-bg-warm/30 transition-colors">
-                  <td className="px-3 py-2">
-                    {item.status === "pending_review" && (
-                      <input
-                        type="checkbox"
-                        checked={selected.has(item.id)}
-                        onChange={() => toggleSelect(item.id)}
-                        className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                      />
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-vc-indigo">{item.name || "\u2014"}</td>
-                  <td className="px-3 py-2 text-vc-text-secondary">{item.email || "\u2014"}</td>
-                  <td className="hidden px-3 py-2 text-vc-text-secondary sm:table-cell">{formatPhone(item.phone)}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center rounded-full bg-vc-bg-warm px-2 py-0.5 text-xs font-medium text-vc-text-secondary">
-                      {item.source === "csv" ? "CSV" : item.source === "chms" ? (item.source_provider || "ChMS") : "Manual"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={item.role}
-                      onChange={(e) => handleEditRole(item.id, e.target.value as OrgRole)}
-                      disabled={item.status !== "pending_review" && item.status !== "approved"}
-                      className="rounded-lg border border-vc-border bg-white px-2 py-1 text-xs text-vc-text-secondary focus:border-vc-coral focus:outline-none"
-                    >
-                      <option value="volunteer">Volunteer</option>
-                      <option value="scheduler">Scheduler</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </td>
-                  <td className="px-3 py-2">
-                    {item.status === "pending_review" && (
-                      <span className="inline-flex items-center rounded-full bg-vc-sand/30 px-2 py-0.5 text-xs font-medium text-vc-sand">
-                        Pending
-                      </span>
-                    )}
-                    {item.status === "approved" && (
-                      <span className="inline-flex items-center rounded-full bg-vc-sage/15 px-2 py-0.5 text-xs font-medium text-vc-sage">
-                        Approved
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-vc-border-light bg-white p-8 text-center">
-          <p className="text-vc-text-muted">Queue is empty. Import people from CSV or a ChMS to get started.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Phone formatting
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-vc-bg-warm p-3 text-center">
-      <p className="text-2xl font-semibold text-vc-indigo">{value}</p>
-      <p className="text-xs text-vc-text-muted">{label}</p>
-    </div>
-  );
-}
-
-function ProviderIcon({ provider }: { provider: IntegrationProvider }) {
-  const colors: Record<IntegrationProvider, string> = {
-    planning_center: "bg-vc-indigo/10 text-vc-indigo",
-    breeze: "bg-vc-coral/10 text-vc-coral",
-    rock_rms: "bg-vc-sage/10 text-vc-sage",
-  };
-
-  return (
-    <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${colors[provider]}`}>
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-      </svg>
-    </div>
-  );
-}
-
-/** Parse a single CSV line handling quoted fields */
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  result.push(current);
-  return result;
-}

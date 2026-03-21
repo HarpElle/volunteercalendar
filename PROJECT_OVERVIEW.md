@@ -74,6 +74,8 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Schedule list, generate draft, matrix view, CSV/PDF export
 │   │   │   ├── scheduling-dashboard/
 │   │   │   │   └── page.tsx        # Scheduling ops dashboard (stats, rosters, attendance)
+│   │   │   ├── my-journey/
+│   │   │   │   └── page.tsx        # Volunteer prerequisite progress (org-wide + per-ministry steps)
 │   │   │   ├── my-schedule/
 │   │   │   │   └── page.tsx        # Volunteer view (Upcoming | Past | Availability | Team tabs)
 │   │   │   ├── my-orgs/
@@ -191,7 +193,8 @@ VolunteerCal/
 │   │           └── webhook/
 │   │               └── route.ts    # Stripe webhook handler
 │   ├── components/
-│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete
+│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, drawer, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete, select
+│   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal, ministry-form-modal, campus-form-modal, create-schedule-modal, volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
 │   │   └── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal

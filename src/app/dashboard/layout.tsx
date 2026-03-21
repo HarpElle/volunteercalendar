@@ -26,7 +26,7 @@ interface NavSection {
   gate?: (m: Membership | null) => boolean;
 }
 
-function getNavSections(): NavSection[] {
+function getNavSections(hasPrereqs: boolean): NavSection[] {
   return [
     {
       label: null,
@@ -40,6 +40,16 @@ function getNavSections(): NavSection[] {
             </svg>
           ),
           gate: (m) => isAdmin(m),
+        },
+        {
+          label: "My Journey",
+          href: "/dashboard/my-journey",
+          icon: (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
+            </svg>
+          ),
+          gate: () => hasPrereqs,
         },
         {
           label: "My Schedule",
@@ -166,6 +176,7 @@ export default function DashboardLayout({
   const [churchName, setChurchName] = useState<string>("");
   const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map());
   const [showGuideDot, setShowGuideDot] = useState(false);
+  const [hasPrerequisites, setHasPrerequisites] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const orgMenuRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +198,8 @@ export default function DashboardLayout({
         const data = snap.data();
         setOrgType((data.org_type as OrgType) || "church");
         setChurchName(data.name || "");
+        const orgPrereqs: unknown[] = data.org_prerequisites || [];
+        setHasPrerequisites(orgPrereqs.length > 0);
       }
     }).catch(() => {});
   }, [churchId]);
@@ -230,7 +243,7 @@ export default function DashboardLayout({
     }
   }, [userMenuOpen, orgMenuOpen]);
 
-  const navSections = getNavSections();
+  const navSections = getNavSections(hasPrerequisites);
 
   // Filter sections: hide sections where the gate fails or all items are gated out
   const visibleSections = navSections

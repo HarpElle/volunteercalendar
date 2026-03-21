@@ -1,9 +1,8 @@
 /**
  * Event invite email — sent when a volunteer is invited to sign up for an event.
  *
- * NOTE: This template uses a unique layout (DM Sans/DM Serif fonts, different
- * color scheme with #2C2E5A and #E07A5F, logo outside the card). It does NOT
- * use wrapInLayout — the HTML is self-contained.
+ * NOTE: This template uses a unique layout (DM Sans/DM Serif fonts, logo
+ * outside the card). It does NOT use wrapInLayout — the HTML is self-contained.
  */
 
 export interface EventInviteData {
@@ -42,7 +41,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
           <!-- Logo -->
           <tr>
             <td style="padding:0 0 32px;">
-              <span style="font-family:'DM Sans',Arial,sans-serif;font-size:22px;font-weight:700;color:#2C2E5A;">Volunteer</span><span style="font-family:'DM Sans',Arial,sans-serif;font-size:22px;font-weight:700;color:#E07A5F;">Cal</span>
+              <span style="font-family:'DM Sans',Arial,sans-serif;font-size:22px;font-weight:700;color:#2D2B55;">Volunteer</span><span style="font-family:'DM Sans',Arial,sans-serif;font-size:22px;font-weight:700;color:#E87461;">Cal</span>
             </td>
           </tr>
           <!-- Card -->
@@ -58,7 +57,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
                 </tr>
                 <tr>
                   <td style="padding:0 0 24px;">
-                    <h1 style="margin:0;font-family:'DM Serif Display',Georgia,serif;font-size:28px;font-weight:400;color:#2C2E5A;line-height:1.3;">
+                    <h1 style="margin:0;font-family:'DM Serif Display',Georgia,serif;font-size:28px;font-weight:400;color:#2D2B55;line-height:1.3;">
                       ${firstName}, you're invited!
                     </h1>
                   </td>
@@ -69,7 +68,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF7F0;border-radius:12px;border:1px solid #EDEDE9;">
                       <tr>
                         <td style="padding:24px;">
-                          <h2 style="margin:0 0 8px;font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;color:#2C2E5A;">
+                          <h2 style="margin:0 0 8px;font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;color:#2D2B55;">
                             ${data.eventName}
                           </h2>
                           <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#6B6D8A;">
@@ -90,7 +89,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
                 </tr>
                 <tr>
                   <td align="center" style="padding:0 0 16px;">
-                    <a href="${data.signupUrl}" style="display:inline-block;background-color:#E07A5F;color:#FFFFFF;font-family:'DM Sans',Arial,sans-serif;font-size:16px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:10px;">
+                    <a href="${data.signupUrl}" style="display:inline-block;background-color:#E87461;color:#FFFFFF;font-family:'DM Sans',Arial,sans-serif;font-size:16px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:10px;">
                       View Event &amp; Sign Up
                     </a>
                   </td>
@@ -102,7 +101,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
           <tr>
             <td style="padding:32px 0 0;text-align:center;">
               <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#9A9BB5;">
-                Sent by VolunteerCal on behalf of ${data.churchName}
+                Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> on behalf of ${data.churchName}
               </p>
             </td>
           </tr>

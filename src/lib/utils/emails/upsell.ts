@@ -77,7 +77,7 @@ export function buildUpsellEmail(data: UpsellData): {
   const html = wrapInLayout({
     headerText: nearLimit ? "You're Getting Close" : "Room to Grow",
     body,
-    footerHtml: `Sent by <span style="color:#E87461;">VolunteerCal</span> \u00b7 Thoughtfully built by HarpElle`,
+    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `${subject}

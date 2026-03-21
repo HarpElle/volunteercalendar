@@ -34,7 +34,7 @@ export function wrapInLayout(opts: LayoutOptions): string {
 
   const footer =
     opts.footerHtml ??
-    `<span style="color:#E87461;">VolunteerCal</span> &middot; Thoughtfully built by HarpElle`;
+    `<span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> &middot; Thoughtfully built by HarpElle`;
 
   return `<!DOCTYPE html>
 <html>
@@ -124,7 +124,7 @@ export function mutedCenter(text: string): string {
 
 /** "On behalf of" footer for org-scoped emails. */
 export function onBehalfFooter(churchName: string): string {
-  return `Sent by <span style="color:#E87461;">VolunteerCal</span> on behalf of ${churchName}`;
+  return `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> on behalf of ${churchName}`;
 }
 
 /**

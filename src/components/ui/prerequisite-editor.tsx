@@ -2,6 +2,13 @@
 
 import type { OnboardingStep, OnboardingStepType } from "@/lib/types";
 
+const PRESETS: { type: OnboardingStepType; label: string; threshold?: number }[] = [
+  { type: "class", label: "Attend orientation class" },
+  { type: "shadow", label: "Shadow a team member (1 service)" },
+  { type: "background_check", label: "Complete background check" },
+  { type: "minimum_service", label: "Serve 3 times in entry-level role", threshold: 3 },
+];
+
 interface PrerequisiteEditorProps {
   prerequisites: OnboardingStep[];
   onChange: (updated: OnboardingStep[]) => void;
@@ -30,6 +37,10 @@ export function PrerequisiteEditor({
     onChange(prerequisites.filter((_, i) => i !== idx));
   }
 
+  const availablePresets = PRESETS.filter(
+    (preset) => !prerequisites.some((p) => p.label === preset.label),
+  );
+
   return (
     <div className="rounded-lg border border-vc-border-light bg-vc-bg-warm/30 p-3 space-y-3">
       <div className="flex items-center justify-between">
@@ -47,6 +58,38 @@ export function PrerequisiteEditor({
           No prerequisites — all volunteers can serve immediately.
         </p>
       )}
+      {prerequisites.length < 5 && availablePresets.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+            Quick Add
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {availablePresets.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() =>
+                  onChange([
+                    ...prerequisites,
+                    {
+                      id: crypto.randomUUID(),
+                      label: preset.label,
+                      type: preset.type,
+                      ...(preset.threshold ? { threshold: preset.threshold } : {}),
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1 rounded-lg border border-dashed border-vc-border px-2.5 py-1.5 text-xs text-vc-text-muted hover:border-vc-coral hover:text-vc-coral transition-colors min-h-[44px]"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {prerequisites.map((prereq, idx) => (
         <div key={prereq.id} className="flex items-center gap-2">
           <select
@@ -60,6 +103,7 @@ export function PrerequisiteEditor({
             <option value="background_check">Background Check</option>
             <option value="minimum_service">Min. Service Count</option>
             <option value="ministry_tenure">Ministry Tenure</option>
+            <option value="shadow">Shadow / Observe</option>
             <option value="custom">Custom</option>
           </select>
           <input

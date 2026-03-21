@@ -158,6 +158,7 @@ export type OnboardingStepType =
   | "background_check"   // cleared background check
   | "minimum_service"    // served X times in another ministry
   | "ministry_tenure"    // active in a prerequisite ministry for N days
+  | "shadow"             // shadow a team member before serving independently
   | "custom";            // admin-defined freeform requirement
 
 export interface OnboardingStep {

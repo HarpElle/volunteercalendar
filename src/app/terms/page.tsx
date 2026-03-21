@@ -132,7 +132,7 @@ export default function TermsOfServicePage() {
               Billing and Subscriptions
             </h2>
             <p className="mt-3">
-              VolunteerCal offers subscription-based pricing tiers. Payment is
+              VolunteerCal offers subscription-based pricing plans. Payment is
               processed securely through Stripe.
             </p>
             <ul className="mt-3 list-disc space-y-2 pl-6">
