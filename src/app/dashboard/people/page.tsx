@@ -121,78 +121,31 @@ function PeopleContent() {
     if (!churchId) return;
     async function load() {
       try {
-        // Fetch memberships via server-side API (Admin SDK bypasses Firestore
-        // security-rule limitations on collection-level queries)
+        // Fetch ALL People page data via server-side API (Admin SDK bypasses
+        // Firestore security-rule limitations on client-side queries)
         const token = await getAuth().currentUser?.getIdToken();
-        const memsRes = await fetch(`/api/memberships?church_id=${encodeURIComponent(churchId!)}`, {
+        const res = await fetch(`/api/people-data?church_id=${encodeURIComponent(churchId!)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const mems: Membership[] = memsRes.ok ? await memsRes.json() : [];
-
-        const [vols, mins, svcs, hh, churchSnap] = await Promise.all([
-          getChurchDocuments(churchId!, "volunteers"),
-          getChurchDocuments(churchId!, "ministries"),
-          getChurchDocuments(churchId!, "services"),
-          getChurchDocuments(churchId!, "households"),
-          getDoc(doc(db, "churches", churchId!)),
-        ]);
-        setVolunteers(vols as unknown as Volunteer[]);
-        setMinistries(mins as unknown as Ministry[]);
-        setServices(svcs as unknown as Service[]);
-        setHouseholds(hh as unknown as Household[]);
-        setMemberships(mems);
-        if (churchSnap.exists()) {
-          setChurchName(churchSnap.data().name || "");
-          setChurchTier(churchSnap.data().subscription_tier || "free");
-          setOrgType(churchSnap.data().org_type as OrgType);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `API returned ${res.status}`);
         }
-        // Load invite queue
-        const qItems = await getChurchDocuments(churchId!, "invite_queue") as unknown as InviteQueueItem[];
-        setQueueItems(qItems.filter((i) => i.status === "pending_review" || i.status === "approved"));
-
-        // Auto-sync: ensure active members have volunteer records on the roster
-        const volsByEmail = new Set((vols as unknown as Volunteer[]).map((v) => v.email?.toLowerCase()));
-        const volsByUserId = new Set((vols as unknown as Volunteer[]).map((v) => v.user_id).filter(Boolean));
-        const missingMembers = mems.filter(
-          (m) => m.status === "active" && m.user_id && !volsByUserId.has(m.user_id),
+        const data = await res.json();
+        setVolunteers(data.volunteers as Volunteer[]);
+        setMinistries(data.ministries as Ministry[]);
+        setServices(data.services as Service[]);
+        setHouseholds(data.households as Household[]);
+        setMemberships(data.memberships as Membership[]);
+        setQueueItems(
+          (data.queueItems as InviteQueueItem[]).filter(
+            (i) => i.status === "pending_review" || i.status === "approved",
+          ),
         );
-        for (const mem of missingMembers) {
-          const memUser = await getDoc(doc(db, "users", mem.user_id));
-          const memEmail = memUser?.data()?.email?.toLowerCase() || "";
-          if (volsByEmail.has(memEmail)) continue; // already on roster by email
-          const now = new Date().toISOString();
-          const volData = {
-            church_id: churchId!,
-            name: memUser?.data()?.display_name || memEmail || "Member",
-            email: memUser?.data()?.email || "",
-            phone: memUser?.data()?.phone || null,
-            user_id: mem.user_id,
-            membership_id: mem.id,
-            status: "active" as const,
-            ministry_ids: [] as string[],
-            role_ids: [] as string[],
-            campus_ids: [] as string[],
-            household_id: null,
-            availability: {
-              blockout_dates: [] as string[],
-              recurring_unavailable: [] as string[],
-              preferred_frequency: 2,
-              max_roles_per_month: 8,
-            },
-            reminder_preferences: { channels: ["email" as const] },
-            stats: {
-              times_scheduled_last_90d: 0,
-              last_served_date: null,
-              decline_count: 0,
-              no_show_count: 0,
-            },
-            imported_from: null,
-            created_at: now,
-          };
-          const newRef = await addChurchDocument(churchId!, "volunteers", volData);
-          setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Volunteer]);
-          volsByEmail.add(memEmail);
-          volsByUserId.add(mem.user_id);
+        if (data.church) {
+          setChurchName(data.church.name || "");
+          setChurchTier(data.church.subscription_tier || "free");
+          setOrgType(data.church.org_type as OrgType);
         }
       } catch (err) {
         console.error("[People] Failed to load:", err);
