@@ -70,7 +70,8 @@ export default function PlansPage() {
           throw new Error(`Failed to load service plans (${plansRes.status})`);
         }
 
-        const plansData: ServicePlan[] = await plansRes.json();
+        const plansJson = await plansRes.json();
+        const plansData: ServicePlan[] = Array.isArray(plansJson) ? plansJson : plansJson.plans ?? [];
 
         if (!cancelled) {
           setPlans(plansData);
