@@ -1,4 +1,30 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "song_usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "church_id", "order": "ASCENDING" },
+        { "fieldPath": "service_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "in_rotation", "order": "ASCENDING" },
+        { "fieldPath": "last_used_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "service_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "service_id", "order": "ASCENDING" },
+        { "fieldPath": "service_date", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

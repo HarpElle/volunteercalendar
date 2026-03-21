@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 complete. Expansion: scheduling enhancements + worship module. |
+| **Status** | Phase 32 + Expansion Phases 4–6 complete. All expansion phases done. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -97,6 +97,15 @@ VolunteerCal/
 │   │   │   │   │   └── page.tsx    # Service plans list (upcoming, create, navigate to editor)
 │   │   │   │   └── reports/
 │   │   │   │       └── page.tsx    # Song usage reports (CCLI compliance)
+│   │   ├── stage-sync/
+│   │   │   ├── conductor/
+│   │   │   │   └── [churchId]/
+│   │   │   │       └── [planId]/
+│   │   │   │           └── page.tsx    # Stage Sync conductor view (advance items, keyboard shortcuts)
+│   │   │   └── view/
+│   │   │       └── [churchId]/
+│   │   │           └── [planId]/
+│   │   │               └── page.tsx    # Stage Sync participant view (real-time follow-along)
 │   │   ├── check-in/
 │   │   │   └── [code]/
 │   │   │       └── page.tsx        # QR code self-check-in (auto-redirect on success)
@@ -157,8 +166,12 @@ VolunteerCal/
 │   │       ├── reminders/
 │   │       │   └── route.ts    # Scheduled reminder API (48h/24h, email + SMS)
 │   │       ├── cron/
-│   │       │   └── reminders/
-│   │       │       └── route.ts    # Vercel Cron → triggers reminders for all churches
+│   │       │   ├── reminders/
+│   │       │   │   └── route.ts    # Vercel Cron → triggers reminders for all churches
+│   │       │   ├── songselect-sync/
+│   │       │   │   └── route.ts    # Vercel Cron → weekly SongSelect metadata sync
+│   │       │   └── propresenter-export/
+│   │       │       └── route.ts    # Vercel Cron → daily ProPresenter export auto-email
 │   │       ├── short-links/
 │   │       │   ├── route.ts        # Short links CRUD API (GET list, POST create, DELETE)
 │   │       │   └── check/
@@ -213,8 +226,29 @@ VolunteerCal/
 │   │       │   ├── route.ts        # Service plan CRUD (POST create, GET list)
 │   │       │   └── [id]/
 │   │       │       ├── route.ts    # Plan update/delete (PATCH items, DELETE)
-│   │       │       └── publish/
-│   │       │           └── route.ts    # Publish plan + create song usage records
+│   │       │       ├── publish/
+│   │       │       │   └── route.ts    # Publish plan + create song usage records
+│   │       │       └── export-propresenter/
+│   │       │           └── route.ts    # ProPresenter JSON export for a plan
+│   │       ├── songselect/
+│   │       │   ├── connect/
+│   │       │   │   └── route.ts    # Connect SongSelect credentials
+│   │       │   ├── search/
+│   │       │   │   └── route.ts    # Search SongSelect catalog
+│   │       │   └── import/
+│   │       │       └── route.ts    # Import song from SongSelect with duplicate detection
+│   │       ├── stage-sync/
+│   │       │   ├── enable/
+│   │       │   │   └── route.ts    # Enable Stage Sync session for a service plan
+│   │       │   ├── advance/
+│   │       │   │   └── route.ts    # Advance current item in Stage Sync session
+│   │       │   └── status/
+│   │       │       └── route.ts    # Get Stage Sync session status
+│   │       ├── reports/
+│   │       │   └── song-usage/
+│   │       │       ├── route.ts    # Song usage report with date range/filters
+│   │       │       └── export/
+│   │       │           └── route.ts    # CSV export of song usage data
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -228,7 +262,7 @@ VolunteerCal/
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
-│   │   └── worship/            # Song library table, song form modal, service plan editor (future), Stage Sync conductor/viewer (future)
+│   │   └── worship/            # Song library table, song form modal, service plan editor, songselect-import-modal, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
@@ -237,10 +271,10 @@ VolunteerCal/
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts
-│       │   ├── emails/         # 30 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict)
+│       │   ├── emails/         # 31 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
-│       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
+│       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect
 │       └── services/           # Scheduling algorithm, auto-reschedule, SMS service
 ```
 
@@ -283,3 +317,6 @@ VolunteerCal/
 | 30 | Attendance enhancement, absence alerts & scheduler notifications: AttendanceStatus type overhaul (boolean→string enum: present/no_show/excused/null with backward-compat normalizer), shared AttendanceToggle component extracted from duplicate inline toggles, four-state toggle cycle (null→present→no_show→excused→null), "Roster & Attendance" button rename, layout shift fixes (reserved stats bar + save button space), "Can't Make It" volunteer self-service absence notification (modal + API + email template + SMS for paid tiers), scheduler/admin granular notification preferences (per-type toggles, standard/urgent channel selection, ministry scope, SMS tier-gated to Starter+), shouldNotifyScheduler utility wired into absence + self-removal API routes | Complete |
 | 31 | UI/UX consistency audit: modal close button touch target fix (28px→45px), confirm dialog buttons sm→md, Card tappable variant (hover-lift + active-press), Organization page ministry/campus cards converted from hover-reveal to tappable card pattern (chevron affordance, keyboard accessible, delete moved into edit form), check-in number inputs right-sized (max-w-[120px]), People page roster Edit/Delete + Approve/Reject touch targets to 44px minimum, My Orgs page Accept/Decline/Switch/reminder toggle touch targets to 44px, schedules page hover-reveal actions made always-visible, dashboard sub-heading size standardization, zero hover-only interaction patterns remaining | Complete |
 | 32 | Expansion: scheduling enhancements + worship module — **Service profiles with timeline changes** (MinistryAssignment with effective_from/effective_until, EditScope, temporal filtering in service-helpers/scheduler, validate-ministry-assignments utility, service PATCH API, service form effective-from UI), **Scheduling workflow modes** (step-based create-schedule wizard, workflow mode picker, all 3 modes active), **Availability campaigns** (broadcast API, availability-campaign-banner, email template), **Multi-stage approval** (approve/publish/coordination APIs, approval-countdown component, cross-team-modal, approval-request + approval-reminder email templates), **Household UI** (household-form-modal, household-conflict-card, Families tab on People page, never_same_time + prefer_same_service scheduler enhancements), **Worship module** (Song/ServicePlan/SongUsageRecord/StageSyncState types, song CRUD API, service-plans CRUD + publish API with song usage tracking, Songs page, Service Plans page, Reports page, worship nav section gated by tier), **Pricing update** (Starter $19→$29, Growth $49→$69, Pro $99→$119, new tier gates: worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting) | Complete |
+| Exp. 4 | SongSelect integration — songselect adapter (src/lib/integrations/songselect.ts), connect/search/import API routes (src/app/api/songselect/), SongSelect import modal (src/components/worship/songselect-import-modal.tsx), duplicate detection by CCLI number, weekly cron sync (src/app/api/cron/songselect-sync/) | Complete |
+| Exp. 5 | Stage Sync — conductor page (src/app/stage-sync/conductor/[churchId]/[planId]/), participant page (src/app/stage-sync/view/[churchId]/[planId]/), enable/advance/status API routes (src/app/api/stage-sync/), conductor component with keyboard shortcuts, participant viewer with real-time Firestore onSnapshot, share modal with QR code, Firestore rules for stage_sync_live and stage_sync_tokens collections | Complete |
+| Exp. 6 | Song usage reports & ProPresenter export — reports page with date range/filters/CSV export (src/app/api/reports/song-usage/), ProPresenter JSON export API (src/app/api/service-plans/[id]/export-propresenter/), daily auto-email cron (src/app/api/cron/propresenter-export/), propresenter-export email template, Firestore composite indexes for song_usage, songs, and service_plans | Complete |

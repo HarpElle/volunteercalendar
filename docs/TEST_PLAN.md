@@ -2,7 +2,7 @@
 
 A reusable checklist for verifying full app functionality. Reset checkboxes each time you run through the plan.
 
-**Time estimates:** Critical Path ~30 min | Full Suite ~3 hours | Post-Deploy Smoke ~5 min
+**Time estimates:** Critical Path ~30 min | Full Suite ~3.5 hours | Post-Deploy Smoke ~5 min
 
 ---
 
@@ -433,6 +433,42 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Song usage tracked** — After publishing, song's use_count incremented and last_used_date updated
 - [ ] **Delete unpublished** — Delete a draft plan → plan removed
 - [ ] **Cannot delete published** — Published plan delete button disabled or warns
+
+### W. SongSelect Integration (~10 min)
+
+> **Requires Growth tier or above.** SongSelect credentials from your CCLI account.
+
+- [ ] **Connect SongSelect** — Worship → Songs → "Connect SongSelect" → enter CCLI credentials → save → "Connected" confirmation shown
+- [ ] **Search songs** — With SongSelect connected, use "Import from SongSelect" → type a song title → results appear from SongSelect catalog
+- [ ] **Import song** — Select a song from search results → click Import → song added to library with CCLI metadata pre-filled
+- [ ] **Duplicate detection** — Import the same song again → warning: "This song already exists in your library" → import blocked or flagged
+- [ ] **Imported song editable** — Open the imported song → all fields editable (key, tags, notes)
+- [ ] **Disconnect SongSelect** — Worship → Songs → "Disconnect SongSelect" → credentials removed → search no longer available
+- [ ] **Cron sync** — Verify `/api/cron/songselect-sync` endpoint returns 200 with valid cron secret → syncs updated metadata for previously imported songs
+
+### X. Stage Sync (~10 min)
+
+> **Requires Growth tier or above.** Best tested with two browser windows (conductor + participant).
+
+- [ ] **Enable session** — Open a published service plan → click "Start Stage Sync" → session enabled → share modal appears with QR code and URL
+- [ ] **Conductor view** — Open conductor page → current item highlighted → next/previous controls visible
+- [ ] **Participant view** — Open participant URL in second browser/device → current item displayed in large format
+- [ ] **Advance item** — Conductor clicks Next → participant view updates in real time to show the next item
+- [ ] **Keyboard shortcuts** — On conductor page: Right Arrow / Space = next, Left Arrow = previous → items advance correctly
+- [ ] **QR sharing** — Share modal QR code scans correctly on a phone → opens participant view
+- [ ] **Reconnection** — Participant: disconnect network briefly → reconnect → view resumes at current item (no stale state)
+
+### Y. Song Usage Reports & ProPresenter Export (~10 min)
+
+> **Requires Growth tier or above.** Publish at least one service plan with songs before testing.
+
+- [ ] **Reports page loads** — Worship → Reports → page loads with date range picker and song usage table
+- [ ] **Date range filter** — Select a custom date range → table updates to show only songs used within that period
+- [ ] **Aggregation correct** — Song use counts match the number of published plans containing each song in the selected range
+- [ ] **CSV export** — Click "Export CSV" → file downloads with song title, CCLI number, use count, and date columns
+- [ ] **ProPresenter export** — Service Plans → open a plan → click "Export for ProPresenter" → JSON file downloads with plan items in ProPresenter-compatible format
+- [ ] **Cron email** — Verify `/api/cron/propresenter-export` endpoint returns 200 with valid cron secret → sends email with export attachment to configured recipients
+- [ ] **Empty state** — Select a date range with no published plans → table shows "No song usage data for this period" (not a crash)
 
 ---
 

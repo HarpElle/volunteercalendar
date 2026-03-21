@@ -112,6 +112,26 @@ const featureGuides: { title: string; content: string }[] = [
     content:
       "The worship module (Growth tier and above) lets you manage songs and build service plans.\n\n**Song Library** — Navigate to Worship → Songs. Add songs with title, CCLI number, default key, available keys, artist/writer credits, copyright, tags, and lyrics. Filter by status (active, archived), rotation status, or search by title. Songs track usage count and last-used date automatically.\n\n**Service Plans** — Navigate to Worship → Service Plans. Create a plan for a specific service and date. Add items: songs (with key overrides), prayers, announcements, sermons, offerings, videos, or custom items. Reorder items with drag-and-drop. Add arrangement notes per item.\n\n**Publishing** — When you publish a plan, VolunteerCal automatically creates song usage records for CCLI compliance. Each song's use count and last-used date update in real time.\n\nThe Reports page (Worship → Reports) shows song usage over time for CCLI reporting.",
   },
+  {
+    title: "SongSelect Integration",
+    content:
+      "Connect your CCLI SongSelect account to import songs directly into your library.\n\n**Connecting** — Navigate to Worship → Songs and click \"Connect SongSelect.\" Enter your CCLI credentials and save. Once connected, the import option becomes available.\n\n**Searching & Importing** — Click \"Import from SongSelect\" to search the SongSelect catalog by title. Select a song from the results and click Import. The song is added to your library with CCLI metadata (number, publisher, copyright) pre-filled. All imported songs are fully editable — you can adjust keys, add tags, or update notes after import.\n\n**Duplicate Detection** — If you try to import a song that already exists in your library (matched by CCLI number), VolunteerCal flags it so you don't create duplicates.\n\n**Auto-Sync** — A weekly background sync checks for updated metadata on songs you've previously imported and keeps your library current. You don't need to do anything — it runs automatically.\n\n**Disconnecting** — To remove your SongSelect connection, click \"Disconnect SongSelect\" on the Songs page. Your imported songs remain in your library; only the connection is removed.",
+  },
+  {
+    title: "Stage Sync",
+    content:
+      "Stage Sync lets you broadcast your order of service in real time so your worship team can follow along on any device.\n\n**Starting a Session** — Open a published service plan and click \"Start Stage Sync.\" A share modal appears with a QR code and a direct URL. Share either with your team members.\n\n**Conductor View** — The conductor page shows your full order of service with the current item highlighted. Use the Next and Previous buttons to advance through the plan, or use keyboard shortcuts: Right Arrow or Space to advance, Left Arrow to go back.\n\n**Participant View** — Team members open the shared link or scan the QR code on their phone, tablet, or laptop. The current item displays in a clear, large format that updates in real time as the conductor advances.\n\n**Reconnection** — If a participant loses their connection briefly (e.g., switching between apps), the view automatically resumes at the current item when they reconnect. No manual refresh needed.\n\nStage Sync is available on Growth tier and above.",
+  },
+  {
+    title: "Song Usage Reports",
+    content:
+      "Track which songs your church uses and how often — built for CCLI compliance reporting.\n\n**Viewing Reports** — Navigate to Worship → Reports. The page shows a table of songs used across your published service plans, with use counts and date information.\n\n**Date Range Filtering** — Use the date range picker to narrow results to a specific period. This is especially helpful for quarterly or annual CCLI reporting windows.\n\n**Aggregation** — Each song's use count reflects the number of published service plans containing that song within your selected date range.\n\n**CSV Export** — Click \"Export CSV\" to download a spreadsheet with song titles, CCLI numbers, use counts, and dates. You can upload this directly to your CCLI reporting portal or keep it for your records.\n\nSong usage reports are available on Growth tier and above.",
+  },
+  {
+    title: "ProPresenter Export",
+    content:
+      "Export your service plans in a format compatible with ProPresenter, the popular worship presentation software.\n\n**Manual Export** — Open any service plan and click \"Export for ProPresenter.\" A JSON file downloads containing your plan items in ProPresenter-compatible format. Import this file into ProPresenter to set up your slides for the service.\n\n**Auto-Email Delivery** — A daily background process can automatically email ProPresenter exports to your designated recipients (e.g., your media team lead). This ensures the presentation team always has the latest plan without needing to log in and export manually.\n\nProPresenter export is available on Growth tier and above.",
+  },
 ];
 
 function AccordionItem({ title, content, isOpen, onToggle }: {

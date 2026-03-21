@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { SongSelectImportModal } from "@/components/worship/songselect-import-modal";
 import type { Song } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -62,40 +63,34 @@ export default function SongsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // ---- Fetch songs ----
 
-  useEffect(() => {
+  const loadSongs = useCallback(async () => {
     if (!churchId || !user) return;
-
-    let cancelled = false;
-
-    async function fetchSongs() {
-      setLoading(true);
-      setError(null);
-      try {
-        const token = await user!.getIdToken();
-        const res = await fetch(`/api/songs?church_id=${churchId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          throw new Error(`Failed to load songs (${res.status})`);
-        }
-        const data: Song[] = await res.json();
-        if (!cancelled) setSongs(data);
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        if (!cancelled) setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/songs?church_id=${churchId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load songs (${res.status})`);
       }
+      const data = await res.json();
+      setSongs(data.songs ?? data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
     }
-
-    fetchSongs();
-    return () => {
-      cancelled = true;
-    };
   }, [churchId, user]);
+
+  useEffect(() => {
+    loadSongs();
+  }, [loadSongs]);
 
   // ---- Client-side filtering ----
 
@@ -140,8 +135,20 @@ export default function SongsPage() {
             Manage your worship song catalog.
           </p>
         </div>
-        <Button>Add Song</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportModalOpen(true)}>
+            Import from SongSelect
+          </Button>
+          <Button>Add Song</Button>
+        </div>
       </div>
+
+      {/* SongSelect Import Modal */}
+      <SongSelectImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImportComplete={loadSongs}
+      />
 
       {/* Search + filter tabs */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -156,5 +156,16 @@ service cloud.firestore {
         allow write: if isSchedulerOrAbove(churchId);
       }
     }
+
+    // ─── Stage Sync Live (public read — token IS the auth) ───
+    match /stage_sync_live/{token} {
+      allow read: if true;
+      allow write: if false; // Admin SDK only
+    }
+
+    // ─── Stage Sync Token Mapping (Admin SDK only) ───
+    match /stage_sync_tokens/{token} {
+      allow read, write: if false; // Admin SDK only
+    }
   }
 }

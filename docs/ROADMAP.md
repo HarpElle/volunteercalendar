@@ -1,6 +1,6 @@
 # VolunteerCal — Roadmap
 
-_Last updated: March 2026 (after Phase 32)_
+_Last updated: March 2026 (after expansion Phases 4–6)_
 
 ## 1. Blocked by External Dependencies
 
@@ -56,8 +56,11 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 - [ ] Test song library (Growth+ tier): add song with CCLI metadata → edit → archive → search/filter
 - [ ] Test service plans (Growth+ tier): create plan → add songs and items → reorder → publish → verify SongUsageRecord created
 - [ ] Test worship nav gating: verify worship section hidden on Free/Starter tiers, visible on Growth+
+- [ ] Test SongSelect integration (Growth+ tier): connect credentials → search songs → import → detect duplicates → disconnect → verify cron sync
+- [ ] Test Stage Sync (Growth+ tier): enable session → open conductor view → open participant view → advance items → test keyboard shortcuts → test reconnection
+- [ ] Test song usage reports: set date range → verify aggregation → export CSV → export ProPresenter JSON → verify cron email delivery
 - [ ] Set up Firestore daily backup (Google Cloud Console → Firestore → Backups)
-- [ ] Review Firestore security rules in production console
+- [ ] Review Firestore security rules in production console (including stage_sync_live and stage_sync_tokens collections)
 
 ---
 
@@ -77,9 +80,6 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 
 | Item | Notes |
 |------|-------|
-| SongSelect integration | Adapter, connect/search/import API routes, weekly cron sync (Phase 4 of expansion) |
-| Stage Sync | Real-time conductor/participant service plan broadcasting via Firestore onSnapshot (Phase 5 of expansion) |
-| Song usage reporting & ProPresenter export | Reports page with filters/export, ProPresenter JSON, auto-email cron (Phase 6 of expansion) |
 | Overage pricing / usage-based billing | Enforce tier limits on API side, auto-prompt upgrade |
 | Pagination for large collections | Volunteers list, events list, assignment history — currently loads all |
 | Denormalize signup counts | Write `active_signup_count` on Event docs via Cloud Function trigger |
@@ -142,7 +142,7 @@ See `docs/SCALING_ASSESSMENT.md` for full capacity analysis.
 These are things beta users should be aware of:
 
 - **Monthly billing only** — Annual billing is planned but not yet available
-- **Worship module partially complete** — Song library, service plans, and publishing are live (Growth+ tiers). SongSelect integration, Stage Sync, and ProPresenter export are in progress (Phases 4–6)
+- **Worship module complete** — Song library, service plans, SongSelect integration, Stage Sync, ProPresenter export, and song usage reports are all live (Growth+ tiers)
 - **No push notification content yet** — FCM infrastructure is wired up (token registration, service worker) but reminders and swap notifications don't send push yet (email + SMS only)
 - **English only** — No i18n/localization
 - **Single timezone per org** — All services/events use the org's configured timezone (campuses can override)
@@ -150,12 +150,15 @@ These are things beta users should be aware of:
 
 ---
 
-## 6. Recently Completed (Phases 23–32)
+## 6. Recently Completed (Phases 23–32 + Expansion 4–6)
 
 Items previously on this roadmap that are now built:
 
 | Item | Phase | Notes |
 |------|-------|-------|
+| SongSelect integration | Exp. 4 | Adapter, connect/search/import API routes, duplicate detection, weekly cron sync |
+| Stage Sync | Exp. 5 | Real-time conductor/participant views via Firestore onSnapshot, keyboard shortcuts, QR sharing, Firestore rules for stage_sync_live and stage_sync_tokens |
+| Song usage reports & ProPresenter export | Exp. 6 | Reports page with date range/filters/CSV export, ProPresenter JSON export, daily auto-email cron |
 | Shift swap / substitution engine | 24 | Full workflow: volunteer requests → eligible replacements → accept → admin approve |
 | Multi-site / campus support | 24 | Campus model with geolocation, per-campus services, timezone overrides |
 | Volunteer health monitoring | 24 | At-risk, declining, inactive, no-show, healthy classification with email outreach |

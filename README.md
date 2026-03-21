@@ -16,6 +16,10 @@ Auto-generate fair, conflict-free volunteer schedules across worship, kids, tech
 - **Volunteer health** — At-risk detection, declining engagement alerts, inactive classification
 - **Onboarding pipeline** — Org-wide and team-specific prerequisites (background checks, training, orientation) with volunteer progress tracking
 - **Song library & service plans** — Full worship planning with CCLI metadata, order-of-service builder, and song usage tracking (Growth+ tiers)
+- **SongSelect integration** — Import songs directly from CCLI SongSelect with automatic metadata sync (Growth+ tiers)
+- **Stage Sync** — Real-time worship display for the team: conductor advances items, participants follow along on any device
+- **Song usage reports** — Date range filtering, aggregation, and CSV export for CCLI compliance reporting
+- **ProPresenter export** — Export service plans as ProPresenter-compatible JSON, with optional daily auto-email delivery
 - **Availability campaigns** — Broadcast availability requests before schedule generation with volunteer response tracking
 - **Multi-stage approval** — Draft → ministry review → approved → published with per-ministry approval gates
 - **Multi-site support** — Campus-level services with optional timezone overrides
