@@ -106,7 +106,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
 
   // Find the actual role definition (preserves pinned_volunteer_id if set)
   let role: ServiceRole = { role_id: roleId, title: roleTitle, count: 1 };
-  const svcMinistries = getServiceMinistries(service);
+  const svcMinistries = getServiceMinistries(service, serviceDate);
   for (const sm of svcMinistries) {
     const found = sm.roles.find((r) => r.role_id === roleId);
     if (found) { role = found; break; }

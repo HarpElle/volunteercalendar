@@ -10,6 +10,8 @@ import type {
   RecurrencePattern,
   Ministry,
   Volunteer,
+  EditScope,
+  ServiceChangeRecord,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ type FormMinistry = {
   roles: ServiceRole[];
   start_time: string | null;
   end_time: string | null;
+  is_default: boolean;
 };
 
 export interface ServiceFormData {
@@ -59,7 +62,10 @@ export interface ServiceFormData {
     roles: ServiceRole[];
     start_time: string | null;
     end_time: string | null;
+    is_default: boolean;
   }[];
+  edit_scope?: EditScope;
+  effective_from_date?: string;
 }
 
 export interface ServiceFormValues {
@@ -72,6 +78,7 @@ export interface ServiceFormValues {
   durationMinutes: string;
   campusId: string;
   formMinistries: FormMinistry[];
+  changeHistory?: ServiceChangeRecord[];
 }
 
 interface ServiceFormModalProps {
@@ -98,6 +105,7 @@ function defaultFormMinistry(): FormMinistry {
     roles: [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
     start_time: null,
     end_time: null,
+    is_default: true,
   };
 }
 
@@ -142,6 +150,9 @@ export function ServiceFormModal({
   const [campusId, setCampusId] = useState("");
   const [formMinistries, setFormMinistries] = useState<FormMinistry[]>([defaultFormMinistry()]);
   const [tierWarning, setTierWarning] = useState("");
+  const [editScope, setEditScope] = useState<EditScope>("next");
+  const [effectiveFromDate, setEffectiveFromDate] = useState("");
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
   // Initialize / reset when modal opens
   useEffect(() => {
@@ -161,6 +172,9 @@ export function ServiceFormModal({
           : [defaultFormMinistry()],
       );
       setTierWarning("");
+      setEditScope("next");
+      setEffectiveFromDate("");
+      setTimelineOpen(false);
     }
   }, [open, initialValues]);
 
@@ -223,6 +237,14 @@ export function ServiceFormModal({
     );
   }
 
+  function toggleMinistryDefault(fmId: string) {
+    setFormMinistries((prev) =>
+      prev.map((m) =>
+        m.id === fmId ? { ...m, is_default: !m.is_default } : m,
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Submit
   // ---------------------------------------------------------------------------
@@ -243,7 +265,14 @@ export function ServiceFormModal({
         roles: m.roles,
         start_time: m.start_time,
         end_time: m.end_time,
+        is_default: m.is_default,
       })),
+      ...(isEditing
+        ? {
+            edit_scope: editScope,
+            ...(editScope !== "next" ? { effective_from_date: effectiveFromDate } : {}),
+          }
+        : {}),
     });
   }
 
@@ -429,6 +458,26 @@ export function ServiceFormModal({
                       </button>
                     ) : null}
 
+                    <label
+                      className="flex items-center gap-1.5 text-xs cursor-pointer select-none whitespace-nowrap"
+                      title={fm.is_default ? "Always scheduled — toggle off to make this ministry optional per occurrence" : "Optional/ad-hoc — toggle on to always include this ministry"}
+                    >
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={fm.is_default}
+                        onClick={() => toggleMinistryDefault(fm.id)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vc-coral/30 focus-visible:ring-offset-1 ${fm.is_default ? "bg-vc-sage" : "bg-vc-border"}`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${fm.is_default ? "translate-x-[18px]" : "translate-x-[3px]"}`}
+                        />
+                      </button>
+                      <span className={fm.is_default ? "text-vc-sage-dark" : "text-vc-text-muted"}>
+                        {fm.is_default ? "Always included" : "Optional"}
+                      </span>
+                    </label>
+
                     {formMinistries.length > 1 && (
                       <button
                         type="button"
@@ -508,6 +557,143 @@ export function ServiceFormModal({
             })}
           </div>
         </div>
+
+        {/* Effective-from date change UI — only when editing */}
+        {isEditing && (
+          <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm/50 p-4">
+            <label className="mb-3 block text-sm font-semibold text-vc-indigo">
+              When should this change take effect?
+            </label>
+            <div className="space-y-2.5">
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="edit_scope"
+                  value="next"
+                  checked={editScope === "next"}
+                  onChange={() => setEditScope("next")}
+                  className="mt-0.5 h-4 w-4 border-vc-border text-vc-coral focus:ring-vc-coral/30"
+                />
+                <div>
+                  <span className="text-sm font-medium text-vc-text group-hover:text-vc-indigo transition-colors">
+                    From next occurrence
+                  </span>
+                  <p className="text-xs text-vc-text-muted">
+                    Changes apply starting at the very next scheduled date.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="edit_scope"
+                  value="from_date"
+                  checked={editScope === "from_date"}
+                  onChange={() => setEditScope("from_date")}
+                  className="mt-0.5 h-4 w-4 border-vc-border text-vc-coral focus:ring-vc-coral/30"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-vc-text group-hover:text-vc-indigo transition-colors">
+                    From a specific date forward
+                  </span>
+                  <p className="text-xs text-vc-text-muted">
+                    Changes apply from the chosen date onward, leaving earlier dates unchanged.
+                  </p>
+                  {editScope === "from_date" && (
+                    <div className="mt-2">
+                      <Input
+                        type="date"
+                        required
+                        value={effectiveFromDate}
+                        onChange={(e) => setEffectiveFromDate(e.target.value)}
+                        className="max-w-[200px] text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="edit_scope"
+                  value="single_date"
+                  checked={editScope === "single_date"}
+                  onChange={() => setEditScope("single_date")}
+                  className="mt-0.5 h-4 w-4 border-vc-border text-vc-coral focus:ring-vc-coral/30"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-vc-text group-hover:text-vc-indigo transition-colors">
+                    Only on specific date(s)
+                  </span>
+                  <p className="text-xs text-vc-text-muted">
+                    A one-time override for a single occurrence. All other dates stay the same.
+                  </p>
+                  {editScope === "single_date" && (
+                    <div className="mt-2">
+                      <Input
+                        type="date"
+                        required
+                        value={effectiveFromDate}
+                        onChange={(e) => setEffectiveFromDate(e.target.value)}
+                        className="max-w-[200px] text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Service Timeline — collapsible change history */}
+        {isEditing && initialValues?.changeHistory && initialValues.changeHistory.length > 0 && (
+          <div className="rounded-xl border border-vc-border-light bg-vc-bg/30">
+            <button
+              type="button"
+              onClick={() => setTimelineOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-vc-indigo hover:bg-vc-bg-warm/30 transition-colors rounded-xl"
+            >
+              <span>Service Timeline</span>
+              <svg
+                className={`h-4 w-4 text-vc-text-muted transition-transform ${timelineOpen ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+            {timelineOpen && (
+              <div className="border-t border-vc-border-light px-4 py-3">
+                <div className="space-y-2">
+                  {initialValues.changeHistory.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3 text-xs"
+                    >
+                      <div className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-vc-coral" />
+                      <div className="min-w-0">
+                        <span className="font-medium text-vc-text">
+                          {entry.change_type.replace(/_/g, " ")}
+                        </span>
+                        <span className="mx-1.5 text-vc-text-muted">&middot;</span>
+                        <span className="text-vc-text-secondary">
+                          effective {new Date(entry.effective_from).toLocaleDateString()}
+                        </span>
+                        <p className="text-vc-text-muted">
+                          Changed {new Date(entry.changed_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <Button type="submit" loading={saving}>

@@ -247,6 +247,44 @@ export interface ServiceMinistry {
   end_time: string | null;
 }
 
+/** A ministry assignment within a service profile, with effective date range for timeline changes. */
+export interface MinistryAssignment {
+  ministry_id: string;
+  roles: ServiceRole[];
+  /** Per-ministry start time override (HH:mm). Null = inherits from service. */
+  start_time: string | null;
+  /** Per-ministry end time override (HH:mm). Null = inherits from service. */
+  end_time: string | null;
+  /** True = always included in schedules; false = optional per-occurrence (ad-hoc team). */
+  is_default: boolean;
+  /** ISO date when this assignment becomes effective. */
+  effective_from: string;
+  /** ISO date when this assignment expires. Null = open-ended (current). */
+  effective_until: string | null;
+  created_at: string;
+  updated_by: string;
+}
+
+export type ServiceChangeType =
+  | "ministry_added"
+  | "ministry_removed"
+  | "role_modified"
+  | "time_changed"
+  | "recurrence_changed";
+
+/** Audit trail entry for a service profile change. */
+export interface ServiceChangeRecord {
+  change_type: ServiceChangeType;
+  effective_from: string;
+  previous_value: Record<string, unknown>;
+  new_value: Record<string, unknown>;
+  changed_by: string;
+  changed_at: string;
+}
+
+/** Scope for service profile edits with effective-from logic. */
+export type EditScope = "next" | "from_date" | "single_date";
+
 export interface Service {
   id: string;
   church_id: string;
@@ -269,6 +307,10 @@ export interface Service {
   roles: ServiceRole[];
   /** Multi-ministry support. Each entry has its own roles and optional time overrides. */
   ministries?: ServiceMinistry[];
+  /** Timeline-based ministry assignments with effective dates. Takes precedence over ministries[] when populated. */
+  ministry_assignments?: MinistryAssignment[];
+  /** Audit trail of service profile changes. */
+  change_history?: ServiceChangeRecord[];
   created_at: string;
 }
 
@@ -397,7 +439,12 @@ export interface Household {
   constraints: {
     never_same_service: boolean;
     prefer_same_service: boolean;
+    /** Hard constraint: no household members assigned to any service on the same date. */
+    never_same_time: boolean;
   };
+  notes?: string | null;
+  created_at?: string;
+  updated_by?: string | null;
 }
 
 // --- Schedules ---
@@ -418,6 +465,35 @@ export interface MinistryApproval {
   notes: string | null;
 }
 
+export interface AvailabilityWindow {
+  /** Deadline for volunteers to update availability. */
+  due_date: string;
+  /** Optional message included in the broadcast email. */
+  message: string | null;
+  /** Timestamp when the reminder email was sent. */
+  reminder_sent_at: string | null;
+  /** Denormalized count of volunteers who updated availability. */
+  response_count: number;
+}
+
+export interface ApprovalWorkflow {
+  /** Target date for all ministries to complete review. */
+  target_approval_date: string | null;
+  started_at: string;
+  approved_at: string | null;
+  conflict_summary: {
+    total_conflicts: number;
+    unfilled_slots: { role_id: string; count: number }[];
+    household_conflicts: { volunteer_ids: string[]; reason: string }[];
+  } | null;
+}
+
+export interface ScheduleMeta {
+  fairness_score: number;
+  fill_rate: number;
+  confirmation_rate: number | null;
+}
+
 export interface Schedule {
   id: string;
   church_id: string;
@@ -431,6 +507,12 @@ export interface Schedule {
   ministry_approvals: Record<string, MinistryApproval>;
   /** Free-form notes for this schedule period (set lists, resource links, etc.) */
   notes?: string | null;
+  /** Availability window campaign for centralized/hybrid workflows. */
+  availability_window?: AvailabilityWindow;
+  /** Multi-stage approval workflow state. */
+  approval_workflow?: ApprovalWorkflow;
+  /** Scheduling quality metrics. */
+  meta?: ScheduleMeta;
 }
 
 // --- Attendance ---
@@ -683,4 +765,135 @@ export interface InviteQueueItem {
   reviewed_at: string | null;
   sent_at: string | null;
   created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Worship Module — Songs
+// ---------------------------------------------------------------------------
+
+export type SongStatus = "active" | "archived" | "retired";
+export type LyricSource = "manual" | "songselect" | "ccli" | "other";
+
+export interface Song {
+  id: string;
+  church_id: string;
+  title: string;
+  ccli_number: string | null;
+  ccli_publisher: string | null;
+  default_key: string | null;
+  available_keys: string[];
+  artist_credit: string | null;
+  writer_credit: string | null;
+  copyright: string | null;
+  tags: string[];
+  in_rotation: boolean;
+  rotation_lists: string[];
+  lyric_source: LyricSource | null;
+  lyrics: string | null;
+  chord_chart_url: string | null;
+  sheet_music_url: string | null;
+  media_file_url: string | null;
+  /** External SongSelect ID for re-sync. */
+  songselect_id: string | null;
+  date_added: string;
+  last_used_date: string | null;
+  /** Denormalized total usage count. */
+  use_count: number;
+  status: SongStatus;
+  notes: string | null;
+  created_at: string;
+  updated_by: string;
+}
+
+// ---------------------------------------------------------------------------
+// Worship Module — Service Plans (Order of Service)
+// ---------------------------------------------------------------------------
+
+export type ServicePlanItemType =
+  | "song"
+  | "prayer"
+  | "announcement"
+  | "sermon"
+  | "offering"
+  | "video"
+  | "custom";
+
+export interface ServicePlanItem {
+  /** Unique within this plan. */
+  id: string;
+  sequence: number;
+  type: ServicePlanItemType;
+  /** Reference to Song.id (for song items). */
+  song_id: string | null;
+  /** Key override for this performance (e.g., "D"). Null = use song default. */
+  key: string | null;
+  /** Title for non-song items, or override for song display. */
+  title: string | null;
+  duration_minutes: number | null;
+  arrangement_notes: string | null;
+  notes: string | null;
+  include_in_program_notes: boolean;
+  created_at: string;
+  updated_by: string;
+}
+
+export interface StageSyncState {
+  enabled: boolean;
+  /** Current item being displayed on stage. */
+  current_item_id: string | null;
+  current_item_index: number;
+  conductor_user_id: string | null;
+  last_advanced_at: string | null;
+  /** Unguessable token for public access (token IS the auth). */
+  access_token: string;
+  /** Denormalized count of connected participant devices. */
+  viewers_connected: number;
+}
+
+export interface ServicePlan {
+  id: string;
+  church_id: string;
+  /** Reference to the recurring Service this plan is for. */
+  service_id: string;
+  service_date: string;
+  theme: string | null;
+  speaker: string | null;
+  scripture_references: string[];
+  notes: string | null;
+  items: ServicePlanItem[];
+  published: boolean;
+  published_at: string | null;
+  stage_sync: StageSyncState | null;
+  created_at: string;
+  updated_by: string;
+}
+
+// ---------------------------------------------------------------------------
+// Worship Module — Song Usage Tracking
+// ---------------------------------------------------------------------------
+
+export interface SongUsageRecord {
+  id: string;
+  church_id: string;
+  song_id: string;
+  service_plan_id: string;
+  service_date: string;
+  service_name: string;
+  song_title: string;
+  ccli_number: string | null;
+  key_used: string | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Worship Module — SongSelect Integration
+// ---------------------------------------------------------------------------
+
+export interface SongSelectCredentials {
+  email: string;
+  /** Encrypted at rest. Only accessible via Admin SDK. */
+  encrypted_password: string;
+  connected_at: string;
+  last_sync_at: string | null;
+  auto_sync_enabled: boolean;
 }

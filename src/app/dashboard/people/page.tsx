@@ -27,10 +27,12 @@ import { getOrgTerms } from "@/lib/utils/org-terms";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { CSVImportModal } from "@/components/forms/csv-import-modal";
 import { ChMSImportModal } from "@/components/forms/chms-import-modal";
+import { HouseholdFormModal } from "@/components/forms/household-form-modal";
 import type {
   Volunteer,
   Ministry,
   Membership,
+  Household,
   OrgRole,
   OrgType,
   Service,
@@ -77,8 +79,9 @@ function PeopleContent() {
   const canViewRoster = isScheduler(activeMembership);
 
   // Tab state
-  const initialTab = searchParams.get("tab") === "invites" ? "invites" : "roster";
-  const [tab, setTab] = useState<"roster" | "invites">(initialTab);
+  const rawTab = searchParams.get("tab");
+  const initialTab = rawTab === "invites" ? "invites" : rawTab === "families" ? "families" : "roster";
+  const [tab, setTab] = useState<"roster" | "invites" | "families">(initialTab);
 
   // Data
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
@@ -93,6 +96,11 @@ function PeopleContent() {
   const [filterMinistries, setFilterMinistries] = useState<string[]>([]);
   const [filterRoles, setFilterRoles] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Households (Families tab)
+  const [households, setHouseholds] = useState<Household[]>([]);
+  const [householdModalOpen, setHouseholdModalOpen] = useState(false);
+  const [editingHousehold, setEditingHousehold] = useState<Household | undefined>();
 
   // Add People panel
   const [addMode, setAddMode] = useState<null | "individual" | "csv" | "chms">(null);
@@ -112,16 +120,18 @@ function PeopleContent() {
     if (!churchId) return;
     async function load() {
       try {
-        const [vols, mins, mems, svcs, churchSnap] = await Promise.all([
+        const [vols, mins, mems, svcs, hh, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchMemberships(churchId!),
           getChurchDocuments(churchId!, "services"),
+          getChurchDocuments(churchId!, "households"),
           getDoc(doc(db, "churches", churchId!)),
         ]);
         setVolunteers(vols as unknown as Volunteer[]);
         setMinistries(mins as unknown as Ministry[]);
         setServices(svcs as unknown as Service[]);
+        setHouseholds(hh as unknown as Household[]);
         setMemberships(mems);
         if (churchSnap.exists()) {
           setChurchName(churchSnap.data().name || "");
@@ -418,6 +428,16 @@ function PeopleContent() {
             Invites ({pendingMems.length})
           </button>
         )}
+        {canManage && (
+          <button
+            onClick={() => setTab("families")}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              tab === "families" ? "bg-white text-vc-indigo shadow-sm" : "text-vc-text-secondary"
+            }`}
+          >
+            Families ({households.length})
+          </button>
+        )}
       </div>
 
       {/* === ROSTER TAB === */}
@@ -633,6 +653,194 @@ function PeopleContent() {
             )}
           </div>
         </>
+      )}
+
+      {/* === FAMILIES TAB === */}
+      {tab === "families" && canManage && (
+        <>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm text-vc-text-secondary">
+              {households.length === 0
+                ? "No families defined yet. Add a family to set household scheduling constraints."
+                : `${households.length} ${households.length === 1 ? "family" : "families"}`}
+            </p>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingHousehold(undefined);
+                setHouseholdModalOpen(true);
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Add Family
+              </span>
+            </Button>
+          </div>
+
+          {households.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
+              <svg className="mx-auto mb-3 h-10 w-10 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+              </svg>
+              <p className="text-vc-text-secondary">No families yet.</p>
+              <p className="mt-1 text-sm text-vc-text-muted">
+                Group volunteers into families to control how household members are scheduled together.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {households.map((hh) => (
+                <HouseholdCard
+                  key={hh.id}
+                  household={hh}
+                  volunteers={volunteers}
+                  onEdit={() => {
+                    setEditingHousehold(hh);
+                    setHouseholdModalOpen(true);
+                  }}
+                  onDelete={async () => {
+                    if (!churchId) return;
+                    if (!confirm(`Delete the ${hh.name} family?`)) return;
+                    await removeChurchDocument(churchId, "households", hh.id);
+                    setHouseholds((prev) => prev.filter((h) => h.id !== hh.id));
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          <HouseholdFormModal
+            open={householdModalOpen}
+            onClose={() => {
+              setHouseholdModalOpen(false);
+              setEditingHousehold(undefined);
+            }}
+            volunteers={volunteers}
+            existingHousehold={editingHousehold}
+            onSave={async (data) => {
+              if (!churchId || !user) return;
+              if (editingHousehold) {
+                await updateChurchDocument(churchId, "households", editingHousehold.id, {
+                  ...data,
+                  updated_by: user.uid,
+                });
+                setHouseholds((prev) =>
+                  prev.map((h) =>
+                    h.id === editingHousehold.id
+                      ? { ...h, ...data, updated_by: user.uid }
+                      : h,
+                  ),
+                );
+              } else {
+                const now = new Date().toISOString();
+                const docData = {
+                  ...data,
+                  church_id: churchId,
+                  created_at: now,
+                  updated_by: user.uid,
+                };
+                const ref = await addChurchDocument(churchId, "households", docData);
+                setHouseholds((prev) => [...prev, { ...docData, id: ref.id } as Household]);
+              }
+              setHouseholdModalOpen(false);
+              setEditingHousehold(undefined);
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Household Card
+// ---------------------------------------------------------------------------
+
+function HouseholdCard({
+  household,
+  volunteers,
+  onEdit,
+  onDelete,
+}: {
+  household: Household;
+  volunteers: Volunteer[];
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const memberNames = household.volunteer_ids
+    .map((id) => volunteers.find((v) => v.id === id)?.name)
+    .filter(Boolean);
+
+  const constraintBadges: { label: string; color: string }[] = [];
+  if (household.constraints.never_same_service) {
+    constraintBadges.push({ label: "Never together", color: "bg-vc-coral/10 text-vc-coral" });
+  }
+  if (household.constraints.prefer_same_service) {
+    constraintBadges.push({ label: "Prefer together", color: "bg-vc-sage/15 text-vc-sage" });
+  }
+  if (household.constraints.never_same_time) {
+    constraintBadges.push({ label: "Never same day", color: "bg-amber-100 text-amber-700" });
+  }
+
+  return (
+    <div className="rounded-xl border border-vc-border-light bg-white p-4 transition-shadow hover:shadow-md">
+      <div className="mb-3 flex items-start justify-between">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-lg text-vc-indigo">{household.name}</h3>
+          <p className="mt-0.5 text-xs text-vc-text-muted">
+            {household.volunteer_ids.length} {household.volunteer_ids.length === 1 ? "member" : "members"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-vc-text-secondary transition-colors hover:text-vc-coral"
+          >
+            Edit
+          </button>
+          <button
+            onClick={onDelete}
+            className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {/* Member names */}
+      {memberNames.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1">
+          {memberNames.map((n, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center rounded-full bg-vc-indigo/8 px-2 py-0.5 text-xs font-medium text-vc-indigo"
+            >
+              {n}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Constraint badges */}
+      {constraintBadges.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {constraintBadges.map((b) => (
+            <span
+              key={b.label}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${b.color}`}
+            >
+              {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Notes */}
+      {household.notes && (
+        <p className="mt-2 text-xs text-vc-text-muted line-clamp-2">{household.notes}</p>
       )}
     </div>
   );

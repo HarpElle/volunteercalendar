@@ -8,12 +8,16 @@ export const TIER_LIMITS: Record<string, {
   roles_per_service: number;
   active_events: number;
   roles_per_event: number;
+  worship_enabled: boolean;
+  workflow_modes_all: boolean;
+  multi_stage_approval: boolean;
+  ccli_auto_reporting: boolean;
 }> = {
-  free:       { volunteers: 20,       ministries: 1,        short_links: 0,   roles_per_service: 3,  active_events: 1,        roles_per_event: 2 },
-  starter:    { volunteers: 100,      ministries: 5,        short_links: 3,   roles_per_service: 8,  active_events: 5,        roles_per_event: 5 },
-  growth:     { volunteers: 250,      ministries: 15,       short_links: 10,  roles_per_service: 20, active_events: 15,       roles_per_event: 15 },
-  pro:        { volunteers: 500,      ministries: Infinity,  short_links: 25,  roles_per_service: 50, active_events: Infinity,  roles_per_event: 50 },
-  enterprise: { volunteers: Infinity, ministries: Infinity,  short_links: 100, roles_per_service: Infinity, active_events: Infinity, roles_per_event: Infinity },
+  free:       { volunteers: 20,       ministries: 1,        short_links: 0,   roles_per_service: 3,  active_events: 1,        roles_per_event: 2,  worship_enabled: false, workflow_modes_all: false, multi_stage_approval: false, ccli_auto_reporting: false },
+  starter:    { volunteers: 100,      ministries: 5,        short_links: 3,   roles_per_service: 8,  active_events: 5,        roles_per_event: 5,  worship_enabled: false, workflow_modes_all: true,  multi_stage_approval: false, ccli_auto_reporting: false },
+  growth:     { volunteers: 250,      ministries: 15,       short_links: 10,  roles_per_service: 20, active_events: 15,       roles_per_event: 15, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: false },
+  pro:        { volunteers: 500,      ministries: Infinity,  short_links: 25,  roles_per_service: 50, active_events: Infinity,  roles_per_event: 50, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: true  },
+  enterprise: { volunteers: Infinity, ministries: Infinity,  short_links: 100, roles_per_service: Infinity, active_events: Infinity, roles_per_event: Infinity, worship_enabled: true, workflow_modes_all: true, multi_stage_approval: true, ccli_auto_reporting: true },
 };
 
 export const WORKFLOW_MODES: { value: WorkflowMode; label: string; description: string }[] = [
@@ -94,19 +98,20 @@ export const PRICING_TIERS: {
       "1 active event",
       "Email reminders",
       "iCal calendar feeds",
+      "Household scheduling",
     ],
   },
   {
     tier: "starter",
     name: "Starter",
-    price: "$19/mo",
+    price: "$29/mo",
     volunteers: "100",
     ministries: "5",
     features: [
       "100 volunteers",
       "5 teams",
-      "8 roles per service",
-      "5 active events",
+      "All scheduling workflow modes",
+      "Availability campaigns",
       "SMS + email reminders",
       "Smart check-in (QR, time & proximity)",
       "Shift swap",
@@ -115,30 +120,33 @@ export const PRICING_TIERS: {
   {
     tier: "growth",
     name: "Growth",
-    price: "$49/mo",
+    price: "$69/mo",
     volunteers: "250",
     ministries: "15",
     highlighted: true,
     features: [
       "250 volunteers",
       "15 teams",
-      "20 roles per service",
-      "15 active events",
+      "Song library & service plans",
+      "SongSelect integration",
+      "Stage Sync (real-time worship)",
+      "Multi-stage approval workflow",
+      "Song usage & CCLI reports",
+      "ProPresenter export",
       "Volunteer health dashboard",
-      "Onboarding pipeline",
     ],
   },
   {
     tier: "pro",
     name: "Pro",
-    price: "$99/mo",
+    price: "$119/mo",
     volunteers: "500",
     ministries: "Unlimited",
     features: [
       "500 volunteers",
       "Unlimited teams",
-      "50 roles per service",
-      "Unlimited events",
+      "Everything in Growth",
+      "CCLI auto-reporting",
       "Multi-site support",
       "API access",
     ],

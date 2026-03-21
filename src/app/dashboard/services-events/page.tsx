@@ -252,6 +252,7 @@ function ServicesTab({
         roles: m.roles.length > 0 ? m.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
         start_time: m.start_time,
         end_time: m.end_time,
+        is_default: true,
       }));
     } else {
       fmList = [
@@ -261,6 +262,7 @@ function ServicesTab({
           roles: s.roles.length > 0 ? s.roles : [{ role_id: crypto.randomUUID(), title: "", count: 1 }],
           start_time: null,
           end_time: null,
+          is_default: true,
         },
       ];
     }
@@ -275,6 +277,7 @@ function ServicesTab({
       durationMinutes: String(s.duration_minutes),
       campusId: s.campus_id || "",
       formMinistries: fmList,
+      changeHistory: s.change_history,
     };
   }
 

@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 31 complete. Preparing for beta. |
+| **Status** | Phase 32 complete. Expansion: scheduling enhancements + worship module. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -90,6 +90,13 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Volunteer health monitoring (at-risk, declining, inactive classification)
 │   │   │   ├── onboarding/
 │   │   │   │   └── page.tsx        # Volunteer onboarding: prerequisite management (org-wide + team-specific) and volunteer progress pipeline
+│   │   │   ├── worship/
+│   │   │   │   ├── songs/
+│   │   │   │   │   └── page.tsx    # Song library (search, filter, add/edit/archive)
+│   │   │   │   ├── plans/
+│   │   │   │   │   └── page.tsx    # Service plans list (upcoming, create, navigate to editor)
+│   │   │   │   └── reports/
+│   │   │   │       └── page.tsx    # Song usage reports (CCLI compliance)
 │   │   ├── check-in/
 │   │   │   └── [code]/
 │   │   │       └── page.tsx        # QR code self-check-in (auto-redirect on success)
@@ -185,6 +192,29 @@ VolunteerCal/
 │   │       │   └── route.ts        # Shift swap engine (POST create, GET eligible, PATCH accept/approve)
 │   │       ├── test-email/
 │   │       │   └── route.ts        # Admin email template preview (dev only)
+│   │       ├── services/
+│   │       │   └── [id]/
+│   │       │       └── route.ts    # Service profile PATCH (timeline changes, effective-from dates)
+│   │       ├── schedules/
+│   │       │   └── [id]/
+│   │       │       ├── approve/
+│   │       │       │   └── route.ts        # Ministry-level schedule approval (PATCH)
+│   │       │       ├── publish/
+│   │       │       │   └── route.ts        # Schedule publish + confirmation emails (POST)
+│   │       │       ├── coordination/
+│   │       │       │   └── route.ts        # Cross-team shared volunteer analysis (GET)
+│   │       │       └── availability-window/
+│   │       │           └── route.ts        # Availability broadcast to volunteers (POST)
+│   │       ├── songs/
+│   │       │   ├── route.ts        # Song CRUD (POST create, GET list with filters)
+│   │       │   └── [id]/
+│   │       │       └── route.ts    # Song update/archive (PATCH, DELETE)
+│   │       ├── service-plans/
+│   │       │   ├── route.ts        # Service plan CRUD (POST create, GET list)
+│   │       │   └── [id]/
+│   │       │       ├── route.ts    # Plan update/delete (PATCH items, DELETE)
+│   │       │       └── publish/
+│   │       │           └── route.ts    # Publish plan + create song usage records
 │   │       └── billing/
 │   │           ├── checkout/
 │   │           │   └── route.ts    # Stripe checkout session creation
@@ -194,19 +224,21 @@ VolunteerCal/
 │   │               └── route.ts    # Stripe webhook handler
 │   ├── components/
 │   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, drawer, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete, select
-│   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal, ministry-form-modal, campus-form-modal, create-schedule-modal, volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer
+│   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal (effective-from UI), ministry-form-modal, campus-form-modal, create-schedule-modal (step wizard), volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer, household-form-modal
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
-│   │   └── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal
+│   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
+│   │   └── worship/            # Song library table, song form modal, service plan editor (future), Stage Sync conductor/viewer (future)
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks (use-service-worker.ts)
-│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep)
-│       ├── constants/          # Workflow modes, reminder channels, pricing tiers, tier limits, scheduler notification defaults
+│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord)
+│       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts
-│       │   ├── emails/         # 26 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert)
+│       │   ├── emails/         # 30 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict)
+│       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms
 │       └── services/           # Scheduling algorithm, auto-reschedule, SMS service
@@ -250,3 +282,4 @@ VolunteerCal/
 | 29 | Service roster & attendance access parity: Roster button added to service cards on Services & Events page (matches event card parity), ServiceRoster modal opens for next upcoming service date, Attendance tab on both service and event rosters now accessible for future dates (not gated to past/today), allows admins/schedulers to familiarize with attendance UI before service day | Complete |
 | 30 | Attendance enhancement, absence alerts & scheduler notifications: AttendanceStatus type overhaul (boolean→string enum: present/no_show/excused/null with backward-compat normalizer), shared AttendanceToggle component extracted from duplicate inline toggles, four-state toggle cycle (null→present→no_show→excused→null), "Roster & Attendance" button rename, layout shift fixes (reserved stats bar + save button space), "Can't Make It" volunteer self-service absence notification (modal + API + email template + SMS for paid tiers), scheduler/admin granular notification preferences (per-type toggles, standard/urgent channel selection, ministry scope, SMS tier-gated to Starter+), shouldNotifyScheduler utility wired into absence + self-removal API routes | Complete |
 | 31 | UI/UX consistency audit: modal close button touch target fix (28px→45px), confirm dialog buttons sm→md, Card tappable variant (hover-lift + active-press), Organization page ministry/campus cards converted from hover-reveal to tappable card pattern (chevron affordance, keyboard accessible, delete moved into edit form), check-in number inputs right-sized (max-w-[120px]), People page roster Edit/Delete + Approve/Reject touch targets to 44px minimum, My Orgs page Accept/Decline/Switch/reminder toggle touch targets to 44px, schedules page hover-reveal actions made always-visible, dashboard sub-heading size standardization, zero hover-only interaction patterns remaining | Complete |
+| 32 | Expansion: scheduling enhancements + worship module — **Service profiles with timeline changes** (MinistryAssignment with effective_from/effective_until, EditScope, temporal filtering in service-helpers/scheduler, validate-ministry-assignments utility, service PATCH API, service form effective-from UI), **Scheduling workflow modes** (step-based create-schedule wizard, workflow mode picker, all 3 modes active), **Availability campaigns** (broadcast API, availability-campaign-banner, email template), **Multi-stage approval** (approve/publish/coordination APIs, approval-countdown component, cross-team-modal, approval-request + approval-reminder email templates), **Household UI** (household-form-modal, household-conflict-card, Families tab on People page, never_same_time + prefer_same_service scheduler enhancements), **Worship module** (Song/ServicePlan/SongUsageRecord/StageSyncState types, song CRUD API, service-plans CRUD + publish API with song usage tracking, Songs page, Service Plans page, Reports page, worship nav section gated by tier), **Pricing update** (Starter $19→$29, Growth $49→$69, Pro $99→$119, new tier gates: worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting) | Complete |

@@ -129,15 +129,54 @@ function hasHouseholdConflict(
 ): boolean {
   if (!volunteer.household_id) return false;
   const household = households.find((h) => h.id === volunteer.household_id);
-  if (!household || !household.constraints.never_same_service) return false;
+  if (!household) return false;
 
-  // Check if any household member is already assigned on the same date
+  const { never_same_service, never_same_time } = household.constraints;
+  if (!never_same_service && !never_same_time) return false;
+
   const otherMembers = household.volunteer_ids.filter((id) => id !== volunteer.id);
+
+  if (never_same_time) {
+    // Hard constraint: no household members on ANY service on the same date
+    return assignments.some(
+      (a) => a.service_date === date && otherMembers.includes(a.volunteer_id),
+    );
+  }
+
+  // never_same_service: no household members on the SAME service on the same date
   return assignments.some(
     (a) =>
       a.service_date === date &&
+      a.service_id === serviceId &&
       otherMembers.includes(a.volunteer_id),
   );
+}
+
+/**
+ * Returns a scoring bonus when a household member is already assigned to
+ * the same service+date, incentivizing the scheduler to schedule families
+ * together (soft preference).
+ */
+function getHouseholdPreferenceBonus(
+  volunteer: Volunteer,
+  date: string,
+  serviceId: string,
+  households: Household[],
+  assignments: DraftAssignment[],
+): number {
+  if (!volunteer.household_id) return 0;
+  const household = households.find((h) => h.id === volunteer.household_id);
+  if (!household || !household.constraints.prefer_same_service) return 0;
+
+  const otherMembers = household.volunteer_ids.filter((id) => id !== volunteer.id);
+  const hasFamilyOnSameService = assignments.some(
+    (a) =>
+      a.service_date === date &&
+      a.service_id === serviceId &&
+      otherMembers.includes(a.volunteer_id),
+  );
+
+  return hasFamilyOnSameService ? 0.5 : 0;
 }
 
 function canServeInMinistry(volunteer: Volunteer, ministryId: string): boolean {
@@ -288,8 +327,8 @@ export function generateDraftSchedule(
   for (const occurrence of occurrences) {
     const { service, date } = occurrence;
 
-    // Iterate per-ministry roles (supports multi-ministry services)
-    const serviceMinistries = getServiceMinistries(service);
+    // Iterate per-ministry roles (supports multi-ministry services with timeline filtering)
+    const serviceMinistries = getServiceMinistries(service, date);
     for (const sm of serviceMinistries) {
       for (const role of sm.roles) {
         for (let slot = 0; slot < role.count; slot++) {
@@ -395,13 +434,17 @@ export function findBestVolunteer(
 
   if (eligible.length === 0) return null;
 
-  // Score candidates: prefer least-assigned, then those closer to preferred frequency
+  // Score candidates: prefer least-assigned, then household preference, then preferred frequency
   eligible.sort((a, b) => {
     const countA = counts[a.id]?.total || 0;
     const countB = counts[b.id]?.total || 0;
     // Primary: fewest assignments (fairness)
     if (countA !== countB) return countA - countB;
-    // Secondary: prefer those with higher preferred_frequency (want to serve more)
+    // Secondary: prefer serving with family (prefer_same_service soft bonus)
+    const bonusA = getHouseholdPreferenceBonus(a, date, service.id, households, currentAssignments);
+    const bonusB = getHouseholdPreferenceBonus(b, date, service.id, households, currentAssignments);
+    if (bonusA !== bonusB) return bonusB - bonusA; // Higher bonus = preferred
+    // Tertiary: prefer those with higher preferred_frequency (want to serve more)
     return b.availability.preferred_frequency - a.availability.preferred_frequency;
   });
 

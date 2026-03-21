@@ -11,7 +11,8 @@ import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { SmartCheckInBanner } from "@/components/ui/smart-check-in-banner";
-import type { OrgType, Membership } from "@/lib/types";
+import type { OrgType, Membership, SubscriptionTier } from "@/lib/types";
+import { TIER_LIMITS } from "@/lib/constants";
 
 interface NavItem {
   label: string;
@@ -26,7 +27,7 @@ interface NavSection {
   gate?: (m: Membership | null) => boolean;
 }
 
-function getNavSections(hasPrereqs: boolean): NavSection[] {
+function getNavSections(hasPrereqs: boolean, worshipEnabled: boolean): NavSection[] {
   return [
     {
       label: null,
@@ -98,6 +99,46 @@ function getNavSections(hasPrereqs: boolean): NavSection[] {
         },
       ],
     },
+    ...(worshipEnabled
+      ? [
+          {
+            label: "Worship",
+            gate: (m: Membership | null) => isAdmin(m),
+            items: [
+              {
+                label: "Songs",
+                href: "/dashboard/worship/songs",
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
+                  </svg>
+                ),
+                gate: (m: Membership | null) => isAdmin(m),
+              },
+              {
+                label: "Service Plans",
+                href: "/dashboard/worship/plans",
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                  </svg>
+                ),
+                gate: (m: Membership | null) => isAdmin(m),
+              },
+              {
+                label: "Reports",
+                href: "/dashboard/worship/reports",
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                  </svg>
+                ),
+                gate: (m: Membership | null) => isAdmin(m),
+              },
+            ],
+          },
+        ]
+      : []),
     {
       label: "Manage",
       gate: (m) => isScheduler(m),
@@ -177,6 +218,7 @@ export default function DashboardLayout({
   const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map());
   const [showGuideDot, setShowGuideDot] = useState(false);
   const [hasPrerequisites, setHasPrerequisites] = useState(false);
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("free");
   const userMenuRef = useRef<HTMLDivElement>(null);
   const orgMenuRef = useRef<HTMLDivElement>(null);
 
@@ -200,6 +242,7 @@ export default function DashboardLayout({
         setChurchName(data.name || "");
         const orgPrereqs: unknown[] = data.org_prerequisites || [];
         setHasPrerequisites(orgPrereqs.length > 0);
+        setSubscriptionTier((data.subscription_tier as SubscriptionTier) || "free");
       }
     }).catch(() => {});
   }, [churchId]);
@@ -243,7 +286,8 @@ export default function DashboardLayout({
     }
   }, [userMenuOpen, orgMenuOpen]);
 
-  const navSections = getNavSections(hasPrerequisites);
+  const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
+  const navSections = getNavSections(hasPrerequisites, worshipEnabled);
 
   // Filter sections: hide sections where the gate fails or all items are gated out
   const visibleSections = navSections

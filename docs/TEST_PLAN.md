@@ -104,7 +104,7 @@ Before testing, make sure you have:
 - [ ] **Create ministry** — Add ministry with name, color, optional description and lead
 - [ ] **Edit ministry** — Change name/color → save → verify update in roster
 - [ ] **Delete ministry** — Delete → confirm → ministry removed
-- [ ] **Workflow mode** — Verify only Centralized is selectable; other modes show "Coming soon" badge and are disabled
+- [ ] **Workflow mode** — All four modes selectable (Centralized, Team-First, Hybrid, Self-Service). Free tier limited to Centralized only; Starter+ has all modes
 - [ ] **Create short link** — Enter slug, target URL, label → created with expiry
 - [ ] **Short link slug validation** — Try reserved slug (e.g., "dashboard") → rejected
 - [ ] **Short link redirect** — Visit `/s/[your-slug]` → redirects correctly
@@ -375,6 +375,64 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Assign service to campus** — Create/edit a service → optionally assign to a campus
 - [ ] **Campus list** — Multiple campuses shown in organization settings
 - [ ] **Delete campus** — Remove a campus → confirm → campus removed
+
+### R. Household Scheduling (~10 min)
+
+- [ ] **Families tab visible** — People page → "Families" tab visible alongside Roster and Invites
+- [ ] **Create household** — Families tab → "Add Family" → name + select members + set constraints → save
+- [ ] **Constraint: never_same_service** — Enable "Never same service" → generate schedule → family members not scheduled to same service on same date
+- [ ] **Constraint: never_same_time** — Enable "Never same time" → generate schedule → family members not scheduled to ANY service on same date
+- [ ] **Constraint: prefer_same_service** — Enable "Prefer same service" → generate schedule → family members scheduled together when possible
+- [ ] **Edit household** — Change members or constraints → save → next schedule respects updated constraints
+- [ ] **Delete household** — Remove household → confirm → constraints no longer applied
+- [ ] **Conflict card in schedule review** — After generating schedule, household conflict card appears if any violations exist
+
+### S. Workflow Modes & Availability Campaigns (~15 min)
+
+- [ ] **Schedule wizard 3-step** — Create Schedule → Step 1: workflow mode picker → Step 2: date range + availability window → Step 3: review summary
+- [ ] **Centralized mode** — Default behavior; admin drafts, reviews, publishes
+- [ ] **Team-first mode** — Schedule filtered to scheduler's ministry scope
+- [ ] **Hybrid mode** — Master schedule with per-ministry edit sections
+- [ ] **Availability due date** — Set due date in wizard → schedule shows availability window metadata
+- [ ] **Send availability broadcast** — Click "Send Availability Request" on draft schedule → email sent to all active volunteers
+- [ ] **Volunteer banner** — Volunteer with active availability window sees campaign banner on dashboard with "Submit Availability" CTA
+- [ ] **Banner dismissal** — Dismiss banner → stays dismissed
+
+### T. Multi-Stage Approval (~10 min)
+
+- [ ] **Submit for review** — Draft schedule → click "Submit for Review" → status changes to `in_review`
+- [ ] **Approval countdown** — In-review schedule shows countdown to target approval date
+- [ ] **Ministry approval grid** — Grid shows each ministry with approved/pending status
+- [ ] **Ministry lead approves** — Ministry lead clicks approve for their ministry → status updates
+- [ ] **Cross-team coordination** — Click "Coordinate with other teams" → modal shows shared volunteers across ministries
+- [ ] **All approved → publish** — All ministries approved → "Publish Now" button active → publish → confirmation emails sent
+- [ ] **Partial approval visible** — "2 of 3 teams approved" shown on schedule card
+
+### U. Worship Module — Song Library (~15 min)
+
+> **Requires Growth tier or above.** Worship nav section hidden on Free/Starter.
+
+- [ ] **Nav gating** — On Free/Starter tier, Worship nav section not visible. On Growth+, Songs/Service Plans/Reports links appear
+- [ ] **Song library loads** — Navigate to Worship → Songs → page loads with empty state or song list
+- [ ] **Add song** — Click "Add Song" → fill title, CCLI number, default key, tags → save → song appears in list
+- [ ] **Edit song** — Click song → edit fields → save → changes reflected
+- [ ] **Archive song** — Click archive → song moves to Archived tab
+- [ ] **Search songs** — Type in search → list filters by title
+- [ ] **Filter tabs** — All / In Rotation / Archived tabs filter correctly
+- [ ] **CCLI metadata** — Song shows CCLI number, publisher, copyright info when provided
+
+### V. Worship Module — Service Plans (~15 min)
+
+- [ ] **Plans list** — Worship → Service Plans → upcoming plans shown (or empty state)
+- [ ] **Create plan** — Click "New Plan" → select service, set date, optional theme/speaker → plan created
+- [ ] **Add song to plan** — In plan editor, add a song item → song appears in order of service
+- [ ] **Add non-song item** — Add prayer, announcement, sermon, offering, video, or custom item
+- [ ] **Reorder items** — Drag items to reorder → sequence numbers update
+- [ ] **Key override** — Set a different key for a song in this plan (vs default)
+- [ ] **Publish plan** — Click Publish → plan marked published → SongUsageRecord entries created for each song
+- [ ] **Song usage tracked** — After publishing, song's use_count incremented and last_used_date updated
+- [ ] **Delete unpublished** — Delete a draft plan → plan removed
+- [ ] **Cannot delete published** — Published plan delete button disabled or warns
 
 ---
 

@@ -87,6 +87,31 @@ const featureGuides: { title: string; content: string }[] = [
     content:
       "VolunteerCal is a Progressive Web App (PWA) — you can install it on any device for quick access and a native app experience.\n\nChrome (Android/Desktop): Look for the \"Install\" prompt in the address bar, or open the browser menu and select \"Install app\" or \"Add to Home Screen.\"\n\niPhone/iPad (Safari): Tap the Share button (square with arrow), then tap \"Add to Home Screen.\"\n\nOnce installed, VolunteerCal opens in its own window with an app icon on your home screen — no app store download required.",
   },
+  {
+    title: "Workflow Modes",
+    content:
+      "VolunteerCal supports four scheduling workflow modes. Choose the one that fits how your organization operates:\n\n**Centralized** — Admin drafts the full schedule. Team leads review and approve. Admin publishes globally. Best for smaller orgs or those that want tight control.\n\n**Team-First** — Each team lead generates and publishes their own schedule independently. Admin monitors for cross-team conflicts. Best for organizations with autonomous ministry teams.\n\n**Hybrid** — Auto-draft creates templates. Leaders tweak their sections independently. Admin sees cross-team alerts. Best for mid-size organizations that want structure with flexibility.\n\n**Self-Service** — Volunteers sign up for open slots directly. No approval workflow. Best for events or low-stakes roles.\n\nFree tier is limited to Centralized. Starter and above have access to all four modes. You can change your workflow mode when creating each new schedule.",
+  },
+  {
+    title: "Availability Campaigns",
+    content:
+      "Before generating a schedule, you can request availability from your volunteers.\n\nWhen creating a new schedule, set an availability due date in Step 2 of the wizard. Optionally add a custom message. After generating the draft, click \"Send Availability Request\" to email all active volunteers.\n\nVolunteers see a banner on their dashboard with the coverage period and a link to submit their availability. You can track response rates on the Scheduling Dashboard.\n\nThis ensures your auto-generated schedule reflects real availability rather than assumptions.",
+  },
+  {
+    title: "Multi-Stage Approval",
+    content:
+      "For organizations with multiple teams, multi-stage approval ensures every team lead signs off before a schedule goes live.\n\nThe workflow:\n1. Admin generates a draft schedule\n2. Admin submits the schedule for review\n3. Each team lead reviews their team's assignments and clicks Approve\n4. Once all teams have approved, the admin can publish\n\nThe approval countdown shows how many teams have approved (e.g., \"2 of 3 teams approved\"). You can also use the cross-team coordination modal to see shared volunteers and resolve conflicts before publishing.\n\nMulti-stage approval is available on Growth tier and above.",
+  },
+  {
+    title: "Household Scheduling",
+    content:
+      "Link family members so the scheduler respects real-life connections.\n\nGo to People → Families tab → Add Family. Give the household a name, select members, and set constraints:\n\n**Never same service** — Family members won't be scheduled to the same service on the same date. Useful when one parent needs to be free for childcare.\n\n**Never same time** — Family members won't be scheduled to ANY service on the same date. For families that attend together.\n\n**Prefer same service** — The scheduler tries to place family members on the same service when possible. For families that like to serve together.\n\nConstraint violations are flagged during schedule review with household conflict cards. You can add notes to each household for context (e.g., \"Dad travels every other weekend\").",
+  },
+  {
+    title: "Song Library & Service Plans",
+    content:
+      "The worship module (Growth tier and above) lets you manage songs and build service plans.\n\n**Song Library** — Navigate to Worship → Songs. Add songs with title, CCLI number, default key, available keys, artist/writer credits, copyright, tags, and lyrics. Filter by status (active, archived), rotation status, or search by title. Songs track usage count and last-used date automatically.\n\n**Service Plans** — Navigate to Worship → Service Plans. Create a plan for a specific service and date. Add items: songs (with key overrides), prayers, announcements, sermons, offerings, videos, or custom items. Reorder items with drag-and-drop. Add arrangement notes per item.\n\n**Publishing** — When you publish a plan, VolunteerCal automatically creates song usage records for CCLI compliance. Each song's use count and last-used date update in real time.\n\nThe Reports page (Worship → Reports) shows song usage over time for CCLI reporting.",
+  },
 ];
 
 function AccordionItem({ title, content, isOpen, onToggle }: {

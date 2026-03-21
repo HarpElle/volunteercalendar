@@ -12,9 +12,10 @@ import { generateDraftSchedule } from "@/lib/services/scheduler";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
-import { CreateScheduleModal } from "@/components/forms/create-schedule-modal";
+import { CreateScheduleModal, type CreateScheduleOptions } from "@/components/forms/create-schedule-modal";
 import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
+import { ApprovalCountdown } from "@/components/scheduling/approval-countdown";
 import type {
   Schedule,
   ScheduleStatus,
@@ -95,28 +96,38 @@ export default function SchedulesPage() {
     load();
   }, [churchId]);
 
-  async function handleGenerate(startDate: string, endDate: string) {
+  async function handleGenerate(options: CreateScheduleOptions) {
     if (!churchId || !user) return;
     setGenerating(true);
 
     try {
       const scheduleData: Omit<Schedule, "id"> = {
         church_id: churchId,
-        date_range_start: startDate,
-        date_range_end: endDate,
+        date_range_start: options.startDate,
+        date_range_end: options.endDate,
         status: "draft",
-        workflow_mode: "centralized",
+        workflow_mode: options.workflowMode,
         created_by: user.uid,
         created_at: new Date().toISOString(),
         published_at: null,
         ministry_approvals: {},
         notes: null,
+        ...(options.availabilityDueDate
+          ? {
+              availability_window: {
+                due_date: options.availabilityDueDate,
+                message: options.availabilityMessage,
+                reminder_sent_at: null,
+                response_count: 0,
+              },
+            }
+          : {}),
       };
       const schedRef = await addChurchDocument(churchId, "schedules", scheduleData);
       const scheduleId = schedRef.id;
 
       const result = generateDraftSchedule(
-        scheduleId, churchId, services, volunteers, households, startDate, endDate, ministries, orgPrerequisites,
+        scheduleId, churchId, services, volunteers, households, options.startDate, options.endDate, ministries, orgPrerequisites,
       );
 
       const savedAssignments: Assignment[] = [];
@@ -479,6 +490,45 @@ export default function SchedulesPage() {
                 </svg>
                 Print / PDF
               </Button>
+              {activeSchedule.availability_window?.due_date &&
+                activeSchedule.status === "draft" &&
+                !activeSchedule.availability_window.reminder_sent_at && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!user || !churchId) return;
+                    try {
+                      const token = await user.getIdToken();
+                      const res = await fetch(`/api/schedules/${activeScheduleId}/availability-window`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ church_id: churchId }),
+                      });
+                      const result = await res.json();
+                      if (result.success) {
+                        setNotifyResult(`Sent availability request to ${result.emails_sent} volunteer${result.emails_sent !== 1 ? "s" : ""}`);
+                        setSchedules((prev) =>
+                          prev.map((s) =>
+                            s.id === activeScheduleId
+                              ? { ...s, availability_window: { ...s.availability_window!, reminder_sent_at: new Date().toISOString() } }
+                              : s
+                          )
+                        );
+                      } else {
+                        setMutationError(result.error || "Failed to send availability request");
+                      }
+                    } catch {
+                      setMutationError("Failed to send availability request");
+                    }
+                  }}
+                >
+                  Send Availability Request
+                </Button>
+              )}
               {activeSchedule.status === "in_review" && (
                 <Button
                   size="sm"
@@ -559,6 +609,33 @@ export default function SchedulesPage() {
                 <p className="text-xs font-medium text-vc-text-muted">Fairness</p>
                 <p className="text-xl font-semibold text-vc-indigo">{activeStats.fairness_score}%</p>
               </div>
+            </div>
+          )}
+
+          {/* Approval Countdown — shown during in_review */}
+          {activeSchedule.status === "in_review" && (
+            <div className="mb-4">
+              <ApprovalCountdown
+                schedule={activeSchedule}
+                ministries={ministries}
+                onRequestApproval={async () => {
+                  if (!user || !churchId) return;
+                  try {
+                    const token = await user.getIdToken();
+                    await fetch(`/api/schedules/${activeScheduleId}/approve`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({ church_id: churchId }),
+                    });
+                  } catch {
+                    // handled by panel
+                  }
+                }}
+                loading={transitioning}
+              />
             </div>
           )}
 
@@ -735,10 +812,20 @@ export default function SchedulesPage() {
                     </div>
                   </div>
                   <p className="mt-1 text-sm text-vc-text-muted">
-                    Created {new Date(s.created_at).toLocaleDateString()} · {s.workflow_mode}
+                    Created {new Date(s.created_at).toLocaleDateString()} · {s.workflow_mode.replace("-", " ")}
                     {s.status === "published" && s.published_at && (
                       <> · Published {new Date(s.published_at).toLocaleDateString()}</>
                     )}
+                    {s.availability_window?.due_date && s.status === "draft" && (
+                      <> · Availability due {s.availability_window.due_date}</>
+                    )}
+                    {s.status === "in_review" && (() => {
+                      const approvals = Object.values(s.ministry_approvals);
+                      const approved = approvals.filter((a) => a.status === "approved").length;
+                      return approvals.length > 0 ? (
+                        <> · {approved}/{approvals.length} teams approved</>
+                      ) : null;
+                    })()}
                   </p>
                 </div>
               ))}

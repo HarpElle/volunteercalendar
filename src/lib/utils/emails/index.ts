@@ -23,3 +23,7 @@ export { buildOrgCreatedEmail } from "./org-created";
 export { buildAssignmentChangeEmail } from "./assignment-change";
 export { buildSelfRemovalAlertEmail } from "./self-removal-alert";
 export { buildAbsenceAlertEmail } from "./absence-alert";
+export { buildAvailabilityWindowEmail } from "./availability-window";
+export { buildApprovalRequestEmail } from "./approval-request";
+export { buildApprovalReminderEmail } from "./approval-reminder";
+export { buildHouseholdConflictEmail } from "./household-conflict";
