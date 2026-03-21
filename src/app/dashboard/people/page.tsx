@@ -8,7 +8,6 @@ import {
   getChurchDocuments,
   updateChurchDocument,
   removeChurchDocument,
-  getChurchMemberships,
   updateMembershipStatus,
   updateMembershipRole,
   deleteMembership,
@@ -122,10 +121,17 @@ function PeopleContent() {
     if (!churchId) return;
     async function load() {
       try {
-        const [vols, mins, mems, svcs, hh, churchSnap] = await Promise.all([
+        // Fetch memberships via server-side API (Admin SDK bypasses Firestore
+        // security-rule limitations on collection-level queries)
+        const token = await getAuth().currentUser?.getIdToken();
+        const memsRes = await fetch(`/api/memberships?church_id=${encodeURIComponent(churchId!)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const mems: Membership[] = memsRes.ok ? await memsRes.json() : [];
+
+        const [vols, mins, svcs, hh, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
-          getChurchMemberships(churchId!),
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "households"),
           getDoc(doc(db, "churches", churchId!)),
@@ -799,9 +805,13 @@ function PeopleContent() {
             churchId={churchId!}
             user={user}
             ministries={ministries}
-            onInvited={() => {
+            onInvited={async () => {
               if (churchId) {
-                getChurchMemberships(churchId).then(setMemberships);
+                const t = await getAuth().currentUser?.getIdToken();
+                const r = await fetch(`/api/memberships?church_id=${encodeURIComponent(churchId)}`, {
+                  headers: { Authorization: `Bearer ${t}` },
+                });
+                if (r.ok) setMemberships(await r.json());
               }
             }}
           />
