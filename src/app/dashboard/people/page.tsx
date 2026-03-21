@@ -188,8 +188,8 @@ function PeopleContent() {
           volsByEmail.add(memEmail);
           volsByUserId.add(mem.user_id);
         }
-      } catch {
-        // silent
+      } catch (err) {
+        console.error("[People] Failed to load:", err);
       } finally {
         setLoading(false);
       }
