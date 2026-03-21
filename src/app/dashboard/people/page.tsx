@@ -270,6 +270,53 @@ function PeopleContent() {
     setMemberships((prev) =>
       prev.map((x) => (x.id === m.id ? { ...x, status: "active" as const, updated_at: new Date().toISOString() } : x)),
     );
+
+    // Create volunteer record so they appear on the Roster tab immediately
+    if (m.user_id && churchId) {
+      try {
+        const memUser = await getDoc(doc(db, "users", m.user_id));
+        const memEmail = memUser?.data()?.email?.toLowerCase() || "";
+        const alreadyOnRoster = volunteers.some(
+          (v) => v.user_id === m.user_id || (memEmail && v.email?.toLowerCase() === memEmail),
+        );
+        if (!alreadyOnRoster) {
+          const now = new Date().toISOString();
+          const volData = {
+            church_id: churchId,
+            name: memUser?.data()?.display_name || memEmail || "Member",
+            email: memUser?.data()?.email || "",
+            phone: memUser?.data()?.phone || null,
+            user_id: m.user_id,
+            membership_id: m.id,
+            status: "active" as const,
+            ministry_ids: [] as string[],
+            role_ids: [] as string[],
+            campus_ids: [] as string[],
+            household_id: null,
+            availability: {
+              blockout_dates: [] as string[],
+              recurring_unavailable: [] as string[],
+              preferred_frequency: 2,
+              max_roles_per_month: 8,
+            },
+            reminder_preferences: { channels: ["email" as const] },
+            stats: {
+              times_scheduled_last_90d: 0,
+              last_served_date: null,
+              decline_count: 0,
+              no_show_count: 0,
+            },
+            imported_from: null,
+            created_at: now,
+          };
+          const newRef = await addChurchDocument(churchId, "volunteers", volData);
+          setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Volunteer]);
+        }
+      } catch (err) {
+        console.error("Failed to create volunteer record on approval:", err);
+      }
+    }
+
     // Fire-and-forget approval notification email
     getAuth().currentUser?.getIdToken().then((token) =>
       fetch("/api/notify/membership-approved", {
@@ -1576,13 +1623,14 @@ function MemberRow({
 }) {
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showScopeEditor, setShowScopeEditor] = useState(false);
   const [scopeSelection, setScopeSelection] = useState<string[]>(membership.ministry_scope || []);
   const [scopeAll, setScopeAll] = useState(!membership.ministry_scope?.length);
 
   useEffect(() => {
-    if (!membership.user_id) return;
+    if (!membership.user_id) { setLoaded(true); return; }
     getDoc(doc(db, "users", membership.user_id))
       .then((snap) => {
         if (snap.exists()) {
@@ -1590,7 +1638,8 @@ function MemberRow({
           setUserEmail(snap.data().email || "");
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, [membership.user_id]);
 
   const statusInfo = STATUS_LABELS[membership.status] || { label: membership.status, color: "bg-vc-bg-cream text-vc-text-muted" };
@@ -1612,7 +1661,7 @@ function MemberRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-medium text-vc-indigo truncate">
-              {userName || userEmail || membership.user_id}
+              {loaded ? (userName || userEmail || "Unknown member") : "Loading\u2026"}
               {isCurrentUser && <span className="ml-1 text-xs text-vc-text-muted">(you)</span>}
             </p>
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusInfo.color}`}>
