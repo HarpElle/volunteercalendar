@@ -737,9 +737,9 @@ export default function AccountPage() {
         </section>
       )}
 
-      {/* Danger Zone */}
+      {/* Account Deletion */}
       <section className="mb-10">
-        <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
+        <h2 className="mb-4 text-lg font-semibold text-vc-danger">Account Deletion</h2>
         <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
           <h3 className="font-medium text-vc-indigo">Delete Account</h3>
           <p className="mt-1 text-sm text-vc-text-muted">

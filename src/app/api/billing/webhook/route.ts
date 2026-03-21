@@ -46,6 +46,13 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // Respect manual tier overrides
+        const checkoutChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
+        if (checkoutChurchSnap.data()?.subscription_source === "manual") {
+          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          break;
+        }
+
         await adminDb.doc(`churches/${churchId}`).update({
           subscription_tier: tier,
           stripe_customer_id: session.customer as string,
@@ -81,6 +88,14 @@ export async function POST(req: NextRequest) {
           console.warn("Webhook: missing or invalid church_id in subscription.updated metadata");
           break;
         }
+
+        // Respect manual tier overrides
+        const updatedChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
+        if (updatedChurchSnap.data()?.subscription_source === "manual") {
+          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          break;
+        }
+
         const priceId = subscription.items.data[0]?.price?.id || "";
         const tier = PRICE_TO_TIER[priceId] || "free";
         const isActive =
@@ -99,6 +114,14 @@ export async function POST(req: NextRequest) {
           console.warn("Webhook: missing or invalid church_id in subscription.deleted metadata");
           break;
         }
+
+        // Respect manual tier overrides
+        const deletedChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
+        if (deletedChurchSnap.data()?.subscription_source === "manual") {
+          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          break;
+        }
+
         await adminDb.doc(`churches/${churchId}`).update({
           subscription_tier: "free",
         });

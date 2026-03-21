@@ -67,7 +67,7 @@ export function Modal({
               </div>
               <button
                 onClick={onClose}
-                className="ml-4 -mr-1 -mt-1 rounded-lg p-2.5 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                className="ml-4 -mr-1 -mt-1 flex h-11 w-11 items-center justify-center rounded-lg text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
                 aria-label="Close"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

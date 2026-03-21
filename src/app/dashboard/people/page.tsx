@@ -95,6 +95,8 @@ function PeopleContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMinistries, setFilterMinistries] = useState<string[]>([]);
   const [filterRoles, setFilterRoles] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState<"active" | "archived" | "all">("active");
+  const [filterTeam, setFilterTeam] = useState<"all" | "on-team" | "no-team">("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Households (Families tab)
@@ -228,6 +230,11 @@ function PeopleContent() {
   });
 
   const filteredRoster = rosterPeople.filter(({ volunteer: v }) => {
+    // Status filter (default: active only)
+    if (filterStatus !== "all" && v.status !== filterStatus) return false;
+    // Team membership filter
+    if (filterTeam === "on-team" && (!v.ministry_ids || v.ministry_ids.length === 0)) return false;
+    if (filterTeam === "no-team" && v.ministry_ids && v.ministry_ids.length > 0) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const digits = q.replace(/\D/g, "");
@@ -245,7 +252,9 @@ function PeopleContent() {
     return true;
   });
 
-  const activeFilterCount = filterMinistries.length + filterRoles.length;
+  const activeFilterCount = filterMinistries.length + filterRoles.length
+    + (filterStatus !== "active" ? 1 : 0)
+    + (filterTeam !== "all" ? 1 : 0);
 
   // Helpers
   function getMinistryName(id: string) {
@@ -311,6 +320,67 @@ function PeopleContent() {
     }
   }
 
+  async function handleArchiveVolunteer(id: string) {
+    if (!churchId) return;
+    const vol = volunteers.find((v) => v.id === id);
+    if (!vol) return;
+    if (!confirm(`Archive ${vol.name}? They'll be removed from all teams and excluded from future scheduling and event invitations. They can still see the organization. You can restore them later.`)) return;
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      const res = await fetch(`/api/volunteers/${id}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId, action: "archive" }),
+      });
+      if (res.ok) {
+        setVolunteers((prev) =>
+          prev.map((v) => v.id === id ? { ...v, status: "archived" as const, ministry_ids: [], role_ids: [] } : v),
+        );
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleRestoreVolunteer(id: string) {
+    if (!churchId) return;
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      const res = await fetch(`/api/volunteers/${id}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId, action: "restore" }),
+      });
+      if (res.ok) {
+        setVolunteers((prev) =>
+          prev.map((v) => v.id === id ? { ...v, status: "active" as const } : v),
+        );
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleRemoveFromOrg(id: string) {
+    if (!churchId) return;
+    const vol = volunteers.find((v) => v.id === id);
+    if (!vol) return;
+    if (!confirm(`Remove ${vol.name} from this organization? They will lose all access and won't be able to see the organization unless re-invited. This cannot be undone.`)) return;
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      const res = await fetch(`/api/volunteers/${id}/remove`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      if (res.ok) {
+        setVolunteers((prev) => prev.filter((v) => v.id !== id));
+      }
+    } catch {
+      // silent
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -335,7 +405,7 @@ function PeopleContent() {
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">People</h1>
           <p className="mt-1 text-vc-text-secondary">
-            {volunteers.length} in roster · {activeMems.length} active members · {pendingMems.length} pending
+            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingMems.length} pending
           </p>
         </div>
         {canManage && addMode === null && (
@@ -477,6 +547,38 @@ function PeopleContent() {
 
             {showFilters && (
               <div className="rounded-xl border border-vc-border-light bg-white p-4 space-y-4">
+                {/* Status & Team filters */}
+                <div className="flex flex-wrap gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                      Status
+                    </label>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value as "active" | "archived" | "all")}
+                      className="rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 min-h-[44px]"
+                    >
+                      <option value="active">Active</option>
+                      <option value="archived">Archived</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                      Team
+                    </label>
+                    <select
+                      value={filterTeam}
+                      onChange={(e) => setFilterTeam(e.target.value as "all" | "on-team" | "no-team")}
+                      className="rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 min-h-[44px]"
+                    >
+                      <option value="all">All</option>
+                      <option value="on-team">On a Team</option>
+                      <option value="no-team">Not on Any Team</option>
+                    </select>
+                  </div>
+                </div>
+
                 {ministries.length > 0 && (
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
@@ -538,7 +640,7 @@ function PeopleContent() {
 
                 {activeFilterCount > 0 && (
                   <button
-                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); }}
+                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterStatus("active"); setFilterTeam("all"); }}
                     className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
                   >
                     Clear all filters
@@ -547,6 +649,28 @@ function PeopleContent() {
               </div>
             )}
           </div>
+
+          {/* UX messaging for filter states */}
+          {filterStatus === "archived" && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-vc-border-light bg-vc-bg-warm px-5 py-3">
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+              </svg>
+              <p className="text-sm text-vc-text-secondary">
+                Archived volunteers are excluded from scheduling, team rosters, and event invitations. They can still see the organization but won&apos;t receive any assignments.
+              </p>
+            </div>
+          )}
+          {filterTeam === "no-team" && filterStatus !== "archived" && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-vc-border-light bg-vc-bg-warm px-5 py-3">
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+              </svg>
+              <p className="text-sm text-vc-text-secondary">
+                These volunteers are active but not assigned to any team. They can still be invited to Events and will appear in your organization.
+              </p>
+            </div>
+          )}
 
           {volunteers.length === 0 && addMode === null ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
@@ -581,6 +705,9 @@ function PeopleContent() {
                         getMinistryName={getMinistryName}
                         getMinistryColor={getMinistryColor}
                         onDelete={() => handleDeleteVolunteer(v.id)}
+                        onArchive={() => handleArchiveVolunteer(v.id)}
+                        onRestore={() => handleRestoreVolunteer(v.id)}
+                        onRemoveFromOrg={() => handleRemoveFromOrg(v.id)}
                         churchId={churchId!}
                         ministries={ministries}
                         availableRoles={uniqueRoles}
@@ -599,7 +726,7 @@ function PeopleContent() {
                   No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
                   {activeFilterCount > 0 && (
                     <button
-                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setSearchQuery(""); }}
+                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); }}
                       className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
                     >
                       Clear all
@@ -857,6 +984,9 @@ function RosterRow({
   getMinistryName,
   getMinistryColor,
   onDelete,
+  onArchive,
+  onRestore,
+  onRemoveFromOrg,
   churchId,
   ministries,
   availableRoles,
@@ -868,17 +998,31 @@ function RosterRow({
   getMinistryName: (id: string) => string;
   getMinistryColor: (id: string) => string;
   onDelete: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onRemoveFromOrg: () => void;
   churchId: string;
   ministries: Ministry[];
   availableRoles: { role_id: string; title: string; ministry_id: string }[];
   onUpdated: (v: Volunteer) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const isArchived = v.status === "archived";
 
   return (
     <>
-      <tr className="hover:bg-vc-bg-warm/50 transition-colors">
-        <td className="px-5 py-3 font-medium text-vc-indigo">{v.name}</td>
+      <tr className={`transition-colors ${isArchived ? "opacity-60 bg-vc-bg-warm/30" : "hover:bg-vc-bg-warm/50"}`}>
+        <td className="px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className={`font-medium ${isArchived ? "text-vc-text-muted" : "text-vc-indigo"}`}>{v.name}</span>
+            {isArchived && (
+              <span className="inline-flex items-center rounded-full bg-vc-bg-warm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+                Archived
+              </span>
+            )}
+          </div>
+        </td>
         <td className="px-5 py-3 text-vc-text-secondary">{v.email || "\u2014"}</td>
         <td className="hidden px-5 py-3 text-vc-text-secondary sm:table-cell">{formatPhone(v.phone)}</td>
         <td className="px-5 py-3">
@@ -911,16 +1055,74 @@ function RosterRow({
         </td>
         {canManage && (
           <td className="px-5 py-3">
-            <button
-              onClick={() => setEditing(true)}
-              className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-            >
-              Edit
-            </button>
+            <div className="relative flex items-center gap-1">
+              {!isArchived && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
+                >
+                  Edit
+                </button>
+              )}
+              {isArchived && (
+                <button
+                  onClick={onRestore}
+                  className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-sage hover:text-vc-sage/80 transition-colors"
+                >
+                  Restore
+                </button>
+              )}
+              <button
+                onClick={() => setShowActions(!showActions)}
+                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-vc-text-muted hover:text-vc-indigo hover:bg-vc-bg-warm transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
+                </svg>
+              </button>
+              {showActions && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowActions(false)} />
+                  <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-xl border border-vc-border-light bg-white py-1 shadow-xl shadow-black/[0.08]">
+                    {!isArchived && (
+                      <button
+                        onClick={() => { setShowActions(false); onArchive(); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                        </svg>
+                        Archive
+                      </button>
+                    )}
+                    {isArchived && (
+                      <button
+                        onClick={() => { setShowActions(false); onRestore(); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-vc-sage hover:bg-vc-bg-warm transition-colors"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                        </svg>
+                        Restore
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setShowActions(false); onRemoveFromOrg(); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                      </svg>
+                      Remove from Organization
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </td>
         )}
       </tr>
-      {canManage && (
+      {canManage && !isArchived && (
         <VolunteerEditModal
           open={editing}
           onClose={() => setEditing(false)}

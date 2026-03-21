@@ -115,7 +115,8 @@ export async function GET(req: NextRequest) {
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    await adminAuth.verifyIdToken(authHeader.slice(7));
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const userId = decoded.uid;
 
     const { searchParams } = new URL(req.url);
     const churchId = searchParams.get("church_id");
@@ -125,6 +126,16 @@ export async function GET(req: NextRequest) {
 
     if (!churchId || !serviceId || !serviceDate) {
       return NextResponse.json({ error: "Missing required params" }, { status: 400 });
+    }
+
+    // Verify user is a member of this church with scheduler+ role
+    const membershipSnap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
+    if (!membershipSnap.exists) {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    }
+    const role = membershipSnap.data()!.role as string;
+    if (!["owner", "admin", "scheduler"].includes(role)) {
+      return NextResponse.json({ error: "Scheduler or above required" }, { status: 403 });
     }
 
     // Check if a code already exists for this service date

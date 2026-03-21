@@ -14,6 +14,7 @@ Auto-generate fair, conflict-free volunteer schedules across worship, kids, tech
 - **Smart check-in** — QR codes, time-aware prompts, and proximity detection; volunteers check in from their phone automatically
 - **Shift swap** — Volunteers request swaps; eligible replacements accept; admins approve
 - **Volunteer health** — At-risk detection, declining engagement alerts, inactive classification
+- **Volunteer archive & removal** — Archive inactive volunteers to exclude them from scheduling while keeping their record, or remove them from the organization entirely
 - **Onboarding pipeline** — Org-wide and team-specific prerequisites (background checks, training, orientation) with volunteer progress tracking
 - **Song library & service plans** — Full worship planning with CCLI metadata, order-of-service builder, and song usage tracking (Growth+ tiers)
 - **SongSelect integration** — Import songs directly from CCLI SongSelect with automatic metadata sync (Growth+ tiers)

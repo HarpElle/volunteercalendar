@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/reminders?hours=24",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/songselect-sync",
+      "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/propresenter-export",
+      "schedule": "0 14 * * *"
     }
   ]
 }

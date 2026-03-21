@@ -18,7 +18,7 @@ const faqs = [
   {
     question: "Is there really a free plan?",
     answer:
-      "Yes — the Free plan is yours forever. It includes up to 20 volunteers, 1 team with 3 roles per service, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
+      "Yes — the Free plan is yours forever. It includes up to 20 volunteers, 2 teams with 3 roles per service, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
   },
   {
     question: "How does auto-draft scheduling work?",

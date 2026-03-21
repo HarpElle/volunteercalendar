@@ -63,7 +63,7 @@ Before testing, make sure you have:
 - [ ] **Double-confirm blocked** — Click link again → shows "Already Responded"
 
 ### 2.7 Account Deletion
-- [ ] **Delete test account** — Account Settings → Danger Zone → type DELETE → confirm → redirected to home, signed out
+- [ ] **Delete test account** — Account Settings → Account Deletion → type DELETE → confirm → redirected to home, signed out
 - [ ] **Verify cleanup** — Check Firebase Console: user doc removed, memberships removed
 
 ---
@@ -458,7 +458,32 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **QR sharing** — Share modal QR code scans correctly on a phone → opens participant view
 - [ ] **Reconnection** — Participant: disconnect network briefly → reconnect → view resumes at current item (no stale state)
 
-### Y. Song Usage Reports & ProPresenter Export (~10 min)
+### Y. Volunteer Archive, Restore & Remove (~10 min)
+
+**Archive:**
+- [ ] **Archive volunteer** — People page → click menu on an active volunteer → Archive → confirmation dialog → confirm → volunteer disappears from default (active) view
+- [ ] **Archived badge** — Filter to "Archived" → archived volunteer shows faded row with "Archived" badge
+- [ ] **Teams cleared** — Archived volunteer's ministry_ids and role_ids are empty (removed from all teams)
+- [ ] **Scheduler exclusion** — Generate a new schedule → verify archived volunteers are NOT assigned to any slots
+
+**Restore:**
+- [ ] **Restore volunteer** — Filter to "Archived" → click menu on archived volunteer → Restore → volunteer reappears in active view
+- [ ] **Status active** — Restored volunteer has status "active"
+- [ ] **Teams empty** — Restored volunteer has no team assignments (must be re-added manually)
+
+**Remove from Organization:**
+- [ ] **Remove volunteer** — People page → click menu → Remove from Organization → confirmation dialog (warns permanent) → confirm → volunteer gone from list
+- [ ] **Membership deleted** — If volunteer had a user account, check Firebase Console → memberships collection → their membership doc is deleted
+- [ ] **Cannot undo** — Removed volunteer does not appear in any filter view (Active, Archived, or All)
+
+**Status & Team Filters:**
+- [ ] **Status filter** — Active (default) / Archived / All → list updates correctly for each
+- [ ] **Team filter** — All / On a Team / Not on Any Team → filters correctly
+- [ ] **Combined filters** — Status "All" + Team "Not on Any Team" → shows both active and archived volunteers with no teams
+- [ ] **Info banners** — "Archived" filter shows info banner explaining exclusion; "Not on Any Team" filter shows info banner about event eligibility
+- [ ] **Clear filters** — "Clear all" resets status to Active and team to All
+
+### Z. Song Usage Reports & ProPresenter Export (~10 min)
 
 > **Requires Growth tier or above.** Publish at least one service plan with songs before testing.
 

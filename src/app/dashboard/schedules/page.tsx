@@ -81,7 +81,7 @@ export default function SchedulesPage() {
         ]);
         setSchedules(scheds as unknown as Schedule[]);
         setServices(svcs as unknown as Service[]);
-        setVolunteers(vols as unknown as Volunteer[]);
+        setVolunteers((vols as unknown as Volunteer[]).filter(v => v.status === "active"));
         setMinistries(mins as unknown as Ministry[]);
         setHouseholds(hhs as unknown as Household[]);
         if (churchSnap.exists()) {

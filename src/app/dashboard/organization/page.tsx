@@ -21,7 +21,7 @@ import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, Campus } from "@/lib/types";
+import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, Campus, SubscriptionSource } from "@/lib/types";
 import { CampusFormModal, type CampusFormData } from "@/components/forms/campus-form-modal";
 import { MinistryFormModal, type MinistryFormData } from "@/components/forms/ministry-form-modal";
 
@@ -89,6 +89,11 @@ function OrganizationContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
+  // Platform admin state
+  const [overrideTier, setOverrideTier] = useState<string>("free");
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideSuccess, setOverrideSuccess] = useState("");
+
   // Check-in settings state
   const [selfCheckInEnabled, setSelfCheckInEnabled] = useState(true);
   const [windowBefore, setWindowBefore] = useState(60);
@@ -153,6 +158,11 @@ function OrganizationContent() {
   const volNearLimit = limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
   const minNearLimit = limits.ministries !== Infinity && ministries.length >= limits.ministries * 0.8;
   const eventNearLimit = limits.active_events !== Infinity && activeEventCount >= limits.active_events * 0.8;
+  const subscriptionSource = church?.subscription_source || "stripe";
+  const isPlatformSuperadmin = (() => {
+    const uids = (process.env.NEXT_PUBLIC_PLATFORM_ADMIN_UIDS || "").split(",").map((s) => s.trim());
+    return user ? uids.includes(user.uid) : false;
+  })();
 
   // --- General settings handler ---
 
@@ -377,6 +387,45 @@ function OrganizationContent() {
       setMutationError("Failed to open billing portal. Please try again.");
     } finally {
       setPortalLoading(false);
+    }
+  }
+
+  // --- Platform admin tier override ---
+
+  async function handleTierOverride(removeOverride = false) {
+    if (!churchId) return;
+    setOverrideSaving(true);
+    setOverrideSuccess("");
+    setMutationError("");
+    try {
+      const idToken = await getAuth().currentUser?.getIdToken();
+      const res = await fetch("/api/admin/tier-override", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(
+          removeOverride
+            ? { church_id: churchId, remove_override: true }
+            : { church_id: churchId, tier: overrideTier },
+        ),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update tier");
+      }
+      const data = await res.json();
+      // Refresh church data in local state
+      setChurch((prev) =>
+        prev
+          ? { ...prev, subscription_tier: data.tier, subscription_source: data.source }
+          : prev,
+      );
+      setOverrideSuccess(
+        removeOverride ? "Override removed — reverted to Free." : `Tier set to ${data.tier}.`,
+      );
+    } catch (err) {
+      setMutationError((err as Error).message || "Failed to override tier.");
+    } finally {
+      setOverrideSaving(false);
     }
   }
 
@@ -717,6 +766,72 @@ function OrganizationContent() {
                 )}
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Platform Admin Override ── */}
+      {isPlatformSuperadmin && churchId && (
+        <section className="mb-8">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-6">
+            <div className="mb-3 flex items-center gap-2">
+              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+              </svg>
+              <h2 className="text-lg font-semibold text-amber-800">Platform Admin</h2>
+            </div>
+            <p className="mb-4 text-sm text-amber-700">
+              Changes here bypass billing and set the subscription tier directly.
+            </p>
+
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-sm font-medium text-amber-800">Current:</span>
+              <Badge variant={subscriptionSource === "manual" ? "warning" : "default"}>
+                {currentTier.charAt(0).toUpperCase() + currentTier.slice(1)}
+              </Badge>
+              <span className="text-xs text-amber-600">
+                ({subscriptionSource === "manual" ? "Manual Override" : "Stripe"})
+              </span>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-amber-800">Set Tier</label>
+                <select
+                  value={overrideTier}
+                  onChange={(e) => setOverrideTier(e.target.value)}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-vc-indigo focus:outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  <option value="free">Free</option>
+                  <option value="starter">Starter</option>
+                  <option value="growth">Growth</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={overrideSaving}
+                onClick={() => handleTierOverride(false)}
+              >
+                Apply Override
+              </Button>
+              {subscriptionSource === "manual" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  loading={overrideSaving}
+                  onClick={() => handleTierOverride(true)}
+                >
+                  Remove Override
+                </Button>
+              )}
+            </div>
+
+            {overrideSuccess && (
+              <p className="mt-3 text-sm font-medium text-vc-sage">{overrideSuccess}</p>
+            )}
           </div>
         </section>
       )}

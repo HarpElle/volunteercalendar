@@ -465,6 +465,8 @@ function isEligible(
   ministries?: Ministry[],
   orgPrerequisites?: OnboardingStep[],
 ): boolean {
+  // Must be active (safety net — callers should pre-filter)
+  if (v.status !== "active") return false;
   // Must be in the right ministry
   if (!canServeInMinistry(v, ministryId)) return false;
   // Must be qualified for this specific role

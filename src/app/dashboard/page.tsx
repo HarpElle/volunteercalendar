@@ -160,7 +160,7 @@ export default function DashboardPage() {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-vc-sand/30">
-          <svg className="h-8 w-8 text-vc-indigo/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <svg className="h-8 w-8 text-vc-indigo/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
           </svg>
         </div>
@@ -198,7 +198,7 @@ export default function DashboardPage() {
     return localStorage.getItem("vc_setup_guide_dismissed") === "true";
   });
   const [guideCollapsed, setGuideCollapsed] = useState(false);
-  const [confirmDismiss, setConfirmDismiss] = useState(false);
+
 
   const setupSteps = stats ? [
     { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
@@ -256,35 +256,17 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>
-                {confirmDismiss ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-vc-text-muted">Hide permanently?</span>
-                    <button
-                      onClick={dismissGuide}
-                      className="text-xs font-medium text-vc-danger hover:text-vc-danger/80 transition-colors"
-                    >
-                      Yes, hide
-                    </button>
-                    <button
-                      onClick={() => setConfirmDismiss(false)}
-                      className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
                   <button
-                    onClick={() => setConfirmDismiss(true)}
-                    className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
-                    title="You can also collapse the guide to minimize it"
-                  >
-                    Dismiss
-                  </button>
-                )}
+                  onClick={dismissGuide}
+                  className="text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+                  title="You can also collapse the guide to minimize it"
+                >
+                  Dismiss
+                </button>
               </div>
 
               {/* Progress bar */}
-              <div className="mt-3 h-1.5 rounded-full bg-white/60 overflow-hidden">
+              <div className="mt-3 h-1.5 rounded-full bg-vc-sand/20 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-vc-coral transition-all duration-500"
                   style={{ width: `${(completedSteps / setupSteps.length) * 100}%` }}
@@ -362,7 +344,7 @@ export default function DashboardPage() {
                     { label: "Services", value: stats.services, color: "bg-vc-sage/10 text-vc-sage", href: "/dashboard/services-events" },
                     { label: "Schedules", value: stats.activeSchedules, color: "bg-vc-sand/10 text-vc-sand-dark", href: "/dashboard/schedules" },
                   ].map((s) => (
-                    <Link key={s.label} href={s.href} className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                    <Link key={s.label} href={s.href} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
                       <p className="text-sm font-medium text-vc-text-muted">{s.label}</p>
                       <p className={`mt-2 inline-flex rounded-lg px-3 py-1 text-2xl font-semibold ${s.color}`}>{s.value}</p>
                     </Link>
@@ -370,14 +352,14 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <Link href="/dashboard/people" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                  <Link href="/dashboard/people" className="rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
                     <p className="text-sm font-medium text-vc-text-muted">Active Volunteers</p>
                     <p className="mt-2 text-2xl font-semibold text-vc-indigo">{stats.volunteers}</p>
                     {stats.unscheduledVolunteers > 0 && (
                       <p className="mt-1 text-xs text-vc-text-muted">{stats.unscheduledVolunteers} not yet scheduled</p>
                     )}
                   </Link>
-                  <Link href="/dashboard/schedules" className="rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                  <Link href="/dashboard/schedules" className="rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
                     <p className="text-sm font-medium text-vc-text-muted">Fill Rate</p>
                     <p className={`mt-2 text-2xl font-semibold ${
                       stats.fillRate >= 80 ? "text-vc-sage" : stats.fillRate >= 50 ? "text-vc-sand-dark" : "text-vc-danger"

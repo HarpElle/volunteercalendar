@@ -100,6 +100,8 @@ export type SubscriptionTier =
 
 export type OrgType = "church" | "nonprofit" | "other";
 
+export type SubscriptionSource = "stripe" | "manual";
+
 export interface Church {
   id: string;
   name: string;
@@ -108,6 +110,8 @@ export interface Church {
   workflow_mode: WorkflowMode;
   timezone: string;
   subscription_tier: SubscriptionTier;
+  /** How the tier was set — absent defaults to "stripe" */
+  subscription_source?: SubscriptionSource;
   stripe_customer_id: string | null;
   settings: ChurchSettings;
   /** Org-wide prerequisites that apply to ALL teams */
@@ -365,7 +369,7 @@ export type ImportSource =
   | "self_signup"
   | "invite";
 
-export type VolunteerStatus = "active" | "inactive" | "pending";
+export type VolunteerStatus = "active" | "inactive" | "pending" | "archived";
 
 export interface VolunteerAvailability {
   blockout_dates: string[];

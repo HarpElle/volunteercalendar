@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 + Expansion Phases 4–6 complete. All expansion phases done. |
+| **Status** | Phase 32 + Expansion Phases 4–8 complete. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -249,13 +249,22 @@ VolunteerCal/
 │   │       │       ├── route.ts    # Song usage report with date range/filters
 │   │       │       └── export/
 │   │       │           └── route.ts    # CSV export of song usage data
-│   │       └── billing/
-│   │           ├── checkout/
-│   │           │   └── route.ts    # Stripe checkout session creation
-│   │           ├── portal/
-│   │           │   └── route.ts    # Stripe customer portal
-│   │           └── webhook/
-│   │               └── route.ts    # Stripe webhook handler
+│   │       ├── billing/
+│   │       │   ├── checkout/
+│   │       │   │   └── route.ts    # Stripe checkout session creation
+│   │       │   ├── portal/
+│   │       │   │   └── route.ts    # Stripe customer portal
+│   │       │   └── webhook/
+│   │       │       └── route.ts    # Stripe webhook handler
+│   │       ├── admin/
+│   │       │   └── tier-override/
+│   │       │       └── route.ts    # Platform admin tier override (POST)
+│   │       └── volunteers/
+│   │           └── [id]/
+│   │               ├── archive/
+│   │               │   └── route.ts    # Archive/restore volunteer (PATCH)
+│   │               └── remove/
+│   │                   └── route.ts    # Remove volunteer from organization (DELETE)
 │   ├── components/
 │   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, drawer, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete, select
 │   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal (effective-from UI), ministry-form-modal, campus-form-modal, create-schedule-modal (step wizard), volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer, household-form-modal
@@ -320,3 +329,5 @@ VolunteerCal/
 | Exp. 4 | SongSelect integration — songselect adapter (src/lib/integrations/songselect.ts), connect/search/import API routes (src/app/api/songselect/), SongSelect import modal (src/components/worship/songselect-import-modal.tsx), duplicate detection by CCLI number, weekly cron sync (src/app/api/cron/songselect-sync/) | Complete |
 | Exp. 5 | Stage Sync — conductor page (src/app/stage-sync/conductor/[churchId]/[planId]/), participant page (src/app/stage-sync/view/[churchId]/[planId]/), enable/advance/status API routes (src/app/api/stage-sync/), conductor component with keyboard shortcuts, participant viewer with real-time Firestore onSnapshot, share modal with QR code, Firestore rules for stage_sync_live and stage_sync_tokens collections | Complete |
 | Exp. 6 | Song usage reports & ProPresenter export — reports page with date range/filters/CSV export (src/app/api/reports/song-usage/), ProPresenter JSON export API (src/app/api/service-plans/[id]/export-propresenter/), daily auto-email cron (src/app/api/cron/propresenter-export/), propresenter-export email template, Firestore composite indexes for song_usage, songs, and service_plans | Complete |
+| Exp. 7 | Platform admin tier override & ministry templates — SubscriptionSource type on Church interface, platform-admin utility (src/lib/utils/platform-admin.ts), tier-override API (src/app/api/admin/tier-override/), Stripe webhook guard for manual overrides, Platform Admin UI card in organization settings, free tier updated to 2 ministries, 23 church ministry templates with 6 categories (src/lib/constants/), setup wizard converted to stepped form with ministry picker (step 4 for churches), inline name editing, background-check indicators | Complete |
+| Exp. 8 | Volunteer archive & status system — "archived" added to VolunteerStatus type, scheduler isEligible() safety check rejects non-active volunteers, schedules page pre-filters archived before generating drafts, archive/restore API (src/app/api/volunteers/[id]/archive/), remove-from-organization API (src/app/api/volunteers/[id]/remove/) deletes volunteer + membership, People page status filter (Active/Archived/All) and team filter (On a Team/Not on Any Team), kebab action menu with Archive/Restore/Remove from Organization, archived row visual indicators (faded + badge), contextual info banners for archived and no-team filter states | Complete |
