@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FamilyLookup } from "@/components/checkin/family-lookup";
 import { ChildSelection } from "@/components/checkin/child-selection";
@@ -59,6 +59,14 @@ const INACTIVITY_TIMEOUT = 30_000; // 30 seconds
  * Auto-resets to Screen 1 after 30s of inactivity.
  */
 export default function CheckInKiosk() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-pulse text-vc-text-muted">Loading...</div></div>}>
+      <CheckInKioskInner />
+    </Suspense>
+  );
+}
+
+function CheckInKioskInner() {
   const searchParams = useSearchParams();
   const churchId = searchParams.get("church_id") || "";
   const stationId = searchParams.get("station") || undefined;
