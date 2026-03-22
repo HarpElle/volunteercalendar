@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
+import { ChordChartRenderer } from "./chord-chart-renderer";
+import type { SongChartData } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,6 +18,7 @@ interface LiveItem {
   song_id: string | null;
   key: string | null;
   arrangement_notes: string | null;
+  chart_data: SongChartData | null;
 }
 
 interface LiveSyncData {
@@ -155,11 +158,20 @@ export function StageSyncViewer({ accessToken }: StageSyncViewerProps) {
         {currentItem?.key && (
           <p className="mt-4 text-2xl text-white/60">Key: {currentItem.key}</p>
         )}
-        {currentItem?.arrangement_notes && (
+        {currentItem?.chart_data ? (
+          <div className="mt-6 w-full max-w-3xl overflow-y-auto" style={{ maxHeight: "60vh" }}>
+            <ChordChartRenderer
+              chartData={currentItem.chart_data}
+              stageSyncMode
+              fontScale={1.2}
+              chordHighlight
+            />
+          </div>
+        ) : currentItem?.arrangement_notes ? (
           <p className="mt-6 max-w-2xl text-center text-lg leading-relaxed text-white/40">
             {currentItem.arrangement_notes}
           </p>
-        )}
+        ) : null}
       </div>
 
       {/* Progress dots */}

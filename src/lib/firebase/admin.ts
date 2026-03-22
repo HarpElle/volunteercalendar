@@ -1,12 +1,14 @@
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getStorage, type Storage } from "firebase-admin/storage";
 
 // Lazy singletons — initialized on first use (at request time), not at build time.
 // This ensures Vercel Production env vars are available when credentials are read.
 let _app: App | null = null;
 let _auth: Auth | null = null;
 let _db: Firestore | null = null;
+let _storage: Storage | null = null;
 
 function getAdminApp(): App {
   if (_app) return _app;
@@ -62,5 +64,12 @@ export const adminDb: Firestore = new Proxy({} as Firestore, {
   get(_, prop) {
     if (!_db) _db = getFirestore(getAdminApp());
     return (_db as unknown as Record<string, unknown>)[prop as string];
+  },
+});
+
+export const adminStorage: Storage = new Proxy({} as Storage, {
+  get(_, prop) {
+    if (!_storage) _storage = getStorage(getAdminApp());
+    return (_storage as unknown as Record<string, unknown>)[prop as string];
   },
 });

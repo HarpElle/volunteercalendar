@@ -37,6 +37,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
+    // Fetch church CCLI number for the report
+    const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+    const churchCcliNumber = (churchSnap.data()?.ccli_number as string) || "";
+
     // Query song usage records
     let query: FirebaseFirestore.Query = adminDb
       .collection("churches")
@@ -59,9 +63,10 @@ export async function GET(req: NextRequest) {
 
     if (format === "csv") {
       // Generate CSV for CCLI compliance
-      const header = "Song Title,CCLI Number,Service Date,Service Name,Key Used";
+      const header = "Church CCLI #,Song Title,CCLI Number,Service Date,Service Name,Key Used";
       const rows = records.map((r) =>
         [
+          churchCcliNumber,
           csvEscape(r.song_title),
           r.ccli_number ?? "",
           r.service_date,

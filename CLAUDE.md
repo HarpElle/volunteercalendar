@@ -48,4 +48,4 @@ Flexible volunteer scheduling SaaS for churches, nonprofits, and volunteer-drive
 - `docs/TEST_PLAN.md` — Manual + automated testing checklist
 
 ## Phase Roadmap
-See `PROJECT_OVERVIEW.md` for complete phase history (Phases 1–32 + Expansion Phases 4–8 complete). All expansion phases are done: SongSelect integration, Stage Sync, ProPresenter export, song usage reports, platform admin tier override, ministry templates, and volunteer archive/status system.
+See `PROJECT_OVERVIEW.md` for complete phase history (Phases 1–32 + Expansion Phases 4–9 complete). All expansion phases are done: SongSelect integration, Stage Sync, ProPresenter export, song usage reports, platform admin tier override, ministry templates, volunteer archive/status system, and ChordPro/PDF import with chord chart viewer system.

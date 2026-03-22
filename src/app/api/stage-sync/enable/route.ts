@@ -84,6 +84,44 @@ export async function POST(req: NextRequest) {
 
     batch.update(planRef, { stage_sync: stageSyncState });
 
+    // Resolve chart_data for song items from arrangements or song docs
+    const planItems = plan.items ?? [];
+    const resolvedItems = [];
+    for (const item of planItems as Record<string, unknown>[]) {
+      let chartData = null;
+      if (item.type === "song" && item.song_id) {
+        // Try arrangement first
+        if (item.arrangement_id) {
+          const arrSnap = await adminDb
+            .collection("churches").doc(church_id)
+            .collection("arrangements").doc(item.arrangement_id as string)
+            .get();
+          if (arrSnap.exists) {
+            chartData = arrSnap.data()?.chart_data ?? null;
+          }
+        }
+        // Fall back to song's chart_data
+        if (!chartData) {
+          const songSnap = await adminDb
+            .collection("churches").doc(church_id)
+            .collection("songs").doc(item.song_id as string)
+            .get();
+          if (songSnap.exists) {
+            chartData = songSnap.data()?.chart_data ?? null;
+          }
+        }
+      }
+      resolvedItems.push({
+        id: item.id,
+        type: item.type,
+        title: item.title ?? null,
+        song_id: item.song_id ?? null,
+        key: item.key ?? null,
+        arrangement_notes: item.arrangement_notes ?? null,
+        chart_data: chartData,
+      });
+    }
+
     // Create the public live sync document (readable by anyone with the token)
     const liveRef = adminDb.collection("stage_sync_live").doc(accessToken);
     batch.set(liveRef, {
@@ -91,15 +129,7 @@ export async function POST(req: NextRequest) {
       plan_id,
       current_item_id: null,
       current_item_index: 0,
-      items: (plan.items ?? []).map((item: Record<string, unknown>) => ({
-        id: item.id,
-        type: item.type,
-        title: item.title ?? null,
-        song_id: item.song_id ?? null,
-        key: item.key ?? null,
-        arrangement_notes: item.arrangement_notes ?? null,
-        lyrics: null, // Lyrics loaded separately per item
-      })),
+      items: resolvedItems,
       last_advanced_at: null,
       started_at: now,
     });

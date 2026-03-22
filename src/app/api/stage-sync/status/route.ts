@@ -48,10 +48,34 @@ export async function GET(req: NextRequest) {
     const plan = planSnap.data()!;
     const stageSync = plan.stage_sync;
 
+    // Resolve chart_data for song items
+    const planItems = (plan.items ?? []) as Record<string, unknown>[];
+    const resolvedItems = [];
+    for (const item of planItems) {
+      let chartData = null;
+      if (item.type === "song" && item.song_id) {
+        if (item.arrangement_id) {
+          const arrSnap = await adminDb
+            .collection("churches").doc(churchId)
+            .collection("arrangements").doc(item.arrangement_id as string)
+            .get();
+          if (arrSnap.exists) chartData = arrSnap.data()?.chart_data ?? null;
+        }
+        if (!chartData) {
+          const songSnap = await adminDb
+            .collection("churches").doc(churchId)
+            .collection("songs").doc(item.song_id as string)
+            .get();
+          if (songSnap.exists) chartData = songSnap.data()?.chart_data ?? null;
+        }
+      }
+      resolvedItems.push({ ...item, chart_data: chartData });
+    }
+
     if (!stageSync?.enabled) {
       return NextResponse.json({
         enabled: false,
-        items: plan.items ?? [],
+        items: resolvedItems,
       });
     }
 
@@ -63,7 +87,7 @@ export async function GET(req: NextRequest) {
       last_advanced_at: stageSync.last_advanced_at,
       access_token: stageSync.access_token,
       viewers_connected: stageSync.viewers_connected,
-      items: plan.items ?? [],
+      items: resolvedItems,
       conductor_url: `/stage-sync/conductor/${churchId}/${planId}`,
       participant_url: `/stage-sync/view/${churchId}/${planId}`,
     });

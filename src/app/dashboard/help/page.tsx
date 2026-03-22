@@ -630,46 +630,64 @@ const featureGuides: HelpSection[] = [
     ),
   },
   {
-    title: "SongSelect Import",
+    title: "SongSelect Import & Chord Charts",
     content: (
       <>
         <p>
           Import songs from CCLI SongSelect into your library by uploading
-          exported files. No account connection required.
+          ChordPro files (Premium) or PDF chord charts. No account connection
+          required &mdash; just download from SongSelect and upload here.
         </p>
         <dl className="mt-3 space-y-4">
           <div>
             <dt className="font-medium text-vc-text">How to Export from SongSelect</dt>
             <dd className="mt-1">
               Sign in at songselect.ccli.com, find your song, and click the
-              download icon. Choose &ldquo;Lyrics&rdquo; or &ldquo;SongSelect
-              File (.usr)&rdquo; to save the file to your device.
+              download icon. Choose &ldquo;ChordPro&rdquo; (Premium subscription)
+              for the best quality, or &ldquo;Chord Chart&rdquo; (PDF) which is
+              available to all subscribers.
             </dd>
           </div>
           <div>
             <dt className="font-medium text-vc-text">Uploading &amp; Importing</dt>
             <dd className="mt-1">
               Go to Worship &rarr; Songs and click &ldquo;Import Songs.&rdquo;
-              Drag and drop your .usr or .txt files (or click to browse).
-              VolunteerCal parses the files and shows a preview of each song
-              with title, key, and CCLI metadata. Select the songs you want and
-              click Import. All imported songs are fully editable &mdash; you
-              can adjust keys, add tags, or update notes after import.
+              Drag and drop your ChordPro (.pro, .chordpro) or PDF files.
+              ChordPro files are parsed instantly; PDFs are converted automatically.
+              You&apos;ll see a preview with title, key, tempo, CCLI metadata, and
+              a chord-over-lyric preview before importing.
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Duplicate Detection</dt>
+            <dt className="font-medium text-vc-text">CCLI Compliance</dt>
             <dd className="mt-1">
-              If you try to import a song that already exists in your library
-              (matched by CCLI number), VolunteerCal flags it so you don&apos;t
-              create duplicates.
+              Your church&apos;s CCLI number must be on file before importing
+              (Settings &rarr; General). All songs are stored privately per
+              church and your CCLI number is included in usage reports.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Chord Chart Viewer</dt>
+            <dd className="mt-1">
+              View imported songs with a full chord chart viewer featuring
+              transposition to any key, chart types (Standard, Nashville,
+              Solfege), 1 or 2 column layout, font scaling, and fit-to-page
+              options. Charts display chords above lyrics and can be printed.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Arrangements</dt>
+            <dd className="mt-1">
+              Create multiple arrangements per song with different keys, chart
+              types, and formatting. Set a default arrangement and link specific
+              arrangements to service plan items.
             </dd>
           </div>
           <div>
             <dt className="font-medium text-vc-text">Supported Formats</dt>
             <dd className="mt-1">
-              VolunteerCal accepts .usr files (SongSelect UserSong format) and
-              plain-text .txt exports. You can upload multiple files at once.
+              ChordPro (.pro, .chordpro, .cho) and PDF chord charts from
+              SongSelect. You can upload multiple files at once.
             </dd>
           </div>
         </dl>

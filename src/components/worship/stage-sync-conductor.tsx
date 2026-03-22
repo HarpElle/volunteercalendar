@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { ChordChartRenderer } from "./chord-chart-renderer";
 import type { ServicePlanItem } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -186,11 +187,21 @@ export function StageSyncConductor({
         {currentItem?.key && (
           <p className="mt-3 text-xl text-white/60">Key: {currentItem.key}</p>
         )}
-        {currentItem?.arrangement_notes && (
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- chart_data comes from resolved API response */}
+        {(currentItem as any)?.chart_data ? (
+          <div className="mt-4 w-full max-w-xl overflow-y-auto rounded-lg" style={{ maxHeight: "40vh" }}>
+            <ChordChartRenderer
+              chartData={(currentItem as any).chart_data}
+              stageSyncMode
+              fontScale={0.7}
+              chordHighlight
+            />
+          </div>
+        ) : currentItem?.arrangement_notes ? (
           <p className="mt-4 max-w-xl text-center text-sm leading-relaxed text-white/50">
             {currentItem.arrangement_notes}
           </p>
-        )}
+        ) : null}
       </div>
 
       {/* Error */}

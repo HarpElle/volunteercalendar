@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -216,6 +217,9 @@ export default function SongsPage() {
               <tr className="border-b border-vc-border text-xs font-medium uppercase tracking-wider text-vc-text-secondary">
                 <th className="px-4 py-3 sm:px-6">Title</th>
                 <th className="hidden px-4 py-3 sm:table-cell sm:px-6">Key</th>
+                <th className="hidden w-10 px-4 py-3 sm:table-cell sm:px-6" title="Chord Chart">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" /></svg>
+                </th>
                 <th className="hidden px-4 py-3 md:table-cell md:px-6">Tags</th>
                 <th className="hidden px-4 py-3 lg:table-cell lg:px-6">
                   Last Used
@@ -232,11 +236,14 @@ export default function SongsPage() {
                   key={song.id}
                   className="transition-colors hover:bg-vc-bg-warm/50"
                 >
-                  {/* Title */}
+                  {/* Title — links to detail page */}
                   <td className="px-4 py-4 sm:px-6">
-                    <span className="font-medium text-vc-text">
+                    <Link
+                      href={`/dashboard/worship/songs/${song.id}`}
+                      className="font-medium text-vc-indigo hover:underline"
+                    >
                       {song.title}
-                    </span>
+                    </Link>
                     {/* Show key + tags on mobile in a compact row */}
                     <div className="mt-1 flex flex-wrap gap-1 sm:hidden">
                       {song.default_key && (
@@ -252,6 +259,19 @@ export default function SongsPage() {
                   <td className="hidden px-4 py-4 sm:table-cell sm:px-6">
                     {song.default_key ? (
                       <Badge variant="accent">{song.default_key}</Badge>
+                    ) : (
+                      <span className="text-vc-text-muted">--</span>
+                    )}
+                  </td>
+
+                  {/* Chart indicator */}
+                  <td className="hidden px-4 py-4 sm:table-cell sm:px-6">
+                    {song.chart_data ? (
+                      <span title="Has chord chart">
+                        <svg className="h-4 w-4 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
+                        </svg>
+                      </span>
                     ) : (
                       <span className="text-vc-text-muted">--</span>
                     )}

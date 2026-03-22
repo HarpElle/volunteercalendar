@@ -342,26 +342,13 @@ export function GeneralSettings({
         </section>
       )}
 
-      {/* ── Worship Integrations ── */}
+      {/* ── CCLI License & Worship ── */}
       {isAdmin(activeMembership) && (
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Worship Integrations</h2>
-          <div className="rounded-xl border border-vc-border-light bg-white p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-vc-bg-warm">
-                <svg className="h-5 w-5 text-vc-indigo" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-vc-indigo">CCLI SongSelect Import</h3>
-                <p className="mt-0.5 text-xs text-vc-text-muted">
-                  Import songs by uploading .usr or .txt files from songselect.ccli.com. Go to Songs &rarr; Import Songs to get started.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <CcliLicenseSection
+          churchId={churchId}
+          church={church}
+          setChurch={setChurch}
+        />
       )}
 
       {/* ── Danger Zone ── */}
@@ -369,6 +356,111 @@ export function GeneralSettings({
         <DeleteOrgSection churchId={churchId} orgName={orgName} user={user} />
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete Organization (kept co-located with general settings)
+// ---------------------------------------------------------------------------
+
+function CcliLicenseSection({
+  churchId,
+  church,
+  setChurch,
+}: {
+  churchId: string;
+  church: Church;
+  setChurch: (c: Church) => void;
+}) {
+  const [ccliNumber, setCcliNumber] = useState(church.ccli_number || "");
+  const [attested, setAttested] = useState(!!church.ccli_attestation_at);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
+
+  const dirty =
+    ccliNumber !== (church.ccli_number || "") ||
+    attested !== !!church.ccli_attestation_at;
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const updates: Record<string, unknown> = {
+        ccli_number: ccliNumber.trim() || null,
+        ccli_attestation_at: attested ? new Date().toISOString() : null,
+      };
+      await updateDocument("churches", churchId, updates);
+      setChurch({
+        ...church,
+        ccli_number: (updates.ccli_number as string | null),
+        ccli_attestation_at: (updates.ccli_attestation_at as string | null),
+      });
+      setSuccess("CCLI settings saved.");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      setError((err as Error).message || "Failed to save CCLI settings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="mb-4 text-lg font-semibold text-vc-indigo">CCLI License &amp; Worship</h2>
+      <div className="rounded-xl border border-vc-border-light bg-white p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-vc-bg-warm">
+            <svg className="h-5 w-5 text-vc-indigo" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-vc-indigo">SongSelect Import</h3>
+            <p className="mt-0.5 text-xs text-vc-text-muted">
+              Import songs by uploading ChordPro or PDF chord chart files from songselect.ccli.com.
+              Go to Songs &rarr; Import Songs to get started.
+            </p>
+          </div>
+        </div>
+
+        <div className="border-t border-vc-border-light pt-5 space-y-4">
+          <Input
+            label="CCLI Church License Number"
+            value={ccliNumber}
+            onChange={(e) => setCcliNumber(e.target.value)}
+            placeholder="e.g., 1234567"
+          />
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={attested}
+              onChange={(e) => setAttested(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-vc-border text-vc-indigo accent-vc-indigo"
+            />
+            <span className="text-sm text-vc-text-secondary">
+              I confirm that my church holds an active CCLI Church Copyright License and
+              that all songs used in VolunteerCal are covered under that license.
+            </span>
+          </label>
+
+          <p className="rounded-lg bg-vc-bg-warm px-4 py-3 text-xs text-vc-text-muted">
+            All songs are stored privately in your account and used only under your
+            church&apos;s CCLI license. Your CCLI number is included automatically in
+            any generated usage reports.
+          </p>
+        </div>
+
+        {error && <p className="text-sm text-vc-danger">{error}</p>}
+        {success && <p className="text-sm text-vc-sage">{success}</p>}
+
+        <Button size="sm" onClick={handleSave} loading={saving} disabled={!dirty}>
+          Save CCLI Settings
+        </Button>
+      </div>
+    </section>
   );
 }
 

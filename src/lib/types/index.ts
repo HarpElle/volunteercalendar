@@ -116,6 +116,10 @@ export interface Church {
   settings: ChurchSettings;
   /** Org-wide prerequisites that apply to ALL teams */
   org_prerequisites?: OnboardingStep[];
+  /** CCLI Church Copyright License number */
+  ccli_number: string | null;
+  /** ISO timestamp when the CCLI attestation checkbox was accepted */
+  ccli_attestation_at: string | null;
   created_at: string;
 }
 
@@ -779,6 +783,97 @@ export interface InviteQueueItem {
 }
 
 // ---------------------------------------------------------------------------
+// Worship Module — Structured Chord Chart Data
+// ---------------------------------------------------------------------------
+
+/** A single chord-lyric pair within a chart line. */
+export interface ChordSegment {
+  /** Chord symbol (e.g., "G", "C2", "D/F#") or null for lyric-only segments. */
+  chord: string | null;
+  /** Lyrics text that follows this chord position. */
+  lyrics: string;
+}
+
+/** A single line in a chart section, composed of chord-lyric segments. */
+export interface ChartLine {
+  segments: ChordSegment[];
+}
+
+export type SectionType =
+  | "verse"
+  | "chorus"
+  | "pre-chorus"
+  | "bridge"
+  | "intro"
+  | "outro"
+  | "ending"
+  | "interlude"
+  | "tag"
+  | "instrumental"
+  | "vamp"
+  | "turnaround"
+  | "misc";
+
+/** A labeled section (e.g., "Verse 1", "Chorus") containing lines of chords + lyrics. */
+export interface ChartSection {
+  /** Unique within this chart. */
+  id: string;
+  type: SectionType;
+  /** Display label, e.g., "Verse 1", "Chorus", "Ending". */
+  label: string;
+  lines: ChartLine[];
+}
+
+/** Structured JSON representation of a chord chart — optimized for transposition, editing, and rendering. */
+export interface SongChartData {
+  metadata: {
+    title: string;
+    artist: string | null;
+    writers: string | null;
+    original_key: string | null;
+    tempo: number | null;
+    /** e.g., "4/4", "3/4", "6/8" */
+    time_signature: string | null;
+    ccli_number: string | null;
+    copyright: string | null;
+  };
+  sections: ChartSection[];
+}
+
+/** Chord notation system for chart display. */
+export type ChartType = "standard" | "nashville" | "solfege_fixed" | "solfege_movable";
+
+/** Per-arrangement display formatting preferences. */
+export interface ArrangementFormatting {
+  columns: 1 | 2;
+  /** Font size multiplier (default 1.0). */
+  font_scale: number;
+  heading_bold: boolean;
+  chord_highlight: boolean;
+  /** Target number of pages to fit content into (null = auto). */
+  fit_pages: number | null;
+}
+
+/** A saved arrangement of a song — stores key, chart data, and display prefs. */
+export interface SongArrangement {
+  id: string;
+  song_id: string;
+  church_id: string;
+  /** e.g., "Key of G — Original", "Key of A — Easier" */
+  name: string;
+  /** Current key for this arrangement. */
+  key: string;
+  chart_type: ChartType;
+  chart_data: SongChartData;
+  formatting: ArrangementFormatting;
+  notes: string | null;
+  /** One arrangement per song should be the default. */
+  is_default: boolean;
+  created_at: string;
+  updated_by: string;
+}
+
+// ---------------------------------------------------------------------------
 // Worship Module — Songs
 // ---------------------------------------------------------------------------
 
@@ -801,6 +896,15 @@ export interface Song {
   rotation_lists: string[];
   lyric_source: LyricSource | null;
   lyrics: string | null;
+  /** Structured chord chart data (null for lyrics-only songs). */
+  chart_data: SongChartData | null;
+  /** Firebase Storage path to the original uploaded file (.pro/.chordpro/PDF). */
+  original_file_url: string | null;
+  original_file_type: "chordpro" | "pdf" | null;
+  /** BPM */
+  tempo: number | null;
+  /** e.g., "4/4", "3/4", "6/8" */
+  time_signature: string | null;
   chord_chart_url: string | null;
   sheet_music_url: string | null;
   media_file_url: string | null;
@@ -838,6 +942,8 @@ export interface ServicePlanItem {
   song_id: string | null;
   /** Key override for this performance (e.g., "D"). Null = use song default. */
   key: string | null;
+  /** Reference to a specific SongArrangement.id. Null = use default arrangement. */
+  arrangement_id: string | null;
   /** Title for non-song items, or override for song display. */
   title: string | null;
   duration_minutes: number | null;
