@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   buildBatchConfirmationEmail,
   type BatchAssignment,
@@ -7,8 +8,16 @@ import {
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Auth: Bearer token + admin/scheduler role check
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const userId = decoded.uid;
+
     const body = await request.json();
     const { church_id, schedule_id } = body;
 
@@ -19,6 +28,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // Verify caller is admin or scheduler
+    const membershipId = `${userId}_${church_id}`;
+    const callerMembership = await adminDb.doc(`memberships/${membershipId}`).get();
+    if (!callerMembership.exists || !["owner", "admin", "scheduler"].includes(callerMembership.data()?.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json(
         { error: "Email service not configured (RESEND_API_KEY missing)" },
@@ -26,33 +42,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch data from Firestore
-    const { collection, getDocs, doc, getDoc, getFirestore } = await import("firebase/firestore");
-    const { initializeApp, getApps, getApp } = await import("firebase/app");
-
-    const app = getApps().length === 0
-      ? initializeApp({
-          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-        })
-      : getApp();
-    const db = getFirestore(app);
-
     // Fetch church
-    const churchSnap = await getDoc(doc(db, "churches", church_id));
-    if (!churchSnap.exists()) {
+    const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
+    if (!churchSnap.exists) {
       return NextResponse.json({ error: "Church not found" }, { status: 404 });
     }
-    const church = churchSnap.data() as Record<string, unknown>;
-    const churchName = (church.name as string) || "Church";
+    const churchName = (churchSnap.data()?.name as string) || "Church";
 
     // Fetch all assignments for this schedule
     type DocRecord = Record<string, unknown> & { id: string };
-    const assignSnap = await getDocs(collection(db, "churches", church_id, "assignments"));
+    const assignSnap = await adminDb.collection(`churches/${church_id}/assignments`).get();
     const allAssignments: DocRecord[] = assignSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
@@ -65,9 +64,9 @@ export async function POST(request: Request) {
 
     // Fetch volunteers, services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
-      getDocs(collection(db, "churches", church_id, "volunteers")),
-      getDocs(collection(db, "churches", church_id, "services")),
-      getDocs(collection(db, "churches", church_id, "ministries")),
+      adminDb.collection(`churches/${church_id}/volunteers`).get(),
+      adminDb.collection(`churches/${church_id}/services`).get(),
+      adminDb.collection(`churches/${church_id}/ministries`).get(),
     ]);
 
     const volunteerMap = new Map(

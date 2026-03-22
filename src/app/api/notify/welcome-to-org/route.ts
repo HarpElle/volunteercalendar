@@ -23,6 +23,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
     }
 
+    // Verify caller has a membership for this org (any role, including pending)
+    const membershipId = `${userId}_${church_id}`;
+    const callerMembership = await adminDb.doc(`memberships/${membershipId}`).get();
+    if (!callerMembership.exists) {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    }
+
     const [userSnap, churchSnap] = await Promise.all([
       adminDb.doc(`users/${userId}`).get(),
       adminDb.doc(`churches/${church_id}`).get(),

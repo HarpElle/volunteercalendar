@@ -326,7 +326,10 @@ export function ServiceRoster({
           <div className="mb-4 flex items-center justify-between min-h-[36px]">
             <div className="flex items-center gap-3">
               <p className="text-sm text-vc-text-secondary">
-                <span className="font-semibold text-vc-indigo">{filtered.length}</span> assigned
+                <span className="font-semibold text-vc-indigo">{filtered.filter((a) => a.assignment_type !== "trainee").length}</span> assigned
+                {filtered.some((a) => a.assignment_type === "trainee") && (
+                  <span className="ml-1 text-vc-text-muted">+ {filtered.filter((a) => a.assignment_type === "trainee").length} shadowing</span>
+                )}
               </p>
               <div className="flex items-center gap-2 text-xs text-vc-text-muted min-h-[20px]">
                 {tab === "attendance" ? (
@@ -386,14 +389,25 @@ export function ServiceRoster({
                     </span>
                   </div>
                   <div className="space-y-1">
-                    {roleAssignments.map((assignment) => (
+                    {roleAssignments.map((assignment) => {
+                      const isTrainee = assignment.assignment_type === "trainee";
+                      return (
                       <div
                         key={assignment.id}
-                        className="flex items-center justify-between rounded-lg border border-vc-border-light bg-white px-3 py-2"
+                        className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+                          isTrainee
+                            ? "border border-dashed border-vc-sand bg-vc-sand/5"
+                            : "border border-vc-border-light bg-white"
+                        }`}
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-vc-indigo">
                             {volunteerNames.get(assignment.volunteer_id) || "Unassigned"}
+                            {isTrainee && (
+                              <span className="ml-1.5 rounded-full bg-vc-sand/20 px-2 py-0.5 text-[10px] font-medium text-vc-sand">
+                                Shadowing
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-vc-text-muted">
                             {viewLevel === "org"
@@ -453,7 +467,8 @@ export function ServiceRoster({
                           )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

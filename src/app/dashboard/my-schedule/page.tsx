@@ -46,6 +46,7 @@ interface ScheduleItem {
   endTime: string | null;
   allDay: boolean;
   status: string;
+  isTrainee?: boolean;
 }
 
 type TabKey = "upcoming" | "past" | "availability" | "team";
@@ -235,6 +236,7 @@ export default function MySchedulePage() {
       endTime: roleTime?.end_time || service?.end_time || null,
       allDay: service?.all_day || false,
       status: a.status,
+      isTrainee: a.assignment_type === "trainee",
     });
   }
 
@@ -441,6 +443,11 @@ export default function MySchedulePage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {item.isTrainee && (
+                          <span className="rounded-full bg-vc-sand/20 px-2 py-0.5 text-[10px] font-medium text-vc-sand">
+                            Shadowing
+                          </span>
+                        )}
                         {item.kind === "signup" && (
                           <span className="rounded-full bg-vc-coral/10 px-2 py-0.5 text-[10px] font-medium text-vc-coral">
                             Event

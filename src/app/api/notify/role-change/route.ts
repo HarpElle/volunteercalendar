@@ -30,11 +30,19 @@ export async function POST(req: NextRequest) {
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    await adminAuth.verifyIdToken(authHeader.slice(7));
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const callerUid = decoded.uid;
 
     const { membership_id, old_role, new_role, church_id } = await req.json();
     if (!membership_id || !old_role || !new_role || !church_id) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Verify caller is admin/owner
+    const callerMembershipId = `${callerUid}_${church_id}`;
+    const callerMembership = await adminDb.doc(`memberships/${callerMembershipId}`).get();
+    if (!callerMembership.exists || !["owner", "admin"].includes(callerMembership.data()?.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
     // Only send email for promotions

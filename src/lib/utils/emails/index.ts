@@ -28,3 +28,8 @@ export { buildAvailabilityWindowEmail } from "./availability-window";
 export { buildApprovalRequestEmail } from "./approval-request";
 export { buildApprovalReminderEmail } from "./approval-reminder";
 export { buildHouseholdConflictEmail } from "./household-conflict";
+export { buildStepCompletedEmail } from "./prerequisite-step-completed";
+export { buildEligibleNotifyEmail } from "./prerequisite-eligible-notify";
+export { buildExpiryWarningEmail } from "./prerequisite-expiry-warning";
+export { buildPrerequisiteNudgeEmail } from "./prerequisite-nudge";
+export { buildTrainingSessionInviteEmail } from "./training-session-invite";

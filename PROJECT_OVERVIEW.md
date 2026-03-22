@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 + Expansion Phases 4–11 + Phase G + Part 3 (WorshipTools UX) complete. |
+| **Status** | Phase 32 + Expansion Phases 4–11 + Phase G + Part 3 + Onboarding Enhancements complete. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -187,8 +187,10 @@ VolunteerCal/
 │   │       │   │   └── route.ts            # Send welcome email on self-registration
 │   │       │   ├── org-created/
 │   │       │   │   └── route.ts            # Send org creation confirmation email
-│   │       │   └── absence/
-│   │       │       └── route.ts            # Volunteer absence alert to schedulers/admins
+│   │       │   ├── absence/
+│   │       │   │   └── route.ts            # Volunteer absence alert to schedulers/admins
+│   │       │   └── prerequisite/
+│   │       │       └── route.ts            # Prerequisite milestone notifications (step/all completed, scheduler eligible)
 │   │       ├── attendance/
 │   │       │   └── route.ts    # Batch attendance updates (event signups + assignments)
 │   │       ├── calendar/
@@ -212,8 +214,20 @@ VolunteerCal/
 │   │       ├── cron/
 │   │       │   ├── reminders/
 │   │       │   │   └── route.ts    # Vercel Cron → triggers reminders for all churches
-│   │       │   └── propresenter-export/
-│   │       │       └── route.ts    # Vercel Cron → daily ProPresenter export auto-email
+│   │       │   ├── propresenter-export/
+│   │       │   │   └── route.ts    # Vercel Cron → daily ProPresenter export auto-email
+│   │       │   └── prerequisite-check/
+│   │       │       └── route.ts    # Vercel Cron → daily expiry warnings + stalled progress nudges
+│   │       ├── training-sessions/
+│   │       │   ├── route.ts                # Training session CRUD (GET list, POST create)
+│   │       │   └── [sessionId]/
+│   │       │       ├── route.ts            # GET detail, PUT update, DELETE cancel
+│   │       │       ├── rsvp/
+│   │       │       │   └── route.ts        # Volunteer RSVP (accept/decline)
+│   │       │       ├── complete/
+│   │       │       │   └── route.ts        # Mark session completed + auto-complete prereq steps
+│   │       │       └── invite/
+│   │       │           └── route.ts        # Send invitations to volunteers with pending prereq
 │   │       ├── short-links/
 │   │       │   ├── route.ts        # Short links CRUD API (GET list, POST create, DELETE)
 │   │       │   └── check/
@@ -413,7 +427,7 @@ VolunteerCal/
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts, recurrence.ts (recurring reservation materialization)
-│       │   ├── emails/         # 32 email templates + base-layout.ts (barrel: index.ts re-exports; incl. batch-confirmation, absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
+│       │   ├── emails/         # 37 email templates + base-layout.ts (barrel: index.ts re-exports; incl. batch-confirmation, absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect (ChordPro/PDF parser)
@@ -475,3 +489,4 @@ VolunteerCal/
 | Exp. 11 | Room & Resource Scheduling — Reservation/ReservationRequest/RoomSettings/RecurrenceRule types, rooms_enabled/rooms_max/rooms_recurring/rooms_public_calendar tier gates, recurrence utility (generateOccurrenceDates, materializeRecurringReservation, cancelRecurrenceGroup), room CRUD API (list/create/detail/update/soft-delete/regenerate-token), room settings API (equipment tags, require_approval, public calendar toggle), reservation API with conflict detection (time overlap formula, pending_approval flow), recurring reservation materialization (batched Firestore writes, recurrence_group_id, edit_scope: single/from_date/all), approval queue API (approve/deny with SMS notification), room display page for wall-mounted tablets (30s polling, Available/In Use/Starting Soon status with color-coded full-screen display), 3 iCal feed routes (per-room, church-wide, per-ministry with 90-day window), admin dashboard (room grid with cards, room detail with timeline/reservations/settings tabs, approval queue, equipment tag palette + booking defaults), 5-step booking form wizard (room picker → date/time → details/equipment → recurrence rule picker → review with conflict modal), room calendar view (month/week toggle, room/ministry filters), public calendar page (token auth, embed mode via ?embed=true), sidebar Rooms nav section (conditional on roomsEnabled tier gate), 4 Firestore composite indexes for reservations collection | Complete |
 | Part 3 | WorshipTools UX Improvements — "header" ServicePlanItemType for section dividers in service plans, service plan editor page (src/app/dashboard/worship/plans/[id]/page.tsx) with item list, inline collapsible notes, add/edit/reorder/remove, publish action, Stage Sync launch, song picker with artist credit, GET /api/service-plans/[id] endpoint, volunteer availability indicators in schedule matrix person-picker (blockout dates, recurring unavailable, max roles per month, sorted available-first with disabled unavailable), volunteer self-service availability page (src/app/dashboard/my-availability/page.tsx) with blockout date management, recurring day-of-week toggles, scheduling preferences, self-serve PATCH API (src/app/api/my-availability/route.ts), sidebar "My Availability" link, batched notification emails (batch-confirmation.ts template bundles all assignments per volunteer into single email), schedule matrix ministry group collapse/expand in by-date view (collapsible headers with chevron + ministry color dot + count), multi-service compare view (new "Compare" tab in schedule matrix showing services as columns, volunteers as rows, availability check/x indicators, date selector, role assignment badges) | Complete |
 | Phase G | People page overhaul — table→card grid (PersonCard with avatar, eligibility dot, role badge, ministry pills), PersonDetailDrawer (profile editing, prerequisite tracking with status toggles, org role changes, archive/remove), prerequisite scope system (PrerequisiteScope: all/teams/events/specific_roles on OnboardingStep, scope-aware scheduler, scope selector + role picker in PrerequisiteEditor), shared eligibility utility (getOrgEligibility, getVolunteerStage, getApplicablePrereqs), org_prerequisites in people-data API, StepTypeIcon extracted to shared component, org role + eligibility filters on Roster tab, share join link moved to header button with modal, inline components extracted to src/components/people/ (add-people-menu, invite-form, join-link-section, member-row, household-card), page.tsx reduced from ~1800→~980 lines, warm editorial design polish | Complete |
+| Onboarding Enhancements | Role validation on 5 notification routes (api/notify/, org-created, role-change, membership-approved, welcome-to-org — Bearer token + admin/scheduler membership checks, notify/route.ts migrated from client Firestore to adminDb), prerequisite notifications (5 email templates: step-completed with progress bar, eligible-notify to schedulers, expiry-warning with 30-day countdown, nudge for stalled progress, training-session-invite with RSVP), prerequisite notification API (POST /api/notify/prerequisite for step_completed/all_completed types), daily cron (/api/cron/prerequisite-check for expiry warnings + stalled nudges), expires_at field on VolunteerJourneyStep, training session system (TrainingSession/TrainingSessionRsvp types, CRUD API /api/training-sessions/, RSVP endpoint, complete endpoint with auto-complete of prereq steps for attendees, invite endpoint sends to volunteers with pending class prereqs), trainee assignment type (AssignmentType: "regular" \| "trainee", dashed border + "Shadowing" badge in service roster, "(shadow)" label in schedule matrix + compare view, "Shadowing" badge in My Schedule, trainees excluded from assigned count) | Complete |

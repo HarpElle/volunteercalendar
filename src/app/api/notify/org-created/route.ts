@@ -23,6 +23,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
     }
 
+    // Verify caller is admin/owner of this org
+    const membershipId = `${userId}_${church_id}`;
+    const callerMembership = await adminDb.doc(`memberships/${membershipId}`).get();
+    if (!callerMembership.exists || !["owner", "admin"].includes(callerMembership.data()?.role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
     const [userSnap, churchSnap] = await Promise.all([
       adminDb.doc(`users/${userId}`).get(),
       adminDb.doc(`churches/${church_id}`).get(),

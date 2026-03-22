@@ -398,6 +398,9 @@ export function ScheduleMatrix({
                               >
                                 <span className="font-medium text-vc-indigo">
                                   {vol?.name || "Unknown"}
+                                  {a.assignment_type === "trainee" && (
+                                    <span className="ml-1 text-[9px] font-medium text-vc-sand">(shadow)</span>
+                                  )}
                                 </span>
                                 <span className="text-xs text-vc-text-muted">
                                   {a.role_title}
@@ -711,9 +714,14 @@ function CompareView({
                               {volAssignments.map((a) => (
                                 <span
                                   key={a.id}
-                                  className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-vc-sage/15 text-vc-sage"
+                                  className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                                    a.assignment_type === "trainee"
+                                      ? "bg-vc-sand/15 text-vc-sand border border-dashed border-vc-sand/40"
+                                      : "bg-vc-sage/15 text-vc-sage"
+                                  }`}
                                 >
                                   {a.role_title}
+                                  {a.assignment_type === "trainee" && <span className="text-[9px]">(shadow)</span>}
                                   <StatusDot status={a.status} />
                                 </span>
                               ))}

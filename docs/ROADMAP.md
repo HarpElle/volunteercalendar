@@ -1,6 +1,6 @@
 # VolunteerCal — Roadmap
 
-_Last updated: March 2026 (after expansion Phases 4–6)_
+_Last updated: March 2026 (after Onboarding Enhancements)_
 
 ## 1. Blocked by External Dependencies
 
@@ -72,7 +72,7 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 |------|-------|
 | Firebase App Check | Prevent API abuse from non-app clients |
 | Error monitoring (Sentry) | Catch production errors before users report them |
-| Add role validation to notification routes | `api/notify`, `api/welcome`, `api/notify/org-created`, `api/notify/role-change`, `api/notify/membership-approved`, `api/notify/welcome-to-org` — verify Bearer token but don't check membership role |
+| ~~Add role validation to notification routes~~ | **Done** — Bearer token + admin/scheduler membership checks on 5 routes; notify/route.ts migrated to adminDb |
 | Annual billing option | Create annual Stripe Price objects, billing interval toggle UI, discount logic — then re-add "save 20%" copy |
 | Update Stripe product/price configuration | Update price IDs for Starter ($29), Growth ($69), Pro ($119) tiers |
 
@@ -89,13 +89,13 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 
 These build on the prerequisite/onboarding pipeline (Phase 27) and the volunteer My Journey page (Phase 32). They deepen the volunteer equipping experience and reduce admin overhead.
 
-#### Training Session Invitations
+#### ~~Training Session Invitations~~ — Done
 
-Allow admins to schedule orientation classes and send RSVP invitations to volunteers who have a pending "class" prerequisite. An admin would create a training session (date, time, location, capacity) tied to a specific prerequisite. Volunteers with that pending step would receive an email/push invitation with an RSVP link. Attending the session could automatically mark the prerequisite step as completed. Sessions could be one-off (e.g., "Get Anchored — April 12") or recurring (e.g., "New Volunteer Orientation — first Saturday monthly"). This connects the abstract "attend a class" prerequisite to a concrete, schedulable event.
+TrainingSession/TrainingSessionRsvp types, full CRUD API (`/api/training-sessions/`), RSVP endpoint, complete endpoint with auto-complete of prerequisite steps for attendees, invite endpoint sends to volunteers with pending class prereqs, training-session-invite email template.
 
-#### Trainee Assignment Type
+#### ~~Trainee Assignment Type~~ — Done
 
-A scheduling concept where a volunteer is assigned to shadow or observe a service without filling a role slot. Currently, assigning a volunteer to a team always consumes a slot. A "trainee" assignment type would let schedulers place someone alongside an experienced team member for observation — visible on the roster but not counted toward staffing requirements. This requires changes to the assignment data model (new `assignment_type: "regular" | "trainee"` field), the schedule generator (trainee slots don't satisfy role minimums), the roster UI (visual distinction for trainees), and the volunteer's My Schedule view (show as "shadowing" rather than "serving"). This supports the "shadow" prerequisite type by giving it a concrete scheduling mechanism.
+AssignmentType: `"regular" | "trainee"` on Assignment interface. Dashed border + "Shadowing" badge in service roster, "(shadow)" label in schedule matrix + compare view, "Shadowing" badge in My Schedule. Trainees excluded from assigned count in roster summary.
 
 #### Background Check Integration
 
@@ -184,3 +184,7 @@ Items previously on this roadmap that are now built:
 | Household scheduling UI | 32 | Family CRUD modal, constraint management (never_same_service, never_same_time, prefer_same_service), conflict cards |
 | Song library & service plans | 32 | Song CRUD with CCLI metadata, service plan builder, publish with usage tracking (Growth+ tiers) |
 | Pricing update | 32 | Starter $29, Growth $69, Pro $119 reflecting worship module value. Tier gates for worship_enabled, workflow_modes_all, multi_stage_approval |
+| Role validation on notification routes | Onboarding | Bearer token + admin/scheduler membership checks on 5 routes; notify/route.ts migrated to adminDb |
+| Prerequisite notifications | Onboarding | 5 email templates, /api/notify/prerequisite, /api/cron/prerequisite-check daily cron, expires_at on VolunteerJourneyStep |
+| Training session invitations | Onboarding | TrainingSession CRUD API, RSVP, complete with auto-prereq-complete, invite endpoint, email template |
+| Trainee assignment type | Onboarding | AssignmentType field, visual distinction in roster/matrix/My Schedule, excluded from slot counts |

@@ -196,9 +196,45 @@ export interface VolunteerJourneyStep {
   ministry_id: string;
   status: JourneyStepStatus;
   completed_at?: string | null;
+  /** ISO date when this step expires (background checks, certifications) */
+  expires_at?: string | null;
   /** Admin who waived or verified completion */
   verified_by?: string | null;
   notes?: string | null;
+}
+
+// --- Training Sessions ---
+
+export type TrainingSessionStatus = "scheduled" | "completed" | "cancelled";
+
+export interface TrainingSessionRsvp {
+  volunteer_id: string;
+  status: "accepted" | "declined";
+  responded_at: string;
+}
+
+export interface TrainingSession {
+  id: string;
+  church_id: string;
+  /** The prerequisite step this session satisfies (from OnboardingStep.id) */
+  prerequisite_step_id: string;
+  /** Ministry that owns this prerequisite (or __org__ for org-wide) */
+  ministry_id: string;
+  title: string;
+  /** ISO date string */
+  date: string;
+  start_time: string;
+  end_time: string;
+  location: string;
+  capacity: number;
+  /** When true, attending auto-completes the linked prerequisite step */
+  auto_complete: boolean;
+  status: TrainingSessionStatus;
+  rsvps: TrainingSessionRsvp[];
+  /** Volunteer IDs marked as attended (set when session is completed) */
+  attendee_ids: string[];
+  created_by: string;
+  created_at: string;
 }
 
 // --- Ministries ---
@@ -555,6 +591,8 @@ export type AssignmentStatus =
 
 export type SignupType = "scheduled" | "self_signup";
 
+export type AssignmentType = "regular" | "trainee";
+
 export interface Assignment {
   id: string;
   schedule_id: string;
@@ -570,6 +608,8 @@ export interface Assignment {
   ministry_id: string;
   status: AssignmentStatus;
   signup_type: SignupType;
+  /** "trainee" = shadow/observe, does not fill a role slot */
+  assignment_type?: AssignmentType;
   confirmation_token: string;
   responded_at: string | null;
   reminder_sent_at: string[];
