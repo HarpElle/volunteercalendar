@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildTrainingSessionInviteEmail } from "@/lib/utils/emails/training-session-invite";
-import type { OnboardingStep, VolunteerJourneyStep, TrainingSessionRsvp } from "@/lib/types";
-import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
+import type { VolunteerJourneyStep, TrainingSessionRsvp } from "@/lib/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 

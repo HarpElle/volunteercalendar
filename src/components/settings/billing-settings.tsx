@@ -70,9 +70,10 @@ export function BillingSettings({
   async function handleCheckout(tier: string) {
     setCheckoutLoading(tier);
     try {
+      const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ church_id: churchId, tier }),
       });
       const data = await res.json();
@@ -89,9 +90,10 @@ export function BillingSettings({
   async function handlePortal() {
     setPortalLoading(true);
     try {
+      const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch("/api/billing/portal", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ church_id: churchId }),
       });
       const data = await res.json();

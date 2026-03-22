@@ -283,6 +283,165 @@ const featureGuides: HelpSection[] = [
     ),
   },
   {
+    title: "Training Sessions",
+    content: (
+      <>
+        <p>
+          Training sessions let admins schedule group training events tied to
+          specific onboarding prerequisites. When volunteers attend a session,
+          the associated prerequisite step is automatically marked complete
+          &mdash; no manual follow-up needed.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Creating a Session</dt>
+            <dd className="mt-1">
+              On the Onboarding page, open the &ldquo;Training Sessions&rdquo;
+              tab and click &ldquo;New Session.&rdquo; Give it a title, choose
+              the prerequisite step it satisfies, set a date, time, and
+              location, and optionally add a capacity limit or notes.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Sending Invitations</dt>
+            <dd className="mt-1">
+              After creating a session, click &ldquo;Send Invitations&rdquo; to
+              email all volunteers who still have that prerequisite step
+              pending. The invitation includes the session details and an RSVP
+              link.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Volunteer RSVP</dt>
+            <dd className="mt-1">
+              Volunteers receive an email with Accept and Decline buttons. When
+              they accept, they&apos;re added to the session&apos;s attendee
+              list. Declined responses are recorded so admins can follow up if
+              needed.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Completing a Session</dt>
+            <dd className="mt-1">
+              After the training takes place, mark the session as completed.
+              VolunteerCal automatically marks the linked prerequisite step as
+              complete for every attendee, updating their onboarding progress
+              instantly.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Training sessions are a powerful way to move multiple volunteers
+          through the onboarding pipeline at once, especially for recurring
+          requirements like safety orientations or policy reviews.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Trainee & Shadow Assignments",
+    content: (
+      <>
+        <p>
+          Trainee assignments let schedulers pair new volunteers with
+          experienced team members so they can observe and learn before serving
+          independently.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Assigning a Trainee</dt>
+            <dd className="mt-1">
+              When building a schedule, assign a volunteer to a role and set
+              their assignment type to &ldquo;Trainee.&rdquo; The trainee is
+              paired with the primary volunteer already assigned to that role.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Visual Indicators</dt>
+            <dd className="mt-1">
+              Trainees are easy to spot throughout the interface. In the
+              schedule matrix, trainee cells appear with a dashed border and a
+              &ldquo;Shadowing&rdquo; badge. Matrix column headers show a
+              &ldquo;(shadow)&rdquo; label next to the trainee&apos;s name.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Slot Counting</dt>
+            <dd className="mt-1">
+              Trainees do not count toward a role&apos;s filled slot total.
+              If a role requires two volunteers, a trainee shadowing one of
+              them won&apos;t inflate the count &mdash; you&apos;ll still see
+              the accurate number of serving volunteers.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Best Practices</dt>
+            <dd className="mt-1">
+              Shadow assignments work well for roles with a learning curve,
+              such as sound tech, lighting, or children&apos;s ministry.
+              Schedule a volunteer as a trainee for a few weeks before moving
+              them to a regular assignment.
+            </dd>
+          </div>
+        </dl>
+      </>
+    ),
+  },
+  {
+    title: "Prerequisite Notifications",
+    content: (
+      <>
+        <p>
+          VolunteerCal sends automatic email notifications at key onboarding
+          milestones so volunteers stay on track and schedulers stay informed.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Step Completed</dt>
+            <dd className="mt-1">
+              When a volunteer completes a prerequisite step, they receive an
+              email confirming the step is done. The email includes a visual
+              progress bar showing how far along they are in the full
+              onboarding pipeline.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">All Prerequisites Completed</dt>
+            <dd className="mt-1">
+              When a volunteer finishes every required prerequisite (both
+              org-wide and team-specific), schedulers are notified that the
+              volunteer is now eligible for scheduling. The volunteer also
+              receives a congratulatory email.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Expiry Warning</dt>
+            <dd className="mt-1">
+              Some prerequisites expire (e.g., annual background checks or
+              certifications). VolunteerCal sends a reminder email 30 days
+              before a completed step expires, giving the volunteer time to
+              renew before losing eligibility.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Stalled Progress Nudge</dt>
+            <dd className="mt-1">
+              If a volunteer&apos;s onboarding progress stalls &mdash; no steps
+              completed for an extended period &mdash; the system sends a
+              friendly nudge email encouraging them to pick up where they left
+              off. This helps prevent volunteers from falling through the
+              cracks.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          All prerequisite notifications are sent automatically by a background
+          process. Admins do not need to configure or trigger them manually.
+        </p>
+      </>
+    ),
+  },
+  {
     title: "Absence Alerts",
     content: (
       <>

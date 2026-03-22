@@ -468,11 +468,20 @@ export default function SchedulesPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  window.open(
+                onClick={async () => {
+                  const token = await user?.getIdToken();
+                  const res = await fetch(
                     `/api/export?church_id=${churchId}&schedule_id=${activeScheduleId}&format=csv`,
-                    "_blank"
+                    { headers: { Authorization: `Bearer ${token}` } },
                   );
+                  if (!res.ok) return;
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `schedule-${activeScheduleId?.slice(0, 8)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
                 }}
               >
                 <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase/config";
-import { collection, getDocs } from "firebase/firestore";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 type DocRecord = Record<string, unknown> & { id: string };
 
 function getAll(churchId: string, col: string): Promise<DocRecord[]> {
-  return getDocs(collection(db, "churches", churchId, col)).then((snap) =>
-    snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DocRecord)
-  );
+  return adminDb
+    .collection(`churches/${churchId}/${col}`)
+    .get()
+    .then((snap) =>
+      snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DocRecord),
+    );
 }
 
 function escapeCSV(val: string): string {
@@ -28,6 +30,13 @@ function formatDateReadable(dateStr: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+  const userId = decoded.uid;
+
   const { searchParams } = req.nextUrl;
   const churchId = searchParams.get("church_id");
   const scheduleId = searchParams.get("schedule_id");
@@ -36,7 +45,20 @@ export async function GET(req: NextRequest) {
   if (!churchId || !scheduleId) {
     return NextResponse.json(
       { error: "church_id and schedule_id are required" },
-      { status: 400 }
+      { status: 400 },
+    );
+  }
+
+  // Verify admin/scheduler role
+  const membershipId = `${userId}_${churchId}`;
+  const membership = await adminDb.doc(`memberships/${membershipId}`).get();
+  if (
+    !membership.exists ||
+    !["owner", "admin", "scheduler"].includes(membership.data()?.role)
+  ) {
+    return NextResponse.json(
+      { error: "Insufficient permissions" },
+      { status: 403 },
     );
   }
 

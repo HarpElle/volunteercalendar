@@ -495,6 +495,65 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Cron email** — Verify `/api/cron/propresenter-export` endpoint returns 200 with valid cron secret → sends email with export attachment to configured recipients
 - [ ] **Empty state** — Select a date range with no published plans → table shows "No song usage data for this period" (not a crash)
 
+### AA. Prerequisite Notifications (~10 min)
+
+- [ ] **Step completed email** — Mark a volunteer's prerequisite step as complete → volunteer receives step-completed email with updated progress (e.g., "3 of 4 steps done!")
+- [ ] **All steps completed email** — Complete a volunteer's final prerequisite for a ministry → volunteer receives eligible-notify celebration email → scheduler is informed volunteer is now eligible to serve
+- [ ] **Expiry warning email** — Set a step's `expires_at` to within 30 days → trigger `/api/cron/prerequisite-check` → volunteer receives expiry-warning email prompting renewal
+- [ ] **Nudge email** — Set a volunteer's journey step to "in_progress" with stale last-activity → trigger `/api/cron/prerequisite-check` → volunteer receives nudge email encouraging next step
+- [ ] **POST endpoint** — Hit `/api/notify/prerequisite` with valid payload and Bearer token → 200 response → correct template sent via Resend
+- [ ] **Cron daily check** — Hit `/api/cron/prerequisite-check` with valid cron secret → 200 → processes all orgs for expiring steps and stalled progress
+- [ ] **No duplicate sends** — Trigger cron twice within same day → second run does not re-send notifications already sent
+- [ ] **Verify in Resend** — All 5 template types (step-completed, eligible-notify, expiry-warning, nudge, training-session-invite) appear with correct content in Resend dashboard
+
+### AB. Training Sessions (~15 min)
+
+**CRUD & List**
+
+- [ ] **Create session** — POST `/api/training-sessions` with title, date, capacity, linked prerequisite → 201 → session document created in Firestore
+- [ ] **List sessions** — GET `/api/training-sessions` → returns sessions for the org
+- [ ] **Edit session** — PATCH `/api/training-sessions/[id]` → updates title/date/capacity → changes reflected on reload
+- [ ] **Delete session** — DELETE `/api/training-sessions/[id]` → session removed
+
+**RSVP**
+
+- [ ] **Volunteer RSVPs** — POST RSVP endpoint with volunteer ID → RSVP recorded → session attendee count increments
+- [ ] **Capacity enforced** — Fill session to capacity → next RSVP attempt returns error
+- [ ] **Cancel RSVP** — Volunteer cancels RSVP → attendee count decrements
+
+**Complete & Auto-Prerequisite**
+
+- [ ] **Mark session complete** — Hit complete endpoint → session status changes to "completed"
+- [ ] **Auto-complete prerequisite** — After session marked complete, attendees with a pending class prerequisite matching the session's linked prereq → step auto-completed in VolunteerJourneyStep
+- [ ] **Non-attendee unaffected** — Volunteer who did not RSVP or attend → prerequisite step NOT auto-completed
+
+**Invite**
+
+- [ ] **Send invitations** — Hit invite endpoint → emails sent to volunteers with pending class prerequisites matching the session
+- [ ] **Invite email content** — Check Resend → training-session-invite template includes session title, date, location, RSVP link
+- [ ] **Already-complete excluded** — Volunteers who already completed the prerequisite do NOT receive the invite
+
+### AC. Trainee Assignments (~10 min)
+
+**Visual Distinction**
+
+- [ ] **Roster: dashed border** — Assign volunteer as trainee (assignment_type: "trainee") → service roster shows dashed border around the assignment card
+- [ ] **Roster: Shadowing badge** — Trainee assignment shows "Shadowing" badge in the service roster
+- [ ] **Matrix: shadow label** — Schedule matrix shows "(shadow)" label next to trainee's name in the cell
+- [ ] **Compare view: shadow label** — Multi-service compare view shows "(shadow)" label for trainee assignments
+- [ ] **My Schedule: Shadowing badge** — Volunteer's My Schedule page shows "Shadowing" badge on their trainee assignments
+
+**Slot Count Exclusion**
+
+- [ ] **Roster summary** — Trainee assignments are NOT counted in the "X of Y filled" slot summary in the service roster
+- [ ] **Matrix fill rate** — Schedule matrix fill rate percentage excludes trainees from the numerator
+- [ ] **Regular + trainee together** — Assign one regular and one trainee to same role → slot count shows 1 of N filled (not 2)
+
+**Assignment Type Toggle**
+
+- [ ] **Set as trainee** — Edit an assignment → change type to "trainee" → visual indicators appear immediately
+- [ ] **Set as regular** — Change trainee back to "regular" → dashed border and badges removed → included in slot counts again
+
 ---
 
 ## 4. Post-Deploy Smoke Test (~5 min)

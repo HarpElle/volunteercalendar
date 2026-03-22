@@ -59,6 +59,9 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 - [ ] Test SongSelect integration (Growth+ tier): connect credentials → search songs → import → detect duplicates → disconnect → verify cron sync
 - [ ] Test Stage Sync (Growth+ tier): enable session → open conductor view → open participant view → advance items → test keyboard shortcuts → test reconnection
 - [ ] Test song usage reports: set date range → verify aggregation → export CSV → export ProPresenter JSON → verify cron email delivery
+- [ ] Test prerequisite notifications cron: trigger `/api/cron/prerequisite-check` → verify expiry-warning emails for steps expiring within 30 days, nudge emails for stalled volunteers
+- [ ] Test training session flow: create session → invite volunteers with pending class prereqs → volunteer RSVPs → mark session complete → verify prerequisite step auto-completed for attendees
+- [ ] Test trainee assignments: assign volunteer as trainee → verify dashed border + "Shadowing" badge in roster, "(shadow)" label in matrix/compare view, "Shadowing" badge in My Schedule, trainee excluded from slot counts
 - [ ] Set up Firestore daily backup (Google Cloud Console → Firestore → Backups)
 - [ ] Review Firestore security rules in production console (including stage_sync_live and stage_sync_tokens collections)
 
@@ -101,15 +104,9 @@ AssignmentType: `"regular" | "trainee"` on Assignment interface. Dashed border +
 
 Self-service workflow where volunteers submit required information for a background check directly from their My Journey page. The flow: volunteer sees a pending "background check" prerequisite → clicks "Start Background Check" → fills out a consent form with personal details → submission triggers an external provider workflow (e.g., Checkr, Sterling, or a church-provided service). The prerequisite status transitions through `pending → processing → cleared/denied`. Admins and the scheduler are notified of the result. The volunteer's record stores the check status, provider name, completion date, and expiry date (many churches require re-checks every 2–3 years). An approaching-expiry notification could prompt renewal. This is particularly important for children's ministry and emergency response teams where background checks are mandatory.
 
-#### Prerequisite Notifications
+#### ~~Prerequisite Notifications~~ — Done
 
-Automated email and push notifications for onboarding milestone events:
-- **Step completed** — When an admin marks a prerequisite step as complete, the volunteer receives a congratulatory notification with their updated progress (e.g., "3 of 4 steps done!")
-- **All steps completed** — When a volunteer finishes all prerequisites for a ministry, they receive a celebration notification and the scheduler is informed they're now eligible to serve
-- **Approaching expiry** — For time-bound prerequisites (background checks, certifications), send a reminder 30 days before expiry so the volunteer can renew
-- **Nudge for stalled progress** — Optional gentle reminder if a volunteer has been in "in progress" for an extended period (configurable by admin)
-
-This leverages the existing email infrastructure (Resend) and FCM push infrastructure (Phase 23). Notifications would respect the volunteer's channel preferences.
+Five email templates (step-completed, eligible-notify, expiry-warning, nudge, training-session-invite), `/api/notify/prerequisite` POST endpoint, `/api/cron/prerequisite-check` daily cron with expiry-warning and stalled-progress nudge logic, and `expires_at` field on VolunteerJourneyStep.
 
 ### Lower Priority (before 200 paying orgs)
 
