@@ -32,6 +32,46 @@
         { "fieldPath": "song_id", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "checkInSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "service_date", "order": "ASCENDING" },
+        { "fieldPath": "room_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkInSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "service_date", "order": "ASCENDING" },
+        { "fieldPath": "child_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkInSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "service_date", "order": "ASCENDING" },
+        { "fieldPath": "checked_out_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "children",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "household_id", "order": "ASCENDING" },
+        { "fieldPath": "is_active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkin_households",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "primary_guardian_phone", "order": "ASCENDING" },
+        { "fieldPath": "church_id", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -78,6 +78,7 @@ export default function DashboardLayout({
   }, [hasMultipleOrgs, memberships]);
 
   const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
+  const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
 
   // Redirect volunteers from /dashboard to /dashboard/my-schedule
   const isVolunteerOnly = activeMembership && !isScheduler(activeMembership);
@@ -122,6 +123,7 @@ export default function DashboardLayout({
         activeMembership={activeMembership}
         hasPrerequisites={hasPrerequisites}
         worshipEnabled={worshipEnabled}
+        checkinEnabled={checkinEnabled}
         showGuideDot={showGuideDot}
         churchName={churchName}
         churchId={churchId}

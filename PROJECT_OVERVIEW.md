@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 + Expansion Phases 4–8 complete. |
+| **Status** | Phase 32 + Expansion Phases 4–10 complete. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -97,6 +97,26 @@ VolunteerCal/
 │   │   │   │   │   └── page.tsx    # Service plans list (upcoming, create, navigate to editor)
 │   │   │   │   └── reports/
 │   │   │   │       └── page.tsx    # Song usage reports (CCLI compliance)
+│   │   │   └── checkin/
+│   │   │       ├── page.tsx        # Check-in dashboard (today's stats, quick actions)
+│   │   │       ├── households/
+│   │   │       │   ├── page.tsx    # Household list (searchable)
+│   │   │       │   └── [id]/
+│   │   │       │       └── page.tsx    # Household detail (guardians, children, QR)
+│   │   │       ├── rooms/
+│   │   │       │   └── page.tsx    # Room grade/capacity assignment for check-in
+│   │   │       ├── reports/
+│   │   │       │   └── page.tsx    # Attendance reports (daily, room, trends, CSV)
+│   │   │       ├── settings/
+│   │   │       │   └── page.tsx    # Service times, thresholds, printer config, pre-check-in SMS
+│   │   │       └── import/
+│   │   │           └── page.tsx    # Breeze CSV import wizard
+│   │   ├── checkin/               # Children's check-in kiosk (unauthenticated)
+│   │   │   ├── layout.tsx         # Blank full-screen layout (no nav/sidebar)
+│   │   │   ├── page.tsx           # 4-screen kiosk state machine
+│   │   │   └── room/
+│   │   │       └── [roomId]/
+│   │   │           └── page.tsx   # Teacher room view (token auth, 5s polling)
 │   │   ├── stage-sync/
 │   │   │   ├── conductor/
 │   │   │   │   └── [churchId]/
@@ -261,9 +281,50 @@ VolunteerCal/
 │   │       │   │   └── route.ts    # Stripe customer portal
 │   │       │   └── webhook/
 │   │       │       └── route.ts    # Stripe webhook handler
+│   │       ├── checkin/            # Children's check-in kiosk API (unauthenticated, rate-limited)
+│   │       │   ├── lookup/
+│   │       │   │   └── route.ts    # POST family lookup (QR token, phone last-4, full phone)
+│   │       │   ├── checkin/
+│   │       │   │   └── route.ts    # POST check-in children + generate label payloads
+│   │       │   ├── checkout/
+│   │       │   │   └── route.ts    # POST secure pickup (timing-safe code verification)
+│   │       │   ├── print/
+│   │       │   │   └── route.ts    # POST reprint labels for existing sessions
+│   │       │   ├── register/
+│   │       │   │   └── route.ts    # POST first-time visitor registration (10 req/min)
+│   │       │   └── room/
+│   │       │       └── [roomId]/
+│   │       │           └── route.ts    # GET teacher room view (token auth)
 │   │       ├── admin/
-│   │       │   └── tier-override/
-│   │       │       └── route.ts    # Platform admin tier override (POST)
+│   │       │   ├── tier-override/
+│   │       │   │   └── route.ts    # Platform admin tier override (POST)
+│   │       │   └── checkin/        # Children's check-in admin API (Bearer auth)
+│   │       │       ├── household/
+│   │       │       │   ├── route.ts            # POST create household
+│   │       │       │   └── [householdId]/
+│   │       │       │       ├── route.ts        # GET/PUT household detail
+│   │       │       │       └── regenerate-qr/
+│   │       │       │           └── route.ts    # POST regenerate QR token
+│   │       │       ├── children/
+│   │       │       │   ├── route.ts            # GET list / POST create child
+│   │       │       │   └── [childId]/
+│   │       │       │       └── route.ts        # GET/PUT child detail
+│   │       │       ├── printer/
+│   │       │       │   ├── route.ts            # POST upsert printer config
+│   │       │       │   └── test/
+│   │       │       │       └── route.ts        # POST generate test label
+│   │       │       ├── settings/
+│   │       │       │   └── route.ts            # GET/PUT check-in settings
+│   │       │       ├── rooms/
+│   │       │       │   └── route.ts            # GET list / PUT update check-in fields
+│   │       │       ├── sms/
+│   │       │       │   └── pre-checkin/
+│   │       │       │       └── route.ts        # POST send pre-check-in SMS (Pro+)
+│   │       │       ├── report/
+│   │       │       │   └── route.ts            # GET reports (6 types + CSV)
+│   │       │       └── import/
+│   │       │           └── breeze/
+│   │       │               └── route.ts        # POST Breeze CSV import
 │   │       └── volunteers/
 │   │           └── [id]/
 │   │               ├── archive/
@@ -280,21 +341,27 @@ VolunteerCal/
 │   │   ├── services/           # services-list, event-list (extracted from services-events/page.tsx)
 │   │   ├── settings/           # general-settings, teams-settings, campuses-settings, billing-settings (extracted from organization/page.tsx)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
-│   │   └── worship/            # Song library table, song form modal, service plan editor, song-import-modal (ChordPro/PDF upload), chord-chart-renderer, chord-chart-viewer, song-editor, arrangements-panel, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
+│   │   ├── worship/            # Song library table, song form modal, service plan editor, song-import-modal (ChordPro/PDF upload), chord-chart-renderer, chord-chart-viewer, song-editor, arrangements-panel, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
+│   │   └── checkin/            # Kiosk UI: family-lookup (QR+phone), child-selection (multi-select cards), allergy-confirm, checkin-success (security code display), numeric-keypad, child-card, room-picker-modal, room-child-card, allergy-detail-modal, visitor-registration (first-time family self-registration)
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks (use-service-worker.ts)
-│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord)
+│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord, CheckInHousehold, Child, CheckInSession, CheckInSettings, PrinterConfig, LabelJob, Room)
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts
+│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts
 │       │   ├── emails/         # 31 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect (ChordPro/PDF parser)
 │       ├── music/              # ChordPro parser, transposition engine, chord notation converters
-│       └── services/           # Scheduling algorithm, auto-reschedule, SMS service
+│       └── services/           # Scheduling algorithm, auto-reschedule, SMS service, printing/ (label adapters: Brother QL, Zebra ZD, Dymo)
+├── print-server/               # Companion print service (Python/Flask, runs on church LAN)
+│   ├── server.py               # Flask app: POST /print (Brother QL PNG, Zebra ZPL via TCP)
+│   ├── requirements.txt        # flask, flask-cors, brother-ql
+│   ├── Dockerfile              # Containerized deployment option
+│   └── README.md               # Setup guide for church IT
 ```
 
 ## Implementation Phases
@@ -342,4 +409,5 @@ VolunteerCal/
 | Exp. 6 | Song usage reports & ProPresenter export — reports page with date range/filters/CSV export (src/app/api/reports/song-usage/), ProPresenter JSON export API (src/app/api/service-plans/[id]/export-propresenter/), daily auto-email cron (src/app/api/cron/propresenter-export/), propresenter-export email template, Firestore composite indexes for song_usage, songs, and service_plans | Complete |
 | Exp. 7 | Platform admin tier override & ministry templates — SubscriptionSource type on Church interface, platform-admin utility (src/lib/utils/platform-admin.ts), tier-override API (src/app/api/admin/tier-override/), Stripe webhook guard for manual overrides, Platform Admin UI card in organization settings, free tier updated to 2 ministries, 23 church ministry templates with 6 categories (src/lib/constants/), setup wizard converted to stepped form with ministry picker (step 4 for churches), inline name editing, background-check indicators | Complete |
 | Exp. 8 | Volunteer archive & status system — "archived" added to VolunteerStatus type, scheduler isEligible() safety check rejects non-active volunteers, schedules page pre-filters archived before generating drafts, archive/restore API (src/app/api/volunteers/[id]/archive/), remove-from-organization API (src/app/api/volunteers/[id]/remove/) deletes volunteer + membership, People page status filter (Active/Archived/All) and team filter (On a Team/Not on Any Team), kebab action menu with Archive/Restore/Remove from Organization, archived row visual indicators (faded + badge), contextual info banners for archived and no-team filter states | Complete |
+| Exp. 10 | Native Children's Check-In — CheckInHousehold/Child/CheckInSession/CheckInSettings/CheckInAlert/Room types + 5 Firestore composite indexes, security code generator (safe charset), label printing system (PrinterAdapter interface, BrotherQLAdapter PNG via @napi-rs/canvas, ZebraZDAdapter ZPL, DymoAdapter XML), companion print server (Python/Flask on church LAN), 6 kiosk API routes (lookup, checkin, checkout, print, register, room view — unauthenticated, rate-limited), 10 admin API routes (household CRUD, children CRUD, printer config/test, settings, 6-type report engine with CSV export, Breeze CSV import with grade mapping), 4-screen kiosk UI (QR scan via jsQR + phone keypad lookup → multi-select child cards → allergy acknowledgment → success with security code + auto-print), teacher room view (token auth, 5s polling, late arrival detection), admin dashboard (overview stats, households, reports, settings, import wizard), sidebar nav (Check-In section gated by checkin_enabled tier), tier gating (checkin_enabled at Growth+, pre_checkin_sms/advanced_reports/multi_station at Pro+) | Complete |
 | Phase G | People page overhaul — table→card grid (PersonCard with avatar, eligibility dot, role badge, ministry pills), PersonDetailDrawer (profile editing, prerequisite tracking with status toggles, org role changes, archive/remove), prerequisite scope system (PrerequisiteScope: all/teams/events/specific_roles on OnboardingStep, scope-aware scheduler, scope selector + role picker in PrerequisiteEditor), shared eligibility utility (getOrgEligibility, getVolunteerStage, getApplicablePrereqs), org_prerequisites in people-data API, StepTypeIcon extracted to shared component, org role + eligibility filters on Roster tab, share join link moved to header button with modal, inline components extracted to src/components/people/ (add-people-menu, invite-form, join-link-section, member-row, household-card), page.tsx reduced from ~1800→~980 lines, warm editorial design polish | Complete |

@@ -1002,3 +1002,193 @@ export interface SongUsageRecord {
   created_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// Children's Check-In Module
+// ---------------------------------------------------------------------------
+
+// ─── CheckIn Household ───────────────────────────────────────────────────────
+// Separate from the scheduling Household (line ~449) which tracks volunteer
+// family constraints. This represents families with children for check-in.
+// Firestore: churches/{churchId}/checkin_households/{id}
+
+export interface CheckInHousehold {
+  id: string;
+  church_id: string;
+  primary_guardian_name: string;
+  primary_guardian_phone: string; // E.164 format: "+15125551234"
+  secondary_guardian_name?: string;
+  secondary_guardian_phone?: string;
+  /** Stable QR check-in token — URL: /checkin?token={qr_token} */
+  qr_token: string;
+  photo_url?: string;
+  imported_from?: "breeze" | "pco" | "manual";
+  external_id?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+// ─── Child ───────────────────────────────────────────────────────────────────
+// Firestore: churches/{churchId}/children/{id}
+
+export type ChildGrade =
+  | "nursery"
+  | "toddler"
+  | "pre-k"
+  | "kindergarten"
+  | "1st"
+  | "2nd"
+  | "3rd"
+  | "4th"
+  | "5th"
+  | "6th";
+
+export interface Child {
+  id: string;
+  church_id: string;
+  household_id: string;
+  first_name: string;
+  last_name: string;
+  preferred_name?: string;
+  date_of_birth?: string;
+  grade?: ChildGrade;
+  photo_url?: string;
+  default_room_id?: string;
+  has_alerts: boolean;
+  allergies?: string;
+  medical_notes?: string;
+  imported_from?: "breeze" | "pco" | "manual";
+  external_id?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── CheckInSession ──────────────────────────────────────────────────────────
+// Firestore: churches/{churchId}/checkInSessions/{id}
+
+export interface CheckInSession {
+  id: string;
+  church_id: string;
+  child_id: string;
+  household_id: string;
+  service_date: string;
+  service_id?: string;
+  room_id: string;
+  room_name: string;
+  security_code: string;
+  security_code_expires_at: string;
+  checked_in_at: string;
+  checked_in_by_user_id?: string;
+  pre_checked_in: boolean;
+  checked_out_at?: string;
+  checked_out_by_user_id?: string;
+  alerts_acknowledged: boolean;
+  alert_snapshot?: string;
+  created_at: string;
+}
+
+// ─── CheckIn Settings ────────────────────────────────────────────────────────
+// Firestore: churches/{churchId}/checkinSettings/config (single doc)
+
+export interface CheckInServiceTime {
+  id: string;
+  name: string;
+  day_of_week: number; // 0=Sunday…6=Saturday
+  start_time: string; // "09:00" (HH:mm)
+  end_time: string; // "10:30"
+  is_active: boolean;
+}
+
+export type PrinterType = "brother_ql" | "zebra_zd" | "dymo_labelwriter";
+export type BrotherLabelSize = "DK-2251" | "DK-1201" | "DK-2205";
+export type ZebraLabelSize = "2x1" | "2x2" | "4x1";
+export type DymoLabelSize = "30256" | "30321";
+
+export interface PrinterConfig {
+  id: string;
+  station_name: string;
+  printer_type: PrinterType;
+  ip_address: string;
+  port?: number; // default: 9100
+  label_size: BrotherLabelSize | ZebraLabelSize | DymoLabelSize;
+  /** LAN URL of companion print service (e.g. http://printserver.local:3001) */
+  print_server_url?: string;
+  is_active: boolean;
+}
+
+export interface CheckInSettings {
+  service_times: CheckInServiceTime[];
+  pre_checkin_window_minutes: number;
+  late_arrival_threshold_minutes: number;
+  capacity_sms_recipient_phone?: string;
+  printers: PrinterConfig[];
+  breeze_import_grade_mapping?: Record<string, ChildGrade>;
+  updated_by: string;
+  updated_at: string;
+}
+
+// ─── CheckIn Alerts ──────────────────────────────────────────────────────────
+// Firestore: churches/{churchId}/checkinAlerts/{id}
+
+export interface CheckInAlert {
+  id: string;
+  church_id: string;
+  session_id: string;
+  child_id: string;
+  alert_type: "wrong_code" | "expired_code" | "capacity_exceeded";
+  attempted_code?: string;
+  occurred_at: string;
+  resolved: boolean;
+  resolved_by?: string;
+  resolved_at?: string;
+}
+
+// ─── Label Printing ──────────────────────────────────────────────────────────
+
+export interface LabelJob {
+  type: "child_label" | "parent_stub";
+  child_name?: string;
+  child_names?: string[];
+  room_name?: string;
+  service_date: string;
+  security_code: string;
+  church_name: string;
+  has_allergy_alert: boolean;
+  allergy_text?: string;
+}
+
+export interface LabelPayload {
+  format: "png" | "zpl" | "dymo_xml";
+  /** Base64-encoded PNG or raw ZPL/XML text */
+  data: string;
+  printer_id: string;
+}
+
+// ─── Room (shared with Part 2: Room/Resource Scheduling) ─────────────────────
+// Firestore: churches/{churchId}/rooms/{id}
+
+export interface Room {
+  id: string;
+  church_id: string;
+  name: string;
+  description?: string;
+  capacity?: number;
+  location?: string;
+  campus_id?: string;
+  equipment: string[];
+  photo_url?: string;
+  suggested_ministry_ids: string[];
+  is_active: boolean;
+  display_public: boolean;
+  public_visible: boolean;
+  calendar_token: string;
+  // Check-in specific fields
+  default_grades?: ChildGrade[];
+  overflow_room_id?: string;
+  checkin_view_token?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+

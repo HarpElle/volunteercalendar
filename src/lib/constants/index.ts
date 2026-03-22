@@ -12,12 +12,16 @@ export const TIER_LIMITS: Record<string, {
   workflow_modes_all: boolean;
   multi_stage_approval: boolean;
   ccli_auto_reporting: boolean;
+  checkin_enabled: boolean;
+  checkin_pre_checkin_sms: boolean;
+  checkin_advanced_reports: boolean;
+  checkin_multi_station: boolean;
 }> = {
-  free:       { volunteers: 20,       ministries: 2,        short_links: 0,   roles_per_service: 3,  active_events: 1,        roles_per_event: 2,  worship_enabled: false, workflow_modes_all: false, multi_stage_approval: false, ccli_auto_reporting: false },
-  starter:    { volunteers: 100,      ministries: 5,        short_links: 3,   roles_per_service: 8,  active_events: 5,        roles_per_event: 5,  worship_enabled: false, workflow_modes_all: true,  multi_stage_approval: false, ccli_auto_reporting: false },
-  growth:     { volunteers: 250,      ministries: 15,       short_links: 10,  roles_per_service: 20, active_events: 15,       roles_per_event: 15, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: false },
-  pro:        { volunteers: 500,      ministries: Infinity,  short_links: 25,  roles_per_service: 50, active_events: Infinity,  roles_per_event: 50, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: true  },
-  enterprise: { volunteers: Infinity, ministries: Infinity,  short_links: 100, roles_per_service: Infinity, active_events: Infinity, roles_per_event: Infinity, worship_enabled: true, workflow_modes_all: true, multi_stage_approval: true, ccli_auto_reporting: true },
+  free:       { volunteers: 20,       ministries: 2,        short_links: 0,   roles_per_service: 3,  active_events: 1,        roles_per_event: 2,  worship_enabled: false, workflow_modes_all: false, multi_stage_approval: false, ccli_auto_reporting: false, checkin_enabled: false, checkin_pre_checkin_sms: false, checkin_advanced_reports: false, checkin_multi_station: false },
+  starter:    { volunteers: 100,      ministries: 5,        short_links: 3,   roles_per_service: 8,  active_events: 5,        roles_per_event: 5,  worship_enabled: false, workflow_modes_all: true,  multi_stage_approval: false, ccli_auto_reporting: false, checkin_enabled: false, checkin_pre_checkin_sms: false, checkin_advanced_reports: false, checkin_multi_station: false },
+  growth:     { volunteers: 250,      ministries: 15,       short_links: 10,  roles_per_service: 20, active_events: 15,       roles_per_event: 15, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: false, checkin_enabled: true,  checkin_pre_checkin_sms: false, checkin_advanced_reports: false, checkin_multi_station: false },
+  pro:        { volunteers: 500,      ministries: Infinity,  short_links: 25,  roles_per_service: 50, active_events: Infinity,  roles_per_event: 50, worship_enabled: true,  workflow_modes_all: true,  multi_stage_approval: true,  ccli_auto_reporting: true,  checkin_enabled: true,  checkin_pre_checkin_sms: true,  checkin_advanced_reports: true,  checkin_multi_station: true  },
+  enterprise: { volunteers: Infinity, ministries: Infinity,  short_links: 100, roles_per_service: Infinity, active_events: Infinity, roles_per_event: Infinity, worship_enabled: true, workflow_modes_all: true, multi_stage_approval: true, ccli_auto_reporting: true, checkin_enabled: true, checkin_pre_checkin_sms: true, checkin_advanced_reports: true, checkin_multi_station: true },
 };
 
 export const WORKFLOW_MODES: { value: WorkflowMode; label: string; description: string }[] = [
@@ -134,6 +138,7 @@ export const PRICING_TIERS: {
       "Song usage tracking & CCLI reporting",
       "ProPresenter export",
       "Volunteer health dashboard",
+      "Children's check-in & label printing",
     ],
   },
   {
@@ -147,6 +152,7 @@ export const PRICING_TIERS: {
       "Unlimited teams",
       "Everything in Growth",
       "Advanced CCLI reporting",
+      "Pre-check-in SMS & multi-station",
       "Multi-site support",
       "API access",
     ],
