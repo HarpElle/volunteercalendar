@@ -183,6 +183,32 @@ export function PersonDetailDrawer({
     }
   }
 
+  function handleTeamRoleToggle(teamId: string) {
+    const isSchedulerForTeam = selectedOrgRole === "scheduler" && ministryScope.includes(teamId);
+
+    if (isSchedulerForTeam) {
+      // Demote from scheduler on this team
+      const nextScope = ministryScope.filter((m) => m !== teamId);
+      if (nextScope.length === 0) {
+        // No scheduler teams left → revert to volunteer role
+        setSelectedOrgRole("volunteer");
+        setMinistryScope([]);
+        if (membership) onRoleChanged(membership, "volunteer");
+      } else {
+        setMinistryScope(nextScope);
+        if (membership) onRoleChanged(membership, "scheduler", nextScope);
+      }
+    } else {
+      // Promote to scheduler on this team
+      const nextScope = selectedOrgRole === "scheduler"
+        ? [...ministryScope, teamId]
+        : [teamId];
+      setSelectedOrgRole("scheduler");
+      setMinistryScope(nextScope);
+      if (membership) onRoleChanged(membership, "scheduler", nextScope);
+    }
+  }
+
   function handleMinistryScpeToggle(mid: string) {
     const next = ministryScope.includes(mid)
       ? ministryScope.filter((m) => m !== mid)
@@ -552,77 +578,59 @@ export function PersonDetailDrawer({
                 )}
               </div>
 
-              {/* --- Scheduling Access --- */}
-              <div className="rounded-xl border border-vc-border-light bg-white p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                  Scheduling Access
-                </p>
-                {selectedOrgRole === "admin" || selectedOrgRole === "owner" ? (
-                  <p className="text-sm text-vc-text-secondary">
-                    {selectedOrgRole === "owner" ? "Owners" : "Administrators"} can schedule all teams.
+              {/* --- Team Roles --- */}
+              {selectedMinistries.length > 0 && (
+                <div className="rounded-xl border border-vc-border-light bg-white p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                    Team Roles
                   </p>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-sm font-medium ${selectedOrgRole === "scheduler" ? "text-vc-indigo" : "text-vc-text-secondary"}`}>
-                        {selectedOrgRole === "scheduler" ? "Team Scheduler" : "Member"}
-                      </span>
-                      {selectedOrgRole === "scheduler" && <Badge variant="accent">Scheduler</Badge>}
-                    </div>
-
-                    {selectedOrgRole !== "scheduler" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOrgRoleChange("scheduler")}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-sand/40 bg-vc-sand/5 px-3 py-1.5 text-sm font-medium text-vc-warning transition-colors hover:bg-vc-sand/10 min-h-[44px]"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-                        </svg>
-                        Make Team Scheduler
-                      </button>
-                    ) : (
-                      <>
-                        {ministries.length > 0 && (
-                          <div>
-                            <p className="mb-1.5 text-xs text-vc-text-muted">
-                              Scheduling access for these teams (empty = all teams):
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {ministries.map((m) => (
-                                <button
-                                  key={m.id}
-                                  type="button"
-                                  onClick={() => handleMinistryScpeToggle(m.id)}
-                                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all min-h-[44px] ${
-                                    ministryScope.includes(m.id)
-                                      ? "border-transparent text-white"
-                                      : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
-                                  }`}
-                                  style={ministryScope.includes(m.id) ? { backgroundColor: m.color } : undefined}
-                                >
-                                  <span
-                                    className="h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: ministryScope.includes(m.id) ? "white" : m.color }}
-                                  />
-                                  {m.name}
-                                </button>
-                              ))}
+                  {selectedOrgRole === "admin" || selectedOrgRole === "owner" ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-vc-text-secondary">
+                        {selectedOrgRole === "owner" ? "Owners" : "Administrators"} can schedule all teams.
+                      </p>
+                      <div className="space-y-1">
+                        {selectedMinistries.map((mid) => {
+                          const m = ministries.find((x) => x.id === mid);
+                          if (!m) return null;
+                          return (
+                            <div key={mid} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                              <span className="text-sm text-vc-text flex-1">{m.name}</span>
+                              <span className="text-[11px] font-medium text-vc-text-muted">Admin</span>
                             </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {selectedMinistries.map((mid) => {
+                        const m = ministries.find((x) => x.id === mid);
+                        if (!m) return null;
+                        const isSchedulerForTeam = selectedOrgRole === "scheduler" && ministryScope.includes(mid);
+                        return (
+                          <div key={mid} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                            <span className="text-sm text-vc-text flex-1">{m.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleTeamRoleToggle(mid)}
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all min-h-[44px] ${
+                                isSchedulerForTeam
+                                  ? "border-vc-sand/50 bg-vc-sand/10 text-vc-warning"
+                                  : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
+                              }`}
+                            >
+                              {isSchedulerForTeam ? "Scheduler" : "Volunteer"}
+                            </button>
                           </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleOrgRoleChange("volunteer")}
-                          className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
-                        >
-                          Remove scheduling access
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
             </div>
           </section>

@@ -93,7 +93,7 @@ export function PersonCard({
             {isArchived && (
               <Badge variant="default">Archived</Badge>
             )}
-            {mem && (
+            {mem && mem.role !== "volunteer" && (
               <Badge variant={ROLE_VARIANTS[mem.role]}>{ROLE_LABELS[mem.role]}</Badge>
             )}
             {!mem && (

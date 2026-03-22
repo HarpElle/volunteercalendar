@@ -116,6 +116,8 @@ export interface Church {
   settings: ChurchSettings;
   /** Org-wide prerequisites that apply to ALL teams */
   org_prerequisites?: OnboardingStep[];
+  /** SongSelect credentials stored on the church doc (server-managed) */
+  songselect_credentials?: SongSelectCredentials;
   created_at: string;
 }
 

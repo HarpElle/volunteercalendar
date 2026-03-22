@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { SongSelectImportModal } from "@/components/worship/songselect-import-modal";
-import type { Song } from "@/lib/types";
+import { db } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import type { Song, Church } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Filter Tabs
@@ -64,6 +66,19 @@ export default function SongsPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [songSelectConnected, setSongSelectConnected] = useState<boolean | undefined>(undefined);
+
+  // ---- Check SongSelect connection status ----
+
+  useEffect(() => {
+    if (!churchId) return;
+    getDoc(doc(db, "churches", churchId)).then((snap) => {
+      const data = snap.data() as Church | undefined;
+      setSongSelectConnected(!!data?.songselect_credentials?.email);
+    }).catch(() => {
+      setSongSelectConnected(false);
+    });
+  }, [churchId]);
 
   // ---- Fetch songs ----
 
@@ -131,9 +146,25 @@ export default function SongsPage() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">Song Library</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Manage your worship song catalog.
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-vc-text-secondary">
+              Manage your worship song catalog.
+            </p>
+            {songSelectConnected !== undefined && (
+              <button
+                onClick={() => setImportModalOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+                style={{
+                  background: songSelectConnected ? "var(--color-vc-sage, #7D9B76)" : "var(--color-vc-sand, #C4A35A)",
+                  color: "white",
+                  opacity: 0.85,
+                }}
+              >
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${songSelectConnected ? "bg-white" : "bg-white/60"}`} />
+                {songSelectConnected ? "SongSelect Connected" : "SongSelect Not Connected"}
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setImportModalOpen(true)}>
@@ -148,6 +179,8 @@ export default function SongsPage() {
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
         onImportComplete={loadSongs}
+        isConnected={songSelectConnected}
+        onConnected={() => setSongSelectConnected(true)}
       />
 
       {/* Search + filter tabs */}

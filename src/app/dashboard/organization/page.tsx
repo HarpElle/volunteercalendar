@@ -103,6 +103,14 @@ function OrganizationContent() {
   const [checkInSaving, setCheckInSaving] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState("");
 
+  // SongSelect integration state
+  const [songSelectConnected, setSongSelectConnected] = useState(false);
+  const [songSelectEmail, setSongSelectEmail] = useState<string | null>(null);
+  const [songSelectAutoSync, setSongSelectAutoSync] = useState(false);
+  const [songSelectDisconnecting, setSongSelectDisconnecting] = useState(false);
+  const [songSelectSyncSaving, setSongSelectSyncSaving] = useState(false);
+  const [songSelectSuccess, setSongSelectSuccess] = useState("");
+
   const billingSuccess = searchParams.get("success") === "true";
   const billingCanceled = searchParams.get("canceled") === "true";
 
@@ -136,6 +144,13 @@ function OrganizationContent() {
           setWindowAfter(s.check_in_window_after ?? 30);
           setProximityEnabled(s.proximity_check_in_enabled === true);
           setProximityRadius(s.proximity_radius_meters ?? 200);
+          // SongSelect
+          const creds = data.songselect_credentials;
+          if (creds?.email) {
+            setSongSelectConnected(true);
+            setSongSelectEmail(creds.email);
+            setSongSelectAutoSync(creds.auto_sync_enabled === true);
+          }
         }
         setMinistries(minDocs as unknown as Ministry[]);
         setCampuses(campusDocs as unknown as Campus[]);
@@ -218,6 +233,50 @@ function OrganizationContent() {
       // silent
     } finally {
       setCheckInSaving(false);
+    }
+  }
+
+  // --- SongSelect handlers ---
+
+  async function handleSongSelectDisconnect() {
+    if (!churchId || !user) return;
+    setSongSelectDisconnecting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/songselect/connect", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      setSongSelectConnected(false);
+      setSongSelectEmail(null);
+      setSongSelectAutoSync(false);
+    } catch {
+      // silent
+    } finally {
+      setSongSelectDisconnecting(false);
+    }
+  }
+
+  async function handleSongSelectAutoSyncToggle() {
+    if (!churchId) return;
+    setSongSelectSyncSaving(true);
+    const newValue = !songSelectAutoSync;
+    try {
+      await updateDocument("churches", churchId, {
+        "songselect_credentials.auto_sync_enabled": newValue,
+      });
+      setSongSelectAutoSync(newValue);
+      setSongSelectSuccess(newValue ? "Weekly sync enabled." : "Auto-sync disabled.");
+      setTimeout(() => setSongSelectSuccess(""), 3000);
+    } catch {
+      // silent
+    } finally {
+      setSongSelectSyncSaving(false);
     }
   }
 
@@ -766,6 +825,87 @@ function OrganizationContent() {
                 )}
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Worship Integrations ── */}
+      {isAdmin(activeMembership) && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Worship Integrations</h2>
+          <div className="rounded-xl border border-vc-border-light bg-white p-6">
+            {/* SongSelect card */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${songSelectConnected ? "bg-vc-sage/10" : "bg-vc-bg-warm"}`}>
+                  <svg className={`h-5 w-5 ${songSelectConnected ? "text-vc-sage" : "text-vc-text-muted"}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-vc-indigo">CCLI SongSelect</h3>
+                    <Badge variant={songSelectConnected ? "success" : "default"}>
+                      {songSelectConnected ? "Connected" : "Not Connected"}
+                    </Badge>
+                  </div>
+                  {songSelectConnected && songSelectEmail && (
+                    <p className="mt-0.5 text-xs text-vc-text-muted">
+                      Signed in as {songSelectEmail}
+                    </p>
+                  )}
+                  {!songSelectConnected && (
+                    <p className="mt-0.5 text-xs text-vc-text-muted">
+                      Connect your CCLI account to import songs from the Song Library page.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {songSelectConnected && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 text-vc-danger hover:text-vc-danger"
+                  loading={songSelectDisconnecting}
+                  onClick={handleSongSelectDisconnect}
+                >
+                  Disconnect
+                </Button>
+              )}
+            </div>
+
+            {/* Auto-sync toggle (only when connected) */}
+            {songSelectConnected && (
+              <div className="mt-5 border-t border-vc-border-light pt-5">
+                <label className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-vc-indigo">Weekly auto-sync</p>
+                    <p className="text-xs text-vc-text-muted">
+                      Automatically sync your SongSelect catalog every week
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={songSelectAutoSync}
+                    disabled={songSelectSyncSaving}
+                    onClick={handleSongSelectAutoSyncToggle}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50 ${
+                      songSelectAutoSync ? "bg-vc-sage" : "bg-gray-200"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                        songSelectAutoSync ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </label>
+                {songSelectSuccess && (
+                  <p className="mt-2 text-sm text-vc-sage">{songSelectSuccess}</p>
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}

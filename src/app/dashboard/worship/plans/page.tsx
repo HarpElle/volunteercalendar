@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
+import { StageSyncShareModal } from "@/components/worship/stage-sync-share-modal";
 import type { ServicePlan, Service } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ export default function PlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [stageSyncPlanId, setStageSyncPlanId] = useState<string | null>(null);
 
   // ---- Fetch plans + services ----
 
@@ -236,10 +238,39 @@ export default function PlansPage() {
                     {[plan.theme, plan.speaker].filter(Boolean).join(" -- ")}
                   </p>
                 )}
+
+                {/* Stage Sync action for published plans with items */}
+                {plan.published && plan.items.length > 0 && upcoming && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStageSyncPlanId(plan.id);
+                    }}
+                  >
+                    <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5" />
+                    </svg>
+                    Stage Sync
+                  </Button>
+                )}
               </Card>
             );
           })}
         </div>
+      )}
+
+      {/* Stage Sync share modal */}
+      {stageSyncPlanId && churchId && (
+        <StageSyncShareModal
+          open
+          onClose={() => setStageSyncPlanId(null)}
+          churchId={churchId}
+          planId={stageSyncPlanId}
+          planTitle={plans.find((p) => p.id === stageSyncPlanId)?.theme || undefined}
+        />
       )}
     </div>
   );
