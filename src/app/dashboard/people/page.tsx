@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef, type FormEvent } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import {
@@ -16,17 +16,23 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import { formatPhone } from "@/lib/utils/phone";
-import { VolunteerEditModal } from "@/components/forms/volunteer-edit-modal";
 import { InviteQueueDrawer } from "@/components/forms/invite-queue-drawer";
 import { getOrgTerms } from "@/lib/utils/org-terms";
-import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { CSVImportModal } from "@/components/forms/csv-import-modal";
 import { ChMSImportModal } from "@/components/forms/chms-import-modal";
 import { HouseholdFormModal } from "@/components/forms/household-form-modal";
+import { getServiceMinistries } from "@/lib/utils/service-helpers";
+import { getOrgEligibility } from "@/lib/utils/eligibility";
+import { PersonCard } from "@/components/people/person-card";
+import { PersonDetailDrawer } from "@/components/people/person-detail-drawer";
+import { AddPeopleMenu } from "@/components/people/add-people-menu";
+import { InviteForm } from "@/components/people/invite-form";
+import { JoinLinkSection } from "@/components/people/join-link-section";
+import { MemberRow } from "@/components/people/member-row";
+import { HouseholdCard } from "@/components/people/household-card";
+import { Modal } from "@/components/ui/modal";
 import type {
   Volunteer,
   Ministry,
@@ -36,8 +42,8 @@ import type {
   OrgType,
   Service,
   InviteQueueItem,
+  OnboardingStep,
 } from "@/lib/types";
-import { getServiceMinistries } from "@/lib/utils/service-helpers";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -48,13 +54,6 @@ const ROLE_LABELS: Record<OrgRole, string> = {
   admin: "Admin",
   scheduler: "Scheduler",
   volunteer: "Volunteer",
-};
-
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  active: { label: "Active", color: "bg-vc-sage/15 text-vc-sage" },
-  pending_org_approval: { label: "Awaiting Approval", color: "bg-vc-sand/30 text-vc-sand" },
-  pending_volunteer_approval: { label: "Invite Sent", color: "bg-vc-indigo/10 text-vc-indigo" },
-  inactive: { label: "Inactive", color: "bg-vc-bg-cream text-vc-text-muted" },
 };
 
 // ---------------------------------------------------------------------------
@@ -96,7 +95,12 @@ function PeopleContent() {
   const [filterRoles, setFilterRoles] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<"active" | "archived" | "all">("active");
   const [filterTeam, setFilterTeam] = useState<"all" | "on-team" | "no-team">("all");
+  const [filterOrgRoles, setFilterOrgRoles] = useState<OrgRole[]>([]);
+  const [filterEligibility, setFilterEligibility] = useState<"all" | "cleared" | "pending">("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Volunteer; membership: Membership | null } | null>(null);
+  const [showJoinLink, setShowJoinLink] = useState(false);
 
   // Households (Families tab)
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -146,6 +150,7 @@ function PeopleContent() {
           setChurchName(data.church.name || "");
           setChurchTier(data.church.subscription_tier || "free");
           setOrgType(data.church.org_type as OrgType);
+          setOrgPrereqs((data.church.org_prerequisites as OnboardingStep[]) || []);
         }
       } catch (err) {
         console.error("[People] Failed to load:", err);
@@ -188,7 +193,7 @@ function PeopleContent() {
     return { volunteer: v, membership: mem };
   });
 
-  const filteredRoster = rosterPeople.filter(({ volunteer: v }) => {
+  const filteredRoster = rosterPeople.filter(({ volunteer: v, membership: mem }) => {
     // Status filter (default: active only)
     if (filterStatus !== "all" && v.status !== filterStatus) return false;
     // Team membership filter
@@ -208,12 +213,24 @@ function PeopleContent() {
     if (filterRoles.length > 0) {
       if (!v.role_ids?.some((id) => filterRoles.includes(id))) return false;
     }
+    // Org role filter
+    if (filterOrgRoles.length > 0) {
+      if (!mem || !filterOrgRoles.includes(mem.role)) return false;
+    }
+    // Eligibility filter
+    if (filterEligibility !== "all") {
+      const elig = getOrgEligibility(v, orgPrereqs);
+      if (filterEligibility === "cleared" && elig !== "cleared" && elig !== "no_prereqs") return false;
+      if (filterEligibility === "pending" && elig !== "in_progress" && elig !== "not_started") return false;
+    }
     return true;
   });
 
   const activeFilterCount = filterMinistries.length + filterRoles.length
     + (filterStatus !== "active" ? 1 : 0)
-    + (filterTeam !== "all" ? 1 : 0);
+    + (filterTeam !== "all" ? 1 : 0)
+    + filterOrgRoles.length
+    + (filterEligibility !== "all" ? 1 : 0);
 
   // Helpers
   function getMinistryName(id: string) {
@@ -414,15 +431,28 @@ function PeopleContent() {
             {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingMems.length} pending
           </p>
         </div>
-        {canManage && addMode === null && (
-          <AddPeopleMenu onSelect={(mode) => {
-            if (mode === "individual") {
-              setTab("invites");
-            } else {
-              setAddMode(mode);
-            }
-          }} />
-        )}
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <button
+              onClick={() => setShowJoinLink(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-2 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+              </svg>
+              Invite Link
+            </button>
+          )}
+          {canManage && addMode === null && (
+            <AddPeopleMenu onSelect={(mode) => {
+              if (mode === "individual") {
+                setTab("invites");
+              } else {
+                setAddMode(mode);
+              }
+            }} />
+          )}
+        </div>
       </div>
 
       {/* Import modals */}
@@ -644,9 +674,61 @@ function PeopleContent() {
                   </div>
                 )}
 
+                {/* Org Role filter */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                    Org Role
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {(["owner", "admin", "scheduler", "volunteer"] as OrgRole[]).map((role) => (
+                      <button
+                        key={role}
+                        onClick={() =>
+                          setFilterOrgRoles((prev) =>
+                            prev.includes(role) ? prev.filter((x) => x !== role) : [...prev, role],
+                          )
+                        }
+                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                          filterOrgRoles.includes(role)
+                            ? "border-vc-indigo bg-vc-indigo/10 text-vc-indigo"
+                            : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                        }`}
+                      >
+                        {ROLE_LABELS[role]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Eligibility filter (only when org has prereqs) */}
+                {orgPrereqs.length > 0 && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                      Eligibility
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {([["all", "All"], ["cleared", "Cleared"], ["pending", "Pending"]] as const).map(([val, lbl]) => (
+                        <button
+                          key={val}
+                          onClick={() => setFilterEligibility(val)}
+                          className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                            filterEligibility === val
+                              ? val === "cleared" ? "border-vc-sage bg-vc-sage/10 text-vc-sage"
+                                : val === "pending" ? "border-vc-sand bg-vc-sand/10 text-vc-sand"
+                                : "border-vc-indigo bg-vc-indigo/10 text-vc-indigo"
+                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {activeFilterCount > 0 && (
                   <button
-                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterStatus("active"); setFilterTeam("all"); }}
+                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); }}
                     className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
                   >
                     Clear all filters
@@ -686,53 +768,26 @@ function PeopleContent() {
               </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-vc-border-light bg-white">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-vc-border-light">
-                      <th className="w-[20%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Name</th>
-                      <th className="w-[22%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Email</th>
-                      <th className="hidden w-[14%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted sm:table-cell">Phone</th>
-                      <th className="w-[12%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Role</th>
-                      <th className="w-[18%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">{terms.plural}</th>
-                      {canManage && (
-                        <th className="w-[14%] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">Actions</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-vc-border-light">
-                    {filteredRoster.map(({ volunteer: v, membership: mem }) => (
-                      <RosterRow
-                        key={v.id}
-                        volunteer={v}
-                        membership={mem}
-                        canManage={canManage}
-                        getMinistryName={getMinistryName}
-                        getMinistryColor={getMinistryColor}
-                        onDelete={() => handleDeleteVolunteer(v.id)}
-                        onArchive={() => handleArchiveVolunteer(v.id)}
-                        onRestore={() => handleRestoreVolunteer(v.id)}
-                        onRemoveFromOrg={() => handleRemoveFromOrg(v.id)}
-                        churchId={churchId!}
-                        ministries={ministries}
-                        availableRoles={uniqueRoles}
-                        onUpdated={(updated) =>
-                          setVolunteers((prev) =>
-                            prev.map((x) => (x.id === updated.id ? updated : x)),
-                          )
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredRoster.map(({ volunteer: v, membership: mem }) => (
+                  <PersonCard
+                    key={v.id}
+                    volunteer={v}
+                    membership={mem}
+                    orgPrereqs={orgPrereqs}
+                    getMinistryName={getMinistryName}
+                    getMinistryColor={getMinistryColor}
+                    onClick={() => setSelectedPerson({ volunteer: v, membership: mem })}
+                  />
+                ))}
               </div>
               {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0) && (
-                <div className="px-5 py-8 text-center text-sm text-vc-text-muted">
+                <div className="rounded-xl border border-vc-border-light bg-white px-5 py-8 text-center text-sm text-vc-text-muted">
                   No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
                   {activeFilterCount > 0 && (
                     <button
-                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); }}
+                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); }}
                       className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
                     >
                       Clear all
@@ -740,12 +795,39 @@ function PeopleContent() {
                   )}
                 </div>
               )}
-            </div>
+            </>
           )}
 
-          {/* Share join link */}
+          {/* Person detail drawer */}
+          {selectedPerson && (
+            <PersonDetailDrawer
+              open={!!selectedPerson}
+              onClose={() => setSelectedPerson(null)}
+              volunteer={selectedPerson.volunteer}
+              membership={selectedPerson.membership}
+              churchId={churchId!}
+              ministries={ministries}
+              orgPrereqs={orgPrereqs}
+              availableRoles={uniqueRoles}
+              canManage={canManage}
+              getMinistryName={getMinistryName}
+              getMinistryColor={getMinistryColor}
+              onVolunteerUpdated={(updated) => {
+                setVolunteers((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                setSelectedPerson((prev) => prev ? { ...prev, volunteer: updated } : null);
+              }}
+              onRoleChanged={(m, role, scope) => handleChangeRole(m, role, scope)}
+              onArchive={() => { handleArchiveVolunteer(selectedPerson.volunteer.id); setSelectedPerson(null); }}
+              onRestore={() => { handleRestoreVolunteer(selectedPerson.volunteer.id); setSelectedPerson(null); }}
+              onRemoveFromOrg={() => { handleRemoveFromOrg(selectedPerson.volunteer.id); setSelectedPerson(null); }}
+            />
+          )}
+
+          {/* Share join link modal */}
           {canManage && (
-            <JoinLinkSection churchId={churchId!} churchName={churchName} churchTier={churchTier} />
+            <Modal open={showJoinLink} onClose={() => setShowJoinLink(false)} title="Invite Link" subtitle="Share this link to let people join your organization">
+              <JoinLinkSection churchId={churchId!} churchName={churchName} churchTier={churchTier} />
+            </Modal>
           )}
         </>
       )}
@@ -892,886 +974,9 @@ function PeopleContent() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Household Card
-// ---------------------------------------------------------------------------
-
-function HouseholdCard({
-  household,
-  volunteers,
-  onEdit,
-  onDelete,
-}: {
-  household: Household;
-  volunteers: Volunteer[];
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const memberNames = household.volunteer_ids
-    .map((id) => volunteers.find((v) => v.id === id)?.name)
-    .filter(Boolean);
-
-  const constraintBadges: { label: string; color: string }[] = [];
-  if (household.constraints.never_same_service) {
-    constraintBadges.push({ label: "Never together", color: "bg-vc-coral/10 text-vc-coral" });
-  }
-  if (household.constraints.prefer_same_service) {
-    constraintBadges.push({ label: "Prefer together", color: "bg-vc-sage/15 text-vc-sage" });
-  }
-  if (household.constraints.never_same_time) {
-    constraintBadges.push({ label: "Never same day", color: "bg-amber-100 text-amber-700" });
-  }
-
-  return (
-    <div className="rounded-xl border border-vc-border-light bg-white p-4 transition-shadow hover:shadow-md">
-      <div className="mb-3 flex items-start justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-display text-lg text-vc-indigo">{household.name}</h3>
-          <p className="mt-0.5 text-xs text-vc-text-muted">
-            {household.volunteer_ids.length} {household.volunteer_ids.length === 1 ? "member" : "members"}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onEdit}
-            className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-vc-text-secondary transition-colors hover:text-vc-coral"
-          >
-            Edit
-          </button>
-          <button
-            onClick={onDelete}
-            className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      {/* Member names */}
-      {memberNames.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1">
-          {memberNames.map((n, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center rounded-full bg-vc-indigo/8 px-2 py-0.5 text-xs font-medium text-vc-indigo"
-            >
-              {n}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Constraint badges */}
-      {constraintBadges.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {constraintBadges.map((b) => (
-            <span
-              key={b.label}
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${b.color}`}
-            >
-              {b.label}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Notes */}
-      {household.notes && (
-        <p className="mt-2 text-xs text-vc-text-muted line-clamp-2">{household.notes}</p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Roster Row
-// ---------------------------------------------------------------------------
-
-function RosterRow({
-  volunteer: v,
-  membership: mem,
-  canManage,
-  getMinistryName,
-  getMinistryColor,
-  onDelete,
-  onArchive,
-  onRestore,
-  onRemoveFromOrg,
-  churchId,
-  ministries,
-  availableRoles,
-  onUpdated,
-}: {
-  volunteer: Volunteer;
-  membership: Membership | null;
-  canManage: boolean;
-  getMinistryName: (id: string) => string;
-  getMinistryColor: (id: string) => string;
-  onDelete: () => void;
-  onArchive: () => void;
-  onRestore: () => void;
-  onRemoveFromOrg: () => void;
-  churchId: string;
-  ministries: Ministry[];
-  availableRoles: { role_id: string; title: string; ministry_id: string }[];
-  onUpdated: (v: Volunteer) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-  const isArchived = v.status === "archived";
-
-  return (
-    <>
-      <tr className={`transition-colors ${isArchived ? "opacity-60 bg-vc-bg-warm/30" : "hover:bg-vc-bg-warm/50"}`}>
-        <td className="px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className={`font-medium ${isArchived ? "text-vc-text-muted" : "text-vc-indigo"}`}>{v.name}</span>
-            {isArchived && (
-              <span className="inline-flex items-center rounded-full bg-vc-bg-warm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
-                Archived
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="px-5 py-3 text-vc-text-secondary">{v.email || "\u2014"}</td>
-        <td className="hidden px-5 py-3 text-vc-text-secondary sm:table-cell">{formatPhone(v.phone)}</td>
-        <td className="px-5 py-3">
-          {mem ? (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              STATUS_LABELS[mem.status]?.color || "bg-vc-bg-cream text-vc-text-muted"
-            }`}>
-              {ROLE_LABELS[mem.role]}
-            </span>
-          ) : (
-            <span className="text-xs text-vc-text-muted">Roster only</span>
-          )}
-        </td>
-        <td className="px-5 py-3">
-          <div className="flex flex-wrap gap-1">
-            {v.ministry_ids.length > 0 ? (
-              v.ministry_ids.map((mid) => (
-                <span
-                  key={mid}
-                  className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium"
-                  style={{ backgroundColor: getMinistryColor(mid) + "15", color: getMinistryColor(mid) }}
-                >
-                  {getMinistryName(mid)}
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-vc-text-muted">None</span>
-            )}
-          </div>
-        </td>
-        {canManage && (
-          <td className="px-5 py-3">
-            <div className="relative flex items-center gap-1">
-              {!isArchived && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors"
-                >
-                  Edit
-                </button>
-              )}
-              {isArchived && (
-                <button
-                  onClick={onRestore}
-                  className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-sage hover:text-vc-sage/80 transition-colors"
-                >
-                  Restore
-                </button>
-              )}
-              <button
-                onClick={() => setShowActions(!showActions)}
-                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-vc-text-muted hover:text-vc-indigo hover:bg-vc-bg-warm transition-colors"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
-                </svg>
-              </button>
-              {showActions && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShowActions(false)} />
-                  <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-xl border border-vc-border-light bg-white py-1 shadow-xl shadow-black/[0.08]">
-                    {!isArchived && (
-                      <button
-                        onClick={() => { setShowActions(false); onArchive(); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-                        </svg>
-                        Archive
-                      </button>
-                    )}
-                    {isArchived && (
-                      <button
-                        onClick={() => { setShowActions(false); onRestore(); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-vc-sage hover:bg-vc-bg-warm transition-colors"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
-                        </svg>
-                        Restore
-                      </button>
-                    )}
-                    <button
-                      onClick={() => { setShowActions(false); onRemoveFromOrg(); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-                      </svg>
-                      Remove from Organization
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </td>
-        )}
-      </tr>
-      {canManage && !isArchived && (
-        <VolunteerEditModal
-          open={editing}
-          onClose={() => setEditing(false)}
-          volunteer={v}
-          churchId={churchId}
-          ministries={ministries}
-          availableRoles={availableRoles}
-          getMinistryName={getMinistryName}
-          getMinistryColor={getMinistryColor}
-          onUpdated={(updated) => {
-            onUpdated(updated);
-            setEditing(false);
-          }}
-          onDelete={onDelete}
-        />
-      )}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Add Individual Panel
-// ---------------------------------------------------------------------------
-
-function AddPeopleMenu({ onSelect }: { onSelect: (mode: "individual" | "csv" | "chms") => void }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <Button onClick={() => setOpen(!open)}>
-        <span className="flex items-center gap-1.5">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add People
-        </span>
-      </Button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-xl border border-vc-border-light bg-white p-2 shadow-xl shadow-black/[0.08]">
-            <button
-              onClick={() => { setOpen(false); onSelect("individual"); }}
-              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
-            >
-              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-vc-indigo">Add person</p>
-                <p className="text-xs text-vc-text-muted">Add and send email invitation</p>
-              </div>
-            </button>
-            <button
-              onClick={() => { setOpen(false); onSelect("csv"); }}
-              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
-            >
-              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-vc-indigo">Import CSV</p>
-                <p className="text-xs text-vc-text-muted">Upload a spreadsheet</p>
-              </div>
-            </button>
-            <button
-              onClick={() => { setOpen(false); onSelect("chms"); }}
-              className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-vc-bg-warm"
-            >
-              <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-vc-indigo">Import from ChMS</p>
-                <p className="text-xs text-vc-text-muted">Planning Center, Breeze, Rock RMS</p>
-              </div>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-
-
-// ---------------------------------------------------------------------------
-// Invite Form (for Invites tab)
-// ---------------------------------------------------------------------------
-
-function InviteForm({
-  churchId,
-  user,
-  ministries,
-  onInvited,
-}: {
-  churchId: string;
-  user: ReturnType<typeof useAuth>["user"];
-  ministries: Ministry[];
-  onInvited: () => void;
-}) {
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState<OrgRole>("volunteer");
-  const [inviting, setInviting] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState("");
-  const [inviteScopeAll, setInviteScopeAll] = useState(true);
-  const [inviteScopeIds, setInviteScopeIds] = useState<string[]>([]);
-
-  async function handleInvite(e: FormEvent) {
-    e.preventDefault();
-    if (!user) return;
-    setInviting(true);
-    setInviteMsg("");
-
-    try {
-      const token = await getAuth().currentUser?.getIdToken();
-      const ministryScope = inviteRole === "scheduler" && !inviteScopeAll ? inviteScopeIds : undefined;
-      const res = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email: inviteEmail, name: inviteName, churchId, role: inviteRole, ministryScope }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setInviteMsg(data.error || "Failed to send invitation");
-      } else {
-        setInviteMsg(data.action === "approved_existing" ? "Member approved!" : "Invitation sent!");
-        setInviteEmail("");
-        setInviteName("");
-        setInviteRole("volunteer");
-        setInviteScopeAll(true);
-        setInviteScopeIds([]);
-        onInvited();
-      }
-    } catch {
-      setInviteMsg("Failed to send invitation");
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-vc-border-light bg-white p-6">
-      <h2 className="text-lg font-semibold text-vc-indigo mb-4">Invite a New Member</h2>
-      <form onSubmit={handleInvite} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Email"
-            type="email"
-            required
-            placeholder="volunteer@example.com"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-          />
-          <Input
-            label="Name (optional)"
-            placeholder="Jane Doe"
-            value={inviteName}
-            onChange={(e) => setInviteName(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-vc-text mb-2 block">Role</label>
-          <div className="flex flex-wrap gap-2">
-            {(["volunteer", "scheduler", "admin"] as OrgRole[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setInviteRole(r)}
-                className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
-                  inviteRole === r
-                    ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
-                    : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                }`}
-              >
-                {ROLE_LABELS[r]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {inviteRole === "scheduler" && ministries.length > 0 && (
-          <div>
-            <label className="text-sm font-medium text-vc-text mb-2 block">Team Access</label>
-            <label className="flex items-center gap-2 mb-2">
-              <input
-                type="checkbox"
-                checked={inviteScopeAll}
-                onChange={(e) => {
-                  setInviteScopeAll(e.target.checked);
-                  if (e.target.checked) setInviteScopeIds([]);
-                }}
-                className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-              />
-              <span className="text-sm text-vc-text-secondary">All Teams</span>
-            </label>
-            {!inviteScopeAll && (
-              <div className="space-y-2 pl-1">
-                {ministries.map((m) => (
-                  <label key={m.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={inviteScopeIds.includes(m.id)}
-                      onChange={(e) => {
-                        setInviteScopeIds((prev) =>
-                          e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id),
-                        );
-                      }}
-                      className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                    />
-                    <span className="text-sm text-vc-text-secondary">{m.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {inviteMsg && (
-          <p className={`text-sm ${inviteMsg.includes("sent") || inviteMsg.includes("approved") ? "text-vc-sage" : "text-vc-danger"}`}>
-            {inviteMsg}
-          </p>
-        )}
-        <Button type="submit" loading={inviting}>Send Invitation</Button>
-      </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Join Link Section
-// ---------------------------------------------------------------------------
-
-function JoinLinkSection({ churchId, churchName, churchTier }: { churchId: string; churchName: string; churchTier: string }) {
-  const { user } = useAuth();
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const joinLink = `${baseUrl}/join/${churchId}`;
-  const [copied, setCopied] = useState(false);
-  const [showShareMenu, setShowShareMenu] = useState(false);
-  const [showShortLinkCreator, setShowShortLinkCreator] = useState(false);
-  const [joinShortLinkUrl, setJoinShortLinkUrl] = useState<string | null>(null);
-  const shareRef = useRef<HTMLDivElement>(null);
-
-  // Fetch short link for join URL
-  useEffect(() => {
-    if (!churchId || !user) return;
-    async function fetchShortLink() {
-      try {
-        const token = await user!.getIdToken();
-        const res = await fetch(`/api/short-links?church_id=${churchId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const joinPath = `/join/${churchId}`;
-          const match = (data.links || []).find((l: { target_url: string }) => l.target_url === joinPath);
-          if (match) {
-            setJoinShortLinkUrl(`${window.location.origin}/s/${match.slug}`);
-          }
-        }
-      } catch {
-        // silent
-      }
-    }
-    fetchShortLink();
-  }, [churchId, user]);
-
-  // Close share menu on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
-        setShowShareMenu(false);
-      }
-    }
-    if (showShareMenu) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showShareMenu]);
-
-  const hasShortLink = !!joinShortLinkUrl;
-
-  function handleCopy() {
-    const urlToCopy = hasShortLink ? joinShortLinkUrl! : joinLink;
-    navigator.clipboard.writeText(urlToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function handlePrintFlyer() {
-    setShowShareMenu(false);
-    const { printFlyer } = await import("@/lib/utils/print-flyer");
-    printFlyer({
-      title: "Volunteer With Us!",
-      subtitle: "Scan the QR code to sign up as a volunteer.",
-      orgName: churchName,
-      url: joinLink,
-      shortUrl: joinShortLinkUrl || undefined,
-      instructions: [
-        "Scan the QR code with your phone camera",
-        "Create a free account (or sign in)",
-        "Request to join — we'll approve you shortly!",
-      ],
-    });
-  }
-
-  async function handleDownloadSlide() {
-    setShowShareMenu(false);
-    const { downloadSlide } = await import("@/lib/utils/download-slide");
-    downloadSlide({
-      title: "Volunteer With Us!",
-      subtitle: "Scan the QR code to sign up as a volunteer.",
-      orgName: churchName,
-      url: joinLink,
-      shortUrl: joinShortLinkUrl || undefined,
-    });
-  }
-
-  const menuBtnClass = "w-full px-3 py-2.5 text-left text-sm text-vc-text-secondary hover:bg-vc-bg-warm transition-colors flex items-center gap-2";
-
-  return (
-    <div className="mt-6 rounded-xl border border-dashed border-vc-border bg-vc-bg-warm p-5">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-vc-indigo">Share join link</p>
-        <div className="relative" ref={shareRef}>
-          <button
-            onClick={() => setShowShareMenu(!showShareMenu)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-white hover:text-vc-indigo transition-colors"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
-            </svg>
-            Share options
-          </button>
-          {showShareMenu && (
-            <div className="absolute right-0 top-full mt-1 z-10 w-52 rounded-xl border border-vc-border-light bg-white py-1 shadow-lg">
-              {/* 1. Short link (create or edit) — first with premium badge */}
-              <button
-                onClick={() => { setShowShareMenu(false); setShowShortLinkCreator(true); }}
-                className={menuBtnClass}
-              >
-                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                </svg>
-                <span className="flex items-center gap-1.5">
-                  {hasShortLink ? "Edit short link" : "Create short link"}
-                  {!hasShortLink && (
-                    <span className="rounded bg-vc-coral/10 px-1 py-0.5 text-[10px] font-semibold uppercase leading-none text-vc-coral">
-                      Pro
-                    </span>
-                  )}
-                </span>
-              </button>
-
-              {/* 2. Copy link / Copy short link */}
-              <button
-                onClick={() => { handleCopy(); setShowShareMenu(false); }}
-                className={menuBtnClass}
-              >
-                {copied ? (
-                  <svg className="h-4 w-4 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                  </svg>
-                )}
-                {copied ? "Copied!" : hasShortLink ? "Copy short link" : "Copy link"}
-              </button>
-
-              {/* 3. Print QR flyer */}
-              <button
-                onClick={handlePrintFlyer}
-                className={menuBtnClass}
-              >
-                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
-                </svg>
-                Print QR flyer
-              </button>
-
-              {/* 4. Download slide */}
-              <button
-                onClick={handleDownloadSlide}
-                className={menuBtnClass}
-              >
-                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                </svg>
-                Download slide (16:9)
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          readOnly
-          value={hasShortLink ? joinShortLinkUrl! : joinLink}
-          className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text-secondary"
-          onClick={(e) => (e.target as HTMLInputElement).select()}
-        />
-        <button
-          onClick={handleCopy}
-          className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-            copied
-              ? "border-vc-sage/30 bg-vc-sage/10 text-vc-sage"
-              : "border-vc-border text-vc-text-secondary hover:bg-white"
-          }`}
-        >
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      </div>
-      <p className="mt-1 text-xs text-vc-text-muted">
-        Anyone with this link can request to join. You'll need to approve them.
-      </p>
-
-      {showShortLinkCreator && (
-        <div className="mt-3">
-          <ShortLinkCreator
-            churchId={churchId}
-            targetUrl={`/join/${churchId}`}
-            label={`Volunteer signup — ${churchName}`}
-            tier={churchTier}
-            onClose={() => setShowShortLinkCreator(false)}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Member Row (for Invites tab)
-// ---------------------------------------------------------------------------
-
-function MemberRow({
-  membership,
-  ministries,
-  isCurrentUser,
-  onApprove,
-  onReject,
-  onChangeRole,
-  onRemove,
-}: {
-  membership: Membership;
-  ministries: Ministry[];
-  isCurrentUser: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-  onChangeRole: (role: OrgRole, ministryScope?: string[]) => void;
-  onRemove: () => void;
-}) {
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
-  const [showScopeEditor, setShowScopeEditor] = useState(false);
-  const [scopeSelection, setScopeSelection] = useState<string[]>(membership.ministry_scope || []);
-  const [scopeAll, setScopeAll] = useState(!membership.ministry_scope?.length);
-
-  useEffect(() => {
-    if (!membership.user_id) { setLoaded(true); return; }
-    getDoc(doc(db, "users", membership.user_id))
-      .then((snap) => {
-        if (snap.exists()) {
-          setUserName(snap.data().display_name || "");
-          setUserEmail(snap.data().email || "");
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-  }, [membership.user_id]);
-
-  const statusInfo = STATUS_LABELS[membership.status] || { label: membership.status, color: "bg-vc-bg-cream text-vc-text-muted" };
-  const isPending = membership.status === "pending_org_approval" || membership.status === "pending_volunteer_approval";
-
-  function handleSaveScopeEditor() {
-    const newScope = scopeAll ? [] : scopeSelection;
-    onChangeRole(membership.role, newScope);
-    setShowScopeEditor(false);
-  }
-
-  return (
-    <div className="rounded-xl border border-vc-border-light bg-white p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-vc-indigo/10 text-sm font-semibold text-vc-indigo">
-          {(userName || userEmail || "?").charAt(0).toUpperCase()}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-medium text-vc-indigo truncate">
-              {loaded ? (userName || userEmail || "Unknown member") : "Loading\u2026"}
-              {isCurrentUser && <span className="ml-1 text-xs text-vc-text-muted">(you)</span>}
-            </p>
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusInfo.color}`}>
-              {statusInfo.label}
-            </span>
-          </div>
-          {userEmail && <p className="text-sm text-vc-text-muted truncate">{userEmail}</p>}
-          <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center rounded-lg bg-vc-bg-warm px-2 py-0.5 text-xs font-medium capitalize text-vc-text-secondary">
-              {membership.role}
-            </span>
-            {membership.role === "scheduler" && (
-              <>
-                {!membership.ministry_scope?.length ? (
-                  <span className="inline-flex items-center rounded-lg bg-vc-sage/10 px-2 py-0.5 text-xs font-medium text-vc-sage">
-                    All Teams
-                  </span>
-                ) : (
-                  membership.ministry_scope.map((mid) => {
-                    const m = ministries.find((x) => x.id === mid);
-                    return m ? (
-                      <span key={mid} className="inline-flex items-center rounded-lg bg-vc-indigo/10 px-2 py-0.5 text-xs font-medium text-vc-indigo">
-                        {m.name}
-                      </span>
-                    ) : null;
-                  })
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {isPending && membership.status === "pending_org_approval" && (
-            <>
-              <button
-                onClick={onApprove}
-                className="rounded-lg bg-vc-sage/15 px-3 py-2 text-sm font-medium text-vc-sage hover:bg-vc-sage/25 transition-colors min-h-[44px]"
-              >
-                Approve
-              </button>
-              <button
-                onClick={onReject}
-                className="rounded-lg bg-vc-bg-cream px-3 py-2 text-sm font-medium text-vc-text-muted hover:bg-vc-bg-warm transition-colors min-h-[44px]"
-              >
-                Reject
-              </button>
-            </>
-          )}
-
-          {membership.status === "active" && !isCurrentUser && membership.role !== "owner" && (
-            <div className="relative">
-              <button
-                onClick={() => setShowRoleMenu(!showRoleMenu)}
-                className="rounded-lg border border-vc-border px-3 py-2 text-xs text-vc-text-secondary hover:bg-vc-bg-warm transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
-              >
-                ...
-              </button>
-              {showRoleMenu && (
-                <div className="absolute right-0 top-full mt-1 z-10 w-48 rounded-xl border border-vc-border-light bg-white py-1 shadow-lg">
-                  {(["volunteer", "scheduler", "admin"] as OrgRole[]).map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => { onChangeRole(r); setShowRoleMenu(false); }}
-                      className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-vc-bg-warm ${
-                        r === membership.role ? "font-medium text-vc-coral" : "text-vc-text-secondary"
-                      }`}
-                    >
-                      {ROLE_LABELS[r]}
-                    </button>
-                  ))}
-                  {membership.role === "scheduler" && (
-                    <>
-                      <div className="my-1 border-t border-vc-border-light" />
-                      <button
-                        onClick={() => { setShowScopeEditor(true); setShowRoleMenu(false); }}
-                        className="w-full px-3 py-2 text-left text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm"
-                      >
-                        Manage team access
-                      </button>
-                    </>
-                  )}
-                  <div className="my-1 border-t border-vc-border-light" />
-                  <button
-                    onClick={() => { onRemove(); setShowRoleMenu(false); }}
-                    className="w-full px-3 py-2 text-left text-sm text-vc-danger hover:bg-vc-danger/5 transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Team scope editor */}
-      {showScopeEditor && membership.role === "scheduler" && (
-        <div className="mt-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-4">
-          <p className="text-sm font-medium text-vc-indigo mb-3">Team Access</p>
-          <label className="flex items-center gap-2 mb-3">
-            <input
-              type="checkbox"
-              checked={scopeAll}
-              onChange={(e) => {
-                setScopeAll(e.target.checked);
-                if (e.target.checked) setScopeSelection([]);
-              }}
-              className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-            />
-            <span className="text-sm text-vc-text-secondary">All Teams</span>
-          </label>
-          {!scopeAll && (
-            <div className="space-y-2 mb-3">
-              {ministries.map((m) => (
-                <label key={m.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={scopeSelection.includes(m.id)}
-                    onChange={(e) => {
-                      setScopeSelection((prev) =>
-                        e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id),
-                      );
-                    }}
-                    className="rounded border-vc-border text-vc-coral focus:ring-vc-coral"
-                  />
-                  <span className="text-sm text-vc-text-secondary">{m.name}</span>
-                </label>
-              ))}
-              {ministries.length === 0 && (
-                <p className="text-xs text-vc-text-muted">No teams created yet.</p>
-              )}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button onClick={handleSaveScopeEditor} className="text-xs">
-              Save
-            </Button>
-            <Button variant="outline" onClick={() => setShowScopeEditor(false)} className="text-xs">
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
+// Inline components extracted to src/components/people/:
+// - HouseholdCard → household-card.tsx
+// - AddPeopleMenu → add-people-menu.tsx
+// - InviteForm → invite-form.tsx
+// - JoinLinkSection → join-link-section.tsx
+// - MemberRow → member-row.tsx

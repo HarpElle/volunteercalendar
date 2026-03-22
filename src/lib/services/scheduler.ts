@@ -229,18 +229,32 @@ function isConditionalRoleSatisfied(
 /**
  * Check if a volunteer has completed all prerequisites for a ministry.
  * Returns true if no prerequisites exist or all are completed/waived.
+ * Scope-aware: only checks org-wide prereqs relevant to team scheduling
+ * (scope "all", "teams", or "specific_roles" matching the assigned role).
  */
 function hasCompletedPrerequisites(
   volunteer: Volunteer,
   ministryId: string,
   ministries?: Ministry[],
   orgPrerequisites?: OnboardingStep[],
+  roleId?: string,
 ): boolean {
   const journey = volunteer.volunteer_journey || [];
 
-  // Check org-wide prerequisites
+  // Check org-wide prerequisites (filtered by scope for team scheduling)
   if (orgPrerequisites && orgPrerequisites.length > 0) {
-    const orgComplete = orgPrerequisites.every((prereq) => {
+    const applicable = orgPrerequisites.filter((p) => {
+      const scope = p.scope || "all";
+      if (scope === "all" || scope === "teams") return true;
+      if (scope === "specific_roles") {
+        if (!p.role_ids || p.role_ids.length === 0) return true;
+        return roleId ? p.role_ids.includes(roleId) : true;
+      }
+      // scope === "events" — skip for team scheduling
+      return false;
+    });
+
+    const orgComplete = applicable.every((prereq) => {
       const step = journey.find(
         (j) => j.step_id === prereq.id && j.ministry_id === ORG_WIDE_MINISTRY_ID,
       );
@@ -475,8 +489,8 @@ function isEligible(
   if (!canServeAtCampus(v, service)) return false;
   // Must have valid background check if ministry requires it
   if (!hasValidBackgroundCheck(v, ministryId, ministries)) return false;
-  // Must have completed all prerequisites (org-wide + ministry-specific)
-  if (!hasCompletedPrerequisites(v, ministryId, ministries, orgPrerequisites)) return false;
+  // Must have completed all prerequisites (org-wide + ministry-specific, scope-aware)
+  if (!hasCompletedPrerequisites(v, ministryId, ministries, orgPrerequisites, role.role_id)) return false;
   // Not blocked out
   if (isBlockedOut(v, date)) return false;
   // Not recurring unavailable

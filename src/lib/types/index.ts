@@ -165,6 +165,9 @@ export type OnboardingStepType =
   | "shadow"             // shadow a team member before serving independently
   | "custom";            // admin-defined freeform requirement
 
+/** Where this prerequisite applies. Absent defaults to "all" (backward-compatible). */
+export type PrerequisiteScope = "all" | "teams" | "events" | "specific_roles";
+
 export interface OnboardingStep {
   id: string;
   /** Human-readable label (e.g., "Complete Get Anchored class") */
@@ -174,6 +177,10 @@ export interface OnboardingStep {
   reference_id?: string | null;
   /** For "minimum_service": minimum number of times served. For "ministry_tenure": minimum days. */
   threshold?: number | null;
+  /** Where this prerequisite applies. Defaults to "all" if absent. */
+  scope?: PrerequisiteScope;
+  /** When scope is "specific_roles": which role IDs this prereq applies to. */
+  role_ids?: string[];
 }
 
 export type JourneyStepStatus = "pending" | "in_progress" | "completed" | "waived";

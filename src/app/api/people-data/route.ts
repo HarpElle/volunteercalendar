@@ -70,7 +70,12 @@ export async function GET(req: NextRequest) {
     const queueItems: Doc[] = queueSnap.docs.map(toDoc);
 
     const church = churchDoc.exists
-      ? { name: churchDoc.data()!.name || "", subscription_tier: churchDoc.data()!.subscription_tier || "free", org_type: churchDoc.data()!.org_type }
+      ? {
+          name: churchDoc.data()!.name || "",
+          subscription_tier: churchDoc.data()!.subscription_tier || "free",
+          org_type: churchDoc.data()!.org_type,
+          org_prerequisites: churchDoc.data()!.org_prerequisites || [],
+        }
       : null;
 
     // Auto-sync: create volunteer records for active members missing from roster

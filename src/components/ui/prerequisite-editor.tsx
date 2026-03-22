@@ -1,6 +1,6 @@
 "use client";
 
-import type { OnboardingStep, OnboardingStepType } from "@/lib/types";
+import type { OnboardingStep, OnboardingStepType, PrerequisiteScope } from "@/lib/types";
 
 const PRESETS: { type: OnboardingStepType; label: string; threshold?: number }[] = [
   { type: "class", label: "Attend orientation class" },
@@ -9,16 +9,26 @@ const PRESETS: { type: OnboardingStepType; label: string; threshold?: number }[]
   { type: "minimum_service", label: "Serve 3 times in entry-level role", threshold: 3 },
 ];
 
+const SCOPE_LABELS: Record<PrerequisiteScope, string> = {
+  all: "Everything",
+  teams: "Teams only",
+  events: "Events only",
+  specific_roles: "Specific roles",
+};
+
 interface PrerequisiteEditorProps {
   prerequisites: OnboardingStep[];
   onChange: (updated: OnboardingStep[]) => void;
   label?: string;
+  /** Available roles for "specific_roles" scope. Pass from pages with service role data. */
+  availableRoles?: { role_id: string; title: string }[];
 }
 
 export function PrerequisiteEditor({
   prerequisites,
   onChange,
   label = "Onboarding Prerequisites",
+  availableRoles,
 }: PrerequisiteEditorProps) {
   function addPrereq() {
     onChange([
@@ -35,6 +45,14 @@ export function PrerequisiteEditor({
 
   function removePrereq(idx: number) {
     onChange(prerequisites.filter((_, i) => i !== idx));
+  }
+
+  function toggleRoleId(idx: number, roleId: string) {
+    const current = prerequisites[idx].role_ids || [];
+    const next = current.includes(roleId)
+      ? current.filter((r) => r !== roleId)
+      : [...current, roleId];
+    updatePrereq(idx, { role_ids: next });
   }
 
   const availablePresets = PRESETS.filter(
@@ -91,48 +109,95 @@ export function PrerequisiteEditor({
         </div>
       )}
       {prerequisites.map((prereq, idx) => (
-        <div key={prereq.id} className="flex items-center gap-2">
-          <select
-            className="w-36 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-            value={prereq.type}
-            onChange={(e) =>
-              updatePrereq(idx, { type: e.target.value as OnboardingStepType })
-            }
-          >
-            <option value="class">Class / Training</option>
-            <option value="background_check">Background Check</option>
-            <option value="minimum_service">Min. Service Count</option>
-            <option value="ministry_tenure">Ministry Tenure</option>
-            <option value="shadow">Shadow / Observe</option>
-            <option value="custom">Custom</option>
-          </select>
-          <input
-            className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none"
-            placeholder="Requirement label (e.g., Complete Get Anchored class)"
-            value={prereq.label}
-            onChange={(e) => updatePrereq(idx, { label: e.target.value })}
-          />
-          {(prereq.type === "minimum_service" || prereq.type === "ministry_tenure") && (
-            <input
-              type="number"
-              min={1}
-              className="w-16 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
-              placeholder={prereq.type === "minimum_service" ? "Count" : "Days"}
-              value={prereq.threshold || ""}
+        <div key={prereq.id} className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <select
+              className="w-36 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+              value={prereq.type}
               onChange={(e) =>
-                updatePrereq(idx, { threshold: Number(e.target.value) || null })
+                updatePrereq(idx, { type: e.target.value as OnboardingStepType })
               }
+            >
+              <option value="class">Class / Training</option>
+              <option value="background_check">Background Check</option>
+              <option value="minimum_service">Min. Service Count</option>
+              <option value="ministry_tenure">Ministry Tenure</option>
+              <option value="shadow">Shadow / Observe</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input
+              className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none"
+              placeholder="Requirement label (e.g., Complete Get Anchored class)"
+              value={prereq.label}
+              onChange={(e) => updatePrereq(idx, { label: e.target.value })}
             />
-          )}
-          <button
-            type="button"
-            onClick={() => removePrereq(idx)}
-            className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
+            {(prereq.type === "minimum_service" || prereq.type === "ministry_tenure") && (
+              <input
+                type="number"
+                min={1}
+                className="w-16 rounded-lg border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
+                placeholder={prereq.type === "minimum_service" ? "Count" : "Days"}
+                value={prereq.threshold || ""}
+                onChange={(e) =>
+                  updatePrereq(idx, { threshold: Number(e.target.value) || null })
+                }
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => removePrereq(idx)}
+              className="p-1 text-vc-text-muted hover:text-vc-danger transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Scope selector */}
+          <div className="ml-[152px] flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+              Applies to
+            </span>
+            <select
+              className="rounded border border-vc-border bg-white px-1.5 py-1 text-[11px] text-vc-text focus:border-vc-coral focus:outline-none"
+              value={prereq.scope || "all"}
+              onChange={(e) => {
+                const scope = e.target.value as PrerequisiteScope;
+                updatePrereq(idx, {
+                  scope,
+                  ...(scope !== "specific_roles" ? { role_ids: undefined } : {}),
+                });
+              }}
+            >
+              {Object.entries(SCOPE_LABELS).map(([val, lbl]) => (
+                <option key={val} value={val} disabled={val === "specific_roles" && (!availableRoles || availableRoles.length === 0)}>
+                  {lbl}
+                </option>
+              ))}
+            </select>
+            {/* Role picker for specific_roles scope */}
+            {prereq.scope === "specific_roles" && availableRoles && availableRoles.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {availableRoles.map((role) => {
+                  const selected = prereq.role_ids?.includes(role.role_id);
+                  return (
+                    <button
+                      key={role.role_id}
+                      type="button"
+                      onClick={() => toggleRoleId(idx, role.role_id)}
+                      className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                        selected
+                          ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                          : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
+                      }`}
+                    >
+                      {role.title}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </div>

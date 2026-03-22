@@ -18,6 +18,7 @@ import type {
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
+import { getVolunteerStage, type EligibilityStage } from "@/lib/utils/eligibility";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 
@@ -25,41 +26,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 // Pipeline Stage
 // ---------------------------------------------------------------------------
 
-type PipelineStage = "not_started" | "in_progress" | "cleared";
-
-function getVolunteerStage(
-  volunteer: Volunteer,
-  ministry: Ministry,
-  orgPrereqs: OnboardingStep[],
-): PipelineStage {
-  const teamPrereqs = ministry.prerequisites || [];
-  const allPrereqs = [
-    ...orgPrereqs.map((p) => ({ ...p, _ministryId: ORG_WIDE_MINISTRY_ID })),
-    ...teamPrereqs.map((p) => ({ ...p, _ministryId: ministry.id })),
-  ];
-
-  if (allPrereqs.length === 0) return "cleared";
-
-  const journey = volunteer.volunteer_journey || [];
-  const completed = allPrereqs.filter((p) => {
-    const step = journey.find(
-      (j) => j.step_id === p.id && j.ministry_id === p._ministryId,
-    );
-    return step?.status === "completed" || step?.status === "waived";
-  });
-
-  if (completed.length === allPrereqs.length) return "cleared";
-  if (completed.length > 0) return "in_progress";
-
-  const hasInProgress = allPrereqs.some((p) => {
-    const step = journey.find(
-      (j) => j.step_id === p.id && j.ministry_id === p._ministryId,
-    );
-    return step?.status === "in_progress";
-  });
-
-  return hasInProgress ? "in_progress" : "not_started";
-}
+type PipelineStage = EligibilityStage;
 
 const STAGE_CONFIG: Record<
   PipelineStage,
