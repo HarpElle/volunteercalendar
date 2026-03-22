@@ -270,7 +270,7 @@ VolunteerCal/
 │   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal (effective-from UI), ministry-form-modal, campus-form-modal, create-schedule-modal (step wizard), volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer, household-form-modal
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
-│   │   ├── people/             # Person card, person detail drawer, add-people-menu, invite-form, join-link-section, member-row, household-card (extracted from people/page.tsx)
+│   │   ├── people/             # Person card, person detail drawer, add-people-menu, invite-form, member-row, household-card (extracted from people/page.tsx)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
 │   │   └── worship/            # Song library table, song form modal, service plan editor, songselect-import-modal, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
 │   └── lib/

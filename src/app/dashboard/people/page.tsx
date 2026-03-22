@@ -29,10 +29,11 @@ import { PersonCard } from "@/components/people/person-card";
 import { PersonDetailDrawer } from "@/components/people/person-detail-drawer";
 import { AddPeopleMenu } from "@/components/people/add-people-menu";
 import { InviteForm } from "@/components/people/invite-form";
-import { JoinLinkSection } from "@/components/people/join-link-section";
 import { MemberRow } from "@/components/people/member-row";
 import { HouseholdCard } from "@/components/people/household-card";
 import { Modal } from "@/components/ui/modal";
+import { ShareMenu } from "@/components/ui/share-menu";
+import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import type {
   Volunteer,
   Ministry,
@@ -100,7 +101,9 @@ function PeopleContent() {
   const [showFilters, setShowFilters] = useState(false);
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Volunteer; membership: Membership | null } | null>(null);
-  const [showJoinLink, setShowJoinLink] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [joinShortLinkUrl, setJoinShortLinkUrl] = useState<string | null>(null);
+  const [showShortLinkCreator, setShowShortLinkCreator] = useState(false);
 
   // Households (Families tab)
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -160,6 +163,64 @@ function PeopleContent() {
     }
     load();
   }, [churchId]);
+
+  // Fetch existing short link for the join URL (used by ShareMenu in header)
+  useEffect(() => {
+    if (!churchId || !user) return;
+    async function fetchJoinShortLink() {
+      try {
+        const token = await user!.getIdToken();
+        const res = await fetch(`/api/short-links?church_id=${churchId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const joinPath = `/join/${churchId}`;
+          const match = (data.links || []).find((l: { target_url: string }) => l.target_url === joinPath);
+          if (match) {
+            setJoinShortLinkUrl(`${window.location.origin}/s/${match.slug}`);
+          }
+        }
+      } catch { /* silent */ }
+    }
+    fetchJoinShortLink();
+  }, [churchId, user]);
+
+  const joinLink = typeof window !== "undefined" ? `${window.location.origin}/join/${churchId}` : "";
+  const hasJoinShortLink = !!joinShortLinkUrl;
+
+  function handleCopyJoinLink() {
+    navigator.clipboard.writeText(hasJoinShortLink ? joinShortLinkUrl! : joinLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handlePrintFlyer() {
+    const { printFlyer } = await import("@/lib/utils/print-flyer");
+    printFlyer({
+      title: "Volunteer With Us!",
+      subtitle: "Scan the QR code to sign up as a volunteer.",
+      orgName: churchName,
+      url: joinLink,
+      shortUrl: joinShortLinkUrl || undefined,
+      instructions: [
+        "Scan the QR code with your phone camera",
+        "Create a free account (or sign in)",
+        "Request to join — we\u2019ll approve you shortly!",
+      ],
+    });
+  }
+
+  async function handleDownloadSlide() {
+    const { downloadSlide } = await import("@/lib/utils/download-slide");
+    downloadSlide({
+      title: "Volunteer With Us!",
+      subtitle: "Scan the QR code to sign up as a volunteer.",
+      orgName: churchName,
+      url: joinLink,
+      shortUrl: joinShortLinkUrl || undefined,
+    });
+  }
 
   const terms = getOrgTerms(orgType);
 
@@ -433,15 +494,18 @@ function PeopleContent() {
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
-            <button
-              onClick={() => setShowJoinLink(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-2 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-              </svg>
-              Invite Link
-            </button>
+            <ShareMenu
+              label="Invite Link"
+              buttonClassName="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-2 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
+              onCopyLink={handleCopyJoinLink}
+              onCopyShortLink={hasJoinShortLink ? handleCopyJoinLink : undefined}
+              onPrintInvite={handlePrintFlyer}
+              onDownloadSlide={handleDownloadSlide}
+              onCreateShortLink={() => setShowShortLinkCreator(true)}
+              copied={copied}
+              hasShortLink={hasJoinShortLink}
+              shortLinkUrl={joinShortLinkUrl || undefined}
+            />
           )}
           {canManage && addMode === null && (
             <AddPeopleMenu onSelect={(mode) => {
@@ -823,10 +887,19 @@ function PeopleContent() {
             />
           )}
 
-          {/* Share join link modal */}
+          {/* Short link creator modal */}
           {canManage && (
-            <Modal open={showJoinLink} onClose={() => setShowJoinLink(false)} title="Invite Link" subtitle="Share this link to let people join your organization">
-              <JoinLinkSection churchId={churchId!} churchName={churchName} churchTier={churchTier} />
+            <Modal open={showShortLinkCreator} onClose={() => setShowShortLinkCreator(false)} title="Create Short Link" subtitle="Create a branded short URL for your join page">
+              <ShortLinkCreator
+                churchId={churchId!}
+                targetUrl={`/join/${churchId}`}
+                label={`Volunteer signup — ${churchName}`}
+                tier={churchTier}
+                onCreated={(slug) => {
+                  setJoinShortLinkUrl(`${window.location.origin}/s/${slug}`);
+                }}
+                onClose={() => setShowShortLinkCreator(false)}
+              />
             </Modal>
           )}
         </>
@@ -978,5 +1051,5 @@ function PeopleContent() {
 // - HouseholdCard → household-card.tsx
 // - AddPeopleMenu → add-people-menu.tsx
 // - InviteForm → invite-form.tsx
-// - JoinLinkSection → join-link-section.tsx
+// - JoinLinkSection → removed (replaced by ShareMenu + ShortLinkCreator inline)
 // - MemberRow → member-row.tsx

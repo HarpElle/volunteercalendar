@@ -15,6 +15,10 @@ interface ShareMenuProps {
   shortLinkUrl?: string;
   /** Called when user clicks "Copy short link" (copies shortLinkUrl) */
   onCopyShortLink?: () => void;
+  /** Custom label for the trigger button (default: "Share") */
+  label?: string;
+  /** Override classes for the trigger button */
+  buttonClassName?: string;
 }
 
 const btnClass =
@@ -30,6 +34,8 @@ export function ShareMenu({
   hasShortLink,
   shortLinkUrl,
   onCopyShortLink,
+  label = "Share",
+  buttonClassName,
 }: ShareMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,16 +54,16 @@ export function ShareMenu({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+        className={buttonClassName ?? `inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
           open
             ? "bg-vc-bg-warm text-vc-indigo"
             : "text-vc-text-secondary hover:bg-vc-bg-warm hover:text-vc-indigo"
         }`}
       >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
         </svg>
-        Share
+        {label}
       </button>
 
       {open && (

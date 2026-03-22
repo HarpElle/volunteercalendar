@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { StepTypeIcon } from "@/components/ui/step-type-icon";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { normalizePhone, formatPhone } from "@/lib/utils/phone";
 import { updateChurchDocument } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
@@ -86,6 +88,15 @@ export function PersonDetailDrawer({
   // --- Role state ---
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>(membership?.role || "volunteer");
   const [ministryScope, setMinistryScope] = useState<string[]>(membership?.ministry_scope || []);
+
+  const hasChanges =
+    name !== volunteer.name ||
+    email !== volunteer.email ||
+    (phone || "") !== (volunteer.phone || "") ||
+    JSON.stringify([...selectedMinistries].sort()) !== JSON.stringify([...volunteer.ministry_ids].sort()) ||
+    JSON.stringify([...selectedRoles].sort()) !== JSON.stringify([...volunteer.role_ids].sort()) ||
+    bgCheckStatus !== (volunteer.background_check?.status || "not_required") ||
+    bgCheckExpiry !== (volunteer.background_check?.expires_at || "");
 
   // Reset state when volunteer/membership changes
   useEffect(() => {
@@ -273,7 +284,7 @@ export function PersonDetailDrawer({
           </h3>
           {canManage && !isArchived ? (
             <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-3">
                 <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
                 <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <Input
@@ -374,24 +385,6 @@ export function PersonDetailDrawer({
                 )}
               </div>
 
-              <div className="flex gap-2">
-                <Button size="sm" loading={saving} onClick={handleSaveProfile}>Save Changes</Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setName(volunteer.name);
-                    setEmail(volunteer.email);
-                    setPhone(volunteer.phone || "");
-                    setSelectedMinistries(volunteer.ministry_ids);
-                    setSelectedRoles(volunteer.role_ids);
-                    setBgCheckStatus(volunteer.background_check?.status || "not_required");
-                    setBgCheckExpiry(volunteer.background_check?.expires_at || "");
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
             </div>
           ) : (
             /* Read-only view for non-admins or archived */
@@ -506,62 +499,131 @@ export function PersonDetailDrawer({
         )}
 
         {/* ================================================================
-            Section C — Role & Lifecycle
+            Section C — Access & Permissions
            ================================================================ */}
         {canManage && membership && (
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
               <span className="h-px flex-1 bg-vc-border-light" />
-              Organization Role
+              Access & Permissions
               <span className="h-px flex-1 bg-vc-border-light" />
             </h3>
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {(["owner", "admin", "scheduler", "volunteer"] as OrgRole[]).map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => handleOrgRoleChange(role)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                      selectedOrgRole === role
-                        ? "border-vc-indigo bg-vc-indigo/10 text-vc-indigo"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                    }`}
-                  >
-                    {ROLE_LABELS[role]}
-                  </button>
-                ))}
+            <div className="space-y-4">
+
+              {/* --- Organization Role --- */}
+              <div className="rounded-xl border border-vc-border-light bg-white p-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                  Organization Role
+                </p>
+                {selectedOrgRole === "owner" ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="accent">Owner</Badge>
+                    <InfoTooltip text="Manages billing and organization settings. Ownership can be transferred on the Organization page." />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-medium ${selectedOrgRole === "admin" ? "text-vc-indigo" : "text-vc-text-secondary"}`}>
+                        {selectedOrgRole === "admin" ? "Administrator" : "Member"}
+                      </span>
+                      {selectedOrgRole === "admin" && <Badge variant="primary">Admin</Badge>}
+                    </div>
+                    {selectedOrgRole !== "admin" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOrgRoleChange("admin")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-coral/30 bg-vc-coral/5 px-3 py-1.5 text-sm font-medium text-vc-coral transition-colors hover:bg-vc-coral/10 min-h-[44px]"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                        </svg>
+                        Make Administrator
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOrgRoleChange("volunteer")}
+                        className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
+                      >
+                        Remove admin access
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Ministry scope for schedulers */}
-              {selectedOrgRole === "scheduler" && ministries.length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-xs text-vc-text-muted">
-                    Limit scheduling access to specific teams (leave empty for all):
+              {/* --- Scheduling Access --- */}
+              <div className="rounded-xl border border-vc-border-light bg-white p-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                  Scheduling Access
+                </p>
+                {selectedOrgRole === "admin" || selectedOrgRole === "owner" ? (
+                  <p className="text-sm text-vc-text-secondary">
+                    {selectedOrgRole === "owner" ? "Owners" : "Administrators"} can schedule all teams.
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ministries.map((m) => (
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-medium ${selectedOrgRole === "scheduler" ? "text-vc-indigo" : "text-vc-text-secondary"}`}>
+                        {selectedOrgRole === "scheduler" ? "Team Scheduler" : "Member"}
+                      </span>
+                      {selectedOrgRole === "scheduler" && <Badge variant="accent">Scheduler</Badge>}
+                    </div>
+
+                    {selectedOrgRole !== "scheduler" ? (
                       <button
-                        key={m.id}
                         type="button"
-                        onClick={() => handleMinistryScpeToggle(m.id)}
-                        className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all min-h-[44px] ${
-                          ministryScope.includes(m.id)
-                            ? "border-transparent text-white"
-                            : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
-                        }`}
-                        style={ministryScope.includes(m.id) ? { backgroundColor: m.color } : undefined}
+                        onClick={() => handleOrgRoleChange("scheduler")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-sand/40 bg-vc-sand/5 px-3 py-1.5 text-sm font-medium text-vc-warning transition-colors hover:bg-vc-sand/10 min-h-[44px]"
                       >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: ministryScope.includes(m.id) ? "white" : m.color }}
-                        />
-                        {m.name}
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                        </svg>
+                        Make Team Scheduler
                       </button>
-                    ))}
+                    ) : (
+                      <>
+                        {ministries.length > 0 && (
+                          <div>
+                            <p className="mb-1.5 text-xs text-vc-text-muted">
+                              Scheduling access for these teams (empty = all teams):
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {ministries.map((m) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => handleMinistryScpeToggle(m.id)}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all min-h-[44px] ${
+                                    ministryScope.includes(m.id)
+                                      ? "border-transparent text-white"
+                                      : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
+                                  }`}
+                                  style={ministryScope.includes(m.id) ? { backgroundColor: m.color } : undefined}
+                                >
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: ministryScope.includes(m.id) ? "white" : m.color }}
+                                  />
+                                  {m.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleOrgRoleChange("volunteer")}
+                          className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
+                        >
+                          Remove scheduling access
+                        </button>
+                      </>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
             </div>
           </section>
         )}
@@ -604,6 +666,42 @@ export function PersonDetailDrawer({
             </div>
           </section>
         )}
+        {/* Sticky save footer — only visible when there are unsaved changes */}
+        <AnimatePresence>
+          {canManage && !isArchived && hasChanges && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="sticky bottom-0 -mx-6 mt-4 border-t border-vc-border-light bg-vc-bg-warm/95 px-6 py-3 backdrop-blur-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-vc-text-muted">Unsaved changes</p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setName(volunteer.name);
+                      setEmail(volunteer.email);
+                      setPhone(volunteer.phone || "");
+                      setSelectedMinistries(volunteer.ministry_ids);
+                      setSelectedRoles(volunteer.role_ids);
+                      setBgCheckStatus(volunteer.background_check?.status || "not_required");
+                      setBgCheckExpiry(volunteer.background_check?.expires_at || "");
+                    }}
+                  >
+                    Reset
+                  </Button>
+                  <Button size="sm" loading={saving} onClick={handleSaveProfile}>
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </Drawer>
   );
