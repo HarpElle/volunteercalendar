@@ -14,7 +14,7 @@ interface ScheduleMatrixProps {
   onUnassign?: (assignmentId: string) => void;
 }
 
-type ViewMode = "by-date" | "by-volunteer";
+type ViewMode = "by-date" | "by-volunteer" | "compare";
 
 export function ScheduleMatrix({
   assignments,
@@ -29,6 +29,7 @@ export function ScheduleMatrix({
   const [filterMinistry, setFilterMinistry] = useState<string>("all");
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const isDraft = schedule.status === "draft";
 
@@ -134,6 +135,53 @@ export function ScheduleMatrix({
     setReassigning(null);
   }
 
+  function toggleGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  /**
+   * Check if a volunteer is unavailable on a given date.
+   * Returns a reason string if unavailable, or null if available.
+   */
+  function getUnavailableReason(vol: Volunteer, dateStr: string): string | null {
+    const avail = vol.availability;
+    if (!avail) return null;
+
+    // Blockout date match
+    if (avail.blockout_dates?.includes(dateStr)) {
+      return "Blocked out";
+    }
+
+    // Recurring unavailable day match (e.g. "Sunday")
+    if (avail.recurring_unavailable?.length) {
+      const d = new Date(dateStr + "T12:00:00");
+      const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
+      if (avail.recurring_unavailable.includes(dayName)) {
+        return `Unavailable ${dayName}s`;
+      }
+    }
+
+    // Max roles per month check
+    if (avail.max_roles_per_month > 0) {
+      const monthPrefix = dateStr.slice(0, 7); // "YYYY-MM"
+      const monthCount = assignments.filter(
+        (a) =>
+          a.volunteer_id === vol.id &&
+          a.service_date.startsWith(monthPrefix),
+      ).length;
+      if (monthCount >= avail.max_roles_per_month) {
+        return `At limit (${avail.max_roles_per_month}/mo)`;
+      }
+    }
+
+    return null;
+  }
+
   if (assignments.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
@@ -166,6 +214,16 @@ export function ScheduleMatrix({
             }`}
           >
             By Volunteer
+          </button>
+          <button
+            onClick={() => setViewMode("compare")}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              viewMode === "compare"
+                ? "bg-vc-indigo text-white"
+                : "text-vc-text-secondary hover:text-vc-indigo"
+            }`}
+          >
+            Compare
           </button>
         </div>
 
@@ -212,6 +270,15 @@ export function ScheduleMatrix({
                       .filter(Boolean)
                       .join(", ");
 
+                    // Sub-group assignments by ministry within this service
+                    const byMinistry: Record<string, Assignment[]> = {};
+                    for (const a of svcAssignments) {
+                      const mId = a.ministry_id || "_none";
+                      if (!byMinistry[mId]) byMinistry[mId] = [];
+                      byMinistry[mId].push(a);
+                    }
+                    const ministryGroups = Object.entries(byMinistry);
+
                     return (
                       <div key={serviceId} className="px-5 py-3">
                         <div className="mb-2 flex items-center gap-2">
@@ -226,8 +293,41 @@ export function ScheduleMatrix({
                             {service.start_time} · {ministryNames}
                           </span>
                         </div>
+                        {ministryGroups.map(([mId, mAssignments]) => {
+                          const ministry = ministryMap.get(mId);
+                          const groupKey = `${date}_${serviceId}_${mId}`;
+                          const isCollapsed = collapsedGroups.has(groupKey);
+                          const showGroupHeader = ministryGroups.length > 1;
+
+                          return (
+                            <div key={mId} className="mb-2 last:mb-0">
+                              {showGroupHeader && (
+                                <button
+                                  onClick={() => toggleGroup(groupKey)}
+                                  className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-vc-text-secondary hover:text-vc-indigo transition-colors"
+                                >
+                                  <svg
+                                    className={`h-3 w-3 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2}
+                                    stroke="currentColor"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                  </svg>
+                                  <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: ministry?.color || "#ccc" }}
+                                  />
+                                  {ministry?.name || "General"}
+                                  <span className="text-vc-text-muted font-normal">
+                                    ({mAssignments.length})
+                                  </span>
+                                </button>
+                              )}
+                              {!isCollapsed && (
                         <div className="flex flex-wrap gap-2">
-                          {svcAssignments.map((a) => {
+                          {mAssignments.map((a) => {
                             const vol = volunteerMap.get(a.volunteer_id);
                             const isReassigningThis = reassigning === a.id;
 
@@ -246,10 +346,27 @@ export function ScheduleMatrix({
                                     <option value="" disabled>Pick volunteer...</option>
                                     {volunteers
                                       .filter((v) => v.id !== a.volunteer_id)
-                                      .sort((x, y) => x.name.localeCompare(y.name))
-                                      .map((v) => (
-                                        <option key={v.id} value={v.id}>{v.name}</option>
-                                      ))}
+                                      .sort((x, y) => {
+                                        // Available volunteers first, then unavailable
+                                        const xUnavail = getUnavailableReason(x, a.service_date);
+                                        const yUnavail = getUnavailableReason(y, a.service_date);
+                                        if (xUnavail && !yUnavail) return 1;
+                                        if (!xUnavail && yUnavail) return -1;
+                                        return x.name.localeCompare(y.name);
+                                      })
+                                      .map((v) => {
+                                        const reason = getUnavailableReason(v, a.service_date);
+                                        return (
+                                          <option
+                                            key={v.id}
+                                            value={v.id}
+                                            disabled={!!reason}
+                                            className={reason ? "text-gray-400" : ""}
+                                          >
+                                            {v.name}{reason ? ` — ${reason}` : ""}
+                                          </option>
+                                        );
+                                      })}
                                   </select>
                                   <button
                                     onClick={() => setReassigning(null)}
@@ -311,7 +428,13 @@ export function ScheduleMatrix({
                               </div>
                             );
                           })}
-                          {/* Unfilled roles */}
+                        </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {/* Unfilled roles (service-level) */}
+                        <div className="mt-1 flex flex-wrap gap-2">
                           {service.roles.map((role) => {
                             const filled = svcAssignments.filter((a) => a.role_id === role.role_id).length;
                             const gap = role.count - filled;
@@ -401,6 +524,237 @@ export function ScheduleMatrix({
           </div>
         </div>
       )}
+
+      {/* Compare View — services as columns, volunteers as rows */}
+      {viewMode === "compare" && (
+        <CompareView
+          assignments={filteredAssignments}
+          services={services}
+          volunteers={volunteers}
+          ministries={ministries}
+          schedule={schedule}
+          getUnavailableReason={getUnavailableReason}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compare View — multi-service side-by-side with availability
+// ---------------------------------------------------------------------------
+
+function CompareView({
+  assignments,
+  services,
+  volunteers,
+  ministries,
+  schedule,
+  getUnavailableReason,
+}: {
+  assignments: Assignment[];
+  services: Service[];
+  volunteers: Volunteer[];
+  ministries: Ministry[];
+  schedule: Schedule;
+  getUnavailableReason: (vol: Volunteer, dateStr: string) => string | null;
+}) {
+  // Get unique dates in the schedule
+  const dates = useMemo(() => {
+    const dateSet = new Set<string>();
+    for (const a of assignments) dateSet.add(a.service_date);
+    return [...dateSet].sort();
+  }, [assignments]);
+
+  const [selectedDate, setSelectedDate] = useState(dates[0] || "");
+
+  // Services that have assignments on the selected date
+  const dateServices = useMemo(() => {
+    const svcIds = new Set<string>();
+    for (const a of assignments) {
+      if (a.service_date === selectedDate && a.service_id) {
+        svcIds.add(a.service_id);
+      }
+    }
+    return services.filter((s) => svcIds.has(s.id));
+  }, [assignments, services, selectedDate]);
+
+  const serviceMap = useMemo(
+    () => new Map(services.map((s) => [s.id, s])),
+    [services],
+  );
+  const ministryMap = useMemo(
+    () => new Map(ministries.map((m) => [m.id, m])),
+    [ministries],
+  );
+
+  // Build assignment lookup: volId_svcId → Assignment[]
+  const assignmentLookup = useMemo(() => {
+    const map = new Map<string, Assignment[]>();
+    for (const a of assignments) {
+      if (a.service_date !== selectedDate) continue;
+      const key = `${a.volunteer_id}_${a.service_id}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(a);
+    }
+    return map;
+  }, [assignments, selectedDate]);
+
+  // Relevant volunteers: those assigned on this date or in relevant ministries
+  const relevantVolunteers = useMemo(() => {
+    const assignedIds = new Set<string>();
+    for (const a of assignments) {
+      if (a.service_date === selectedDate) assignedIds.add(a.volunteer_id);
+    }
+    return volunteers
+      .filter((v) => assignedIds.has(v.id) || v.ministry_ids.some((mId) =>
+        dateServices.some((s) => {
+          const svcMinistryIds = s.ministries?.map((m) => m.ministry_id) || [s.ministry_id];
+          return svcMinistryIds.includes(mId);
+        }),
+      ))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [volunteers, assignments, selectedDate, dateServices]);
+
+  function formatDate(dateStr: string): string {
+    const d = new Date(dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  if (dates.length === 0) {
+    return <p className="py-8 text-center text-vc-text-muted">No dates to compare.</p>;
+  }
+
+  return (
+    <div>
+      {/* Date selector */}
+      {dates.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {dates.map((d) => (
+            <button
+              key={d}
+              onClick={() => setSelectedDate(d)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${
+                selectedDate === d
+                  ? "bg-vc-indigo text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {formatDate(d)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Compare table */}
+      <div className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-vc-border-light bg-vc-bg-warm">
+                <th className="sticky left-0 z-10 bg-vc-bg-warm px-4 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted min-w-[160px]">
+                  Volunteer
+                </th>
+                <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted text-center min-w-[60px]">
+                  Avail
+                </th>
+                {dateServices.map((svc) => (
+                  <th
+                    key={svc.id}
+                    className="px-4 py-3 text-xs font-semibold text-vc-indigo text-center min-w-[140px]"
+                  >
+                    <div>{svc.name}</div>
+                    <div className="font-normal text-vc-text-muted">{svc.start_time}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-vc-border-light">
+              {relevantVolunteers.map((vol) => {
+                const unavailReason = getUnavailableReason(vol, selectedDate);
+                return (
+                  <tr
+                    key={vol.id}
+                    className={`transition-colors ${unavailReason ? "opacity-50" : "hover:bg-vc-bg-warm/50"}`}
+                  >
+                    <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-medium text-vc-indigo whitespace-nowrap">
+                      {vol.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {unavailReason ? (
+                        <span
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-vc-danger/10 text-vc-danger"
+                          title={unavailReason}
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-vc-sage/10 text-vc-sage"
+                          title="Available"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        </span>
+                      )}
+                    </td>
+                    {dateServices.map((svc) => {
+                      const key = `${vol.id}_${svc.id}`;
+                      const volAssignments = assignmentLookup.get(key) || [];
+                      return (
+                        <td key={svc.id} className="px-4 py-2.5 text-center">
+                          {volAssignments.length > 0 ? (
+                            <div className="flex flex-wrap justify-center gap-1">
+                              {volAssignments.map((a) => (
+                                <span
+                                  key={a.id}
+                                  className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium bg-vc-sage/15 text-vc-sage"
+                                >
+                                  {a.role_title}
+                                  <StatusDot status={a.status} />
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-vc-text-muted">--</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-vc-text-muted">
+        <span className="flex items-center gap-1">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-vc-sage/10 text-vc-sage">
+            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+          </span>
+          Available
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-vc-danger/10 text-vc-danger">
+            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </span>
+          Unavailable
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block rounded bg-vc-sage/15 px-1.5 py-0.5 text-[10px] font-medium text-vc-sage">Role</span>
+          Assigned
+        </span>
+      </div>
     </div>
   );
 }

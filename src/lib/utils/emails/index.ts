@@ -5,6 +5,7 @@ export type { LayoutOptions } from "./base-layout";
 
 export { buildWelcomeEmail, buildAccountCreatedEmail } from "./welcome";
 export { buildConfirmationEmail } from "./confirmation";
+export { buildBatchConfirmationEmail } from "./batch-confirmation";
 export { buildPurchaseThankYouEmail } from "./purchase-thank-you";
 export { buildReEngagementEmail } from "./re-engagement";
 export { buildUpsellEmail } from "./upsell";

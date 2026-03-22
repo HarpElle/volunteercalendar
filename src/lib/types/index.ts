@@ -167,7 +167,8 @@ export type OnboardingStepType =
   | "minimum_service"    // served X times in another ministry
   | "ministry_tenure"    // active in a prerequisite ministry for N days
   | "shadow"             // shadow a team member before serving independently
-  | "custom";            // admin-defined freeform requirement
+  | "custom"
+  | "header";            // admin-defined freeform requirement
 
 /** Where this prerequisite applies. Absent defaults to "all" (backward-compatible). */
 export type PrerequisiteScope = "all" | "teams" | "events" | "specific_roles";
@@ -931,7 +932,8 @@ export type ServicePlanItemType =
   | "sermon"
   | "offering"
   | "video"
-  | "custom";
+  | "custom"
+  | "header";
 
 export interface ServicePlanItem {
   /** Unique within this plan. */

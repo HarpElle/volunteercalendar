@@ -2,6 +2,61 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 /**
+ * GET /api/service-plans/{id}?church_id=...
+ *
+ * Fetch a single service plan by id.
+ * Requires authenticated membership in the church.
+ */
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const token = authHeader.slice(7);
+    const decoded = await adminAuth.verifyIdToken(token);
+    const userId = decoded.uid;
+    const { id: planId } = await params;
+
+    const churchId = req.nextUrl.searchParams.get("church_id");
+    if (!churchId) {
+      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    }
+
+    // Verify membership
+    const membershipId = `${userId}_${churchId}`;
+    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
+    if (!membershipSnap.exists) {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    }
+
+    const planRef = adminDb
+      .collection("churches")
+      .doc(churchId)
+      .collection("service_plans")
+      .doc(planId);
+    const planSnap = await planRef.get();
+
+    if (!planSnap.exists) {
+      return NextResponse.json({ error: "Service plan not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      plan: { id: planSnap.id, ...planSnap.data() },
+    });
+  } catch (error) {
+    console.error("[GET /api/service-plans/[id]]", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
  * PATCH /api/service-plans/{id}
  *
  * Update a service plan's metadata or items array.

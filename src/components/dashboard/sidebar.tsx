@@ -62,6 +62,11 @@ function getNavSections(hasPrereqs: boolean, worshipEnabled: boolean, checkinEna
           href: "/dashboard/my-schedule",
           icon: <Icon d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-1.5h.008v.008H12v-.008Z" />,
         },
+        {
+          label: "My Availability",
+          href: "/dashboard/my-availability",
+          icon: <Icon d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />,
+        },
       ],
     },
 

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { buildConfirmationEmail } from "@/lib/utils/email-templates";
+import {
+  buildBatchConfirmationEmail,
+  type BatchAssignment,
+} from "@/lib/utils/emails/batch-confirmation";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
       || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
       || "https://volunteercal.com";
 
-    // Group assignments by volunteer to send one email per volunteer
+    // Group assignments by volunteer to send one batched email per volunteer
     const byVolunteer = new Map<string, typeof assignments>();
     for (const a of assignments) {
       const volId = a.volunteer_id as string;
@@ -97,54 +100,63 @@ export async function POST(request: Request) {
     for (const [volId, volAssignments] of byVolunteer) {
       const volunteer = volunteerMap.get(volId);
       if (!volunteer) {
-        skipped++;
+        skipped += volAssignments.length;
         continue;
       }
 
       const email = volunteer.email as string;
       if (!email) {
-        skipped++;
+        skipped += volAssignments.length;
         continue;
       }
 
-      // For MVP, send one email per assignment (each has its own confirmation token)
-      // In the future, could bundle multiple assignments into one email
+      // Build batched assignment list (skip already-responded)
+      const pending: BatchAssignment[] = [];
+      let volSkipped = 0;
+
       for (const assignment of volAssignments) {
-        // Skip already-responded assignments
         if (assignment.responded_at) {
-          skipped++;
+          volSkipped++;
           continue;
         }
 
         const service = serviceMap.get(assignment.service_id as string);
         const ministry = ministryMap.get(assignment.ministry_id as string);
         const token = assignment.confirmation_token as string;
-        const confirmUrl = `${origin}/confirm/${token}`;
 
-        const { subject, html, text } = buildConfirmationEmail({
-          volunteerName: (volunteer.name as string) || "Volunteer",
-          churchName,
+        pending.push({
+          serviceDate: assignment.service_date as string,
           serviceName: (service?.name as string) || "Service",
+          startTime: (service?.start_time as string) || "",
           ministryName: (ministry?.name as string) || "Ministry",
           roleTitle: (assignment.role_title as string) || "Volunteer",
-          serviceDate: assignment.service_date as string,
-          startTime: (service?.start_time as string) || "",
-          confirmUrl,
+          confirmUrl: `${origin}/confirm/${token}`,
         });
+      }
 
-        try {
-          await resend.emails.send({
-            from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-            replyTo: "info@volunteercal.com",
-            to: [email],
-            subject,
-            html,
-            text,
-          });
-          sent++;
-        } catch (err) {
-          errors.push(`Failed to email ${email}: ${(err as Error).message}`);
-        }
+      skipped += volSkipped;
+
+      if (pending.length === 0) continue;
+
+      // Send one batched email with all pending assignments
+      const { subject, html, text } = buildBatchConfirmationEmail({
+        volunteerName: (volunteer.name as string) || "Volunteer",
+        churchName,
+        assignments: pending,
+      });
+
+      try {
+        await resend.emails.send({
+          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+          replyTo: "info@volunteercal.com",
+          to: [email],
+          subject,
+          html,
+          text,
+        });
+        sent += pending.length;
+      } catch (err) {
+        errors.push(`Failed to email ${email}: ${(err as Error).message}`);
       }
     }
 

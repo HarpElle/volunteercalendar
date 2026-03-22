@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 + Expansion Phases 4–10 + Phase G + Exp. 11 complete. |
+| **Status** | Phase 32 + Expansion Phases 4–11 + Phase G + Part 3 (WorshipTools UX) complete. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -78,6 +78,8 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Volunteer prerequisite progress (org-wide + per-ministry steps)
 │   │   │   ├── my-schedule/
 │   │   │   │   └── page.tsx        # Volunteer view (Upcoming | Past | Availability | Team tabs)
+│   │   │   ├── my-availability/
+│   │   │   │   └── page.tsx        # Volunteer self-service availability (blockouts, recurring days, preferences)
 │   │   │   ├── my-orgs/
 │   │   │   │   └── page.tsx        # Multi-org management (invites, reminders, switch)
 │   │   │   ├── organization/
@@ -94,7 +96,9 @@ VolunteerCal/
 │   │   │   │   ├── songs/
 │   │   │   │   │   └── page.tsx    # Song library (search, filter, add/edit/archive)
 │   │   │   │   ├── plans/
-│   │   │   │   │   └── page.tsx    # Service plans list (upcoming, create, navigate to editor)
+│   │   │   │   │   ├── page.tsx    # Service plans list (upcoming, create, navigate to editor)
+│   │   │   │   │   └── [id]/
+│   │   │   │   │       └── page.tsx # Service plan editor (items, header type, inline notes, reorder, publish)
 │   │   │   │   └── reports/
 │   │   │   │       └── page.tsx    # Song usage reports (CCLI compliance)
 │   │   │   └── checkin/
@@ -171,8 +175,10 @@ VolunteerCal/
 │   │       │   └── route.ts    # Waitlist form handler
 │   │       ├── confirm/
 │   │       │   └── route.ts    # Token-based assignment confirm/decline API
+│   │       ├── my-availability/
+│   │       │   └── route.ts    # Volunteer self-service availability (GET own, PATCH update)
 │   │       ├── notify/
-│   │       │   ├── route.ts                # Publish → send confirmation emails (Resend)
+│   │       │   ├── route.ts                # Publish → batched confirmation emails per volunteer (Resend)
 │   │       │   ├── membership-approved/
 │   │       │   │   └── route.ts            # Send approval notification email
 │   │       │   ├── role-change/
@@ -261,7 +267,7 @@ VolunteerCal/
 │   │       ├── service-plans/
 │   │       │   ├── route.ts        # Service plan CRUD (POST create, GET list)
 │   │       │   └── [id]/
-│   │       │       ├── route.ts    # Plan update/delete (PATCH items, DELETE)
+│   │       │       ├── route.ts    # Plan GET/update/delete (GET single, PATCH items, DELETE)
 │   │       │       ├── publish/
 │   │       │       │   └── route.ts    # Publish plan + create song usage records
 │   │       │       └── export-propresenter/
@@ -407,7 +413,7 @@ VolunteerCal/
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts, recurrence.ts (recurring reservation materialization)
-│       │   ├── emails/         # 31 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
+│       │   ├── emails/         # 32 email templates + base-layout.ts (barrel: index.ts re-exports; incl. batch-confirmation, absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
 │       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect (ChordPro/PDF parser)
@@ -467,4 +473,5 @@ VolunteerCal/
 | Exp. 8 | Volunteer archive & status system — "archived" added to VolunteerStatus type, scheduler isEligible() safety check rejects non-active volunteers, schedules page pre-filters archived before generating drafts, archive/restore API (src/app/api/volunteers/[id]/archive/), remove-from-organization API (src/app/api/volunteers/[id]/remove/) deletes volunteer + membership, People page status filter (Active/Archived/All) and team filter (On a Team/Not on Any Team), kebab action menu with Archive/Restore/Remove from Organization, archived row visual indicators (faded + badge), contextual info banners for archived and no-team filter states | Complete |
 | Exp. 10 | Native Children's Check-In — CheckInHousehold/Child/CheckInSession/CheckInSettings/CheckInAlert/Room types + 5 Firestore composite indexes, security code generator (safe charset), label printing system (PrinterAdapter interface, BrotherQLAdapter PNG via @napi-rs/canvas, ZebraZDAdapter ZPL, DymoAdapter XML), companion print server (Python/Flask on church LAN), 6 kiosk API routes (lookup, checkin, checkout, print, register, room view — unauthenticated, rate-limited), 10 admin API routes (household CRUD, children CRUD, printer config/test, settings, 6-type report engine with CSV export, Breeze CSV import with grade mapping), 4-screen kiosk UI (QR scan via jsQR + phone keypad lookup → multi-select child cards → allergy acknowledgment → success with security code + auto-print), teacher room view (token auth, 5s polling, late arrival detection), admin dashboard (overview stats, households, reports, settings, import wizard), sidebar nav (Check-In section gated by checkin_enabled tier), tier gating (checkin_enabled at Growth+, pre_checkin_sms/advanced_reports/multi_station at Pro+) | Complete |
 | Exp. 11 | Room & Resource Scheduling — Reservation/ReservationRequest/RoomSettings/RecurrenceRule types, rooms_enabled/rooms_max/rooms_recurring/rooms_public_calendar tier gates, recurrence utility (generateOccurrenceDates, materializeRecurringReservation, cancelRecurrenceGroup), room CRUD API (list/create/detail/update/soft-delete/regenerate-token), room settings API (equipment tags, require_approval, public calendar toggle), reservation API with conflict detection (time overlap formula, pending_approval flow), recurring reservation materialization (batched Firestore writes, recurrence_group_id, edit_scope: single/from_date/all), approval queue API (approve/deny with SMS notification), room display page for wall-mounted tablets (30s polling, Available/In Use/Starting Soon status with color-coded full-screen display), 3 iCal feed routes (per-room, church-wide, per-ministry with 90-day window), admin dashboard (room grid with cards, room detail with timeline/reservations/settings tabs, approval queue, equipment tag palette + booking defaults), 5-step booking form wizard (room picker → date/time → details/equipment → recurrence rule picker → review with conflict modal), room calendar view (month/week toggle, room/ministry filters), public calendar page (token auth, embed mode via ?embed=true), sidebar Rooms nav section (conditional on roomsEnabled tier gate), 4 Firestore composite indexes for reservations collection | Complete |
+| Part 3 | WorshipTools UX Improvements — "header" ServicePlanItemType for section dividers in service plans, service plan editor page (src/app/dashboard/worship/plans/[id]/page.tsx) with item list, inline collapsible notes, add/edit/reorder/remove, publish action, Stage Sync launch, song picker with artist credit, GET /api/service-plans/[id] endpoint, volunteer availability indicators in schedule matrix person-picker (blockout dates, recurring unavailable, max roles per month, sorted available-first with disabled unavailable), volunteer self-service availability page (src/app/dashboard/my-availability/page.tsx) with blockout date management, recurring day-of-week toggles, scheduling preferences, self-serve PATCH API (src/app/api/my-availability/route.ts), sidebar "My Availability" link, batched notification emails (batch-confirmation.ts template bundles all assignments per volunteer into single email), schedule matrix ministry group collapse/expand in by-date view (collapsible headers with chevron + ministry color dot + count), multi-service compare view (new "Compare" tab in schedule matrix showing services as columns, volunteers as rows, availability check/x indicators, date selector, role assignment badges) | Complete |
 | Phase G | People page overhaul — table→card grid (PersonCard with avatar, eligibility dot, role badge, ministry pills), PersonDetailDrawer (profile editing, prerequisite tracking with status toggles, org role changes, archive/remove), prerequisite scope system (PrerequisiteScope: all/teams/events/specific_roles on OnboardingStep, scope-aware scheduler, scope selector + role picker in PrerequisiteEditor), shared eligibility utility (getOrgEligibility, getVolunteerStage, getApplicablePrereqs), org_prerequisites in people-data API, StepTypeIcon extracted to shared component, org role + eligibility filters on Roster tab, share join link moved to header button with modal, inline components extracted to src/components/people/ (add-people-menu, invite-form, join-link-section, member-row, household-card), page.tsx reduced from ~1800→~980 lines, warm editorial design polish | Complete |
