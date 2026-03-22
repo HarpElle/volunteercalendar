@@ -4,7 +4,7 @@
 |---|---|
 | **Project** | VolunteerCal.org |
 | **Location** | `HarpElleIncubator/VolunteerCal/` |
-| **Status** | Phase 32 + Expansion Phases 4–10 complete. |
+| **Status** | Phase 32 + Expansion Phases 4–10 + Phase G + Exp. 11 complete. |
 | **Stack** | Next.js 16 + TypeScript + Tailwind v4 + Firebase |
 | **Deploy** | Vercel (volunteercal.com) |
 | **Backend** | Firebase Auth + Firestore + Cloud Functions |
@@ -111,12 +111,30 @@ VolunteerCal/
 │   │   │       │   └── page.tsx    # Service times, thresholds, printer config, pre-check-in SMS
 │   │   │       └── import/
 │   │   │           └── page.tsx    # Breeze CSV import wizard
+│   │   │   └── rooms/
+│   │   │       ├── page.tsx        # Room grid (list, create, equipment badges)
+│   │   │       ├── [roomId]/
+│   │   │       │   └── page.tsx    # Room detail (timeline, reservations, settings tabs)
+│   │   │       ├── requests/
+│   │   │       │   └── page.tsx    # Reservation approval queue (approve/deny)
+│   │   │       └── settings/
+│   │   │           └── page.tsx    # Room settings (equipment tags, defaults, public calendar)
 │   │   ├── checkin/               # Children's check-in kiosk (unauthenticated)
 │   │   │   ├── layout.tsx         # Blank full-screen layout (no nav/sidebar)
 │   │   │   ├── page.tsx           # 4-screen kiosk state machine
 │   │   │   └── room/
 │   │   │       └── [roomId]/
 │   │   │           └── page.tsx   # Teacher room view (token auth, 5s polling)
+│   │   ├── display/               # Room display signage (wall-mounted tablets)
+│   │   │   ├── layout.tsx         # Blank full-screen layout
+│   │   │   └── room/
+│   │   │       └── [roomId]/
+│   │   │           └── page.tsx   # Room status display (30s polling, status colors)
+│   │   ├── calendar/              # Room calendar views
+│   │   │   ├── layout.tsx         # Authenticated calendar layout
+│   │   │   ├── page.tsx           # Authenticated room calendar + booking
+│   │   │   └── public/
+│   │   │       └── page.tsx       # Public calendar (token auth, embed mode)
 │   │   ├── stage-sync/
 │   │   │   ├── conductor/
 │   │   │   │   └── [churchId]/
@@ -325,6 +343,43 @@ VolunteerCal/
 │   │       │       └── import/
 │   │       │           └── breeze/
 │   │       │               └── route.ts        # POST Breeze CSV import
+│   │       ├── rooms/                 # Room & reservation scheduling API
+│   │       │   ├── route.ts           # Room list (GET) + create (POST, tier-gated)
+│   │       │   ├── [roomId]/
+│   │       │   │   ├── route.ts       # Room detail (GET) + update (PUT) + soft-delete (DELETE)
+│   │       │   │   └── regenerate-token/
+│   │       │   │       └── route.ts   # Regenerate calendar token (POST)
+│   │       │   └── settings/
+│   │       │       └── route.ts       # Room settings CRUD (GET, PUT)
+│   │       ├── reservations/          # Reservation scheduling API
+│   │       │   ├── route.ts           # List (GET) + create with conflict detection (POST)
+│   │       │   ├── [reservationId]/
+│   │       │   │   └── route.ts       # Detail (GET) + update (PUT) + cancel (DELETE)
+│   │       │   └── requests/
+│   │       │       ├── route.ts       # Pending approval queue (GET)
+│   │       │       └── [requestId]/
+│   │       │           ├── approve/
+│   │       │           │   └── route.ts   # Approve request + SMS (POST)
+│   │       │           └── deny/
+│   │       │               └── route.ts   # Deny request + SMS (POST)
+│   │       ├── display/               # Room display signage API
+│   │       │   └── room/
+│   │       │       └── [roomId]/
+│   │       │           └── route.ts   # Public room status (GET, token auth)
+│   │       ├── calendar/              # iCal feed routes (existing + new room feeds)
+│   │       │   ├── route.ts           # Existing volunteer iCal feed
+│   │       │   ├── room/
+│   │       │   │   └── [roomId]/
+│   │       │   │       └── [calendarToken]/
+│   │       │   │           └── route.ts   # Per-room iCal feed
+│   │       │   ├── church/
+│   │       │   │   └── [churchId]/
+│   │       │   │       └── [calendarToken]/
+│   │       │   │           └── route.ts   # Church-wide room iCal feed
+│   │       │   └── ministry/
+│   │       │       └── [ministryId]/
+│   │       │           └── [calendarToken]/
+│   │       │               └── route.ts   # Per-ministry room iCal feed
 │   │       └── volunteers/
 │   │           └── [id]/
 │   │               ├── archive/
@@ -342,15 +397,16 @@ VolunteerCal/
 │   │   ├── settings/           # general-settings, teams-settings, campuses-settings, billing-settings (extracted from organization/page.tsx)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
 │   │   ├── worship/            # Song library table, song form modal, service plan editor, song-import-modal (ChordPro/PDF upload), chord-chart-renderer, chord-chart-viewer, song-editor, arrangements-panel, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
+│   │   ├── rooms/              # Room booking: room-booking-form (5-step wizard), recurrence-rule-picker, reservation-conflict-modal, room-calendar-view (month/week), room-timeline (horizontal time strip)
 │   │   └── checkin/            # Kiosk UI: family-lookup (QR+phone), child-selection (multi-select cards), allergy-confirm, checkin-success (security code display), numeric-keypad, child-card, room-picker-modal, room-child-card, allergy-detail-modal, visitor-registration (first-time family self-registration)
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks (use-service-worker.ts)
-│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord, CheckInHousehold, Child, CheckInSession, CheckInSettings, PrinterConfig, LabelJob, Room)
+│       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord, CheckInHousehold, Child, CheckInSession, CheckInSettings, PrinterConfig, LabelJob, Room, Reservation, ReservationRequest, RoomSettings, RecurrenceRule)
 │       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
-│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts
+│       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts, recurrence.ts (recurring reservation materialization)
 │       │   ├── emails/         # 31 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
@@ -410,4 +466,5 @@ VolunteerCal/
 | Exp. 7 | Platform admin tier override & ministry templates — SubscriptionSource type on Church interface, platform-admin utility (src/lib/utils/platform-admin.ts), tier-override API (src/app/api/admin/tier-override/), Stripe webhook guard for manual overrides, Platform Admin UI card in organization settings, free tier updated to 2 ministries, 23 church ministry templates with 6 categories (src/lib/constants/), setup wizard converted to stepped form with ministry picker (step 4 for churches), inline name editing, background-check indicators | Complete |
 | Exp. 8 | Volunteer archive & status system — "archived" added to VolunteerStatus type, scheduler isEligible() safety check rejects non-active volunteers, schedules page pre-filters archived before generating drafts, archive/restore API (src/app/api/volunteers/[id]/archive/), remove-from-organization API (src/app/api/volunteers/[id]/remove/) deletes volunteer + membership, People page status filter (Active/Archived/All) and team filter (On a Team/Not on Any Team), kebab action menu with Archive/Restore/Remove from Organization, archived row visual indicators (faded + badge), contextual info banners for archived and no-team filter states | Complete |
 | Exp. 10 | Native Children's Check-In — CheckInHousehold/Child/CheckInSession/CheckInSettings/CheckInAlert/Room types + 5 Firestore composite indexes, security code generator (safe charset), label printing system (PrinterAdapter interface, BrotherQLAdapter PNG via @napi-rs/canvas, ZebraZDAdapter ZPL, DymoAdapter XML), companion print server (Python/Flask on church LAN), 6 kiosk API routes (lookup, checkin, checkout, print, register, room view — unauthenticated, rate-limited), 10 admin API routes (household CRUD, children CRUD, printer config/test, settings, 6-type report engine with CSV export, Breeze CSV import with grade mapping), 4-screen kiosk UI (QR scan via jsQR + phone keypad lookup → multi-select child cards → allergy acknowledgment → success with security code + auto-print), teacher room view (token auth, 5s polling, late arrival detection), admin dashboard (overview stats, households, reports, settings, import wizard), sidebar nav (Check-In section gated by checkin_enabled tier), tier gating (checkin_enabled at Growth+, pre_checkin_sms/advanced_reports/multi_station at Pro+) | Complete |
+| Exp. 11 | Room & Resource Scheduling — Reservation/ReservationRequest/RoomSettings/RecurrenceRule types, rooms_enabled/rooms_max/rooms_recurring/rooms_public_calendar tier gates, recurrence utility (generateOccurrenceDates, materializeRecurringReservation, cancelRecurrenceGroup), room CRUD API (list/create/detail/update/soft-delete/regenerate-token), room settings API (equipment tags, require_approval, public calendar toggle), reservation API with conflict detection (time overlap formula, pending_approval flow), recurring reservation materialization (batched Firestore writes, recurrence_group_id, edit_scope: single/from_date/all), approval queue API (approve/deny with SMS notification), room display page for wall-mounted tablets (30s polling, Available/In Use/Starting Soon status with color-coded full-screen display), 3 iCal feed routes (per-room, church-wide, per-ministry with 90-day window), admin dashboard (room grid with cards, room detail with timeline/reservations/settings tabs, approval queue, equipment tag palette + booking defaults), 5-step booking form wizard (room picker → date/time → details/equipment → recurrence rule picker → review with conflict modal), room calendar view (month/week toggle, room/ministry filters), public calendar page (token auth, embed mode via ?embed=true), sidebar Rooms nav section (conditional on roomsEnabled tier gate), 4 Firestore composite indexes for reservations collection | Complete |
 | Phase G | People page overhaul — table→card grid (PersonCard with avatar, eligibility dot, role badge, ministry pills), PersonDetailDrawer (profile editing, prerequisite tracking with status toggles, org role changes, archive/remove), prerequisite scope system (PrerequisiteScope: all/teams/events/specific_roles on OnboardingStep, scope-aware scheduler, scope selector + role picker in PrerequisiteEditor), shared eligibility utility (getOrgEligibility, getVolunteerStage, getApplicablePrereqs), org_prerequisites in people-data API, StepTypeIcon extracted to shared component, org role + eligibility filters on Roster tab, share join link moved to header button with modal, inline components extracted to src/components/people/ (add-people-menu, invite-form, join-link-section, member-row, household-card), page.tsx reduced from ~1800→~980 lines, warm editorial design polish | Complete |

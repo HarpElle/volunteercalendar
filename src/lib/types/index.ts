@@ -1192,3 +1192,94 @@ export interface Room {
   updated_at: string;
 }
 
+// ─── Room & Resource Scheduling (Part 2) ─────────────────────────────────────
+
+export type ReservationStatus =
+  | "confirmed"
+  | "pending_approval"
+  | "denied"
+  | "cancelled";
+
+export type RecurrenceFrequency =
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "monthly_by_date"
+  | "monthly_by_weekday";
+
+export type RecurrenceEndType = "never" | "until_date" | "count";
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  days_of_week?: number[]; // 0=Sunday…6=Saturday
+  monthly_week?: number; // 1-5 (for monthly_by_weekday: "2nd Sunday")
+  monthly_weekday?: number; // 0-6 (for monthly_by_weekday)
+  end_type: RecurrenceEndType;
+  end_date?: string; // ISO date (for until_date)
+  count?: number; // number of occurrences (for count)
+}
+
+// Firestore: churches/{churchId}/reservations/{id}
+export interface Reservation {
+  id: string;
+  church_id: string;
+  room_id: string;
+  title: string;
+  description?: string;
+  ministry_id?: string;
+  requested_by: string; // user_id
+  requested_by_name: string;
+  date: string; // ISO date "YYYY-MM-DD"
+  start_time: string; // "HH:mm"
+  end_time: string; // "HH:mm"
+  status: ReservationStatus;
+  // Equipment & teams
+  equipment_requested: string[];
+  teams_needed: string[]; // ministry IDs
+  attendee_count?: number;
+  setup_notes?: string;
+  // Recurrence
+  is_recurring: boolean;
+  recurrence_rule?: RecurrenceRule;
+  recurrence_group_id?: string; // shared across all occurrences
+  recurrence_index?: number; // 0-based occurrence number
+  // Conflict tracking
+  conflict_with_ids: string[];
+  // Approval
+  approved_by?: string;
+  approved_at?: string;
+  denied_by?: string;
+  denied_at?: string;
+  denied_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Firestore: churches/{churchId}/reservation_requests/{id}
+export interface ReservationRequest {
+  id: string;
+  church_id: string;
+  new_reservation_id: string;
+  conflicting_reservation_ids: string[];
+  status: "pending" | "approved" | "denied";
+  admin_note?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  notified_at?: string;
+  created_at: string;
+}
+
+// Firestore: churches/{churchId}/roomSettings/config (singleton)
+export interface RoomSettings {
+  equipment_tags: string[];
+  require_approval: boolean;
+  max_advance_days: number;
+  default_setup_minutes: number;
+  default_teardown_minutes: number;
+  public_calendar_enabled: boolean;
+  public_calendar_token: string;
+  conflict_notification_user_ids: string[];
+  updated_by: string;
+  updated_at: string;
+}
