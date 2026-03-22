@@ -106,7 +106,7 @@ const features = [
   {
     title: "Song Library & Service Plans",
     description:
-      "Build your order of service with a full song library, CCLI metadata, and drag-and-drop planning. Publish plans and track song usage automatically.",
+      "Build your order of service with a full song library, accurate CCLI metadata, and drag-and-drop planning. Publish plans, track song usage, and generate CCLI reports.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
@@ -139,7 +139,7 @@ const features = [
   {
     title: "SongSelect Import",
     description:
-      "Import songs from CCLI SongSelect by uploading exported files. Metadata fills in automatically and duplicates are caught before they reach your library.",
+      "Import songs from CCLI SongSelect by uploading exported .usr or .txt files. Song metadata fills in automatically and duplicates are caught before they reach your library.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
