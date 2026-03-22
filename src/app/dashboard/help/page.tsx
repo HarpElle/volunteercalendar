@@ -630,33 +630,31 @@ const featureGuides: HelpSection[] = [
     ),
   },
   {
-    title: "SongSelect Integration",
+    title: "SongSelect Import",
     content: (
       <>
         <p>
-          Connect your CCLI SongSelect account to import songs directly into
-          your library.
+          Import songs from CCLI SongSelect into your library by uploading
+          exported files. No account connection required.
         </p>
         <dl className="mt-3 space-y-4">
           <div>
-            <dt className="font-medium text-vc-text">Connecting</dt>
+            <dt className="font-medium text-vc-text">How to Export from SongSelect</dt>
             <dd className="mt-1">
-              Navigate to Worship &rarr; Songs and click &ldquo;Connect
-              SongSelect.&rdquo; Enter your CCLI credentials and save. Once
-              connected, the import option becomes available.
+              Sign in at songselect.ccli.com, find your song, and click the
+              download icon. Choose &ldquo;Lyrics&rdquo; or &ldquo;SongSelect
+              File (.usr)&rdquo; to save the file to your device.
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">
-              Searching &amp; Importing
-            </dt>
+            <dt className="font-medium text-vc-text">Uploading &amp; Importing</dt>
             <dd className="mt-1">
-              Click &ldquo;Import from SongSelect&rdquo; to search the
-              SongSelect catalog by title. Select a song from the results and
-              click Import. The song is added to your library with CCLI metadata
-              (number, publisher, copyright) pre-filled. All imported songs are
-              fully editable &mdash; you can adjust keys, add tags, or update
-              notes after import.
+              Go to Worship &rarr; Songs and click &ldquo;Import Songs.&rdquo;
+              Drag and drop your .usr or .txt files (or click to browse).
+              VolunteerCal parses the files and shows a preview of each song
+              with title, key, and CCLI metadata. Select the songs you want and
+              click Import. All imported songs are fully editable &mdash; you
+              can adjust keys, add tags, or update notes after import.
             </dd>
           </div>
           <div>
@@ -668,19 +666,10 @@ const featureGuides: HelpSection[] = [
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Auto-Sync</dt>
+            <dt className="font-medium text-vc-text">Supported Formats</dt>
             <dd className="mt-1">
-              A weekly background sync checks for updated metadata on songs
-              you&apos;ve previously imported and keeps your library current. You
-              don&apos;t need to do anything &mdash; it runs automatically.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-vc-text">Disconnecting</dt>
-            <dd className="mt-1">
-              To remove your SongSelect connection, click &ldquo;Disconnect
-              SongSelect&rdquo; on the Songs page. Your imported songs remain in
-              your library; only the connection is removed.
+              VolunteerCal accepts .usr files (SongSelect UserSong format) and
+              plain-text .txt exports. You can upload multiple files at once.
             </dd>
           </div>
         </dl>

@@ -434,17 +434,17 @@ Trigger each email and verify it arrives in the Resend dashboard:
 - [ ] **Delete unpublished** — Delete a draft plan → plan removed
 - [ ] **Cannot delete published** — Published plan delete button disabled or warns
 
-### W. SongSelect Integration (~10 min)
+### W. SongSelect File Import (~5 min)
 
-> **Requires Growth tier or above.** SongSelect credentials from your CCLI account.
+> **Requires Growth tier or above.** Download a .usr or .txt file from songselect.ccli.com first.
 
-- [ ] **Connect SongSelect** — Worship → Songs → "Connect SongSelect" → enter CCLI credentials → save → "Connected" confirmation shown
-- [ ] **Search songs** — With SongSelect connected, use "Import from SongSelect" → type a song title → results appear from SongSelect catalog
-- [ ] **Import song** — Select a song from search results → click Import → song added to library with CCLI metadata pre-filled
-- [ ] **Duplicate detection** — Import the same song again → warning: "This song already exists in your library" → import blocked or flagged
+- [ ] **Open import modal** — Worship → Songs → "Import Songs" → modal opens with drag-and-drop zone and instructions
+- [ ] **Upload file** — Drop a .usr or .txt file → file parsed → song preview shown with title, key, CCLI number
+- [ ] **Multi-file upload** — Drop multiple files at once → all songs parsed and listed
+- [ ] **Import song** — Select song(s) from preview → click Import → song added to library with CCLI metadata pre-filled
+- [ ] **Duplicate detection** — Import a song with a CCLI number that already exists in the library → skipped with "already in your library" count
 - [ ] **Imported song editable** — Open the imported song → all fields editable (key, tags, notes)
-- [ ] **Disconnect SongSelect** — Worship → Songs → "Disconnect SongSelect" → credentials removed → search no longer available
-- [ ] **Cron sync** — Verify `/api/cron/songselect-sync` endpoint returns 200 with valid cron secret → syncs updated metadata for previously imported songs
+- [ ] **Invalid file handling** — Upload a non-song file → parse error shown, no crash
 
 ### X. Stage Sync (~10 min)
 

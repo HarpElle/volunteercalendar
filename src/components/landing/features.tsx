@@ -139,7 +139,7 @@ const features = [
   {
     title: "SongSelect Import",
     description:
-      "Import songs directly from your CCLI SongSelect account. Metadata fills in automatically, duplicates are caught, and a weekly sync keeps everything current.",
+      "Import songs from CCLI SongSelect by uploading exported files. Metadata fills in automatically and duplicates are caught before they reach your library.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
