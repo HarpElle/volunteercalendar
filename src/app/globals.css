@@ -54,6 +54,11 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --vc-text-on-dark: #FEFCF9;
   --vc-text-on-coral: #FFFFFF;
 
+  /* Spacing — brand guide: 24px between elements, 48-80px between sections */
+  --vc-space-element: 24px;
+  --vc-space-section: 48px;
+  --vc-space-section-lg: 80px;
+
   /* Alias tokens — referenced by shared UI components */
   --vc-primary-100: #ECEDF4;
   --vc-primary-500: var(--vc-coral);
@@ -108,8 +113,12 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --color-vc-accent-700: var(--vc-accent-700);
   --color-vc-bg-muted: var(--vc-bg-muted);
 
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-dm-serif-display), Georgia, "Times New Roman", serif;
+  --spacing-vc-element: var(--vc-space-element);
+  --spacing-vc-section: var(--vc-space-section);
+  --spacing-vc-section-lg: var(--vc-space-section-lg);
+
+  --font-sans: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Noise texture overlay for sections */
@@ -138,6 +147,15 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   background-size: 48px 48px;
 }
 
+/* Hide scrollbar for horizontal tab scrolling on mobile */
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Skeleton shimmer animation */
 @keyframes shimmer {
   0% { background-position: 200% 0; }
@@ -158,6 +176,11 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* font-display: Plus Jakarta Sans with SemiBold weight for heading distinction */
+.font-display {
+  font-weight: 600;
 }
 
 /* Editorial pull-quote styling */

@@ -6,15 +6,15 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 function Card({ variant = "default", className = "", children, ...props }: CardProps) {
   const variantStyles = {
-    default: "bg-white",
-    bordered: "bg-white border border-vc-border",
+    default: "bg-white ring-1 ring-vc-border-light",
+    bordered: "bg-white ring-1 ring-vc-border",
     elevated: "bg-white shadow-md",
-    tappable: "bg-white border border-vc-border-light cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]",
+    tappable: "bg-white ring-1 ring-vc-border-light cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99]",
   };
 
   return (
     <div
-      className={`rounded-xl p-6 ${variantStyles[variant]} ${className}`}
+      className={`rounded-xl p-6 sm:p-8 ${variantStyles[variant]} ${className}`}
       {...props}
     >
       {children}

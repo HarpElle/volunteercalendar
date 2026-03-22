@@ -266,11 +266,14 @@ VolunteerCal/
 │   │               └── remove/
 │   │                   └── route.ts    # Remove volunteer from organization (DELETE)
 │   ├── components/
-│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, drawer, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete, select, step-type-icon
+│   │   ├── ui/                 # Hand-built: button, input, card, badge, spinner, modal, drawer, skeleton, toast, confirm-dialog, check-in-qr, short-link-creator, share-menu, info-tooltip, pwa-install-banner, prerequisite-editor, smart-check-in-banner, address-autocomplete, select, step-type-icon, tab-bar, stat-card, data-list, empty-state
 │   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal (effective-from UI), ministry-form-modal, campus-form-modal, create-schedule-modal (step wizard), volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer, household-form-modal
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
-│   │   ├── people/             # Person card, person detail drawer, add-people-menu, invite-form, member-row, household-card (extracted from people/page.tsx)
+│   │   ├── dashboard/           # sidebar, mobile-header (extracted from dashboard layout.tsx)
+│   │   ├── people/             # Person card, person detail drawer, add-people-menu, invite-form, member-row, household-card, filter-bar (extracted from people/page.tsx)
+│   │   ├── services/           # services-list, event-list (extracted from services-events/page.tsx)
+│   │   ├── settings/           # general-settings, teams-settings, campuses-settings, billing-settings (extracted from organization/page.tsx)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
 │   │   └── worship/            # Song library table, song form modal, service plan editor, songselect-import-modal, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
 │   └── lib/

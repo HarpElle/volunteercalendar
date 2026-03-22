@@ -1,39 +1,31 @@
 "use client";
 
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import {
-  addChurchDocument,
-  getChurchDocuments,
-  updateChurchDocument,
-  removeChurchDocument,
-  updateDocument,
-} from "@/lib/firebase/firestore";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
+import { TabBar } from "@/components/ui/tab-bar";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
-import { WORKFLOW_MODES, PRICING_TIERS, TIER_LIMITS } from "@/lib/constants";
+import { TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
-import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, OnboardingStep, Campus, SubscriptionSource } from "@/lib/types";
-import { CampusFormModal, type CampusFormData } from "@/components/forms/campus-form-modal";
-import { MinistryFormModal, type MinistryFormData } from "@/components/forms/ministry-form-modal";
+import type { Ministry, OrgType, WorkflowMode, Church, Volunteer, Campus } from "@/lib/types";
 
-const TIMEZONE_OPTIONS = [
-  { value: "America/New_York", label: "Eastern (ET)" },
-  { value: "America/Chicago", label: "Central (CT)" },
-  { value: "America/Denver", label: "Mountain (MT)" },
-  { value: "America/Los_Angeles", label: "Pacific (PT)" },
-  { value: "America/Anchorage", label: "Alaska (AKT)" },
-  { value: "Pacific/Honolulu", label: "Hawaii (HT)" },
+import { GeneralSettings } from "@/components/settings/general-settings";
+import { TeamsSettings } from "@/components/settings/teams-settings";
+import { CampusesSettings } from "@/components/settings/campuses-settings";
+import { BillingSettings } from "@/components/settings/billing-settings";
+
+type SettingsTab = "general" | "teams" | "campuses" | "billing";
+
+const SETTINGS_TABS: Array<{ key: SettingsTab; label: string }> = [
+  { key: "general", label: "General" },
+  { key: "teams", label: "Teams" },
+  { key: "campuses", label: "Campuses" },
+  { key: "billing", label: "Billing" },
 ];
-
 
 export default function OrganizationPage() {
   return (
@@ -48,51 +40,29 @@ function OrganizationContent() {
   const searchParams = useSearchParams();
   const churchId = activeMembership?.church_id || profile?.church_id;
 
-  // Church data
+  // ── Shared state ──────────────────────────────────────────────────────────
   const [church, setChurch] = useState<Church | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
   // General settings state
   const [orgName, setOrgName] = useState("");
   const [orgType, setOrgType] = useState<OrgType>("church");
   const [orgTimezone, setOrgTimezone] = useState("America/New_York");
   const [orgWorkflowMode, setOrgWorkflowMode] = useState<WorkflowMode>("centralized");
-  const [orgSaving, setOrgSaving] = useState(false);
-  const [orgSuccess, setOrgSuccess] = useState("");
-  const [orgError, setOrgError] = useState("");
-
-  // Track whether general settings have been modified
-  const orgDirty = church
-    ? orgName !== (church.name || "") ||
-      orgType !== (church.org_type || "church") ||
-      orgTimezone !== (church.timezone || "America/New_York")
-    : false;
 
   // Ministries state
   const [ministries, setMinistries] = useState<Ministry[]>([]);
-  const [showMinistryForm, setShowMinistryForm] = useState(false);
-  const [editingMinistryId, setEditingMinistryId] = useState<string | null>(null);
-  const [ministrySaving, setMinistrySaving] = useState(false);
-  const [deletingMinistry, setDeletingMinistry] = useState<string | null>(null);
 
   // Campuses state
   const [campuses, setCampuses] = useState<Campus[]>([]);
-  const [showCampusForm, setShowCampusForm] = useState(false);
-  const [editingCampusId, setEditingCampusId] = useState<string | null>(null);
-  const [campusSaving, setCampusSaving] = useState(false);
 
+  // Shared mutation error (used by several tabs)
   const [mutationError, setMutationError] = useState("");
 
   // Billing state
   const [volunteerCount, setVolunteerCount] = useState(0);
   const [activeEventCount, setActiveEventCount] = useState(0);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
-
-  // Platform admin state
-  const [overrideTier, setOverrideTier] = useState<string>("free");
-  const [overrideSaving, setOverrideSaving] = useState(false);
-  const [overrideSuccess, setOverrideSuccess] = useState("");
 
   // Check-in settings state
   const [selfCheckInEnabled, setSelfCheckInEnabled] = useState(true);
@@ -100,21 +70,16 @@ function OrganizationContent() {
   const [windowAfter, setWindowAfter] = useState(30);
   const [proximityEnabled, setProximityEnabled] = useState(false);
   const [proximityRadius, setProximityRadius] = useState(200);
-  const [checkInSaving, setCheckInSaving] = useState(false);
-  const [checkInSuccess, setCheckInSuccess] = useState("");
 
   // SongSelect integration state
   const [songSelectConnected, setSongSelectConnected] = useState(false);
   const [songSelectEmail, setSongSelectEmail] = useState<string | null>(null);
   const [songSelectAutoSync, setSongSelectAutoSync] = useState(false);
-  const [songSelectDisconnecting, setSongSelectDisconnecting] = useState(false);
-  const [songSelectSyncSaving, setSongSelectSyncSaving] = useState(false);
-  const [songSelectSuccess, setSongSelectSuccess] = useState("");
 
   const billingSuccess = searchParams.get("success") === "true";
   const billingCanceled = searchParams.get("canceled") === "true";
 
-  // Load all data
+  // ── Load all data ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!churchId) {
       setLoading(false);
@@ -156,7 +121,9 @@ function OrganizationContent() {
         setCampuses(campusDocs as unknown as Campus[]);
         setVolunteerCount((volDocs as unknown as Volunteer[]).length);
         const events = eventDocs as unknown as { id: string; status?: string }[];
-        setActiveEventCount(events.filter((e) => !e.status || e.status === "active" || e.status === "draft").length);
+        setActiveEventCount(
+          events.filter((e) => !e.status || e.status === "active" || e.status === "draft").length
+        );
       } catch {
         // silent
       } finally {
@@ -166,340 +133,43 @@ function OrganizationContent() {
     load();
   }, [churchId]);
 
+  // ── Derived values ────────────────────────────────────────────────────────
   const terms = getOrgTerms(orgType);
   const currentTier = church?.subscription_tier || "free";
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;
-  const workflowLabel = WORKFLOW_MODES.find((m) => m.value === orgWorkflowMode)?.label || orgWorkflowMode;
-  const volNearLimit = limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
-  const minNearLimit = limits.ministries !== Infinity && ministries.length >= limits.ministries * 0.8;
-  const eventNearLimit = limits.active_events !== Infinity && activeEventCount >= limits.active_events * 0.8;
-  const subscriptionSource = church?.subscription_source || "stripe";
+  const ministryLimitReached =
+    limits.ministries !== Infinity && ministries.length >= limits.ministries;
   const isPlatformSuperadmin = (() => {
-    const uids = (process.env.NEXT_PUBLIC_PLATFORM_ADMIN_UIDS || "").split(",").map((s) => s.trim());
+    const uids = (process.env.NEXT_PUBLIC_PLATFORM_ADMIN_UIDS || "")
+      .split(",")
+      .map((s) => s.trim());
     return user ? uids.includes(user.uid) : false;
   })();
 
-  // --- General settings handler ---
+  // Filter visible tabs based on role
+  const visibleTabs = SETTINGS_TABS.filter((tab) => {
+    if (tab.key === "campuses") return isAdmin(activeMembership);
+    if (tab.key === "billing") return isOwner(activeMembership) || isPlatformSuperadmin;
+    return true;
+  });
 
-  async function handleOrgSave(e: FormEvent) {
-    e.preventDefault();
-    if (!churchId) return;
-    setOrgSaving(true);
-    setOrgError("");
-    setOrgSuccess("");
-    try {
-      const slug = orgName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
-      await updateDocument("churches", churchId, {
-        name: orgName,
-        slug,
-        org_type: orgType,
-        timezone: orgTimezone,
-      });
-      // Update local church state so dirty flag resets
-      if (church) {
-        setChurch({ ...church, name: orgName, org_type: orgType, timezone: orgTimezone });
-      }
-      setOrgSuccess("Organization settings updated.");
-      setTimeout(() => setOrgSuccess(""), 3000);
-    } catch (err) {
-      setOrgError((err as Error).message || "Failed to update organization.");
-    } finally {
-      setOrgSaving(false);
-    }
-  }
-
-  // --- Check-in settings handler ---
-
-  async function handleCheckInSettingsSave() {
-    if (!churchId || !church) return;
-    setCheckInSaving(true);
-    try {
-      const updatedSettings = {
-        ...church.settings,
-        self_check_in_enabled: selfCheckInEnabled,
-        check_in_window_before: windowBefore,
-        check_in_window_after: windowAfter,
-        proximity_check_in_enabled: proximityEnabled,
-        proximity_radius_meters: proximityRadius,
-      };
-      await updateDocument("churches", churchId, { settings: updatedSettings });
-      setChurch({ ...church, settings: updatedSettings });
-      setCheckInSuccess("Check-in settings saved.");
-      setTimeout(() => setCheckInSuccess(""), 3000);
-    } catch {
-      // silent
-    } finally {
-      setCheckInSaving(false);
-    }
-  }
-
-  // --- SongSelect handlers ---
-
-  async function handleSongSelectDisconnect() {
-    if (!churchId || !user) return;
-    setSongSelectDisconnecting(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch("/api/songselect/connect", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ church_id: churchId }),
-      });
-      if (!res.ok) throw new Error("Failed to disconnect");
-      setSongSelectConnected(false);
-      setSongSelectEmail(null);
-      setSongSelectAutoSync(false);
-    } catch {
-      // silent
-    } finally {
-      setSongSelectDisconnecting(false);
-    }
-  }
-
-  async function handleSongSelectAutoSyncToggle() {
-    if (!churchId) return;
-    setSongSelectSyncSaving(true);
-    const newValue = !songSelectAutoSync;
-    try {
-      await updateDocument("churches", churchId, {
-        "songselect_credentials.auto_sync_enabled": newValue,
-      });
-      setSongSelectAutoSync(newValue);
-      setSongSelectSuccess(newValue ? "Weekly sync enabled." : "Auto-sync disabled.");
-      setTimeout(() => setSongSelectSuccess(""), 3000);
-    } catch {
-      // silent
-    } finally {
-      setSongSelectSyncSaving(false);
-    }
-  }
-
-  // --- Ministry handlers ---
-
-  function closeMinistryForm() {
-    setEditingMinistryId(null);
-    setShowMinistryForm(false);
-  }
-
-  function startEditMinistry(m: Ministry) {
-    setEditingMinistryId(m.id);
-    setShowMinistryForm(true);
-  }
-
-  async function handleMinistrySubmit(formData: MinistryFormData) {
-    if (!churchId || !user) return;
-    setMinistrySaving(true);
-    try {
-      const data = {
-        name: formData.name,
-        color: formData.color,
-        description: formData.description,
-        requires_background_check: formData.requiresBgCheck,
-        prerequisites: formData.prereqs.filter((p) => p.label.trim()),
-        church_id: churchId,
-        lead_user_id: user.uid,
-        lead_email: user.email || "",
-        ...(editingMinistryId ? {} : { created_at: new Date().toISOString() }),
-      };
-      if (editingMinistryId) {
-        await updateChurchDocument(churchId, "ministries", editingMinistryId, data);
-        setMinistries((prev) =>
-          prev.map((m) => (m.id === editingMinistryId ? { ...m, ...data } : m))
-        );
-      } else {
-        const ref = await addChurchDocument(churchId, "ministries", data);
-        setMinistries((prev) => [...prev, { id: ref.id, ...data } as Ministry]);
-      }
-      closeMinistryForm();
-      setMutationError("");
-    } catch {
-      setMutationError("Failed to save ministry. Please try again.");
-    } finally {
-      setMinistrySaving(false);
-    }
-  }
-
-  async function handleDeleteMinistry(id: string) {
-    if (!churchId) return;
-    setDeletingMinistry(id);
-    try {
-      await removeChurchDocument(churchId, "ministries", id);
-      setMinistries((prev) => prev.filter((m) => m.id !== id));
-      setMutationError("");
-    } catch {
-      setMutationError("Failed to delete ministry. Please try again.");
-    } finally {
-      setDeletingMinistry(null);
-    }
-  }
-
-  // --- Campus handlers ---
-
-  function closeCampusForm() {
-    setEditingCampusId(null);
-    setShowCampusForm(false);
-  }
-
-  function startEditCampus(c: Campus) {
-    setEditingCampusId(c.id);
-    setShowCampusForm(true);
-  }
-
-  async function handleCampusSubmit(formData: CampusFormData) {
-    if (!churchId) return;
-    setCampusSaving(true);
-    try {
-      const data = {
-        name: formData.name,
-        address: formData.address || null,
-        location: formData.location,
-        timezone: null,
-        is_primary: formData.isPrimary,
-        church_id: churchId,
-        ...(editingCampusId ? {} : { created_at: new Date().toISOString() }),
-      };
-      // If setting as primary, unset other primaries
-      if (formData.isPrimary) {
-        for (const existing of campuses) {
-          if (existing.is_primary && existing.id !== editingCampusId) {
-            await updateChurchDocument(churchId, "campuses", existing.id, { is_primary: false });
-          }
-        }
-      }
-      if (editingCampusId) {
-        await updateChurchDocument(churchId, "campuses", editingCampusId, data);
-        setCampuses((prev) => prev.map((c) => {
-          if (c.id === editingCampusId) return { ...c, ...data };
-          if (formData.isPrimary && c.is_primary) return { ...c, is_primary: false };
-          return c;
-        }));
-      } else {
-        const ref = await addChurchDocument(churchId, "campuses", data);
-        setCampuses((prev) => {
-          const updated = formData.isPrimary
-            ? prev.map((c) => c.is_primary ? { ...c, is_primary: false } : c)
-            : prev;
-          return [...updated, { id: ref.id, ...data } as Campus];
-        });
-      }
-      closeCampusForm();
-    } catch {
-      setMutationError("Failed to save campus.");
-    } finally {
-      setCampusSaving(false);
-    }
-  }
-
-  async function handleDeleteCampus(id: string) {
-    if (!churchId) return;
-    if (!window.confirm("Delete this campus? This cannot be undone.")) return;
-    try {
-      await removeChurchDocument(churchId, "campuses", id);
-      setCampuses((prev) => prev.filter((c) => c.id !== id));
-      closeCampusForm();
-    } catch (err) {
-      console.error("Delete campus failed:", err);
-      setMutationError("Failed to delete campus.");
-    }
-  }
-
-  // --- Billing handlers ---
-
-  async function handleCheckout(tier: string) {
-    setCheckoutLoading(tier);
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ church_id: churchId, tier }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch {
-      setMutationError("Failed to start checkout. Please try again.");
-    } finally {
-      setCheckoutLoading(null);
-    }
-  }
-
-  async function handlePortal() {
-    setPortalLoading(true);
-    try {
-      const res = await fetch("/api/billing/portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ church_id: churchId }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch {
-      setMutationError("Failed to open billing portal. Please try again.");
-    } finally {
-      setPortalLoading(false);
-    }
-  }
-
-  // --- Platform admin tier override ---
-
-  async function handleTierOverride(removeOverride = false) {
-    if (!churchId) return;
-    setOverrideSaving(true);
-    setOverrideSuccess("");
-    setMutationError("");
-    try {
-      const idToken = await getAuth().currentUser?.getIdToken();
-      const res = await fetch("/api/admin/tier-override", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(
-          removeOverride
-            ? { church_id: churchId, remove_override: true }
-            : { church_id: churchId, tier: overrideTier },
-        ),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update tier");
-      }
-      const data = await res.json();
-      // Refresh church data in local state
-      setChurch((prev) =>
-        prev
-          ? { ...prev, subscription_tier: data.tier, subscription_source: data.source }
-          : prev,
-      );
-      setOverrideSuccess(
-        removeOverride ? "Override removed — reverted to Free." : `Tier set to ${data.tier}.`,
-      );
-    } catch (err) {
-      setMutationError((err as Error).message || "Failed to override tier.");
-    } finally {
-      setOverrideSaving(false);
-    }
-  }
-
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
-    return <div className="py-16 flex justify-center"><Spinner /></div>;
+    return (
+      <div className="py-16 flex justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
-  const ministryLimitReached = limits.ministries !== Infinity && ministries.length >= limits.ministries;
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8">
         <h1 className="font-display text-3xl text-vc-indigo">Organization</h1>
         <p className="mt-1 text-vc-text-secondary">
-          Manage your {orgType === "church" ? "church" : "organization"} settings, {terms.pluralLower}, and billing.
+          Manage your {orgType === "church" ? "church" : "organization"} settings,{" "}
+          {terms.pluralLower}, and billing.
         </p>
       </div>
 
@@ -509,1064 +179,92 @@ function OrganizationContent() {
         </div>
       )}
 
-      {/* Billing banners */}
-      {billingSuccess && (
-        <div className="mb-6 rounded-lg bg-vc-sage/10 border border-vc-sage/30 px-4 py-3 text-sm text-vc-sage font-medium">
-          Subscription activated! Your plan has been updated.
-        </div>
-      )}
-      {billingCanceled && (
-        <div className="mb-6 rounded-lg bg-vc-sand/20 border border-vc-sand/30 px-4 py-3 text-sm text-vc-text-secondary">
-          Checkout was canceled. You can try again anytime.
-        </div>
-      )}
+      <TabBar
+        tabs={visibleTabs}
+        active={activeTab}
+        onChange={setActiveTab}
+        variant="underline"
+        className="mb-8"
+      />
 
-      {/* ── Ministries / Teams ── */}
-      <section className="mb-8">
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-vc-indigo">{terms.plural}</h2>
-          {ministryLimitReached ? (
-            <Button variant="outline" size="sm" onClick={() => {
-              const el = document.getElementById("billing-section");
-              el?.scrollIntoView({ behavior: "smooth" });
-            }}>
-              Upgrade to Add More {terms.plural}
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => setShowMinistryForm(true)}>
-              Add {terms.singular}
-            </Button>
-          )}
-        </div>
-
-        <MinistryFormModal
-          open={showMinistryForm}
-          onClose={closeMinistryForm}
-          onSubmit={handleMinistrySubmit}
-          onDelete={editingMinistryId ? () => handleDeleteMinistry(editingMinistryId) : undefined}
-          saving={ministrySaving}
-          deleting={deletingMinistry === editingMinistryId}
-          isEditing={!!editingMinistryId}
-          terms={terms}
-          initialValues={(() => {
-            const m = editingMinistryId ? ministries.find((x) => x.id === editingMinistryId) : null;
-            return m ? { name: m.name, color: m.color, description: m.description, requiresBgCheck: m.requires_background_check || false, prereqs: m.prerequisites || [] } : undefined;
-          })()}
+      {activeTab === "general" && church && (
+        <GeneralSettings
+          churchId={churchId!}
+          church={church}
+          setChurch={setChurch}
+          orgName={orgName}
+          setOrgName={setOrgName}
+          orgType={orgType}
+          setOrgType={setOrgType}
+          orgTimezone={orgTimezone}
+          setOrgTimezone={setOrgTimezone}
+          orgWorkflowMode={orgWorkflowMode}
+          selfCheckInEnabled={selfCheckInEnabled}
+          setSelfCheckInEnabled={setSelfCheckInEnabled}
+          windowBefore={windowBefore}
+          setWindowBefore={setWindowBefore}
+          windowAfter={windowAfter}
+          setWindowAfter={setWindowAfter}
+          proximityEnabled={proximityEnabled}
+          setProximityEnabled={setProximityEnabled}
+          proximityRadius={proximityRadius}
+          setProximityRadius={setProximityRadius}
+          campuses={campuses}
+          songSelectConnected={songSelectConnected}
+          setSongSelectConnected={setSongSelectConnected}
+          songSelectEmail={songSelectEmail}
+          setSongSelectEmail={setSongSelectEmail}
+          songSelectAutoSync={songSelectAutoSync}
+          setSongSelectAutoSync={setSongSelectAutoSync}
+          user={user}
+          activeMembership={activeMembership}
         />
+      )}
 
-        {/* Ministry list */}
-        {ministries.length === 0 && !showMinistryForm ? (
-          <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
-            <p className="text-vc-text-secondary">No {terms.pluralLower} yet.</p>
-            <p className="mt-1 text-sm text-vc-text-muted">
-              Add your first {terms.singularLower} to start organizing volunteers.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {ministries.map((m) => (
-              <div
-                key={m.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => startEditMinistry(m)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEditMinistry(m); } }}
-                className="relative rounded-xl border border-vc-border-light bg-white p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
-                    style={{ backgroundColor: m.color }}
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-vc-indigo">{m.name}</h3>
-                    {m.description && (
-                      <p className="mt-1 text-sm text-vc-text-muted">{m.description}</p>
-                    )}
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {m.requires_background_check && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-vc-sand/20 px-2 py-0.5 text-[10px] font-medium text-vc-text-secondary">
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                          </svg>
-                          Background check required
-                        </span>
-                      )}
-                      {m.prerequisites && m.prerequisites.length > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-vc-indigo/10 px-2 py-0.5 text-[10px] font-medium text-vc-indigo/70">
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
-                          </svg>
-                          {m.prerequisites.length} prerequisite{m.prerequisites.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {/* Chevron affordance */}
-                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                  </svg>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ── Short Links ── */}
-      {isAdmin(activeMembership) && churchId && (
-        <ShortLinksSection
-          churchId={churchId}
+      {activeTab === "teams" && (
+        <TeamsSettings
+          churchId={churchId!}
+          ministries={ministries}
+          setMinistries={setMinistries}
+          ministryLimitReached={ministryLimitReached}
+          terms={terms}
           currentTier={currentTier}
           shortLinksLimit={limits.short_links}
+          mutationError={mutationError}
+          setMutationError={setMutationError}
+          user={user}
+          activeMembership={activeMembership}
         />
       )}
 
-      {/* ── Campuses / Sites ── */}
-      {isAdmin(activeMembership) && (
-        <section className="mb-8">
-          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-vc-indigo">Campuses</h2>
-              <p className="text-sm text-vc-text-muted">Manage multiple sites or locations within your organization.</p>
-            </div>
-            <Button size="sm" onClick={() => setShowCampusForm(true)}>
-              Add Campus
-            </Button>
-          </div>
-
-          <CampusFormModal
-            open={showCampusForm}
-            onClose={closeCampusForm}
-            onSubmit={handleCampusSubmit}
-            onDelete={editingCampusId ? () => handleDeleteCampus(editingCampusId) : undefined}
-            saving={campusSaving}
-            isEditing={!!editingCampusId}
-            initialValues={(() => {
-              const c = editingCampusId ? campuses.find((x) => x.id === editingCampusId) : null;
-              return c ? { name: c.name, address: c.address || "", location: c.location || null, isPrimary: c.is_primary } : undefined;
-            })()}
-          />
-
-          {campuses.length === 0 && !showCampusForm ? (
-            <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
-              <p className="text-vc-text-secondary">No campuses configured.</p>
-              <p className="mt-1 text-sm text-vc-text-muted">
-                Single-site organizations don&apos;t need campuses. Add one if you have multiple locations.
-              </p>
-            </div>
-          ) : campuses.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {campuses.map((c) => (
-                <div
-                  key={c.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => startEditCampus(c)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEditCampus(c); } }}
-                  className="relative rounded-xl border border-vc-border-light bg-white p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-vc-indigo/10 text-sm font-semibold text-vc-indigo">
-                      {c.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-vc-indigo">{c.name}</h3>
-                      {c.address && (
-                        <p className="mt-0.5 text-sm text-vc-text-muted">{c.address}</p>
-                      )}
-                      {c.is_primary && (
-                        <span className="mt-1.5 inline-flex items-center rounded-full bg-vc-coral/10 px-2 py-0.5 text-[10px] font-medium text-vc-coral">
-                          Primary
-                        </span>
-                      )}
-                    </div>
-                    {/* Chevron affordance */}
-                    <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                    </svg>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
+      {activeTab === "campuses" && isAdmin(activeMembership) && (
+        <CampusesSettings
+          churchId={churchId!}
+          campuses={campuses}
+          setCampuses={setCampuses}
+          mutationError={mutationError}
+          setMutationError={setMutationError}
+        />
       )}
 
-      {/* ── Check-In Settings ── */}
-      {isAdmin(activeMembership) && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Check-In Settings</h2>
-          <div className="rounded-xl border border-vc-border-light bg-white p-6">
-            <div className="space-y-5">
-              {/* Self-check-in toggle */}
-              <label className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-vc-indigo">Allow self-check-in</p>
-                  <p className="text-xs text-vc-text-muted">
-                    Volunteers can check in from the app without scanning a QR code
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={selfCheckInEnabled}
-                  onClick={() => setSelfCheckInEnabled(!selfCheckInEnabled)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                    selfCheckInEnabled ? "bg-vc-sage" : "bg-gray-200"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                      selfCheckInEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </label>
-
-              {/* Window settings (only visible when enabled) */}
-              {selfCheckInEnabled && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                      Minutes before service
-                    </label>
-                    <Input
-                      type="number"
-                      min={5}
-                      max={180}
-                      value={windowBefore}
-                      onChange={(e) => setWindowBefore(parseInt(e.target.value, 10) || 60)}
-                      className="max-w-[120px]"
-                    />
-                    <p className="mt-1 text-xs text-vc-text-muted">
-                      Check-in opens this many minutes before the service starts
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                      Minutes after start
-                    </label>
-                    <Input
-                      type="number"
-                      min={5}
-                      max={120}
-                      value={windowAfter}
-                      onChange={(e) => setWindowAfter(parseInt(e.target.value, 10) || 30)}
-                      className="max-w-[120px]"
-                    />
-                    <p className="mt-1 text-xs text-vc-text-muted">
-                      Check-in window closes this many minutes after service starts
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Proximity settings — only show if at least one campus has coordinates */}
-              {selfCheckInEnabled && campuses.some((c) => c.location) && (
-                <>
-                  <div className="border-t border-vc-border-light pt-5">
-                    <label className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-vc-indigo">Enable proximity check-in</p>
-                        <p className="text-xs text-vc-text-muted">
-                          Volunteers near a campus will be prompted to check in automatically
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={proximityEnabled}
-                        onClick={() => setProximityEnabled(!proximityEnabled)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                          proximityEnabled ? "bg-vc-sage" : "bg-gray-200"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                            proximityEnabled ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-
-                  {proximityEnabled && (
-                    <div className="max-w-xs">
-                      <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                        Proximity radius (meters)
-                      </label>
-                      <Input
-                        type="number"
-                        min={50}
-                        max={2000}
-                        value={proximityRadius}
-                        onChange={(e) => setProximityRadius(parseInt(e.target.value, 10) || 200)}
-                      />
-                      <p className="mt-1 text-xs text-vc-text-muted">
-                        How close a volunteer must be to a campus to trigger proximity check-in
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Save */}
-              <div className="flex items-center gap-3">
-                <Button
-                  size="sm"
-                  onClick={handleCheckInSettingsSave}
-                  loading={checkInSaving}
-                >
-                  Save Check-In Settings
-                </Button>
-                {checkInSuccess && (
-                  <span className="text-sm text-vc-sage">{checkInSuccess}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Worship Integrations ── */}
-      {isAdmin(activeMembership) && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Worship Integrations</h2>
-          <div className="rounded-xl border border-vc-border-light bg-white p-6">
-            {/* SongSelect card */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${songSelectConnected ? "bg-vc-sage/10" : "bg-vc-bg-warm"}`}>
-                  <svg className={`h-5 w-5 ${songSelectConnected ? "text-vc-sage" : "text-vc-text-muted"}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-vc-indigo">CCLI SongSelect</h3>
-                    <Badge variant={songSelectConnected ? "success" : "default"}>
-                      {songSelectConnected ? "Connected" : "Not Connected"}
-                    </Badge>
-                  </div>
-                  {songSelectConnected && songSelectEmail && (
-                    <p className="mt-0.5 text-xs text-vc-text-muted">
-                      Signed in as {songSelectEmail}
-                    </p>
-                  )}
-                  {!songSelectConnected && (
-                    <p className="mt-0.5 text-xs text-vc-text-muted">
-                      Connect your CCLI account to import songs from the Song Library page.
-                    </p>
-                  )}
-                </div>
-              </div>
-              {songSelectConnected && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="shrink-0 text-vc-danger hover:text-vc-danger"
-                  loading={songSelectDisconnecting}
-                  onClick={handleSongSelectDisconnect}
-                >
-                  Disconnect
-                </Button>
-              )}
-            </div>
-
-            {/* Auto-sync toggle (only when connected) */}
-            {songSelectConnected && (
-              <div className="mt-5 border-t border-vc-border-light pt-5">
-                <label className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-vc-indigo">Weekly auto-sync</p>
-                    <p className="text-xs text-vc-text-muted">
-                      Automatically sync your SongSelect catalog every week
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={songSelectAutoSync}
-                    disabled={songSelectSyncSaving}
-                    onClick={handleSongSelectAutoSyncToggle}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50 ${
-                      songSelectAutoSync ? "bg-vc-sage" : "bg-gray-200"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                        songSelectAutoSync ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </label>
-                {songSelectSuccess && (
-                  <p className="mt-2 text-sm text-vc-sage">{songSelectSuccess}</p>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Platform Admin Override ── */}
-      {isPlatformSuperadmin && churchId && (
-        <section className="mb-8">
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-6">
-            <div className="mb-3 flex items-center gap-2">
-              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-              </svg>
-              <h2 className="text-lg font-semibold text-amber-800">Platform Admin</h2>
-            </div>
-            <p className="mb-4 text-sm text-amber-700">
-              Changes here bypass billing and set the subscription tier directly.
-            </p>
-
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-sm font-medium text-amber-800">Current:</span>
-              <Badge variant={subscriptionSource === "manual" ? "warning" : "default"}>
-                {currentTier.charAt(0).toUpperCase() + currentTier.slice(1)}
-              </Badge>
-              <span className="text-xs text-amber-600">
-                ({subscriptionSource === "manual" ? "Manual Override" : "Stripe"})
-              </span>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-end gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-amber-800">Set Tier</label>
-                <select
-                  value={overrideTier}
-                  onChange={(e) => setOverrideTier(e.target.value)}
-                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-vc-indigo focus:outline-none focus:ring-2 focus:ring-amber-400"
-                >
-                  <option value="free">Free</option>
-                  <option value="starter">Starter</option>
-                  <option value="growth">Growth</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-              <Button
-                size="sm"
-                variant="primary"
-                loading={overrideSaving}
-                onClick={() => handleTierOverride(false)}
-              >
-                Apply Override
-              </Button>
-              {subscriptionSource === "manual" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  loading={overrideSaving}
-                  onClick={() => handleTierOverride(true)}
-                >
-                  Remove Override
-                </Button>
-              )}
-            </div>
-
-            {overrideSuccess && (
-              <p className="mt-3 text-sm font-medium text-vc-sage">{overrideSuccess}</p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Billing & Plan ── */}
-      {isOwner(activeMembership) && (
-        <section className="mb-8" id="billing-section">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Billing & Plan</h2>
-
-          {/* Current plan card */}
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-semibold text-vc-indigo">Current Plan</h3>
-                  <Badge variant={currentTier === "free" ? "default" : "success"}>
-                    {currentTier.charAt(0).toUpperCase() + currentTier.slice(1)}
-                  </Badge>
-                </div>
-                <p className="text-sm text-vc-text-secondary">
-                  {PRICING_TIERS.find((t) => t.tier === currentTier)?.price || "$0"}{" "}
-                  {currentTier !== "free" && "· Billed monthly"}
-                </p>
-              </div>
-              {currentTier !== "free" && (
-                <Button variant="outline" size="sm" onClick={handlePortal} loading={portalLoading}>
-                  Manage Subscription
-                </Button>
-              )}
-            </div>
-
-            {/* Usage meters */}
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-lg bg-vc-bg-warm p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-vc-text-secondary">Volunteers</span>
-                  <span className="text-sm font-semibold text-vc-indigo">
-                    {volunteerCount} / {limits.volunteers === Infinity ? "∞" : limits.volunteers}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${volNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
-                    style={{
-                      width: limits.volunteers === Infinity
-                        ? "10%"
-                        : `${Math.min((volunteerCount / limits.volunteers) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-                {volNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching volunteer limit</p>}
-              </div>
-              <div className="rounded-lg bg-vc-bg-warm p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-vc-text-secondary">{terms.plural}</span>
-                  <span className="text-sm font-semibold text-vc-indigo">
-                    {ministries.length} / {limits.ministries === Infinity ? "∞" : limits.ministries}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${minNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
-                    style={{
-                      width: limits.ministries === Infinity
-                        ? "10%"
-                        : `${Math.min((ministries.length / limits.ministries) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-                {minNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching {terms.singularLower} limit</p>}
-              </div>
-              <div className="rounded-lg bg-vc-bg-warm p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-vc-text-secondary">Active Events</span>
-                  <span className="text-sm font-semibold text-vc-indigo">
-                    {activeEventCount} / {limits.active_events === Infinity ? "∞" : limits.active_events}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-vc-border overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${eventNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
-                    style={{
-                      width: limits.active_events === Infinity
-                        ? "10%"
-                        : `${Math.min((activeEventCount / limits.active_events) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-                {eventNearLimit && <p className="mt-1 text-xs text-vc-coral">Approaching event limit</p>}
-              </div>
-            </div>
-          </div>
-
-          {/* Plan comparison */}
-          <h3 className="mb-4 font-semibold text-vc-indigo">
-            {currentTier === "free" ? "Upgrade Your Plan" : "All Plans"}
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {PRICING_TIERS.map((plan) => {
-              const isCurrent = plan.tier === currentTier;
-              const isDowngrade =
-                PRICING_TIERS.findIndex((t) => t.tier === currentTier) >
-                PRICING_TIERS.findIndex((t) => t.tier === plan.tier);
-              const canCheckout = !isCurrent && !isDowngrade && plan.tier !== "free" && plan.tier !== "enterprise";
-
-              return (
-                <div
-                  key={plan.tier}
-                  className={`flex flex-col rounded-xl border p-5 transition-shadow ${
-                    plan.highlighted && !isCurrent
-                      ? "border-vc-coral/40 bg-vc-coral/5 shadow-sm"
-                      : isCurrent
-                        ? "border-vc-sage/40 bg-vc-sage/5"
-                        : "border-vc-border-light bg-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="font-semibold text-vc-indigo">{plan.name}</h4>
-                    {isCurrent && <Badge variant="success">Current</Badge>}
-                    {plan.highlighted && !isCurrent && <Badge variant="warning">Popular</Badge>}
-                  </div>
-                  <p className="text-2xl font-bold text-vc-indigo mb-1">{plan.price}</p>
-                  <p className="text-xs text-vc-text-muted mb-4">
-                    {plan.volunteers} volunteers · {plan.ministries}{" "}
-                    {plan.ministries === "1" ? "team" : "teams"}
-                  </p>
-                  <ul className="space-y-1.5 mb-5 flex-1">
-                    {plan.features.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-vc-text-secondary">
-                        <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {canCheckout ? (
-                    <Button
-                      size="sm"
-                      variant={plan.highlighted ? "primary" : "outline"}
-                      className="w-full"
-                      loading={checkoutLoading === plan.tier}
-                      onClick={() => handleCheckout(plan.tier)}
-                    >
-                      {currentTier === "free" ? "Start Free Trial" : "Upgrade"}
-                    </Button>
-                  ) : plan.tier === "enterprise" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => (window.location.href = "mailto:info@volunteercal.com")}
-                    >
-                      Contact Us
-                    </Button>
-                  ) : isCurrent ? (
-                    <Button size="sm" variant="ghost" className="w-full" disabled>
-                      Current Plan
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="mt-6 text-center text-xs text-vc-text-muted">
-            All paid plans include a 14-day free trial.
-            Questions?{" "}
-            <a href="mailto:info@volunteercal.com" className="text-vc-coral hover:underline">
-              Contact us
-            </a>
-          </p>
-        </section>
-      )}
-
-      {/* ── General Settings ── */}
-      <section className="mb-8">
-        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
-        <div className="rounded-xl border border-vc-border-light bg-white p-6">
-          <form onSubmit={handleOrgSave} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-vc-text">Organization Type</label>
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  { value: "church" as const, label: "Church" },
-                  { value: "nonprofit" as const, label: "Nonprofit" },
-                  { value: "other" as const, label: "Other" },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setOrgType(opt.value)}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all ${
-                      orgType === opt.value
-                        ? "border-vc-coral bg-vc-coral/5 text-vc-indigo ring-1 ring-vc-coral"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20 hover:bg-vc-bg-warm"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Input
-              label={orgType === "church" ? "Church Name" : "Organization Name"}
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              required
-            />
-
-            <Select
-              label="Timezone"
-              options={TIMEZONE_OPTIONS}
-              value={orgTimezone}
-              onChange={(e) => setOrgTimezone(e.target.value)}
-            />
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-vc-text">Scheduling Workflow</label>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex rounded-full bg-vc-indigo/10 px-3 py-1 text-sm font-medium text-vc-indigo">
-                  {workflowLabel}
-                </span>
-                <span className="text-xs text-vc-text-muted">
-                  Contact support to change workflow mode.
-                </span>
-              </div>
-            </div>
-
-            {orgError && <p className="text-sm text-vc-danger">{orgError}</p>}
-            {orgSuccess && <p className="text-sm text-vc-sage">{orgSuccess}</p>}
-            <Button type="submit" loading={orgSaving} disabled={!orgDirty} size="sm">
-              Save Changes
-            </Button>
-          </form>
-        </div>
-      </section>
-
-      {/* ── Danger Zone ── */}
-      {isOwner(activeMembership) && (
-        <DeleteOrgSection churchId={churchId!} orgName={orgName} user={user} />
+      {activeTab === "billing" && church && (
+        <BillingSettings
+          churchId={churchId!}
+          church={church}
+          setChurch={setChurch}
+          currentTier={currentTier}
+          volunteerCount={volunteerCount}
+          activeEventCount={activeEventCount}
+          ministriesCount={ministries.length}
+          terms={terms}
+          isPlatformSuperadmin={isPlatformSuperadmin}
+          mutationError={mutationError}
+          setMutationError={setMutationError}
+          activeMembership={activeMembership}
+          billingSuccess={billingSuccess}
+          billingCanceled={billingCanceled}
+        />
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Short Links Management
-// ---------------------------------------------------------------------------
-
-function ShortLinksSection({
-  churchId,
-  currentTier,
-  shortLinksLimit,
-}: {
-  churchId: string;
-  currentTier: string;
-  shortLinksLimit: number;
-}) {
-  const [links, setLinks] = useState<Array<{
-    id: string;
-    slug: string;
-    target_url: string;
-    label: string;
-    created_by: string;
-    created_at: string;
-    expires_at: string;
-  }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const token = await getAuth().currentUser?.getIdToken();
-        if (!token) return;
-        const res = await fetch(`/api/short-links?church_id=${churchId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setLinks(data.links || []);
-        }
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [churchId]);
-
-  async function handleDelete(linkId: string) {
-    setDeleting(linkId);
-    try {
-      const token = await getAuth().currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch("/api/short-links", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ church_id: churchId, link_id: linkId }),
-      });
-      if (res.ok) {
-        setLinks((prev) => prev.filter((l) => l.id !== linkId));
-      }
-    } catch {
-      // silent
-    } finally {
-      setDeleting(null);
-    }
-  }
-
-  const now = new Date().toISOString();
-  const activeLinks = links.filter((l) => l.expires_at > now);
-  const expiredLinks = links.filter((l) => l.expires_at <= now);
-
-  function daysRemaining(expiresAt: string) {
-    const diff = new Date(expiresAt).getTime() - Date.now();
-    const days = Math.ceil(diff / 86400000);
-    return days;
-  }
-
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  function getLinkTypeLabel(targetUrl: string) {
-    if (targetUrl.includes("/join/")) return "Volunteer signup";
-    if (targetUrl.includes("/events/")) return "Event signup";
-    return "Link";
-  }
-
-  return (
-    <section className="mb-8">
-      <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Short Links</h2>
-      <div className="rounded-xl border border-vc-border-light bg-white p-6">
-        {/* Usage meter */}
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-vc-text">
-              {activeLinks.length} of {shortLinksLimit === 0 ? "0" : shortLinksLimit} active short links
-            </p>
-            <p className="text-xs text-vc-text-muted">
-              {shortLinksLimit === 0
-                ? "Upgrade to a paid plan to create short links"
-                : `${currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} plan`}
-            </p>
-          </div>
-          {shortLinksLimit > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-24 rounded-full bg-vc-bg-warm overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    activeLinks.length >= shortLinksLimit
-                      ? "bg-vc-danger"
-                      : activeLinks.length >= shortLinksLimit * 0.8
-                        ? "bg-vc-sand"
-                        : "bg-vc-sage"
-                  }`}
-                  style={{ width: `${Math.min(100, (activeLinks.length / shortLinksLimit) * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {loading && (
-          <div className="flex justify-center py-8">
-            <Spinner />
-          </div>
-        )}
-
-        {!loading && links.length === 0 && shortLinksLimit > 0 && (
-          <p className="text-sm text-vc-text-muted py-4 text-center">
-            No short links yet. Create one from the share options on any event or your volunteer join link.
-          </p>
-        )}
-
-        {/* Active links */}
-        {activeLinks.length > 0 && (
-          <div className="space-y-2">
-            {activeLinks.map((link) => {
-              const days = daysRemaining(link.expires_at);
-              return (
-                <div
-                  key={link.id}
-                  className="flex items-center gap-3 rounded-xl border border-vc-border-light p-3"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-vc-coral/10">
-                    <svg className="h-4 w-4 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                    </svg>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-vc-indigo truncate">
-                        /s/{link.slug}
-                      </p>
-                      <span className="shrink-0 rounded-full bg-vc-indigo/5 px-2 py-0.5 text-[10px] font-medium text-vc-text-secondary">
-                        {getLinkTypeLabel(link.target_url)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-vc-text-muted truncate">{link.label}</p>
-                  </div>
-
-                  <div className="shrink-0 text-right">
-                    <p className={`text-xs font-medium ${
-                      days <= 3 ? "text-vc-danger" : days <= 7 ? "text-vc-sand" : "text-vc-text-secondary"
-                    }`}>
-                      {days <= 0 ? "Expiring today" : `${days}d remaining`}
-                    </p>
-                    <p className="text-[10px] text-vc-text-muted">
-                      Expires {formatDate(link.expires_at)}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => handleDelete(link.id)}
-                    disabled={deleting === link.id}
-                    className="shrink-0 rounded-lg p-1.5 text-vc-text-muted hover:bg-vc-danger/5 hover:text-vc-danger transition-colors"
-                    title="Delete short link"
-                  >
-                    {deleting === link.id ? (
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-vc-border border-t-vc-danger" />
-                    ) : (
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Expired links */}
-        {expiredLinks.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-xs font-medium text-vc-text-muted hover:text-vc-text-secondary transition-colors">
-              {expiredLinks.length} expired link{expiredLinks.length !== 1 ? "s" : ""}
-            </summary>
-            <div className="mt-2 space-y-2">
-              {expiredLinks.map((link) => (
-                <div
-                  key={link.id}
-                  className="flex items-center gap-3 rounded-xl border border-vc-border-light bg-vc-bg-warm/50 p-3 opacity-60"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-vc-bg-cream">
-                    <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-vc-text-muted truncate">/s/{link.slug}</p>
-                    <p className="text-xs text-vc-text-muted truncate">{link.label}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-xs text-vc-text-muted">
-                      Expired {formatDate(link.expires_at)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(link.id)}
-                    disabled={deleting === link.id}
-                    className="shrink-0 rounded-lg p-1.5 text-vc-text-muted hover:bg-vc-danger/5 hover:text-vc-danger transition-colors"
-                    title="Delete"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Delete Organization
-// ---------------------------------------------------------------------------
-
-function DeleteOrgSection({
-  churchId,
-  orgName,
-  user,
-}: {
-  churchId: string;
-  orgName: string;
-  user: ReturnType<typeof useAuth>["user"];
-}) {
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleDelete() {
-    if (!user || confirmText !== orgName) return;
-    setDeleting(true);
-    setError("");
-
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch("/api/organization", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ church_id: churchId, confirm_name: confirmText }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Deletion failed" }));
-        setError(data.error || "Failed to delete organization.");
-        return;
-      }
-
-      // Full reload to dashboard — profile now has church_id cleared,
-      // so user will see the no-org state with options to create or leave.
-      window.location.href = "/dashboard";
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <section className="mb-8">
-      <h2 className="mb-4 text-lg font-semibold text-vc-danger">Danger Zone</h2>
-      <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
-        <h3 className="font-medium text-vc-indigo">Delete Organization</h3>
-        <p className="mt-1 text-sm text-vc-text-muted">
-          Permanently deleting an organization removes all its data including volunteers,
-          schedules, memberships, and billing. This cannot be undone.
-        </p>
-
-        {!showConfirm ? (
-          <Button
-            variant="outline"
-            className="mt-4 border-vc-danger/30 text-vc-danger hover:bg-vc-danger/5"
-            onClick={() => setShowConfirm(true)}
-          >
-            Delete this organization
-          </Button>
-        ) : (
-          <div className="mt-4 rounded-xl border border-vc-danger/20 bg-vc-danger/5 p-4">
-            <p className="text-sm font-medium text-vc-danger mb-3">
-              Type <strong>&quot;{orgName}&quot;</strong> to confirm deletion:
-            </p>
-            <Input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={orgName}
-            />
-            {error && (
-              <p className="mt-2 text-sm text-vc-danger">{error}</p>
-            )}
-            <div className="mt-3 flex gap-2">
-              <Button
-                onClick={handleDelete}
-                loading={deleting}
-                disabled={confirmText !== orgName}
-                className="bg-vc-danger hover:bg-vc-danger/90 text-white"
-              >
-                Permanently delete
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowConfirm(false);
-                  setConfirmText("");
-                  setError("");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
   );
 }

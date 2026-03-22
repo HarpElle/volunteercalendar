@@ -34,6 +34,8 @@ import { HouseholdCard } from "@/components/people/household-card";
 import { Modal } from "@/components/ui/modal";
 import { ShareMenu } from "@/components/ui/share-menu";
 import { ShortLinkCreator } from "@/components/ui/short-link-creator";
+import { TabBar } from "@/components/ui/tab-bar";
+import { FilterBar } from "@/components/people/filter-bar";
 import type {
   Volunteer,
   Ministry,
@@ -45,17 +47,6 @@ import type {
   InviteQueueItem,
   OnboardingStep,
 } from "@/lib/types";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ROLE_LABELS: Record<OrgRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  scheduler: "Scheduler",
-  volunteer: "Volunteer",
-};
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -98,7 +89,6 @@ function PeopleContent() {
   const [filterTeam, setFilterTeam] = useState<"all" | "on-team" | "no-team">("all");
   const [filterOrgRoles, setFilterOrgRoles] = useState<OrgRole[]>([]);
   const [filterEligibility, setFilterEligibility] = useState<"all" | "cleared" | "pending">("all");
-  const [showFilters, setShowFilters] = useState(false);
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Volunteer; membership: Membership | null } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -579,228 +569,42 @@ function PeopleContent() {
       )}
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
-        <button
-          onClick={() => setTab("roster")}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            tab === "roster" ? "bg-white text-vc-indigo shadow-sm" : "text-vc-text-secondary"
-          }`}
-        >
-          Roster ({volunteers.length})
-        </button>
-        {canManage && (
-          <button
-            onClick={() => setTab("invites")}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              tab === "invites" ? "bg-white text-vc-indigo shadow-sm" : "text-vc-text-secondary"
-            }`}
-          >
-            Invites ({pendingMems.length})
-          </button>
-        )}
-        {canManage && (
-          <button
-            onClick={() => setTab("families")}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              tab === "families" ? "bg-white text-vc-indigo shadow-sm" : "text-vc-text-secondary"
-            }`}
-          >
-            Families ({households.length})
-          </button>
-        )}
-      </div>
+      <TabBar
+        tabs={[
+          { key: "roster" as const, label: `Roster (${volunteers.length})` },
+          ...(canManage ? [{ key: "invites" as const, label: `Invites (${pendingMems.length})` }] : []),
+          ...(canManage ? [{ key: "families" as const, label: `Families (${households.length})` }] : []),
+        ]}
+        active={tab}
+        onChange={setTab}
+        className="mb-4"
+      />
 
       {/* === ROSTER TAB === */}
       {tab === "roster" && (
         <>
           {/* Search & Filters */}
-          <div className="mb-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="search"
-                placeholder="Search by name, email, or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-vc-border bg-white px-3 py-2.5 text-sm text-vc-text placeholder:text-vc-text-muted focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-              />
-              {(ministries.length > 0 || uniqueRoles.length > 0) && (
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                    showFilters || activeFilterCount > 0
-                      ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
-                      : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                  }`}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
-                  </svg>
-                  Filter
-                  {activeFilterCount > 0 && (
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-vc-coral text-[10px] font-bold text-white">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {showFilters && (
-              <div className="rounded-xl border border-vc-border-light bg-white p-4 space-y-4">
-                {/* Status & Team filters */}
-                <div className="flex flex-wrap gap-4">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                      Status
-                    </label>
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value as "active" | "archived" | "all")}
-                      className="rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 min-h-[44px]"
-                    >
-                      <option value="active">Active</option>
-                      <option value="archived">Archived</option>
-                      <option value="all">All</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                      Team
-                    </label>
-                    <select
-                      value={filterTeam}
-                      onChange={(e) => setFilterTeam(e.target.value as "all" | "on-team" | "no-team")}
-                      className="rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 min-h-[44px]"
-                    >
-                      <option value="all">All</option>
-                      <option value="on-team">On a Team</option>
-                      <option value="no-team">Not on Any Team</option>
-                    </select>
-                  </div>
-                </div>
-
-                {ministries.length > 0 && (
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                      {terms.plural}
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {ministries.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() =>
-                            setFilterMinistries((prev) =>
-                              prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id],
-                            )
-                          }
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                            filterMinistries.includes(m.id)
-                              ? "border-transparent text-white"
-                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                          }`}
-                          style={filterMinistries.includes(m.id) ? { backgroundColor: m.color } : undefined}
-                        >
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: filterMinistries.includes(m.id) ? "white" : m.color }}
-                          />
-                          {m.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {uniqueRoles.length > 0 && (
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                      Roles
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {uniqueRoles.map((r) => (
-                        <button
-                          key={r.role_id}
-                          onClick={() =>
-                            setFilterRoles((prev) =>
-                              prev.includes(r.role_id) ? prev.filter((x) => x !== r.role_id) : [...prev, r.role_id],
-                            )
-                          }
-                          className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                            filterRoles.includes(r.role_id)
-                              ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
-                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                          }`}
-                        >
-                          {r.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Org Role filter */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                    Org Role
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["owner", "admin", "scheduler", "volunteer"] as OrgRole[]).map((role) => (
-                      <button
-                        key={role}
-                        onClick={() =>
-                          setFilterOrgRoles((prev) =>
-                            prev.includes(role) ? prev.filter((x) => x !== role) : [...prev, role],
-                          )
-                        }
-                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                          filterOrgRoles.includes(role)
-                            ? "border-vc-indigo bg-vc-indigo/10 text-vc-indigo"
-                            : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                        }`}
-                      >
-                        {ROLE_LABELS[role]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Eligibility filter (only when org has prereqs) */}
-                {orgPrereqs.length > 0 && (
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                      Eligibility
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {([["all", "All"], ["cleared", "Cleared"], ["pending", "Pending"]] as const).map(([val, lbl]) => (
-                        <button
-                          key={val}
-                          onClick={() => setFilterEligibility(val)}
-                          className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                            filterEligibility === val
-                              ? val === "cleared" ? "border-vc-sage bg-vc-sage/10 text-vc-sage"
-                                : val === "pending" ? "border-vc-sand bg-vc-sand/10 text-vc-sand"
-                                : "border-vc-indigo bg-vc-indigo/10 text-vc-indigo"
-                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                          }`}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeFilterCount > 0 && (
-                  <button
-                    onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); }}
-                    className="text-xs font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                  >
-                    Clear all filters
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <FilterBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            filterMinistries={filterMinistries}
+            onFilterMinistriesChange={setFilterMinistries}
+            filterRoles={filterRoles}
+            onFilterRolesChange={setFilterRoles}
+            filterStatus={filterStatus}
+            onFilterStatusChange={setFilterStatus}
+            filterTeam={filterTeam}
+            onFilterTeamChange={setFilterTeam}
+            filterOrgRoles={filterOrgRoles}
+            onFilterOrgRolesChange={setFilterOrgRoles}
+            filterEligibility={filterEligibility}
+            onFilterEligibilityChange={setFilterEligibility}
+            activeFilterCount={activeFilterCount}
+            ministries={ministries}
+            uniqueRoles={uniqueRoles}
+            orgPrereqs={orgPrereqs}
+            teamLabel={terms.plural}
+          />
 
           {/* UX messaging for filter states */}
           {filterStatus === "archived" && (

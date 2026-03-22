@@ -820,6 +820,11 @@ export default function AccountPage() {
           </div>
         </div>
       )}
+
+      {/* HarpElle sub-brand attribution */}
+      <p className="mt-12 text-center text-[11px] text-vc-text-muted">
+        a HarpElle app
+      </p>
     </div>
   );
 }
