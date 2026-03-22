@@ -71,11 +71,6 @@ function OrganizationContent() {
   const [proximityEnabled, setProximityEnabled] = useState(false);
   const [proximityRadius, setProximityRadius] = useState(200);
 
-  // SongSelect integration state
-  const [songSelectConnected, setSongSelectConnected] = useState(false);
-  const [songSelectEmail, setSongSelectEmail] = useState<string | null>(null);
-  const [songSelectAutoSync, setSongSelectAutoSync] = useState(false);
-
   const billingSuccess = searchParams.get("success") === "true";
   const billingCanceled = searchParams.get("canceled") === "true";
 
@@ -109,13 +104,6 @@ function OrganizationContent() {
           setWindowAfter(s.check_in_window_after ?? 30);
           setProximityEnabled(s.proximity_check_in_enabled === true);
           setProximityRadius(s.proximity_radius_meters ?? 200);
-          // SongSelect
-          const creds = data.songselect_credentials;
-          if (creds?.email) {
-            setSongSelectConnected(true);
-            setSongSelectEmail(creds.email);
-            setSongSelectAutoSync(creds.auto_sync_enabled === true);
-          }
         }
         setMinistries(minDocs as unknown as Ministry[]);
         setCampuses(campusDocs as unknown as Campus[]);
@@ -210,12 +198,6 @@ function OrganizationContent() {
           proximityRadius={proximityRadius}
           setProximityRadius={setProximityRadius}
           campuses={campuses}
-          songSelectConnected={songSelectConnected}
-          setSongSelectConnected={setSongSelectConnected}
-          songSelectEmail={songSelectEmail}
-          setSongSelectEmail={setSongSelectEmail}
-          songSelectAutoSync={songSelectAutoSync}
-          setSongSelectAutoSync={setSongSelectAutoSync}
           user={user}
           activeMembership={activeMembership}
         />

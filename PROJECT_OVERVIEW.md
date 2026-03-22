@@ -168,8 +168,6 @@ VolunteerCal/
 │   │       ├── cron/
 │   │       │   ├── reminders/
 │   │       │   │   └── route.ts    # Vercel Cron → triggers reminders for all churches
-│   │       │   ├── songselect-sync/
-│   │       │   │   └── route.ts    # Vercel Cron → weekly SongSelect metadata sync
 │   │       │   └── propresenter-export/
 │   │       │       └── route.ts    # Vercel Cron → daily ProPresenter export auto-email
 │   │       ├── short-links/
@@ -231,12 +229,8 @@ VolunteerCal/
 │   │       │       └── export-propresenter/
 │   │       │           └── route.ts    # ProPresenter JSON export for a plan
 │   │       ├── songselect/
-│   │       │   ├── connect/
-│   │       │   │   └── route.ts    # Connect SongSelect credentials
-│   │       │   ├── search/
-│   │       │   │   └── route.ts    # Search SongSelect catalog
 │   │       │   └── import/
-│   │       │       └── route.ts    # Import song from SongSelect with duplicate detection
+│   │       │       └── route.ts    # Import parsed songs from uploaded SongSelect files
 │   │       ├── stage-sync/
 │   │       │   ├── enable/
 │   │       │   │   └── route.ts    # Enable Stage Sync session for a service plan
@@ -275,7 +269,7 @@ VolunteerCal/
 │   │   ├── services/           # services-list, event-list (extracted from services-events/page.tsx)
 │   │   ├── settings/           # general-settings, teams-settings, campuses-settings, billing-settings (extracted from organization/page.tsx)
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
-│   │   └── worship/            # Song library table, song form modal, service plan editor, songselect-import-modal, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
+│   │   └── worship/            # Song library table, song form modal, service plan editor, song-import-modal (file upload), stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
@@ -287,7 +281,7 @@ VolunteerCal/
 │       │   ├── emails/         # 31 email templates + base-layout.ts (barrel: index.ts re-exports; incl. absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
 │       │   ├── validate-ministry-assignments.ts  # Validates non-overlapping effective date ranges for service profile timeline changes
 │       │   ├── print-roster.ts # Document-style roster printout utility (new-window print)
-│       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect
+│       ├── integrations/       # ChMS adapters: types, config, planning-center, breeze, rock-rms, songselect (file parser)
 │       └── services/           # Scheduling algorithm, auto-reschedule, SMS service
 ```
 
@@ -330,7 +324,7 @@ VolunteerCal/
 | 30 | Attendance enhancement, absence alerts & scheduler notifications: AttendanceStatus type overhaul (boolean→string enum: present/no_show/excused/null with backward-compat normalizer), shared AttendanceToggle component extracted from duplicate inline toggles, four-state toggle cycle (null→present→no_show→excused→null), "Roster & Attendance" button rename, layout shift fixes (reserved stats bar + save button space), "Can't Make It" volunteer self-service absence notification (modal + API + email template + SMS for paid tiers), scheduler/admin granular notification preferences (per-type toggles, standard/urgent channel selection, ministry scope, SMS tier-gated to Starter+), shouldNotifyScheduler utility wired into absence + self-removal API routes | Complete |
 | 31 | UI/UX consistency audit: modal close button touch target fix (28px→45px), confirm dialog buttons sm→md, Card tappable variant (hover-lift + active-press), Organization page ministry/campus cards converted from hover-reveal to tappable card pattern (chevron affordance, keyboard accessible, delete moved into edit form), check-in number inputs right-sized (max-w-[120px]), People page roster Edit/Delete + Approve/Reject touch targets to 44px minimum, My Orgs page Accept/Decline/Switch/reminder toggle touch targets to 44px, schedules page hover-reveal actions made always-visible, dashboard sub-heading size standardization, zero hover-only interaction patterns remaining | Complete |
 | 32 | Expansion: scheduling enhancements + worship module — **Service profiles with timeline changes** (MinistryAssignment with effective_from/effective_until, EditScope, temporal filtering in service-helpers/scheduler, validate-ministry-assignments utility, service PATCH API, service form effective-from UI), **Scheduling workflow modes** (step-based create-schedule wizard, workflow mode picker, all 3 modes active), **Availability campaigns** (broadcast API, availability-campaign-banner, email template), **Multi-stage approval** (approve/publish/coordination APIs, approval-countdown component, cross-team-modal, approval-request + approval-reminder email templates), **Household UI** (household-form-modal, household-conflict-card, Families tab on People page, never_same_time + prefer_same_service scheduler enhancements), **Worship module** (Song/ServicePlan/SongUsageRecord/StageSyncState types, song CRUD API, service-plans CRUD + publish API with song usage tracking, Songs page, Service Plans page, Reports page, worship nav section gated by tier), **Pricing update** (Starter $19→$29, Growth $49→$69, Pro $99→$119, new tier gates: worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting) | Complete |
-| Exp. 4 | SongSelect integration — songselect adapter (src/lib/integrations/songselect.ts), connect/search/import API routes (src/app/api/songselect/), SongSelect import modal (src/components/worship/songselect-import-modal.tsx), duplicate detection by CCLI number, weekly cron sync (src/app/api/cron/songselect-sync/) | Complete |
+| Exp. 4 | SongSelect file import — songselect file parser for .usr/.txt exports (src/lib/integrations/songselect.ts), import API route (src/app/api/songselect/import/), drag-and-drop import modal (src/components/worship/songselect-import-modal.tsx), duplicate detection by CCLI number. Note: SongSelect has no public API; users download files from songselect.ccli.com and upload them. | Complete |
 | Exp. 5 | Stage Sync — conductor page (src/app/stage-sync/conductor/[churchId]/[planId]/), participant page (src/app/stage-sync/view/[churchId]/[planId]/), enable/advance/status API routes (src/app/api/stage-sync/), conductor component with keyboard shortcuts, participant viewer with real-time Firestore onSnapshot, share modal with QR code, Firestore rules for stage_sync_live and stage_sync_tokens collections | Complete |
 | Exp. 6 | Song usage reports & ProPresenter export — reports page with date range/filters/CSV export (src/app/api/reports/song-usage/), ProPresenter JSON export API (src/app/api/service-plans/[id]/export-propresenter/), daily auto-email cron (src/app/api/cron/propresenter-export/), propresenter-export email template, Firestore composite indexes for song_usage, songs, and service_plans | Complete |
 | Exp. 7 | Platform admin tier override & ministry templates — SubscriptionSource type on Church interface, platform-admin utility (src/lib/utils/platform-admin.ts), tier-override API (src/app/api/admin/tier-override/), Stripe webhook guard for manual overrides, Platform Admin UI card in organization settings, free tier updated to 2 ministries, 23 church ministry templates with 6 categories (src/lib/constants/), setup wizard converted to stepped form with ministry picker (step 4 for churches), inline name editing, background-check indicators | Complete |

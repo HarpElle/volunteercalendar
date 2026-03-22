@@ -1,196 +1,210 @@
 /**
- * CCLI SongSelect adapter.
+ * SongSelect file parser.
  *
- * Searches the SongSelect catalog and imports songs into the church's
- * song library. Uses SongSelect's REST API with session-based auth.
+ * Parses .usr (SongSelect UserSong format) and plain-text song files
+ * exported from the SongSelect website. Extracts title, CCLI number,
+ * author/copyright info, key, and lyrics.
  *
- * Note: SongSelect credentials are stored encrypted on the church
- * document and decrypted only via Admin SDK server-side.
+ * Usage: Users download song files from songselect.ccli.com and upload
+ * them here — no API credentials needed.
  */
-
-const SONGSELECT_BASE = "https://api.songselect.com/v1";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SongSelectSearchResult {
-  songselect_id: string;
+export interface ParsedSong {
   title: string;
   ccli_number: string | null;
   artist_credit: string | null;
   writer_credit: string | null;
   copyright: string | null;
-  ccli_publisher: string | null;
-  available_keys: string[];
   default_key: string | null;
   themes: string[];
-}
-
-export interface SongSelectSongDetail extends SongSelectSearchResult {
   lyrics: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Session Management
-// ---------------------------------------------------------------------------
-
-interface SongSelectSession {
-  access_token: string;
-  expires_at: number;
+export interface ParseResult {
+  songs: ParsedSong[];
+  errors: string[];
 }
 
-const sessionCache = new Map<string, SongSelectSession>();
+// ---------------------------------------------------------------------------
+// .usr file parser (SongSelect UserSong format)
+// ---------------------------------------------------------------------------
 
-async function getSession(
-  email: string,
-  password: string,
-): Promise<SongSelectSession> {
-  const cacheKey = email;
-  const cached = sessionCache.get(cacheKey);
-  if (cached && cached.expires_at > Date.now() + 60_000) {
-    return cached;
+/**
+ * Parse a .usr (SongSelect UserSong) file.
+ *
+ * Format is key=value pairs like:
+ *   [File]
+ *   Type=SongSelect Import File
+ *   [Song]
+ *   Title=Amazing Grace
+ *   Author=John Newton
+ *   Copyright=Public Domain
+ *   CCLI Song #=4669
+ *   Key=G
+ *   Fields=Verse 1,Verse 2,...
+ *   Words=lyrics text with /n line breaks and double for stanza breaks
+ */
+function parseUsrFile(content: string): ParsedSong {
+  const lines = content.split(/\r?\n/);
+  const fields: Record<string, string> = {};
+
+  for (const line of lines) {
+    const eqIdx = line.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = line.slice(0, eqIdx).trim();
+    const value = line.slice(eqIdx + 1).trim();
+    if (key && value) {
+      fields[key] = value;
+    }
   }
 
-  const res = await fetch(`${SONGSELECT_BASE}/auth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  // Extract CCLI number — field may be "CCLI Song #" or "CCLISongNumber"
+  const ccliRaw = fields["CCLI Song #"] || fields["CCLISongNumber"] || fields["CCLI"] || null;
+  const ccliNumber = ccliRaw?.replace(/[^\d]/g, "") || null;
 
-  if (!res.ok) {
-    const msg = res.status === 401
-      ? "Invalid SongSelect credentials"
-      : `SongSelect auth failed (${res.status})`;
-    throw new Error(msg);
+  // Parse lyrics — .usr uses /n for line breaks within a section
+  let lyrics: string | null = null;
+  const wordsRaw = fields["Words"];
+  if (wordsRaw) {
+    lyrics = wordsRaw
+      .replace(/\/n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
-  const data = await res.json();
-  const session: SongSelectSession = {
-    access_token: data.access_token,
-    expires_at: Date.now() + (data.expires_in ?? 3600) * 1000,
+  return {
+    title: fields["Title"] || "Untitled",
+    ccli_number: ccliNumber,
+    artist_credit: fields["Artist"] || fields["Author"] || null,
+    writer_credit: fields["Author"] || fields["Writer"] || null,
+    copyright: fields["Copyright"] || null,
+    default_key: fields["Key"] || fields["OriginalKey"] || null,
+    themes: fields["Themes"]?.split(/[,;]/).map((t) => t.trim()).filter(Boolean) || [],
+    lyrics,
   };
-  sessionCache.set(cacheKey, session);
-  return session;
 }
 
-async function songselectFetch(
-  path: string,
-  session: SongSelectSession,
-): Promise<Response> {
-  const res = await fetch(`${SONGSELECT_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      Accept: "application/json",
-    },
-  });
+// ---------------------------------------------------------------------------
+// Plain-text parser (SongSelect .txt export)
+// ---------------------------------------------------------------------------
 
-  if (res.status === 429) {
-    const retryAfter = Number(res.headers.get("Retry-After") || "5");
-    await new Promise((r) => setTimeout(r, retryAfter * 1000));
-    return fetch(`${SONGSELECT_BASE}${path}`, {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        Accept: "application/json",
-      },
-    });
+/**
+ * Parse a plain-text song file from SongSelect.
+ *
+ * Typical format:
+ *   Title line (first non-empty line)
+ *   Author / Artist line
+ *   Empty line
+ *   CCLI Song # 12345
+ *   (lyrics follow)
+ */
+function parseTxtFile(content: string): ParsedSong {
+  const lines = content.split(/\r?\n/);
+  const nonEmpty = lines.filter((l) => l.trim().length > 0);
+
+  const title = nonEmpty[0]?.trim() || "Untitled";
+  let artist: string | null = null;
+  let copyright: string | null = null;
+  let ccliNumber: string | null = null;
+  let defaultKey: string | null = null;
+
+  // Scan for metadata patterns
+  const lyricsStart: string[] = [];
+  let metadataEnded = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // CCLI number
+    const ccliMatch = line.match(/CCLI\s+(?:Song\s+)?#?\s*(\d+)/i);
+    if (ccliMatch) {
+      ccliNumber = ccliMatch[1];
+      continue;
+    }
+
+    // Copyright line
+    if (line.startsWith("©") || line.toLowerCase().startsWith("copyright")) {
+      copyright = line.replace(/^©\s*/, "").replace(/^copyright\s*/i, "").trim();
+      continue;
+    }
+
+    // Key indicator
+    const keyMatch = line.match(/^(?:Key|Original Key)[:\s]+([A-G][b#]?(?:m|min|maj)?)/i);
+    if (keyMatch) {
+      defaultKey = keyMatch[1];
+      continue;
+    }
+
+    // Author/artist — usually 2nd non-empty line before lyrics
+    if (!metadataEnded && i > 0 && !artist && !ccliMatch && line.length < 100) {
+      const looksLikeAuthor = /^(?:by\s+)?[A-Z]/.test(line) && !line.includes("\t");
+      if (looksLikeAuthor && i <= 3) {
+        artist = line.replace(/^by\s+/i, "").trim();
+        continue;
+      }
+    }
+
+    if (line === "" && i > 2) metadataEnded = true;
+    if (metadataEnded || i > 4) {
+      lyricsStart.push(lines[i]);
+    }
   }
 
-  return res;
+  const lyrics = lyricsStart.join("\n").trim() || null;
+
+  return {
+    title,
+    ccli_number: ccliNumber,
+    artist_credit: artist,
+    writer_credit: artist,
+    copyright,
+    default_key: defaultKey,
+    themes: [],
+    lyrics,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Adapter Methods
+// Public API
 // ---------------------------------------------------------------------------
 
-export const songselectAdapter = {
-  /**
-   * Validate credentials by attempting to authenticate.
-   */
-  async testConnection(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Parse one or more song files. Accepts .usr and .txt content.
+ * Each file should contain one song.
+ */
+export function parseSongFiles(
+  files: { name: string; content: string }[],
+): ParseResult {
+  const songs: ParsedSong[] = [];
+  const errors: string[] = [];
+
+  for (const file of files) {
     try {
-      await getSession(email, password);
-      return { ok: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      if (message.includes("401") || message.includes("403") || message.toLowerCase().includes("unauthorized") || message.toLowerCase().includes("invalid")) {
-        return { ok: false, error: "Invalid credentials. Please check your CCLI/SongSelect email and password." };
+      const ext = file.name.toLowerCase().split(".").pop() || "";
+      let song: ParsedSong;
+
+      if (ext === "usr") {
+        song = parseUsrFile(file.content);
+      } else {
+        // Default to plain-text parser for .txt and other text formats
+        song = parseTxtFile(file.content);
       }
-      return { ok: false, error: `Could not reach SongSelect: ${message}` };
+
+      // Skip files that produced no meaningful data
+      if (song.title === "Untitled" && !song.lyrics && !song.ccli_number) {
+        errors.push(`${file.name}: Could not extract song data`);
+        continue;
+      }
+
+      songs.push(song);
+    } catch (err) {
+      errors.push(`${file.name}: ${err instanceof Error ? err.message : "Parse error"}`);
     }
-  },
+  }
 
-  /**
-   * Search the SongSelect catalog by title, CCLI number, or artist.
-   */
-  async searchSongs(
-    email: string,
-    password: string,
-    query: string,
-    limit = 25,
-  ): Promise<SongSelectSearchResult[]> {
-    const session = await getSession(email, password);
-    const params = new URLSearchParams({
-      q: query,
-      limit: String(limit),
-    });
-
-    const res = await songselectFetch(`/songs?${params}`, session);
-    if (!res.ok) {
-      throw new Error(`SongSelect search failed (${res.status})`);
-    }
-
-    const data = await res.json();
-    const results: SongSelectSearchResult[] = [];
-
-    for (const item of data.songs ?? data.data ?? []) {
-      results.push({
-        songselect_id: String(item.id ?? item.songselect_id),
-        title: item.title ?? "Untitled",
-        ccli_number: item.ccli_number ?? item.ccli_song_number ?? null,
-        artist_credit: item.artist ?? item.artist_credit ?? null,
-        writer_credit: item.writer ?? item.writer_credit ?? null,
-        copyright: item.copyright ?? null,
-        ccli_publisher: item.publisher ?? item.ccli_publisher ?? null,
-        available_keys: item.available_keys ?? [],
-        default_key: item.default_key ?? null,
-        themes: item.themes ?? item.tags ?? [],
-      });
-    }
-
-    return results;
-  },
-
-  /**
-   * Fetch full song detail including lyrics for a specific SongSelect ID.
-   */
-  async getSongDetail(
-    email: string,
-    password: string,
-    songselectId: string,
-  ): Promise<SongSelectSongDetail> {
-    const session = await getSession(email, password);
-    const res = await songselectFetch(`/songs/${songselectId}`, session);
-
-    if (!res.ok) {
-      throw new Error(`SongSelect detail fetch failed (${res.status})`);
-    }
-
-    const item = await res.json();
-    const song = item.song ?? item.data ?? item;
-
-    return {
-      songselect_id: String(song.id ?? songselectId),
-      title: song.title ?? "Untitled",
-      ccli_number: song.ccli_number ?? song.ccli_song_number ?? null,
-      artist_credit: song.artist ?? song.artist_credit ?? null,
-      writer_credit: song.writer ?? song.writer_credit ?? null,
-      copyright: song.copyright ?? null,
-      ccli_publisher: song.publisher ?? song.ccli_publisher ?? null,
-      available_keys: song.available_keys ?? [],
-      default_key: song.default_key ?? null,
-      themes: song.themes ?? song.tags ?? [],
-      lyrics: song.lyrics ?? null,
-    };
-  },
-};
+  return { songs, errors };
+}

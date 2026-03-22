@@ -116,8 +116,6 @@ export interface Church {
   settings: ChurchSettings;
   /** Org-wide prerequisites that apply to ALL teams */
   org_prerequisites?: OnboardingStep[];
-  /** SongSelect credentials stored on the church doc (server-managed) */
-  songselect_credentials?: SongSelectCredentials;
   created_at: string;
 }
 
@@ -898,15 +896,3 @@ export interface SongUsageRecord {
   created_at: string;
 }
 
-// ---------------------------------------------------------------------------
-// Worship Module — SongSelect Integration
-// ---------------------------------------------------------------------------
-
-export interface SongSelectCredentials {
-  email: string;
-  /** Encrypted at rest. Only accessible via Admin SDK. */
-  encrypted_password: string;
-  connected_at: string;
-  last_sync_at: string | null;
-  auto_sync_enabled: boolean;
-}

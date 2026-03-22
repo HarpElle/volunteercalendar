@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { songselectAdapter } from "@/lib/integrations/songselect";
 import type { Song } from "@/lib/types";
+import type { ParsedSong } from "@/lib/integrations/songselect";
 
 /**
  * POST /api/songselect/import
- * Import one or more songs from SongSelect into the church's song library.
+ * Import parsed songs into the church's song library.
  *
- * Body: { church_id, songselect_ids: string[] }
+ * Body: { church_id, songs: ParsedSong[] }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -20,16 +20,16 @@ export async function POST(req: NextRequest) {
     const userId = decoded.uid;
 
     const body = await req.json();
-    const { church_id, songselect_ids } = body;
+    const { church_id, songs } = body as { church_id: string; songs: ParsedSong[] };
 
-    if (!church_id || !Array.isArray(songselect_ids) || songselect_ids.length === 0) {
+    if (!church_id || !Array.isArray(songs) || songs.length === 0) {
       return NextResponse.json(
-        { error: "Missing required fields: church_id, songselect_ids[]" },
+        { error: "Missing required fields: church_id, songs[]" },
         { status: 400 },
       );
     }
 
-    if (songselect_ids.length > 50) {
+    if (songs.length > 50) {
       return NextResponse.json(
         { error: "Maximum 50 songs per import batch" },
         { status: 400 },
@@ -47,71 +47,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    // Get stored credentials
-    const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
-    const churchData = churchSnap.data();
-    const creds = churchData?.songselect_credentials;
+    // Check for existing songs by CCLI number to avoid duplicates
+    const ccliNumbers = songs
+      .map((s) => s.ccli_number)
+      .filter((n): n is string => n !== null && n !== "");
 
-    if (!creds?.email || !creds?.encrypted_password) {
-      return NextResponse.json(
-        { error: "SongSelect is not connected" },
-        { status: 422 },
-      );
+    const alreadyImportedCcli = new Set<string>();
+
+    if (ccliNumbers.length > 0) {
+      // Firestore "in" queries limited to 30 elements
+      for (let i = 0; i < ccliNumbers.length; i += 30) {
+        const batch = ccliNumbers.slice(i, i + 30);
+        const existingSnap = await adminDb
+          .collection("churches")
+          .doc(church_id)
+          .collection("songs")
+          .where("ccli_number", "in", batch)
+          .get();
+
+        for (const d of existingSnap.docs) {
+          const ccli = d.data().ccli_number as string;
+          if (ccli) alreadyImportedCcli.add(ccli);
+        }
+      }
     }
-
-    const password = Buffer.from(creds.encrypted_password, "base64").toString("utf-8");
-
-    // Check which songs are already imported
-    const existingSnap = await adminDb
-      .collection("churches")
-      .doc(church_id)
-      .collection("songs")
-      .where("songselect_id", "in", songselect_ids.slice(0, 30))
-      .get();
-
-    const alreadyImported = new Set(
-      existingSnap.docs.map((d) => d.data().songselect_id as string),
-    );
-
-    const toImport = songselect_ids.filter((id: string) => !alreadyImported.has(id));
-
-    const imported: Song[] = [];
-    const errors: { songselect_id: string; error: string }[] = [];
 
     const songsCollection = adminDb
       .collection("churches")
       .doc(church_id)
       .collection("songs");
 
-    for (const ssId of toImport) {
-      try {
-        const detail = await songselectAdapter.getSongDetail(
-          creds.email,
-          password,
-          ssId,
-        );
+    const imported: Song[] = [];
+    const errors: { title: string; error: string }[] = [];
+    let skipped = 0;
 
+    for (const parsed of songs) {
+      // Skip if CCLI number already exists in library
+      if (parsed.ccli_number && alreadyImportedCcli.has(parsed.ccli_number)) {
+        skipped++;
+        continue;
+      }
+
+      try {
         const now = new Date().toISOString();
 
         const songData: Omit<Song, "id"> = {
           church_id,
-          title: detail.title,
-          ccli_number: detail.ccli_number,
-          ccli_publisher: detail.ccli_publisher,
-          default_key: detail.default_key,
-          available_keys: detail.available_keys,
-          artist_credit: detail.artist_credit,
-          writer_credit: detail.writer_credit,
-          copyright: detail.copyright,
-          tags: detail.themes,
+          title: parsed.title,
+          ccli_number: parsed.ccli_number,
+          ccli_publisher: null,
+          default_key: parsed.default_key,
+          available_keys: parsed.default_key ? [parsed.default_key] : [],
+          artist_credit: parsed.artist_credit,
+          writer_credit: parsed.writer_credit,
+          copyright: parsed.copyright,
+          tags: parsed.themes,
           in_rotation: false,
           rotation_lists: [],
           lyric_source: "songselect",
-          lyrics: detail.lyrics,
+          lyrics: parsed.lyrics,
           chord_chart_url: null,
           sheet_music_url: null,
           media_file_url: null,
-          songselect_id: detail.songselect_id,
+          songselect_id: null,
           date_added: now,
           last_used_date: null,
           use_count: 0,
@@ -125,7 +123,7 @@ export async function POST(req: NextRequest) {
         imported.push({ id: docRef.id, ...songData });
       } catch (err) {
         errors.push({
-          songselect_id: ssId,
+          title: parsed.title,
           error: err instanceof Error ? err.message : "Import failed",
         });
       }
@@ -133,7 +131,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       imported: imported.length,
-      skipped: alreadyImported.size,
+      skipped,
       errors,
       songs: imported,
     });
