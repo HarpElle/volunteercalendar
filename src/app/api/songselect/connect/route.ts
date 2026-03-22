@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Test connection before saving
-    const valid = await songselectAdapter.testConnection(email, password);
-    if (!valid) {
+    const result = await songselectAdapter.testConnection(email, password);
+    if (!result.ok) {
       return NextResponse.json(
-        { error: "Could not connect to SongSelect. Please check your credentials." },
+        { error: result.error ?? "Could not connect to SongSelect." },
         { status: 422 },
       );
     }

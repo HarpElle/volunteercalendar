@@ -45,7 +45,8 @@ function ConnectForm({
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleConnect() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     if (!email.trim() || !password.trim() || !user) return;
     setConnecting(true);
     setError(null);
@@ -80,7 +81,7 @@ function ConnectForm({
   }
 
   return (
-    <div className="space-y-5">
+    <form onSubmit={handleSubmit} name="songselect-login" action="" autoComplete="on" className="space-y-5">
       {/* Header illustration area */}
       <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-5 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-vc-indigo/10">
@@ -99,6 +100,7 @@ function ConnectForm({
         <Input
           label="SongSelect Email"
           type="email"
+          name="email"
           placeholder="worship@yourchurch.org"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -107,12 +109,10 @@ function ConnectForm({
         <Input
           label="SongSelect Password"
           type="password"
+          name="password"
           placeholder="Enter your SongSelect password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleConnect();
-          }}
           autoComplete="current-password"
         />
       </div>
@@ -128,14 +128,14 @@ function ConnectForm({
           Credentials are stored securely and only used for SongSelect access.
         </p>
         <Button
-          onClick={handleConnect}
+          type="submit"
           disabled={connecting || !email.trim() || !password.trim()}
           className="min-h-[44px] shrink-0"
         >
           {connecting ? <Spinner size="sm" /> : "Connect"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 }
 

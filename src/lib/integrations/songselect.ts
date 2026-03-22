@@ -107,12 +107,16 @@ export const songselectAdapter = {
   /**
    * Validate credentials by attempting to authenticate.
    */
-  async testConnection(email: string, password: string): Promise<boolean> {
+  async testConnection(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
     try {
       await getSession(email, password);
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("401") || message.includes("403") || message.toLowerCase().includes("unauthorized") || message.toLowerCase().includes("invalid")) {
+        return { ok: false, error: "Invalid credentials. Please check your CCLI/SongSelect email and password." };
+      }
+      return { ok: false, error: `Could not reach SongSelect: ${message}` };
     }
   },
 

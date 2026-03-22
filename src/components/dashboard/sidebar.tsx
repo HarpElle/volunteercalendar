@@ -283,7 +283,7 @@ export function Sidebar({
       </div>
 
       {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Dashboard navigation">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Dashboard navigation">
         {visibleSections.map((section, sIdx) => (
           <div key={sIdx} className={sIdx > 0 ? "mt-2" : ""}>
             {section.label && (
@@ -323,7 +323,7 @@ export function Sidebar({
       </nav>
 
       {/* Bottom pinned area: Org Card + Account Card */}
-      <div className="mt-auto">
+      <div className="mt-auto shrink-0">
         {/* Org Card */}
         <div className="relative border-t border-vc-border-light px-3 py-3" ref={orgMenuRef}>
           {/* Org popover */}
