@@ -48,6 +48,15 @@ export function MemberRow({
   const [scopeAll, setScopeAll] = useState(!membership.ministry_scope?.length);
 
   useEffect(() => {
+    // Prefer server-enriched data (from /api/people-data or /api/memberships)
+    const m = membership as unknown as Record<string, unknown>;
+    if (m._user_display_name !== undefined || m._user_email !== undefined) {
+      setUserName((m._user_display_name as string) || "");
+      setUserEmail((m._user_email as string) || "");
+      setLoaded(true);
+      return;
+    }
+    // Fallback: client-side fetch (for contexts without enrichment)
     if (!membership.user_id) { setLoaded(true); return; }
     getDoc(doc(db, "users", membership.user_id))
       .then((snap) => {

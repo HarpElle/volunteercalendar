@@ -45,7 +45,33 @@ export async function GET(req: NextRequest) {
       .where("church_id", "==", churchId)
       .get();
 
-    const memberships = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const memberships: Record<string, unknown>[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Enrich with user display data (Admin SDK bypasses self-read-only rule)
+    const uniqueUserIds = [...new Set(
+      memberships.map((m) => m.user_id as string).filter(Boolean),
+    )];
+    const userDocs = await Promise.all(
+      uniqueUserIds.map((uid) => adminDb.collection("users").doc(uid).get()),
+    );
+    const userMap = new Map<string, { display_name: string; email: string }>();
+    for (const udoc of userDocs) {
+      if (udoc.exists) {
+        const d = udoc.data()!;
+        userMap.set(udoc.id, {
+          display_name: (d.display_name as string) || "",
+          email: (d.email as string) || "",
+        });
+      }
+    }
+    for (const mem of memberships) {
+      const userData = userMap.get(mem.user_id as string);
+      if (userData) {
+        mem._user_display_name = userData.display_name;
+        mem._user_email = userData.email;
+      }
+    }
+
     return NextResponse.json(memberships);
   } catch (err) {
     console.error("[API /memberships] Error:", err);

@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import type { Schedule, Assignment, Service, Volunteer, Ministry } from "@/lib/types";
 import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
+import { isAdmin } from "@/lib/utils/permissions";
 
 interface DashboardStats {
   volunteers: number;
@@ -27,9 +28,10 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { profile, activeMembership } = useAuth();
+  const { user, profile, activeMembership } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingApprovals, setPendingApprovals] = useState<Array<Record<string, unknown>>>([]);
 
   const churchId = activeMembership?.church_id || profile?.default_church_id || profile?.church_id;
   const hasOrg = !!churchId;
@@ -156,6 +158,27 @@ export default function DashboardPage() {
     load();
   }, [churchId]);
 
+  // Fetch pending approvals for admin notification banner
+  useEffect(() => {
+    if (!churchId || !user || !isAdmin(activeMembership)) return;
+    async function loadPending() {
+      try {
+        const token = await user!.getIdToken();
+        const res = await fetch(
+          `/api/memberships?church_id=${encodeURIComponent(churchId!)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const all: Record<string, unknown>[] = await res.json();
+          setPendingApprovals(all.filter((m) => m.status === "pending_org_approval"));
+        }
+      } catch {
+        // Non-critical — dashboard still works without this
+      }
+    }
+    loadPending();
+  }, [churchId, user, activeMembership]);
+
   if (!hasOrg) {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
@@ -235,6 +258,36 @@ export default function DashboardPage() {
           Here&apos;s an overview of your organization&apos;s volunteer schedule.
         </p>
       </div>
+
+      {/* Pending approval notification */}
+      {!loading && isAdmin(activeMembership) && pendingApprovals.length > 0 && (
+        <div className="mb-6 rounded-xl border border-vc-coral/20 bg-vc-coral/5 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-vc-coral/15">
+              <svg className="h-5 w-5 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-vc-indigo">
+                {pendingApprovals.length} {pendingApprovals.length === 1 ? "person" : "people"} waiting for approval
+              </p>
+              <p className="mt-1 text-sm text-vc-text-secondary">
+                {pendingApprovals.slice(0, 3).map((m) =>
+                  (m._user_display_name as string) || (m._user_email as string) || "Someone",
+                ).join(", ")}
+                {pendingApprovals.length > 3 && ` and ${pendingApprovals.length - 3} more`}
+              </p>
+            </div>
+            <Link
+              href="/dashboard/people?tab=invites"
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-vc-coral px-4 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+            >
+              Review
+            </Link>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
