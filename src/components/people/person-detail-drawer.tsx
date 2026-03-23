@@ -6,8 +6,10 @@ import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 import { StepTypeIcon } from "@/components/ui/step-type-icon";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { normalizePhone, formatPhone } from "@/lib/utils/phone";
 import { updateChurchDocument } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
@@ -73,7 +75,11 @@ export function PersonDetailDrawer({
   onRestore,
   onRemoveFromOrg,
 }: PersonDetailDrawerProps) {
+  const { confirm } = useConfirm();
   const isArchived = volunteer.status === "archived";
+
+  // --- Edit mode (Profile & Contact only) ---
+  const [editMode, setEditMode] = useState(false);
 
   // --- Profile edit state ---
   const [name, setName] = useState(volunteer.name);
@@ -89,18 +95,31 @@ export function PersonDetailDrawer({
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>(membership?.role || "volunteer");
   const [ministryScope, setMinistryScope] = useState<string[]>(membership?.ministry_scope || []);
 
-  const hasChanges =
+  // --- Danger zone collapse ---
+  const [dangerOpen, setDangerOpen] = useState(false);
+
+  // --- Photo upload ---
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Track changes for Profile & Contact fields only
+  const hasProfileChanges =
     name !== volunteer.name ||
     email !== volunteer.email ||
-    (phone || "") !== (volunteer.phone || "") ||
+    (phone || "") !== (volunteer.phone || "");
+
+  // Track all changes (profile + teams/roles/bg check)
+  const hasChanges =
+    hasProfileChanges ||
     JSON.stringify([...selectedMinistries].sort()) !== JSON.stringify([...volunteer.ministry_ids].sort()) ||
     JSON.stringify([...selectedRoles].sort()) !== JSON.stringify([...volunteer.role_ids].sort()) ||
     bgCheckStatus !== (volunteer.background_check?.status || "not_required") ||
     bgCheckExpiry !== (volunteer.background_check?.expires_at || "");
 
-  // Reset state when volunteer/membership changes
+  // Reset state when volunteer/membership changes or drawer opens
   useEffect(() => {
     if (open) {
+      setEditMode(false);
+      setDangerOpen(false);
       setName(volunteer.name);
       setEmail(volunteer.email);
       setPhone(volunteer.phone || "");
@@ -137,6 +156,7 @@ export function PersonDetailDrawer({
       };
       await updateChurchDocument(churchId, "volunteers", volunteer.id, updateData);
       onVolunteerUpdated({ ...volunteer, ...updateData });
+      setEditMode(false);
     } catch {
       // silent
     } finally {
@@ -176,7 +196,29 @@ export function PersonDetailDrawer({
     }
   }
 
-  function handleOrgRoleChange(newRole: OrgRole) {
+  async function handleBgCheckChange(newStatus: string) {
+    if (newStatus === "cleared" && bgCheckStatus !== "cleared") {
+      const ok = await confirm({
+        title: "Mark Background Check as Cleared?",
+        message: `This will mark ${volunteer.name}'s background check as cleared. Make sure you have verified this through your organization's background check provider.`,
+        confirmLabel: "Mark Cleared",
+        variant: "default",
+      });
+      if (!ok) return;
+    }
+    setBgCheckStatus(newStatus as "cleared" | "pending" | "expired" | "not_required");
+  }
+
+  async function handleOrgRoleChange(newRole: OrgRole) {
+    if (newRole === "admin") {
+      const ok = await confirm({
+        title: "Grant Administrator Access?",
+        message: `This will give ${volunteer.name} full administrative control over your organization, including managing people, teams, schedules, and settings. Only do this if you fully trust this person with organization management.`,
+        confirmLabel: "Make Administrator",
+        variant: "danger",
+      });
+      if (!ok) return;
+    }
     setSelectedOrgRole(newRole);
     if (membership) {
       onRoleChanged(membership, newRole, newRole === "scheduler" ? ministryScope : undefined);
@@ -187,10 +229,8 @@ export function PersonDetailDrawer({
     const isSchedulerForTeam = selectedOrgRole === "scheduler" && ministryScope.includes(teamId);
 
     if (isSchedulerForTeam) {
-      // Demote from scheduler on this team
       const nextScope = ministryScope.filter((m) => m !== teamId);
       if (nextScope.length === 0) {
-        // No scheduler teams left → revert to volunteer role
         setSelectedOrgRole("volunteer");
         setMinistryScope([]);
         if (membership) onRoleChanged(membership, "volunteer");
@@ -199,7 +239,6 @@ export function PersonDetailDrawer({
         if (membership) onRoleChanged(membership, "scheduler", nextScope);
       }
     } else {
-      // Promote to scheduler on this team
       const nextScope = selectedOrgRole === "scheduler"
         ? [...ministryScope, teamId]
         : [teamId];
@@ -209,13 +248,47 @@ export function PersonDetailDrawer({
     }
   }
 
-  function handleMinistryScpeToggle(mid: string) {
-    const next = ministryScope.includes(mid)
-      ? ministryScope.filter((m) => m !== mid)
-      : [...ministryScope, mid];
-    setMinistryScope(next);
-    if (membership && selectedOrgRole === "scheduler") {
-      onRoleChanged(membership, "scheduler", next);
+  async function handleArchive() {
+    const ok = await confirm({
+      title: `Archive ${volunteer.name}?`,
+      message: "They'll be removed from all teams and excluded from future scheduling and event invitations. They can still see the organization. You can restore them later.",
+      confirmLabel: "Archive",
+      variant: "danger",
+    });
+    if (ok) onArchive();
+  }
+
+  async function handleRemoveFromOrg() {
+    const ok = await confirm({
+      title: `Remove ${volunteer.name}?`,
+      message: "They will lose all access and won't be able to see the organization unless re-invited. This cannot be undone.",
+      confirmLabel: "Remove from Organization",
+      variant: "danger",
+    });
+    if (ok) onRemoveFromOrg();
+  }
+
+  async function handlePhotoUpload(file: File) {
+    if (!file || file.size > 5 * 1024 * 1024) return;
+    setUploadingPhoto(true);
+    try {
+      const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
+      const form = new FormData();
+      form.append("file", file);
+      form.append("church_id", churchId);
+      const res = await fetch(`/api/volunteers/${volunteer.id}/photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (res.ok) {
+        const { photo_url } = await res.json();
+        onVolunteerUpdated({ ...volunteer, photo_url });
+      }
+    } catch {
+      // silent
+    } finally {
+      setUploadingPhoto(false);
     }
   }
 
@@ -259,208 +332,309 @@ export function PersonDetailDrawer({
 
   const hasPrereqs = prereqGroups.length > 0;
 
-  // Progress stats for eligibility section
+  // Progress stats
   const totalSteps = prereqGroups.reduce((sum, g) => sum + g.steps.length, 0);
   const completedSteps = prereqGroups.reduce(
     (sum, g) => sum + g.steps.filter((s) => s.journeyStep?.status === "completed" || s.journeyStep?.status === "waived").length,
     0,
   );
 
-  function getInitials(n: string) {
-    return n.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");
-  }
+  // Which teams require background check?
+  const teamsRequiringBgCheck = ministries.filter(
+    (m) => myMinistryIds.includes(m.id) && m.prerequisites?.some((p) => p.type === "background_check"),
+  );
 
   return (
     <Drawer open={open} onClose={onClose} title={volunteer.name} subtitle={volunteer.email || undefined}>
       <div className="space-y-6">
-        {/* Hero avatar + eligibility at-a-glance */}
+        {/* ================================================================
+            Hero — Avatar + Name + Eligibility Summary
+           ================================================================ */}
         <div className="flex items-center gap-4 rounded-xl bg-vc-bg-warm/60 p-4 -mx-2">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-vc-indigo/10 text-lg font-semibold text-vc-indigo">
-            {getInitials(volunteer.name)}
+          <div className="relative">
+            <Avatar
+              name={volunteer.name}
+              photoUrl={volunteer.photo_url}
+              size="xl"
+              eligibility={orgEligibility}
+              showUploadOverlay={canManage && !isArchived}
+              onClick={canManage && !isArchived ? () => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/*";
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handlePhotoUpload(file);
+                };
+                input.click();
+              } : undefined}
+            />
+            {uploadingPhoto && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
+              </div>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg text-vc-indigo truncate">{volunteer.name}</h3>
-            {isArchived && (
-              <Badge variant="default">Archived</Badge>
-            )}
+            {isArchived && <Badge variant="default">Archived</Badge>}
             {hasPrereqs && totalSteps > 0 && (
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="h-1.5 flex-1 rounded-full bg-vc-border overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-vc-sage transition-all duration-500"
-                    style={{ width: `${(completedSteps / totalSteps) * 100}%` }}
-                  />
+              <div className="mt-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 rounded-full bg-vc-border overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-vc-sage transition-all duration-500"
+                      style={{ width: `${(completedSteps / totalSteps) * 100}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[11px] font-medium text-vc-text-muted">
+                    {completedSteps} of {totalSteps}
+                  </span>
                 </div>
-                <span className="shrink-0 text-[11px] font-medium text-vc-text-muted">
-                  {completedSteps}/{totalSteps}
-                </span>
+                <p className="mt-0.5 text-[11px] text-vc-text-muted">
+                  {completedSteps === totalSteps ? "All steps complete" : `${totalSteps - completedSteps} step${totalSteps - completedSteps !== 1 ? "s" : ""} remaining`}
+                </p>
               </div>
             )}
           </div>
         </div>
 
         {/* ================================================================
-            Section A — Profile & Contact
+            Section 1 — Profile & Contact (read-only default, edit toggle)
            ================================================================ */}
         <section>
-          <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
+          <div className="mb-3 flex items-center gap-2">
             <span className="h-px flex-1 bg-vc-border-light" />
-            Profile & Contact
+            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
+              Profile & Contact
+            </h3>
             <span className="h-px flex-1 bg-vc-border-light" />
-          </h3>
-          {canManage && !isArchived ? (
+            {canManage && !isArchived && !editMode && (
+              <button
+                onClick={() => setEditMode(true)}
+                className="ml-1 rounded-lg p-1.5 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                title="Edit profile"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {editMode ? (
             <div className="space-y-3">
-              <div className="space-y-3">
-                <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-                <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <Input
-                  label="Phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  onBlur={() => { if (phone) setPhone(formatPhone(phone)); }}
-                />
+              <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                label="Phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => { if (phone) setPhone(formatPhone(phone)); }}
+              />
+              <div className="flex items-center gap-2 pt-1">
+                <Button size="sm" loading={saving} onClick={handleSaveProfile} disabled={!hasProfileChanges}>
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setName(volunteer.name);
+                    setEmail(volunteer.email);
+                    setPhone(volunteer.phone || "");
+                    setEditMode(false);
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
-
-              {/* Ministry toggles */}
-              {ministries.length > 0 && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-vc-text">Teams</label>
-                  <div className="flex flex-wrap gap-2">
-                    {ministries.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() =>
-                          setSelectedMinistries((prev) =>
-                            prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id],
-                          )
-                        }
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                          selectedMinistries.includes(m.id)
-                            ? "border-transparent text-white"
-                            : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                        }`}
-                        style={selectedMinistries.includes(m.id) ? { backgroundColor: m.color } : undefined}
-                      >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: selectedMinistries.includes(m.id) ? "white" : m.color }}
-                        />
-                        {m.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Qualified roles */}
-              {(() => {
-                const relevant = availableRoles.filter((r) => selectedMinistries.includes(r.ministry_id));
-                if (relevant.length === 0) return null;
-                return (
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-vc-text">Qualified Roles</label>
-                    <div className="flex flex-wrap gap-2">
-                      {relevant.map((r) => (
-                        <button
-                          key={r.role_id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedRoles((prev) =>
-                              prev.includes(r.role_id) ? prev.filter((x) => x !== r.role_id) : [...prev, r.role_id],
-                            )
-                          }
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                            selectedRoles.includes(r.role_id)
-                              ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
-                              : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                          }`}
-                        >
-                          {selectedRoles.includes(r.role_id) && (
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                          )}
-                          {r.title}
-                          <span className="text-[10px] text-vc-text-muted">({getMinistryName(r.ministry_id)})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Background check */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-vc-text">Background Check</label>
-                  <select
-                    className="w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none min-h-[44px]"
-                    value={bgCheckStatus}
-                    onChange={(e) => setBgCheckStatus(e.target.value as "cleared" | "pending" | "expired" | "not_required")}
-                  >
-                    <option value="not_required">Not Required</option>
-                    <option value="pending">Pending</option>
-                    <option value="cleared">Cleared</option>
-                    <option value="expired">Expired</option>
-                  </select>
-                </div>
-                {(bgCheckStatus === "cleared" || bgCheckStatus === "expired") && (
-                  <Input label="Expiry Date" type="date" value={bgCheckExpiry} onChange={(e) => setBgCheckExpiry(e.target.value)} />
-                )}
-              </div>
-
             </div>
           ) : (
-            /* Read-only view for non-admins or archived */
-            <div className="space-y-2 text-sm">
-              <p><span className="font-medium text-vc-text">Name:</span> {volunteer.name}</p>
-              <p><span className="font-medium text-vc-text">Email:</span> {volunteer.email || "\u2014"}</p>
-              <p><span className="font-medium text-vc-text">Phone:</span> {formatPhone(volunteer.phone)}</p>
-              {volunteer.ministry_ids.length > 0 && (
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {volunteer.ministry_ids.map((mid) => (
-                    <span
-                      key={mid}
-                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                      style={{ backgroundColor: getMinistryColor(mid) + "15", color: getMinistryColor(mid) }}
-                    >
-                      {getMinistryName(mid)}
-                    </span>
-                  ))}
-                </div>
-              )}
+            <div className="space-y-2.5">
+              <div className="flex items-start gap-3">
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+                <p className="text-sm text-vc-text">{volunteer.name}</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+                <p className="text-sm text-vc-text">{volunteer.email || "\u2014"}</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
+                </svg>
+                <p className="text-sm text-vc-text">{volunteer.phone ? formatPhone(volunteer.phone) : "\u2014"}</p>
+              </div>
             </div>
           )}
         </section>
 
         {/* ================================================================
-            Section B — Eligibility / Prerequisite Tracking
+            Section 2 — Teams & Roles (always interactive)
            ================================================================ */}
-        {hasPrereqs && (
+        {canManage && !isArchived && (
+          <section>
+            <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
+              <span className="h-px flex-1 bg-vc-border-light" />
+              Teams & Roles
+              <span className="h-px flex-1 bg-vc-border-light" />
+            </h3>
+
+            {/* Ministry toggles */}
+            {ministries.length > 0 && (
+              <div className="mb-3">
+                <label className="mb-1.5 block text-sm font-medium text-vc-text">Teams</label>
+                <div className="flex flex-wrap gap-2">
+                  {ministries.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedMinistries((prev) =>
+                          prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id],
+                        )
+                      }
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                        selectedMinistries.includes(m.id)
+                          ? "border-transparent text-white"
+                          : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                      }`}
+                      style={selectedMinistries.includes(m.id) ? { backgroundColor: m.color } : undefined}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: selectedMinistries.includes(m.id) ? "white" : m.color }}
+                      />
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Qualified roles */}
+            {(() => {
+              const relevant = availableRoles.filter((r) => selectedMinistries.includes(r.ministry_id));
+              if (relevant.length === 0) return null;
+              return (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-vc-text">Qualified Roles</label>
+                  <div className="flex flex-wrap gap-2">
+                    {relevant.map((r) => (
+                      <button
+                        key={r.role_id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedRoles((prev) =>
+                            prev.includes(r.role_id) ? prev.filter((x) => x !== r.role_id) : [...prev, r.role_id],
+                          )
+                        }
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                          selectedRoles.includes(r.role_id)
+                            ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                            : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
+                        }`}
+                      >
+                        {selectedRoles.includes(r.role_id) && (
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                        {r.title}
+                        <span className="text-[10px] text-vc-text-muted">({getMinistryName(r.ministry_id)})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Save teams/roles changes */}
+            {(JSON.stringify([...selectedMinistries].sort()) !== JSON.stringify([...volunteer.ministry_ids].sort()) ||
+              JSON.stringify([...selectedRoles].sort()) !== JSON.stringify([...volunteer.role_ids].sort())) && (
+              <div className="mt-3 flex items-center gap-2">
+                <Button size="sm" loading={saving} onClick={handleSaveProfile}>
+                  Save Team Changes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectedMinistries(volunteer.ministry_ids);
+                    setSelectedRoles(volunteer.role_ids);
+                  }}
+                >
+                  Reset
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Read-only teams for non-admins or archived */}
+        {(!canManage || isArchived) && volunteer.ministry_ids.length > 0 && (
+          <section>
+            <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
+              <span className="h-px flex-1 bg-vc-border-light" />
+              Teams
+              <span className="h-px flex-1 bg-vc-border-light" />
+            </h3>
+            <div className="flex flex-wrap gap-1">
+              {volunteer.ministry_ids.map((mid) => (
+                <span
+                  key={mid}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                  style={{ backgroundColor: getMinistryColor(mid) + "15", color: getMinistryColor(mid) }}
+                >
+                  {getMinistryName(mid)}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================
+            Section 3 — Eligibility (prereqs + background check)
+           ================================================================ */}
+        {(hasPrereqs || teamsRequiringBgCheck.length > 0 || canManage) && (
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
               <span className="h-px flex-1 bg-vc-border-light" />
               Eligibility
               <span className="h-px flex-1 bg-vc-border-light" />
             </h3>
-            <div className="mb-3 flex items-center gap-2">
-              <Badge
-                variant={
-                  orgEligibility === "cleared" ? "success"
-                    : orgEligibility === "in_progress" ? "warning"
-                    : orgEligibility === "no_prereqs" ? "success"
-                    : "default"
-                }
-              >
-                {orgEligibility === "cleared" ? "Cleared"
-                  : orgEligibility === "in_progress" ? "In Progress"
-                  : orgEligibility === "no_prereqs" ? "No Prereqs"
-                  : "Not Started"}
-              </Badge>
-            </div>
 
+            {/* Eligibility badge */}
+            {hasPrereqs && (
+              <div className="mb-3 flex items-center gap-2">
+                <Badge
+                  variant={
+                    orgEligibility === "cleared" ? "success"
+                      : orgEligibility === "in_progress" ? "warning"
+                      : orgEligibility === "no_prereqs" ? "success"
+                      : "default"
+                  }
+                >
+                  {orgEligibility === "cleared" ? "Cleared"
+                    : orgEligibility === "in_progress" ? "In Progress"
+                    : orgEligibility === "no_prereqs" ? "No Prerequisites"
+                    : "Not Started"}
+                </Badge>
+                {totalSteps > 0 && (
+                  <span className="text-xs text-vc-text-muted">
+                    {completedSteps} of {totalSteps} steps complete
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Prerequisite groups */}
             {prereqGroups.map((group) => (
               <div key={group.label} className="mb-4">
                 <div className="mb-2 flex items-center gap-2">
@@ -521,11 +695,56 @@ export function PersonDetailDrawer({
                 </div>
               </div>
             ))}
+
+            {/* Background check — now part of Eligibility */}
+            {canManage && !isArchived && (
+              <div className="rounded-xl border border-vc-border-light bg-white p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                  </svg>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+                    Background Check
+                  </p>
+                </div>
+                {teamsRequiringBgCheck.length > 0 && (
+                  <p className="mb-2 text-[11px] text-vc-text-muted">
+                    Required by: {teamsRequiringBgCheck.map((m) => m.name).join(", ")}
+                  </p>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <select
+                      className="w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none min-h-[44px]"
+                      value={bgCheckStatus}
+                      onChange={(e) => handleBgCheckChange(e.target.value)}
+                    >
+                      <option value="not_required">Not Required</option>
+                      <option value="pending">Pending</option>
+                      <option value="cleared">Cleared</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </div>
+                  {(bgCheckStatus === "cleared" || bgCheckStatus === "expired") && (
+                    <Input label="Expiry Date" type="date" value={bgCheckExpiry} onChange={(e) => setBgCheckExpiry(e.target.value)} />
+                  )}
+                </div>
+                {/* Save bg check changes */}
+                {(bgCheckStatus !== (volunteer.background_check?.status || "not_required") ||
+                  bgCheckExpiry !== (volunteer.background_check?.expires_at || "")) && (
+                  <div className="mt-3">
+                    <Button size="sm" loading={saving} onClick={handleSaveProfile}>
+                      Save Background Check
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
         {/* ================================================================
-            Section C — Access & Permissions
+            Section 4 — Access & Permissions
            ================================================================ */}
         {canManage && membership && (
           <section>
@@ -535,8 +754,7 @@ export function PersonDetailDrawer({
               <span className="h-px flex-1 bg-vc-border-light" />
             </h3>
             <div className="space-y-4">
-
-              {/* --- Organization Role --- */}
+              {/* Organization Role */}
               <div className="rounded-xl border border-vc-border-light bg-white p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
                   Organization Role
@@ -558,7 +776,7 @@ export function PersonDetailDrawer({
                       <button
                         type="button"
                         onClick={() => handleOrgRoleChange("admin")}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-coral/30 bg-vc-coral/5 px-3 py-1.5 text-sm font-medium text-vc-coral transition-colors hover:bg-vc-coral/10 min-h-[44px]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
@@ -578,7 +796,7 @@ export function PersonDetailDrawer({
                 )}
               </div>
 
-              {/* --- Team Roles --- */}
+              {/* Team Roles */}
               {selectedMinistries.length > 0 && (
                 <div className="rounded-xl border border-vc-border-light bg-white p-4">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
@@ -631,12 +849,13 @@ export function PersonDetailDrawer({
                   )}
                 </div>
               )}
-
             </div>
           </section>
         )}
 
-        {/* Lifecycle actions */}
+        {/* ================================================================
+            Section 5 — Actions (collapsible danger zone)
+           ================================================================ */}
         {canManage && (
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
@@ -644,72 +863,78 @@ export function PersonDetailDrawer({
               Actions
               <span className="h-px flex-1 bg-vc-border-light" />
             </h3>
-            <div className="flex flex-wrap gap-2">
-              {!isArchived ? (
-                <Button size="sm" variant="ghost" onClick={onArchive}>
-                  <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+
+            {!isArchived ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setDangerOpen(!dangerOpen)}
+                  className="flex w-full items-center gap-2 rounded-lg border border-vc-border-light px-4 py-3 text-sm text-vc-text-muted transition-colors hover:bg-vc-bg-warm"
+                >
+                  <svg
+                    className={`h-4 w-4 transition-transform ${dangerOpen ? "rotate-90" : ""}`}
+                    fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                   </svg>
-                  Archive
-                </Button>
-              ) : (
+                  <span>Archive or remove this person</span>
+                </button>
+
+                <AnimatePresence>
+                  {dangerOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 flex flex-wrap gap-2 rounded-lg border border-vc-danger/15 bg-vc-danger/3 p-4">
+                        <Button size="sm" variant="ghost" onClick={handleArchive}>
+                          <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                          </svg>
+                          Archive
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-vc-danger hover:bg-vc-danger/5"
+                          onClick={handleRemoveFromOrg}
+                        >
+                          <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                          </svg>
+                          Remove from Organization
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="ghost" onClick={onRestore} className="text-vc-sage">
                   <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
                   </svg>
                   Restore
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-vc-danger hover:bg-vc-danger/5"
-                onClick={onRemoveFromOrg}
-              >
-                <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-                </svg>
-                Remove from Organization
-              </Button>
-            </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-vc-danger hover:bg-vc-danger/5"
+                  onClick={handleRemoveFromOrg}
+                >
+                  <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM4 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+                  </svg>
+                  Remove from Organization
+                </Button>
+              </div>
+            )}
           </section>
         )}
-        {/* Sticky save footer — only visible when there are unsaved changes */}
-        <AnimatePresence>
-          {canManage && !isArchived && hasChanges && (
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-              transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="sticky bottom-0 -mx-6 mt-4 border-t border-vc-border-light bg-vc-bg-warm/95 px-6 py-3 backdrop-blur-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-vc-text-muted">Unsaved changes</p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setName(volunteer.name);
-                      setEmail(volunteer.email);
-                      setPhone(volunteer.phone || "");
-                      setSelectedMinistries(volunteer.ministry_ids);
-                      setSelectedRoles(volunteer.role_ids);
-                      setBgCheckStatus(volunteer.background_check?.status || "not_required");
-                      setBgCheckExpiry(volunteer.background_check?.expires_at || "");
-                    }}
-                  >
-                    Reset
-                  </Button>
-                  <Button size="sm" loading={saving} onClick={handleSaveProfile}>
-                    Save Changes
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </Drawer>
   );

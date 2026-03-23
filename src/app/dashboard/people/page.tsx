@@ -25,7 +25,8 @@ import { ChMSImportModal } from "@/components/forms/chms-import-modal";
 import { HouseholdFormModal } from "@/components/forms/household-form-modal";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
-import { PersonCard } from "@/components/people/person-card";
+import { TeamSidebar } from "@/components/people/team-sidebar";
+import { PeopleTable, PeopleList } from "@/components/people/people-table";
 import { PersonDetailDrawer } from "@/components/people/person-detail-drawer";
 import { AddPeopleMenu } from "@/components/people/add-people-menu";
 import { InviteForm } from "@/components/people/invite-form";
@@ -90,6 +91,7 @@ function PeopleContent() {
   const [filterOrgRoles, setFilterOrgRoles] = useState<OrgRole[]>([]);
   const [filterEligibility, setFilterEligibility] = useState<"all" | "cleared" | "pending">("all");
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
+  const [sidebarMinistry, setSidebarMinistry] = useState<string | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Volunteer; membership: Membership | null } | null>(null);
   const [copied, setCopied] = useState(false);
   const [joinShortLinkUrl, setJoinShortLinkUrl] = useState<string | null>(null);
@@ -257,6 +259,10 @@ function PeopleContent() {
       const emailMatch = v.email.toLowerCase().includes(q);
       const phoneMatch = digits.length > 0 && v.phone?.replace(/\D/g, "").includes(digits);
       if (!nameMatch && !emailMatch && !phoneMatch) return false;
+    }
+    // Sidebar single-ministry filter
+    if (sidebarMinistry) {
+      if (!v.ministry_ids?.includes(sidebarMinistry)) return false;
     }
     if (filterMinistries.length > 0) {
       if (!v.ministry_ids?.some((id) => filterMinistries.includes(id))) return false;
@@ -636,34 +642,53 @@ function PeopleContent() {
               </p>
             </div>
           ) : (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredRoster.map(({ volunteer: v, membership: mem }) => (
-                  <PersonCard
-                    key={v.id}
-                    volunteer={v}
-                    membership={mem}
+            <div className="flex gap-6">
+              {/* Team sidebar (desktop) */}
+              <TeamSidebar
+                ministries={ministries}
+                volunteers={volunteers}
+                selectedMinistryId={sidebarMinistry}
+                onSelectMinistry={setSidebarMinistry}
+              />
+
+              <div className="flex-1 min-w-0">
+                {/* Desktop table */}
+                <div className="hidden md:block">
+                  <PeopleTable
+                    people={filteredRoster}
                     orgPrereqs={orgPrereqs}
                     getMinistryName={getMinistryName}
                     getMinistryColor={getMinistryColor}
-                    onClick={() => setSelectedPerson({ volunteer: v, membership: mem })}
+                    onSelectPerson={(v, m) => setSelectedPerson({ volunteer: v, membership: m })}
                   />
-                ))}
-              </div>
-              {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0) && (
-                <div className="rounded-xl border border-vc-border-light bg-white px-5 py-8 text-center text-sm text-vc-text-muted">
-                  No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
-                  {activeFilterCount > 0 && (
-                    <button
-                      onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); }}
-                      className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                    >
-                      Clear all
-                    </button>
-                  )}
                 </div>
-              )}
-            </>
+
+                {/* Mobile list */}
+                <div className="md:hidden">
+                  <PeopleList
+                    people={filteredRoster}
+                    orgPrereqs={orgPrereqs}
+                    getMinistryName={getMinistryName}
+                    getMinistryColor={getMinistryColor}
+                    onSelectPerson={(v, m) => setSelectedPerson({ volunteer: v, membership: m })}
+                  />
+                </div>
+
+                {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0) && (
+                  <div className="rounded-xl border border-vc-border-light bg-white px-5 py-8 text-center text-sm text-vc-text-muted">
+                    No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); setSidebarMinistry(null); }}
+                        className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Person detail drawer */}

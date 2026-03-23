@@ -184,35 +184,6 @@ export function FilterBar({
             </div>
           </div>
 
-          {/* Ministry toggles */}
-          {ministries.length > 0 && (
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                {teamLabel}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {ministries.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => toggleMinistry(m.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
-                      filterMinistries.includes(m.id)
-                        ? "border-transparent text-white"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-indigo/20"
-                    }`}
-                    style={filterMinistries.includes(m.id) ? { backgroundColor: m.color } : undefined}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: filterMinistries.includes(m.id) ? "white" : m.color }}
-                    />
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Role toggles */}
           {uniqueRoles.length > 0 && (
             <div>

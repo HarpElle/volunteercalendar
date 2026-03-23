@@ -456,6 +456,8 @@ export interface Volunteer {
   /** Campus IDs this volunteer can serve at. Empty = all campuses. */
   campus_ids?: string[];
   household_id: string | null;
+  /** Profile photo URL (Firebase Storage path) */
+  photo_url?: string | null;
   availability: VolunteerAvailability;
   reminder_preferences: {
     channels: ReminderChannel[];
