@@ -231,7 +231,8 @@ export default function AccountPage() {
         setUserPhotoUrl(photo_url);
         updateProfilePhoto(photo_url);
       } else {
-        setPhotoError("Failed to upload photo. Please try again.");
+        const errData = await res.json().catch(() => null);
+        setPhotoError(errData?.error || "Failed to upload photo. Please try again.");
       }
     } catch {
       setPhotoError("Failed to upload photo. Please try again.");

@@ -82,11 +82,9 @@ export async function POST(
       },
     });
 
-    // Make publicly accessible via signed URL (long-lived)
-    const [signedUrl] = await fileRef.getSignedUrl({
-      action: "read",
-      expires: "01-01-2100",
-    });
+    // Make publicly readable (bypasses Security Rules, which only gate client SDK)
+    await fileRef.makePublic();
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
     // Delete old photo if exists
     const oldPhotoUrl = volDoc.data()?.photo_url;
@@ -104,10 +102,10 @@ export async function POST(
 
     // Update volunteer doc
     await adminDb.doc(`churches/${churchId}/volunteers/${volunteerId}`).update({
-      photo_url: signedUrl,
+      photo_url: publicUrl,
     });
 
-    return NextResponse.json({ photo_url: signedUrl });
+    return NextResponse.json({ photo_url: publicUrl });
   } catch (err) {
     console.error("[API /volunteers/[id]/photo] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

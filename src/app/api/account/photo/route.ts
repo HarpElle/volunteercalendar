@@ -50,10 +50,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const [signedUrl] = await fileRef.getSignedUrl({
-      action: "read",
-      expires: "01-01-2100",
-    });
+    // Make publicly readable (bypasses Security Rules, which only gate client SDK)
+    await fileRef.makePublic();
+    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
     // Delete old photo if exists
     const userDoc = await adminDb.doc(`users/${uid}`).get();
@@ -70,9 +69,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Update user profile
-    await adminDb.doc(`users/${uid}`).update({ photo_url: signedUrl });
+    await adminDb.doc(`users/${uid}`).update({ photo_url: publicUrl });
 
-    return NextResponse.json({ photo_url: signedUrl });
+    return NextResponse.json({ photo_url: publicUrl });
   } catch (err) {
     console.error("[API /account/photo] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
