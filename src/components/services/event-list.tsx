@@ -1023,7 +1023,7 @@ function EventCard({
                 key={r.role_id}
                 className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo"
               >
-                {r.title} \u00d7{r.count}
+                {r.title}{" \u00d7"}{r.count}
                 {timeStr}
                 {r.allow_signup && (
                   <span className="ml-1 text-vc-sage" title="Open for signup">{"\u25cf"}</span>

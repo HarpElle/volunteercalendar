@@ -329,7 +329,7 @@ export function ServicesList({
                   <div>
                     <h3 className="font-semibold text-vc-indigo">{s.name}</h3>
                     <p className="mt-1 text-sm text-vc-text-muted">
-                      {getDayName(s.day_of_week)}{s.all_day ? " \u00b7 All day" : ` \u00b7 ${s.start_time}${s.end_time ? `\u2013${s.end_time}` : ` \u00b7 ${s.duration_minutes} min`}`} \u00b7 {getServiceMinistryNames(s)}
+                      {getDayName(s.day_of_week)}{s.all_day ? " \u00b7 All day" : ` \u00b7 ${s.start_time}${s.end_time ? `\u2013${s.end_time}` : ` \u00b7 ${s.duration_minutes} min`}`}{" \u00b7 "}{getServiceMinistryNames(s)}
                     </p>
                   </div>
                   <span className="rounded-full bg-vc-bg-warm px-3 py-1 text-xs font-medium text-vc-text-secondary capitalize">
@@ -353,7 +353,7 @@ export function ServicesList({
                         </span>
                         {sm.roles.map((r) => (
                           <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-0.5 text-xs font-medium text-vc-indigo">
-                            {r.title} \u00d7{r.count}
+                            {r.title}{" \u00d7"}{r.count}
                           </span>
                         ))}
                       </div>
@@ -366,7 +366,7 @@ export function ServicesList({
                       const timeStr = hasCustomTime ? ` (${r.start_time || "?"}–${r.end_time || "?"})` : "";
                       return (
                         <span key={r.role_id} className="rounded-lg bg-vc-indigo/5 px-2.5 py-1 text-xs font-medium text-vc-indigo">
-                          {r.title} \u00d7{r.count}{timeStr}
+                          {r.title}{" \u00d7"}{r.count}{timeStr}
                         </span>
                       );
                     })}
