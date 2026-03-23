@@ -210,9 +210,9 @@ function SettingsContent() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Settings</h1>
+        <h1 className="font-display text-3xl text-vc-indigo">Organization Settings</h1>
         <p className="mt-1 text-vc-text-secondary">
-          Manage your {orgType === "church" ? "church" : "organization"}{" "}
+          Manage {orgName || (orgType === "church" ? "your church" : "your organization")}{" "}
           settings, {terms.pluralLower}, and billing.
         </p>
       </div>
