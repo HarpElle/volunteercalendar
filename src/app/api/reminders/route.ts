@@ -5,6 +5,7 @@ import { buildReminderEmail, buildReminderSms } from "@/lib/utils/email-template
 import { sendSms } from "@/lib/services/sms";
 import { safeCompare } from "@/lib/utils/safe-compare";
 import type { NotificationType, NotificationChannel } from "@/lib/types";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -240,6 +241,29 @@ export async function POST(request: Request) {
       await adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`).update({
         reminder_sent_at: [...existingSent, `${reminderType}:${new Date().toISOString()}`],
       });
+
+      // Fire-and-forget: create in-app reminder notification
+      try {
+        const reminderUserId = await resolveUserId(church_id, assignment.volunteer_id as string);
+        if (reminderUserId) {
+          const reminderTitle = hours <= 24
+            ? "Reminder: You're serving tomorrow"
+            : "Reminder: You're serving in 2 days";
+          const roleTitle = (assignment.role_title as string) || "Volunteer";
+          const svcDate = assignment.service_date as string;
+
+          await createUserNotification({
+            user_id: reminderUserId,
+            church_id,
+            type: "reminder",
+            title: reminderTitle,
+            body: `${roleTitle} on ${svcDate}`,
+            metadata: { service_date: svcDate, link_href: "/dashboard/my-schedule" },
+          });
+        }
+      } catch (notifErr) {
+        console.error("User notification error (reminder):", notifErr);
+      }
     }
 
     return NextResponse.json({

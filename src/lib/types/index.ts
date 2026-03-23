@@ -755,6 +755,38 @@ export interface SentNotification {
   sent_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// User Notification Center
+// ---------------------------------------------------------------------------
+
+export type UserNotificationType =
+  | "schedule_assignment"
+  | "reminder"
+  | "assignment_change"
+  | "replacement_assignment"
+  | "swap_request"
+  | "swap_resolved"
+  | "membership_approved"
+  | "role_promotion"
+  | "prerequisite_milestone"
+  | "prerequisite_expiry"
+  | "absence_alert"
+  | "self_removal_alert";
+
+export interface UserNotification {
+  id: string;
+  user_id: string;
+  church_id: string;
+  type: UserNotificationType;
+  title: string;
+  body: string;
+  /** Structured data for deep-linking and display: link_href, schedule_id, etc. */
+  metadata: Record<string, string | null>;
+  read: boolean;
+  created_at: string;
+  expires_at: string;
+}
+
 /** A service occurrence on a specific date */
 export interface ServiceOccurrence {
   service: Service;

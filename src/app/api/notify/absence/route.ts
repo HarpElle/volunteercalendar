@@ -5,6 +5,7 @@ import { buildAbsenceAlertEmail } from "@/lib/utils/emails/absence-alert";
 import { sendSms } from "@/lib/services/sms";
 import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
 import type { Membership } from "@/lib/types";
+import { createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -209,6 +210,20 @@ export async function POST(req: NextRequest) {
         } catch {
           // continue
         }
+      }
+
+      // Fire-and-forget: in-app absence alert notification for scheduler
+      try {
+        await createUserNotification({
+          user_id: mUserId,
+          church_id,
+          type: "absence_alert",
+          title: `${volunteerName} can't make it`,
+          body: `${roleName} on ${serviceDate}`,
+          metadata: { link_href: "/dashboard/schedules" },
+        });
+      } catch (notifErr) {
+        console.error("Absence alert user notification failed:", notifErr);
       }
     }
 

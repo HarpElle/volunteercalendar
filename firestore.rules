@@ -43,6 +43,21 @@ service cloud.firestore {
     // Dashboard reads use subcollection rules at churches/{churchId}/...
     // No collection group rule needed.
 
+    // ─── User Notifications ───
+    match /user_notifications/{notifId} {
+      // Users can read their own notifications
+      allow read: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+
+      // Users can mark their own notifications as read (only the "read" field)
+      allow update: if request.auth != null
+        && resource.data.user_id == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+      // Only Admin SDK can create/delete
+      allow create, delete: if false;
+    }
+
     // ─── Event Signups ───
     match /event_signups/{docId} {
       // Org admins can read signups for their church

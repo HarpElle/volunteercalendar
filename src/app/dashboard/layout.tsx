@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
+import { useNotifications } from "@/lib/hooks/use-notifications";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { SmartCheckInBanner } from "@/components/ui/smart-check-in-banner";
 import { Sidebar } from "@/components/dashboard/sidebar";
@@ -34,6 +35,9 @@ export default function DashboardLayout({
 
   // Register service worker for PWA + push notifications
   useServiceWorker();
+
+  // Real-time unread notification badge
+  const { hasUnread } = useNotifications(user?.uid, activeMembership?.church_id || profile?.church_id);
 
   // Show a dot on "Home" when the setup guide hasn't been dismissed
   useEffect(() => {
@@ -125,6 +129,7 @@ export default function DashboardLayout({
         checkinEnabled={checkinEnabled}
         roomsEnabled={roomsEnabled}
         showGuideDot={showGuideDot}
+        hasUnreadNotifications={hasUnread}
         churchName={churchName}
         churchId={churchId}
         activeMemberships={activeMemberships}
@@ -153,7 +158,7 @@ export default function DashboardLayout({
       <BottomNav
         isAdmin={userIsAdmin || userIsScheduler}
         worshipEnabled={worshipEnabled}
-        hasUnreadNotifications={false}
+        hasUnreadNotifications={hasUnread}
         onMoreOpen={() => setMoreMenuOpen(true)}
       />
 
@@ -163,7 +168,7 @@ export default function DashboardLayout({
         onClose={() => setMoreMenuOpen(false)}
         checkinEnabled={checkinEnabled}
         roomsEnabled={roomsEnabled}
-        hasUnreadNotifications={false}
+        hasUnreadNotifications={hasUnread}
         onSignOut={handleSignOut}
       />
     </div>

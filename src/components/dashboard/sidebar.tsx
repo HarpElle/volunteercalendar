@@ -470,9 +470,9 @@ export function Sidebar({
         {/* Notifications + Help */}
         <div className="mt-3 space-y-1">
           <Link
-            href="/dashboard/reminders"
+            href="/dashboard/inbox"
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/reminders")
+              pathname.startsWith("/dashboard/inbox")
                 ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
                 : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
             }`}
@@ -481,7 +481,7 @@ export function Sidebar({
               <Icon
                 d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
                 className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/reminders")
+                  pathname.startsWith("/dashboard/inbox")
                     ? "text-vc-indigo"
                     : "text-vc-text-muted"
                 }`}
@@ -490,8 +490,28 @@ export function Sidebar({
                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-vc-coral" />
               )}
             </span>
-            Reminders
+            Inbox
           </Link>
+          {isScheduler(activeMembership) && (
+            <Link
+              href="/dashboard/reminders"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                pathname.startsWith("/dashboard/reminders")
+                  ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
+                  : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
+              }`}
+            >
+              <Icon
+                d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38a1.125 1.125 0 0 1-1.54-.413l-.34-.59a9.867 9.867 0 0 1-.985-2.783m2.91-9.09a9.868 9.868 0 0 1 .985-2.783l.34-.59a1.125 1.125 0 0 1 1.54-.413l.657.38c.524.3.71.96.463 1.51a9.866 9.866 0 0 0-.985 2.783m-2.91 9.09h2.91"
+                className={`h-5 w-5 ${
+                  pathname.startsWith("/dashboard/reminders")
+                    ? "text-vc-indigo"
+                    : "text-vc-text-muted"
+                }`}
+              />
+              Send Reminders
+            </Link>
+          )}
           <Link
             href="/dashboard/help"
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${

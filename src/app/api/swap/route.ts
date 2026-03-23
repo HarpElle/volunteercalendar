@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase/admin";
 import type { SwapRequest, Volunteer, Assignment } from "@/lib/types";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 // POST — Create a swap request
 // Supports two auth modes:
@@ -201,6 +202,35 @@ export async function PATCH(request: Request) {
         status: "confirmed",
       });
 
+      // Fire-and-forget: notify requester and replacement about swap acceptance
+      try {
+        const requesterUid = await resolveUserId(church_id, swap.requester_volunteer_id);
+        if (requesterUid) {
+          await createUserNotification({
+            user_id: requesterUid,
+            church_id,
+            type: "swap_resolved",
+            title: "Swap approved",
+            body: `${volunteer_name} accepted your swap for ${swap.role_title} on ${swap.service_date}.`,
+            metadata: { link_href: "/dashboard/my-schedule" },
+          });
+        }
+
+        const replacementUid = await resolveUserId(church_id, volunteer_id);
+        if (replacementUid) {
+          await createUserNotification({
+            user_id: replacementUid,
+            church_id,
+            type: "swap_resolved",
+            title: "Swap approved",
+            body: `You've been assigned ${swap.role_title} on ${swap.service_date}.`,
+            metadata: { link_href: "/dashboard/my-schedule" },
+          });
+        }
+      } catch (notifErr) {
+        console.error("User notification error (swap accept):", notifErr);
+      }
+
       return NextResponse.json({ success: true, status: "auto_approved" });
     }
 
@@ -236,6 +266,40 @@ export async function PATCH(request: Request) {
         await churchRef.collection("assignments").doc(swap.assignment_id).update({
           status: "confirmed",
         });
+      }
+
+      // Fire-and-forget: notify requester (and replacement if approved) about admin decision
+      try {
+        const reqUid = await resolveUserId(church_id, swap.requester_volunteer_id);
+        if (reqUid) {
+          const isApproved = action === "approve";
+          await createUserNotification({
+            user_id: reqUid,
+            church_id,
+            type: "swap_resolved",
+            title: isApproved ? "Swap approved" : "Swap rejected",
+            body: isApproved
+              ? `Your swap for ${swap.role_title} on ${swap.service_date} was approved.`
+              : `Your swap for ${swap.role_title} on ${swap.service_date} was rejected.`,
+            metadata: { link_href: "/dashboard/my-schedule" },
+          });
+        }
+
+        if (action === "approve" && swap.replacement_volunteer_id) {
+          const repUid = await resolveUserId(church_id, swap.replacement_volunteer_id);
+          if (repUid) {
+            await createUserNotification({
+              user_id: repUid,
+              church_id,
+              type: "swap_resolved",
+              title: "Swap approved",
+              body: `You've been assigned ${swap.role_title} on ${swap.service_date}.`,
+              metadata: { link_href: "/dashboard/my-schedule" },
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error("User notification error (swap admin decision):", notifErr);
       }
 
       return NextResponse.json({ success: true, status: action === "approve" ? "approved" : "cancelled" });

@@ -5,6 +5,7 @@ import { buildStepCompletedEmail } from "@/lib/utils/emails/prerequisite-step-co
 import { buildEligibleNotifyEmail } from "@/lib/utils/emails/prerequisite-eligible-notify";
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -112,6 +113,23 @@ export async function POST(req: NextRequest) {
         text,
       });
       results.push(`step_completed email sent to ${volunteerEmail}`);
+
+      // Fire-and-forget: in-app notification for step completion
+      try {
+        const volUserId = await resolveUserId(church_id, volunteer_id);
+        if (volUserId) {
+          await createUserNotification({
+            user_id: volUserId,
+            church_id,
+            type: "prerequisite_milestone",
+            title: `You completed ${stepLabel}!`,
+            body: `${completedCount}/${totalCount} steps complete`,
+            metadata: { link_href: "/dashboard/my-journey" },
+          });
+        }
+      } catch (notifErr) {
+        console.error("Step-completed user notification failed:", notifErr);
+      }
     }
 
     if (type === "all_completed") {
@@ -150,6 +168,23 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           results.push(`failed to notify ${schedulerEmail}: ${(err as Error).message}`);
         }
+      }
+
+      // Fire-and-forget: in-app notification for all prerequisites completed
+      try {
+        const volUserId = await resolveUserId(church_id, volunteer_id);
+        if (volUserId) {
+          await createUserNotification({
+            user_id: volUserId,
+            church_id,
+            type: "prerequisite_milestone",
+            title: `You're now eligible for ${ministryName}!`,
+            body: "All prerequisites are complete.",
+            metadata: { link_href: "/dashboard/my-journey" },
+          });
+        }
+      } catch (notifErr) {
+        console.error("All-completed user notification failed:", notifErr);
       }
     }
 

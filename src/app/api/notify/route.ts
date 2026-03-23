@@ -5,6 +5,7 @@ import {
   buildBatchConfirmationEmail,
   type BatchAssignment,
 } from "@/lib/utils/emails/batch-confirmation";
+import { resolveUserId, createUserNotificationBatch } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -157,6 +158,43 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         errors.push(`Failed to email ${email}: ${(err as Error).message}`);
       }
+    }
+
+    // Fire-and-forget: create in-app notifications for assigned volunteers
+    try {
+      const notifPayloads: Array<{
+        user_id: string;
+        church_id: string;
+        type: "schedule_assignment";
+        title: string;
+        body: string;
+        metadata: Record<string, string>;
+      }> = [];
+
+      const resolvedIds = await Promise.all(
+        Array.from(byVolunteer.keys()).map(async (volId) => {
+          const uid = await resolveUserId(church_id, volId);
+          return { volId, uid };
+        }),
+      );
+
+      for (const { uid } of resolvedIds) {
+        if (!uid) continue;
+        notifPayloads.push({
+          user_id: uid,
+          church_id,
+          type: "schedule_assignment",
+          title: "You've been scheduled",
+          body: "You have new assignment(s) — check your schedule.",
+          metadata: { link_href: "/dashboard/my-schedule" },
+        });
+      }
+
+      if (notifPayloads.length > 0) {
+        await createUserNotificationBatch(notifPayloads);
+      }
+    } catch (notifErr) {
+      console.error("User notification error (schedule publish):", notifErr);
     }
 
     return NextResponse.json({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
 import { buildAssignmentChangeEmail } from "@/lib/utils/emails";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -162,6 +163,27 @@ export async function POST(req: NextRequest) {
         html: email.html,
         text: email.text,
       });
+    }
+
+    // Fire-and-forget: create in-app assignment change notification
+    try {
+      const modifyUserId = await resolveUserId(church_id, volunteerId);
+      if (modifyUserId) {
+        const notifBody = action === "remove"
+          ? `You were removed from ${oldRoleTitle} on ${serviceDate}`
+          : `Your role was changed for ${serviceDate}`;
+
+        await createUserNotification({
+          user_id: modifyUserId,
+          church_id,
+          type: "assignment_change",
+          title: "Your schedule was updated",
+          body: notifBody,
+          metadata: { link_href: "/dashboard/my-schedule" },
+        });
+      }
+    } catch (notifErr) {
+      console.error("User notification error (roster modify):", notifErr);
     }
 
     return NextResponse.json({

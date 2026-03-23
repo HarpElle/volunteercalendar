@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildMembershipApprovedEmail } from "@/lib/utils/email-templates";
+import { createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -66,6 +67,20 @@ export async function POST(req: NextRequest) {
       html,
       text,
     });
+
+    // Fire-and-forget: create in-app membership approved notification
+    try {
+      await createUserNotification({
+        user_id: userId,
+        church_id,
+        type: "membership_approved",
+        title: `Welcome to ${churchName}!`,
+        body: "Your membership has been approved.",
+        metadata: { link_href: "/dashboard/my-schedule" },
+      });
+    } catch (notifErr) {
+      console.error("User notification error (membership approved):", notifErr);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

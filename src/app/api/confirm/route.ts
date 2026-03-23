@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { autoReschedule } from "@/lib/services/auto-reschedule";
 import { buildConfirmationEmail } from "@/lib/utils/email-templates";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 export async function GET(request: Request) {
   const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
@@ -153,6 +154,25 @@ export async function POST(request: Request) {
               html,
               text,
             }).catch((err) => console.error("Auto-reschedule email failed:", err));
+
+            // Fire-and-forget: in-app notification for replacement volunteer
+            try {
+              const replacementUserId = result.newVolunteerId
+                ? await resolveUserId(churchId, result.newVolunteerId)
+                : null;
+              if (replacementUserId) {
+                await createUserNotification({
+                  user_id: replacementUserId,
+                  church_id: churchId,
+                  type: "replacement_assignment",
+                  title: "You've been assigned as a replacement",
+                  body: `${current.role_title} on ${current.service_date}`,
+                  metadata: { link_href: "/dashboard/my-schedule" },
+                });
+              }
+            } catch (notifErr) {
+              console.error("Replacement user notification failed:", notifErr);
+            }
           }
         }
       } catch (err) {

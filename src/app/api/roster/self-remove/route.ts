@@ -5,6 +5,7 @@ import { buildSelfRemovalAlertEmail } from "@/lib/utils/emails";
 import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
 import { sendSms } from "@/lib/services/sms";
 import type { Membership } from "@/lib/types";
+import { createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -202,6 +203,20 @@ export async function POST(req: NextRequest) {
         } catch {
           // continue
         }
+      }
+
+      // Fire-and-forget: in-app self-removal alert notification for scheduler
+      try {
+        await createUserNotification({
+          user_id: mUserId,
+          church_id,
+          type: "self_removal_alert",
+          title: `${volunteerName} removed themselves`,
+          body: `${roleName} on ${serviceDate}`,
+          metadata: { link_href: "/dashboard/schedules" },
+        });
+      } catch (notifErr) {
+        console.error("Self-removal alert user notification failed:", notifErr);
       }
     }
 

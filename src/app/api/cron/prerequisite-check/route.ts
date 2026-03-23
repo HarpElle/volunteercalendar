@@ -6,6 +6,7 @@ import { buildExpiryWarningEmail } from "@/lib/utils/emails/prerequisite-expiry-
 import { buildPrerequisiteNudgeEmail } from "@/lib/utils/emails/prerequisite-nudge";
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
+import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -127,6 +128,23 @@ export async function GET(request: Request) {
                 text,
               });
               expiryWarnings++;
+
+              // Fire-and-forget: in-app expiry warning notification
+              try {
+                const volUserId = await resolveUserId(churchId, volDoc.id);
+                if (volUserId) {
+                  await createUserNotification({
+                    user_id: volUserId,
+                    church_id: churchId,
+                    type: "prerequisite_expiry",
+                    title: `Your ${prereq.label} expires soon`,
+                    body: `Expires in ${daysRemaining} days`,
+                    metadata: { link_href: "/dashboard/my-journey" },
+                  });
+                }
+              } catch (notifErr) {
+                console.error("Expiry warning user notification failed:", notifErr);
+              }
             } catch (err) {
               errors.push(`expiry warning to ${volunteerEmail}: ${(err as Error).message}`);
             }
@@ -169,6 +187,23 @@ export async function GET(request: Request) {
                   text,
                 });
                 nudges++;
+
+                // Fire-and-forget: in-app nudge notification
+                try {
+                  const volUserId = await resolveUserId(churchId, volDoc.id);
+                  if (volUserId) {
+                    await createUserNotification({
+                      user_id: volUserId,
+                      church_id: churchId,
+                      type: "prerequisite_expiry",
+                      title: `Reminder: Complete your ${prereq.label}`,
+                      body: `You have ${totalCount - completedCount} steps left`,
+                      metadata: { link_href: "/dashboard/my-journey" },
+                    });
+                  }
+                } catch (notifErr) {
+                  console.error("Nudge user notification failed:", notifErr);
+                }
               } catch (err) {
                 errors.push(`nudge to ${volunteerEmail}: ${(err as Error).message}`);
               }

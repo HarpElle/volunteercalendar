@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildRolePromotionEmail } from "@/lib/utils/email-templates";
+import { createUserNotification } from "@/lib/services/user-notifications";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -86,6 +87,20 @@ export async function POST(req: NextRequest) {
       html,
       text,
     });
+
+    // Fire-and-forget: in-app notification for role promotion
+    try {
+      await createUserNotification({
+        user_id: userId,
+        church_id,
+        type: "role_promotion",
+        title: `You've been promoted to ${ROLE_LABELS[new_role] || new_role}`,
+        body: "Congratulations!",
+        metadata: { link_href: "/dashboard" },
+      });
+    } catch (notifErr) {
+      console.error("Role promotion user notification failed:", notifErr);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {
