@@ -677,8 +677,12 @@ export function Sidebar({
               </p>
               <p className="truncate text-xs text-vc-text-muted">
                 {churchName || "No Organization"}
-                {activeMembership?.role ? ` \u00b7 ${activeMembership.role.charAt(0).toUpperCase() + activeMembership.role.slice(1)}` : ""}
               </p>
+              {activeMembership?.role && (
+                <p className="truncate text-xs text-vc-text-muted/70">
+                  {activeMembership.role.charAt(0).toUpperCase() + activeMembership.role.slice(1)}
+                </p>
+              )}
             </div>
             <svg
               className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${

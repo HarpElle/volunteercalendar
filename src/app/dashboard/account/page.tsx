@@ -30,7 +30,7 @@ import { SCHEDULER_NOTIFICATION_TYPES, DEFAULT_SCHEDULER_NOTIFICATION_PREFS } fr
 
 export default function AccountPage() {
   const router = useRouter();
-  const { user, profile, activeMembership, signOut } = useAuth();
+  const { user, profile, activeMembership, signOut, updateProfilePhoto } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
   const userIsAdmin = isAdmin(activeMembership);
   const userIsScheduler = isScheduler(activeMembership);
@@ -75,6 +75,7 @@ export default function AccountPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(profile?.photo_url || null);
+  const [photoError, setPhotoError] = useState("");
 
   // Scheduler notification prefs state
   const [churchTier, setChurchTier] = useState("free");
@@ -215,6 +216,7 @@ export default function AccountPage() {
   async function handlePhotoUpload(blob: Blob) {
     if (!user) return;
     setUploadingPhoto(true);
+    setPhotoError("");
     try {
       const token = await user.getIdToken();
       const form = new FormData();
@@ -227,10 +229,14 @@ export default function AccountPage() {
       if (res.ok) {
         const { photo_url } = await res.json();
         setUserPhotoUrl(photo_url);
+        updateProfilePhoto(photo_url);
+      } else {
+        setPhotoError("Failed to upload photo. Please try again.");
       }
     } catch {
-      // silent
+      setPhotoError("Failed to upload photo. Please try again.");
     } finally {
+      setCropFile(null);
       setUploadingPhoto(false);
     }
   }
@@ -238,6 +244,7 @@ export default function AccountPage() {
   async function handlePhotoDelete() {
     if (!user) return;
     setUploadingPhoto(true);
+    setPhotoError("");
     try {
       const token = await user.getIdToken();
       await fetch("/api/account/photo", {
@@ -245,8 +252,9 @@ export default function AccountPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUserPhotoUrl(null);
+      updateProfilePhoto(null);
     } catch {
-      // silent
+      setPhotoError("Failed to remove photo. Please try again.");
     } finally {
       setUploadingPhoto(false);
     }
@@ -508,6 +516,7 @@ export default function AccountPage() {
                 )}
               </div>
             </div>
+            {photoError && <p className="mt-2 text-sm text-vc-danger">{photoError}</p>}
           </div>
 
           <div className="border-t border-vc-border-light" />

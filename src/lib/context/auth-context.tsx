@@ -54,7 +54,8 @@ type AuthAction =
   | { type: "SET_ERROR"; error: string }
   | { type: "CLEAR_ERROR" }
   | { type: "SWITCH_ORG"; membership: Membership }
-  | { type: "MEMBERSHIPS_UPDATED"; memberships: Membership[]; activeMembership: Membership | null };
+  | { type: "MEMBERSHIPS_UPDATED"; memberships: Membership[]; activeMembership: Membership | null }
+  | { type: "UPDATE_PROFILE_PHOTO"; photo_url: string | null };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
@@ -82,6 +83,11 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         memberships: action.memberships,
         activeMembership: action.activeMembership,
       };
+    case "UPDATE_PROFILE_PHOTO":
+      return {
+        ...state,
+        profile: state.profile ? { ...state.profile, photo_url: action.photo_url } : state.profile,
+      };
   }
 }
 
@@ -95,6 +101,7 @@ interface AuthContextValue extends AuthState {
   clearError: () => void;
   switchOrg: (churchId: string) => void;
   refreshMemberships: () => Promise<void>;
+  updateProfilePhoto: (photoUrl: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -285,6 +292,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "MEMBERSHIPS_UPDATED", memberships, activeMembership });
   }, [state.user, state.activeMembership, state.profile]);
 
+  function updateProfilePhoto(photoUrl: string | null) {
+    dispatch({ type: "UPDATE_PROFILE_PHOTO", photo_url: photoUrl });
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -296,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearError,
         switchOrg,
         refreshMemberships,
+        updateProfilePhoto,
       }}
     >
       {children}

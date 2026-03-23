@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
@@ -136,6 +137,18 @@ export default function MyJourneyPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
+      {/* Breadcrumb */}
+      <nav className="mb-2 flex items-center gap-1.5 text-sm">
+        <Link
+          href="/dashboard/account"
+          className="text-vc-text-muted transition-colors hover:text-vc-indigo"
+        >
+          Account Settings
+        </Link>
+        <span className="text-vc-text-muted/50">/</span>
+        <span className="font-medium text-vc-text-secondary">My Journey</span>
+      </nav>
+
       {/* Welcome header */}
       <div className="mb-8">
         <h1 className="font-display text-2xl text-vc-indigo sm:text-3xl">
