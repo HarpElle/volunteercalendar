@@ -109,7 +109,8 @@ export async function POST(
     return NextResponse.json({ photo_url: downloadUrl });
   } catch (err) {
     console.error("[API /volunteers/[id]/photo] Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

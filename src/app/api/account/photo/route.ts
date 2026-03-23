@@ -70,13 +70,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update user profile
-    await adminDb.doc(`users/${uid}`).update({ photo_url: downloadUrl });
+    // Update user profile (merge in case doc was created without photo_url field)
+    await adminDb.doc(`users/${uid}`).set({ photo_url: downloadUrl }, { merge: true });
 
     return NextResponse.json({ photo_url: downloadUrl });
   } catch (err) {
     console.error("[API /account/photo] Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -103,7 +104,7 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    await adminDb.doc(`users/${uid}`).update({ photo_url: null });
+    await adminDb.doc(`users/${uid}`).set({ photo_url: null }, { merge: true });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
