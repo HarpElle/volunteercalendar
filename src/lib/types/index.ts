@@ -1233,9 +1233,31 @@ export interface Room {
   default_grades?: ChildGrade[];
   overflow_room_id?: string;
   checkin_view_token?: string;
+  /** Links this room to a facility group for cross-org visibility */
+  facility_group_id?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+// ─── Shared Facility Groups ──────────────────────────────────────────────────
+
+export interface FacilityGroup {
+  id: string;
+  name: string;
+  created_by_church_id: string;
+  created_at: string;
+}
+
+export type FacilityGroupMemberStatus = "pending" | "active";
+
+export interface FacilityGroupMember {
+  id: string;
+  church_id: string;
+  church_name: string;
+  status: FacilityGroupMemberStatus;
+  invited_by_church_id: string;
+  joined_at: string | null;
 }
 
 // ─── Room & Resource Scheduling (Part 2) ─────────────────────────────────────

@@ -82,7 +82,7 @@ export default function CheckInDashboardPage() {
           icon="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
         />
         <QuickAction
-          href="/dashboard/checkin/settings"
+          href="/dashboard/settings?tab=checkin"
           label="Settings"
           description="Service times, printers"
           icon="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
@@ -101,15 +101,15 @@ export default function CheckInDashboardPage() {
           <h2 className="text-lg font-semibold text-vc-indigo font-display mb-3">
             Today&apos;s Activity
           </h2>
-          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm divide-y divide-vc-border-light">
             {stats.sessions.slice(0, 10).map((session) => (
               <div key={session.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="font-medium text-vc-indigo">{session.child_name}</p>
-                  <p className="text-sm text-gray-500">{session.room_name}</p>
+                  <p className="text-sm text-vc-text-secondary">{session.room_name}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-vc-text-secondary">
                     {new Date(session.checked_in_at).toLocaleTimeString([], {
                       hour: "numeric",
                       minute: "2-digit",
@@ -142,10 +142,10 @@ function StatCard({
   loading: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <p className="text-sm text-gray-500 mb-1">{label}</p>
+    <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+      <p className="text-sm text-vc-text-secondary mb-1">{label}</p>
       {loading ? (
-        <div className="h-8 w-12 rounded bg-gray-100 animate-pulse" />
+        <div className="h-8 w-12 rounded bg-vc-sand/20 animate-pulse" />
       ) : (
         <p className={`text-3xl font-bold ${color}`}>{value}</p>
       )}
@@ -167,7 +167,7 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="bg-white rounded-xl border border-gray-200 p-5 hover:border-vc-coral/30
+      className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-5 hover:border-vc-coral/30
         hover:shadow-sm transition-all group"
     >
       <svg
@@ -180,7 +180,7 @@ function QuickAction({
         <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
       </svg>
       <p className="font-semibold text-vc-indigo">{label}</p>
-      <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+      <p className="text-sm text-vc-text-secondary mt-0.5">{description}</p>
     </Link>
   );
 }

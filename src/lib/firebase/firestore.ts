@@ -345,4 +345,118 @@ export async function getServiceAssignments(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as import("@/lib/types").Assignment);
 }
 
+// ─── Facility Group Helpers ──────────────────────────────────────────────────
+
+import type { FacilityGroup, FacilityGroupMember } from "@/lib/types";
+
+/** Create a new facility group. Returns the created group ID. */
+export async function createFacilityGroup(
+  name: string,
+  churchId: string,
+  churchName: string,
+): Promise<string> {
+  const groupRef = await addDoc(collection(db, "facility_groups"), {
+    name,
+    created_by_church_id: churchId,
+    created_at: new Date().toISOString(),
+  } satisfies Omit<FacilityGroup, "id">);
+
+  // Add the creating org as the first active member
+  await setDoc(doc(db, "facility_groups", groupRef.id, "members", churchId), {
+    church_id: churchId,
+    church_name: churchName,
+    status: "active",
+    invited_by_church_id: churchId,
+    joined_at: new Date().toISOString(),
+  } satisfies Omit<FacilityGroupMember, "id">);
+
+  return groupRef.id;
+}
+
+/** Invite another org to a facility group. */
+export async function inviteToFacilityGroup(
+  groupId: string,
+  targetChurchId: string,
+  targetChurchName: string,
+  invitedByChurchId: string,
+): Promise<void> {
+  await setDoc(
+    doc(db, "facility_groups", groupId, "members", targetChurchId),
+    {
+      church_id: targetChurchId,
+      church_name: targetChurchName,
+      status: "pending",
+      invited_by_church_id: invitedByChurchId,
+      joined_at: null,
+    } satisfies Omit<FacilityGroupMember, "id">,
+  );
+}
+
+/** Accept a facility group invitation. */
+export async function acceptFacilityInvite(
+  groupId: string,
+  churchId: string,
+): Promise<void> {
+  await updateDoc(
+    doc(db, "facility_groups", groupId, "members", churchId),
+    {
+      status: "active",
+      joined_at: new Date().toISOString(),
+    },
+  );
+}
+
+/** Leave / decline a facility group. */
+export async function leaveFacilityGroup(
+  groupId: string,
+  churchId: string,
+): Promise<void> {
+  await deleteDoc(doc(db, "facility_groups", groupId, "members", churchId));
+}
+
+/** Get all facility groups that a church belongs to (active or pending). */
+export async function getChurchFacilityGroups(
+  churchId: string,
+): Promise<Array<FacilityGroup & { membership: FacilityGroupMember }>> {
+  // Query all facility_groups where this church is a member
+  // Firestore limitation: we can't query subcollection across parents,
+  // so we use collectionGroup
+  const memberSnap = await getDocs(
+    query(
+      collection(db, "facility_groups"),
+    ),
+  );
+
+  const results: Array<FacilityGroup & { membership: FacilityGroupMember }> = [];
+
+  for (const groupDoc of memberSnap.docs) {
+    const memberRef = doc(db, "facility_groups", groupDoc.id, "members", churchId);
+    const memberSnap2 = await getDoc(memberRef);
+    if (memberSnap2.exists()) {
+      results.push({
+        id: groupDoc.id,
+        ...groupDoc.data(),
+        membership: {
+          id: memberSnap2.id,
+          ...memberSnap2.data(),
+        },
+      } as FacilityGroup & { membership: FacilityGroupMember });
+    }
+  }
+
+  return results;
+}
+
+/** Get all members of a facility group. */
+export async function getFacilityGroupMembers(
+  groupId: string,
+): Promise<FacilityGroupMember[]> {
+  const snap = await getDocs(
+    collection(db, "facility_groups", groupId, "members"),
+  );
+  return snap.docs.map(
+    (d) => ({ id: d.id, ...d.data() }) as FacilityGroupMember,
+  );
+}
+
 export { where, orderBy, limit };

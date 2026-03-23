@@ -82,8 +82,10 @@ VolunteerCal/
 │   │   │   │   └── page.tsx        # Volunteer self-service availability (blockouts, recurring days, preferences)
 │   │   │   ├── my-orgs/
 │   │   │   │   └── page.tsx        # Multi-org management (invites, reminders, switch)
+│   │   │   ├── settings/
+│   │   │   │   └── page.tsx        # Unified settings hub (General, Teams, Campuses, Check-In, Rooms, Billing tabs)
 │   │   │   ├── organization/
-│   │   │   │   └── page.tsx        # Org settings, ministries/teams, campuses, billing (stacked sections)
+│   │   │   │   └── page.tsx        # Redirect → /dashboard/settings
 │   │   │   ├── account/
 │   │   │   │   └── page.tsx        # User profile, password, calendar feeds, danger zone
 │   │   │   ├── notifications/
@@ -189,8 +191,10 @@ VolunteerCal/
 │   │       │   │   └── route.ts            # Send org creation confirmation email
 │   │       │   ├── absence/
 │   │       │   │   └── route.ts            # Volunteer absence alert to schedulers/admins
-│   │       │   └── prerequisite/
-│   │       │       └── route.ts            # Prerequisite milestone notifications (step/all completed, scheduler eligible)
+│   │       │   ├── prerequisite/
+│   │       │   │   └── route.ts            # Prerequisite milestone notifications (step/all completed, scheduler eligible)
+│   │       │   └── facility-invite/
+│   │       │       └── route.ts            # Facility group invitation email to target org admins
 │   │       ├── attendance/
 │   │       │   └── route.ts    # Batch attendance updates (event signups + assignments)
 │   │       ├── calendar/
@@ -382,10 +386,13 @@ VolunteerCal/
 │   │       │           │   └── route.ts   # Approve request + SMS (POST)
 │   │       │           └── deny/
 │   │       │               └── route.ts   # Deny request + SMS (POST)
+│   │       ├── facility/              # Shared facility scheduling
+│   │       │   └── reservations/
+│   │       │       └── route.ts       # Cross-org reservation fetch for linked facility groups
 │   │       ├── display/               # Room display signage API
 │   │       │   └── room/
 │   │       │       └── [roomId]/
-│   │       │           └── route.ts   # Public room status (GET, token auth)
+│   │       │           └── route.ts   # Public room status (GET, token auth, wake-lock indicator)
 │   │       ├── calendar/              # iCal feed routes (existing + new room feeds)
 │   │       │   ├── route.ts           # Existing volunteer iCal feed
 │   │       │   ├── room/
@@ -411,7 +418,7 @@ VolunteerCal/
 │   │   ├── forms/              # Modal/drawer-wrapped forms: service-form-modal (effective-from UI), ministry-form-modal, campus-form-modal, create-schedule-modal (step wizard), volunteer-edit-modal, csv-import-modal, chms-import-modal, invite-queue-drawer, household-form-modal
 │   │   ├── layout/             # Headers, footers, sidebar
 │   │   ├── landing/            # Landing page sections (hero, features, pain-points, how-it-works, pricing, faq, waitlist-form, footer, navbar, animate-in)
-│   │   ├── dashboard/           # sidebar, mobile-header (extracted from dashboard layout.tsx)
+│   │   ├── dashboard/           # sidebar (desktop-only, warm vc-bg-warm, collapsible Check-In/Rooms), mobile-header (slim branding bar), bottom-nav (mobile tab bar: volunteer 4-tab / admin 5-tab), more-menu (mobile admin slide-up sheet)
 │   │   ├── people/             # Person card, person detail drawer, add-people-menu, invite-form, member-row, household-card, filter-bar (extracted from people/page.tsx)
 │   │   ├── services/           # services-list, event-list (extracted from services-events/page.tsx)
 │   │   ├── settings/           # general-settings, teams-settings, campuses-settings, billing-settings (extracted from organization/page.tsx)
@@ -424,7 +431,7 @@ VolunteerCal/
 │       ├── context/            # auth-context.tsx, schedule-context.tsx
 │       ├── hooks/              # Custom React hooks (use-service-worker.ts)
 │       ├── types/              # TypeScript interfaces (incl. InviteQueueItem, Campus, SwapRequest, OnboardingStep, VolunteerJourneyStep, MinistryAssignment, Song, ServicePlan, StageSyncState, SongUsageRecord, CheckInHousehold, Child, CheckInSession, CheckInSettings, PrinterConfig, LabelJob, Room, Reservation, ReservationRequest, RoomSettings, RecurrenceRule)
-│       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting), scheduler notification defaults
+│       ├── constants/          # Workflow modes, reminder channels, pricing tiers (updated: Starter $29, Growth $69, Pro $119), tier limits (worship_enabled, workflow_modes_all, multi_stage_approval, ccli_csv_export), scheduler notification defaults
 │       ├── stripe.ts           # Stripe client, price mappings
 │       ├── utils/              # ical.ts, org-terms.ts, permissions.ts, download-slide.ts, org-cascade-delete.ts, rate-limit.ts, safe-compare.ts, phone.ts, service-helpers.ts, print-flyer.ts, geolocation.ts, scheduler-notification-check.ts, eligibility.ts, security-code.ts, recurrence.ts (recurring reservation materialization)
 │       │   ├── emails/         # 37 email templates + base-layout.ts (barrel: index.ts re-exports; incl. batch-confirmation, absence-alert, availability-window, approval-request, approval-reminder, household-conflict, propresenter-export)
@@ -478,7 +485,7 @@ VolunteerCal/
 | 29 | Service roster & attendance access parity: Roster button added to service cards on Services & Events page (matches event card parity), ServiceRoster modal opens for next upcoming service date, Attendance tab on both service and event rosters now accessible for future dates (not gated to past/today), allows admins/schedulers to familiarize with attendance UI before service day | Complete |
 | 30 | Attendance enhancement, absence alerts & scheduler notifications: AttendanceStatus type overhaul (boolean→string enum: present/no_show/excused/null with backward-compat normalizer), shared AttendanceToggle component extracted from duplicate inline toggles, four-state toggle cycle (null→present→no_show→excused→null), "Roster & Attendance" button rename, layout shift fixes (reserved stats bar + save button space), "Can't Make It" volunteer self-service absence notification (modal + API + email template + SMS for paid tiers), scheduler/admin granular notification preferences (per-type toggles, standard/urgent channel selection, ministry scope, SMS tier-gated to Starter+), shouldNotifyScheduler utility wired into absence + self-removal API routes | Complete |
 | 31 | UI/UX consistency audit: modal close button touch target fix (28px→45px), confirm dialog buttons sm→md, Card tappable variant (hover-lift + active-press), Organization page ministry/campus cards converted from hover-reveal to tappable card pattern (chevron affordance, keyboard accessible, delete moved into edit form), check-in number inputs right-sized (max-w-[120px]), People page roster Edit/Delete + Approve/Reject touch targets to 44px minimum, My Orgs page Accept/Decline/Switch/reminder toggle touch targets to 44px, schedules page hover-reveal actions made always-visible, dashboard sub-heading size standardization, zero hover-only interaction patterns remaining | Complete |
-| 32 | Expansion: scheduling enhancements + worship module — **Service profiles with timeline changes** (MinistryAssignment with effective_from/effective_until, EditScope, temporal filtering in service-helpers/scheduler, validate-ministry-assignments utility, service PATCH API, service form effective-from UI), **Scheduling workflow modes** (step-based create-schedule wizard, workflow mode picker, all 3 modes active), **Availability campaigns** (broadcast API, availability-campaign-banner, email template), **Multi-stage approval** (approve/publish/coordination APIs, approval-countdown component, cross-team-modal, approval-request + approval-reminder email templates), **Household UI** (household-form-modal, household-conflict-card, Families tab on People page, never_same_time + prefer_same_service scheduler enhancements), **Worship module** (Song/ServicePlan/SongUsageRecord/StageSyncState types, song CRUD API, service-plans CRUD + publish API with song usage tracking, Songs page, Service Plans page, Reports page, worship nav section gated by tier), **Pricing update** (Starter $19→$29, Growth $49→$69, Pro $99→$119, new tier gates: worship_enabled, workflow_modes_all, multi_stage_approval, ccli_auto_reporting) | Complete |
+| 32 | Expansion: scheduling enhancements + worship module — **Service profiles with timeline changes** (MinistryAssignment with effective_from/effective_until, EditScope, temporal filtering in service-helpers/scheduler, validate-ministry-assignments utility, service PATCH API, service form effective-from UI), **Scheduling workflow modes** (step-based create-schedule wizard, workflow mode picker, all 3 modes active), **Availability campaigns** (broadcast API, availability-campaign-banner, email template), **Multi-stage approval** (approve/publish/coordination APIs, approval-countdown component, cross-team-modal, approval-request + approval-reminder email templates), **Household UI** (household-form-modal, household-conflict-card, Families tab on People page, never_same_time + prefer_same_service scheduler enhancements), **Worship module** (Song/ServicePlan/SongUsageRecord/StageSyncState types, song CRUD API, service-plans CRUD + publish API with song usage tracking, Songs page, Service Plans page, Reports page, worship nav section gated by tier), **Pricing update** (Starter $19→$29, Growth $49→$69, Pro $99→$119, new tier gates: worship_enabled, workflow_modes_all, multi_stage_approval, ccli_csv_export) | Complete |
 | Exp. 4 | SongSelect file import — songselect file parser for ChordPro exports (src/lib/integrations/songselect.ts), import API route (src/app/api/songselect/import/), drag-and-drop import modal with ChordPro + PDF support (src/components/worship/songselect-import-modal.tsx), duplicate detection by CCLI number. Note: SongSelect has no public API; users download files from songselect.ccli.com and upload them. | Complete |
 | Exp. 9 | ChordPro & PDF Import + Chord Chart Viewer — custom ChordPro parser (src/lib/music/chordpro-parser.ts), transposition engine with Nashville/Solfege support (src/lib/music/transposition.ts), PDF conversion via Claude Vision API (src/app/api/songselect/convert-pdf/), file upload with Firebase Storage (src/app/api/songselect/upload/), chord chart renderer + viewer with transpose/chart-type/columns/scale/fit-to-pages (src/components/worship/chord-chart-renderer.tsx, chord-chart-viewer.tsx), song detail page (/dashboard/worship/songs/[id]), song editor with section management (src/components/worship/song-editor.tsx), arrangements system (src/app/api/arrangements/, src/components/worship/arrangements-panel.tsx), StageSync chart integration, CCLI compliance (license number + attestation in settings, CSV export). Dropped .usr/.txt parsers (discontinued formats). | Complete |
 | Exp. 5 | Stage Sync — conductor page (src/app/stage-sync/conductor/[churchId]/[planId]/), participant page (src/app/stage-sync/view/[churchId]/[planId]/), enable/advance/status API routes (src/app/api/stage-sync/), conductor component with keyboard shortcuts, participant viewer with real-time Firestore onSnapshot, share modal with QR code, Firestore rules for stage_sync_live and stage_sync_tokens collections | Complete |

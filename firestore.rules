@@ -157,6 +157,40 @@ service cloud.firestore {
       }
     }
 
+    // ─── Facility Groups ───
+    match /facility_groups/{groupId} {
+      // Any authenticated user can read groups (app filters by membership)
+      allow read: if request.auth != null;
+
+      // Org admins can create a facility group
+      allow create: if request.auth != null
+        && isOrgAdmin(request.resource.data.created_by_church_id);
+
+      // Only the creator org's admins can update/delete the group
+      allow update: if request.auth != null
+        && isOrgAdmin(resource.data.created_by_church_id);
+
+      allow delete: if request.auth != null
+        && isOrgAdmin(resource.data.created_by_church_id);
+
+      // ─── Facility Group Members ───
+      match /members/{memberId} {
+        allow read: if request.auth != null;
+
+        // Admins of the inviting org can add members
+        allow create: if request.auth != null
+          && isOrgAdmin(request.resource.data.invited_by_church_id);
+
+        // Admins of the member's own org can accept invite or update
+        allow update: if request.auth != null
+          && isOrgAdmin(resource.data.church_id);
+
+        // Admins of the member's own org can leave (delete)
+        allow delete: if request.auth != null
+          && isOrgAdmin(resource.data.church_id);
+      }
+    }
+
     // ─── Stage Sync Live (public read — token IS the auth) ───
     match /stage_sync_live/{token} {
       allow read: if true;

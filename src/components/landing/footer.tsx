@@ -84,10 +84,10 @@ export function Footer() {
           </p>
           <p>
             <a
-              href="mailto:hello@volunteercal.com"
+              href="mailto:info@volunteercal.com"
               className="transition-colors hover:text-vc-indigo"
             >
-              hello@volunteercal.com
+              info@volunteercal.com
             </a>
           </p>
         </div>

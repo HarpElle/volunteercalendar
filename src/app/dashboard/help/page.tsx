@@ -914,9 +914,10 @@ const featureGuides: HelpSection[] = [
           <div>
             <dt className="font-medium text-vc-text">Viewing Reports</dt>
             <dd className="mt-1">
-              Navigate to Worship &rarr; Reports. The page shows a table of
-              songs used across your published service plans, with use counts and
-              date information.
+              From the Worship section, open Service Plans and click the
+              &ldquo;Song Usage Reports&rdquo; link in the page header. The
+              reports page shows a table of songs used across your published
+              service plans, with use counts and date information.
             </dd>
           </div>
           <div>
@@ -981,6 +982,296 @@ const featureGuides: HelpSection[] = [
         </dl>
         <p className="mt-3">
           ProPresenter export is available on Growth tier and above.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Children's Check-In",
+    content: (
+      <>
+        <p>
+          VolunteerCal includes a dedicated children&apos;s check-in system
+          designed for safety, speed, and simplicity.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Kiosk Mode</dt>
+            <dd className="mt-1">
+              Set up a tablet or computer as a check-in kiosk. Parents search
+              for their household, select the children to check in, and the
+              system assigns each child to the appropriate room based on their
+              grade.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Room Assignment</dt>
+            <dd className="mt-1">
+              Each room can be configured with grade ranges (e.g., K&ndash;2nd
+              grade). When a child checks in, they&apos;re automatically routed
+              to the correct room. If a room reaches capacity, children are
+              directed to a designated overflow room.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Label Printing</dt>
+            <dd className="mt-1">
+              After check-in, two labels print automatically: a name tag for
+              the child and a guardian receipt with a matching security code.
+              The security code is required for pickup. Configure printers in
+              Settings &rarr; Check-In.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Security Codes</dt>
+            <dd className="mt-1">
+              Each check-in generates a unique security code shared between
+              the child&apos;s name tag and the guardian&apos;s receipt. At
+              pickup, volunteers verify the codes match before releasing a
+              child.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Children&apos;s check-in is available on Growth tier and above.
+          Configure rooms and printers in Settings &rarr; Check-In.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Room & Resource Scheduling",
+    content: (
+      <>
+        <p>
+          Book and manage rooms, equipment, and shared spaces with a visual
+          calendar and approval workflow.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Booking a Room</dt>
+            <dd className="mt-1">
+              Go to Rooms &rarr; Bookings and click &ldquo;New Booking.&rdquo;
+              The booking wizard walks you through selecting a room, choosing
+              a date and time, requesting equipment, and adding setup notes.
+              If approval is required, your request goes to an admin for
+              review.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Recurring Reservations</dt>
+            <dd className="mt-1">
+              Set up weekly, biweekly, or monthly recurring reservations.
+              Individual occurrences can be modified or cancelled without
+              affecting the rest of the series. Available on Growth tier and
+              above.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Conflict Detection</dt>
+            <dd className="mt-1">
+              The booking wizard automatically checks for scheduling conflicts.
+              If another reservation already occupies your requested time slot,
+              you&apos;ll see a warning before submitting.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Room Display Signage</dt>
+            <dd className="mt-1">
+              Each room has a public display URL for wall-mounted tablets.
+              The display shows the room&apos;s current status (Available, In
+              Use, Starting Soon), a countdown timer, and today&apos;s full
+              schedule. Find the display URL in Settings &rarr; Rooms.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">iCal Feeds</dt>
+            <dd className="mt-1">
+              Subscribe to a room&apos;s calendar feed from Google Calendar,
+              Outlook, or Apple Calendar. The feed updates automatically when
+              reservations change. Find feed URLs in Settings &rarr; Rooms.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Room scheduling starts at the Starter tier (5 rooms). Growth and
+          above unlock recurring reservations, public calendars, and more rooms.
+          Configure rooms in Settings &rarr; Rooms.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Label Printing Setup",
+    content: (
+      <>
+        <p>
+          VolunteerCal prints children&apos;s check-in labels (name tags and
+          guardian receipts) using a companion print service that runs on your
+          local network.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Install the Print Service</dt>
+            <dd className="mt-1">
+              Download the VolunteerCal Print Service for your platform (Windows
+              or macOS). Install and launch it &mdash; the service runs in the
+              background and listens for print jobs from VolunteerCal.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Configure Printers</dt>
+            <dd className="mt-1">
+              In Settings &rarr; Check-In, add your label printers. Specify
+              the printer name (as it appears on your computer), label size,
+              and which rooms each printer serves.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Label Types</dt>
+            <dd className="mt-1">
+              Two labels print per check-in: a child name tag (with name, room,
+              and security code) and a guardian receipt (with child name, room,
+              and matching security code for pickup verification).
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Label printing requires the companion print service and is available
+          on Growth tier and above.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Your Availability",
+    content: (
+      <>
+        <p>
+          Let your team know when you&apos;re unavailable so the scheduler can
+          plan around your schedule.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Setting Unavailable Dates</dt>
+            <dd className="mt-1">
+              Open the Dates tab (mobile) or My Availability page (desktop).
+              Click &ldquo;Add Dates&rdquo; to select a start and end date.
+              Optionally add a reason (e.g., &ldquo;Family vacation&rdquo;).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">How It&apos;s Used</dt>
+            <dd className="mt-1">
+              When a scheduler generates a schedule, your unavailable dates are
+              factored in automatically. You won&apos;t be assigned to any
+              service that falls within your blocked periods.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Managing Your Dates</dt>
+            <dd className="mt-1">
+              View all your upcoming unavailable periods in a list. Remove any
+              that are no longer needed by clicking the delete button.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Availability is shared across all organizations you belong to. If
+          you&apos;re unavailable, no org will schedule you during that period.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Managing Multiple Organizations",
+    content: (
+      <>
+        <p>
+          If you serve at more than one church or organization, VolunteerCal
+          lets you manage them all from a single account.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Switching Organizations</dt>
+            <dd className="mt-1">
+              Use the organization switcher at the bottom of the sidebar
+              (desktop) or in the More menu (mobile) to switch between your
+              organizations. Your dashboard, schedule, and settings update
+              instantly.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Joining an Organization</dt>
+            <dd className="mt-1">
+              If you receive an invitation email, click the link to accept and
+              join the organization. You can also create a new organization
+              from the My Organizations page.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Per-Org Roles</dt>
+            <dd className="mt-1">
+              Your role (admin, scheduler, volunteer) is set independently for
+              each organization. You might be an admin at one church and a
+              volunteer at another.
+            </dd>
+          </div>
+        </dl>
+      </>
+    ),
+  },
+  {
+    title: "Shared Facility Scheduling",
+    content: (
+      <>
+        <p>
+          When multiple organizations share the same physical building,
+          shared facility scheduling lets everyone see room reservations
+          across groups &mdash; preventing double-bookings and coordination
+          issues.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Creating a Facility Group</dt>
+            <dd className="mt-1">
+              Go to Settings &rarr; Rooms and scroll to the Shared Facility
+              section. Enter a name for the facility group (e.g., &ldquo;Main
+              Campus&rdquo;) and click Create. Your organization is
+              automatically added as the first member.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Inviting Another Organization</dt>
+            <dd className="mt-1">
+              Click &ldquo;Invite Org&rdquo; on your facility group and enter
+              the other organization&apos;s ID. They&apos;ll receive an email
+              notification and can accept or decline from their own Settings
+              page. Both organizations must consent &mdash; sharing is mutual.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">How It Works</dt>
+            <dd className="mt-1">
+              Once linked, each organization retains full control of their own
+              rooms and reservations. When viewing the room calendar,
+              reservations from linked organizations appear as read-only
+              blocks &mdash; you can see the time and event name, but cannot
+              edit or delete them. The booking wizard also checks for conflicts
+              across all linked organizations.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Linking Rooms</dt>
+            <dd className="mt-1">
+              Each organization chooses which rooms to share by assigning them
+              to the facility group. Only rooms marked for sharing will be
+              visible to linked organizations.
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3">
+          Shared facility scheduling is available on Growth tier and above.
         </p>
       </>
     ),
@@ -1089,7 +1380,7 @@ export default function HelpPage() {
           We&apos;re here to help you get the most out of VolunteerCal. Reach out anytime.
         </p>
         <a
-          href="mailto:hello@volunteercal.com"
+          href="mailto:info@volunteercal.com"
           className="mt-4 inline-flex items-center gap-2 rounded-full bg-vc-coral px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-vc-coral-dark active:scale-[0.98]"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

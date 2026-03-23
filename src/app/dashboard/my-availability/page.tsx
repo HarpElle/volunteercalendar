@@ -141,9 +141,7 @@ export default function MyAvailabilityPage() {
 
   function toggleRecurringDay(day: string) {
     setRecurringUnavailable((prev) =>
-      prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day],
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   }
 
@@ -160,197 +158,207 @@ export default function MyAvailabilityPage() {
   if (!volunteer) {
     return (
       <div className="px-4 py-20 text-center">
-        <p className="text-vc-text-secondary">
-          No volunteer record found for your account. Contact your admin to be
-          added as a volunteer.
+        <svg
+          className="mx-auto h-12 w-12 text-vc-text-muted"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+          />
+        </svg>
+        <h3 className="mt-3 text-base font-semibold text-vc-indigo">
+          No volunteer profile yet
+        </h3>
+        <p className="mt-1 text-sm text-vc-text-secondary">
+          Contact your admin to be added as a volunteer.
         </p>
       </div>
     );
   }
 
   const today = new Date().toISOString().split("T")[0];
-  // Filter out past blockout dates for display
   const futureBlockouts = blockoutDates.filter((d) => d >= today);
   const pastBlockouts = blockoutDates.filter((d) => d < today);
 
   return (
-    <div className="min-h-screen bg-vc-bg px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-display text-3xl text-vc-indigo">
-            My Availability
-          </h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Let your team know when you're available to serve.
-          </p>
-        </div>
+    <div className="mx-auto max-w-2xl">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="font-display text-3xl text-vc-indigo">
+          Your Availability
+        </h1>
+        <p className="mt-1 text-vc-text-secondary">
+          Let your team know when you're unavailable so they can plan around
+          your schedule.
+        </p>
+      </div>
 
-        {/* Recurring Unavailable Days */}
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-1 font-display text-lg text-vc-indigo">
-            Recurring Days Off
-          </h2>
-          <p className="mb-4 text-sm text-vc-text-secondary">
-            Select days you're regularly unavailable.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {DAYS_OF_WEEK.map((day) => {
-              const active = recurringUnavailable.includes(day);
-              return (
-                <button
-                  key={day}
-                  onClick={() => toggleRecurringDay(day)}
-                  className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-vc-coral text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Blockout Dates */}
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-1 font-display text-lg text-vc-indigo">
-            Blockout Dates
-          </h2>
-          <p className="mb-4 text-sm text-vc-text-secondary">
-            Specific dates you can't serve (vacations, trips, etc.).
-          </p>
-
-          {/* Add new */}
-          <div className="mb-4 flex items-center gap-2">
-            <input
-              type="date"
-              value={newBlockoutDate}
-              min={today}
-              onChange={(e) => setNewBlockoutDate(e.target.value)}
-              className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-vc-coral"
-            />
-            <Button
-              size="sm"
-              onClick={addBlockoutDate}
-              disabled={!newBlockoutDate}
-            >
-              Add Date
-            </Button>
-          </div>
-
-          {/* List */}
-          {futureBlockouts.length === 0 && pastBlockouts.length === 0 ? (
-            <p className="text-sm italic text-vc-text-muted">
-              No blockout dates set.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {futureBlockouts.map((date) => (
-                <div
-                  key={date}
-                  className="flex items-center justify-between rounded-lg bg-vc-bg px-3 py-2"
-                >
-                  <span className="text-sm text-vc-text">
-                    {new Date(date + "T12:00:00").toLocaleDateString(
-                      undefined,
-                      {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      },
-                    )}
-                  </span>
-                  <button
-                    onClick={() => removeBlockoutDate(date)}
-                    className="flex h-8 w-8 items-center justify-center rounded text-gray-400 transition-colors hover:text-vc-danger"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18 18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-              {pastBlockouts.length > 0 && (
-                <p className="pt-2 text-xs text-vc-text-muted">
-                  {pastBlockouts.length} past blockout date
-                  {pastBlockouts.length !== 1 ? "s" : ""} (auto-cleaned on
-                  save)
-                </p>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Preferences */}
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-1 font-display text-lg text-vc-indigo">
-            Scheduling Preferences
-          </h2>
-          <p className="mb-4 text-sm text-vc-text-secondary">
-            Help schedulers plan around your capacity.
-          </p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-vc-text-secondary">
-                Preferred frequency (weeks between)
-              </label>
-              <select
-                value={preferredFrequency}
-                onChange={(e) =>
-                  setPreferredFrequency(parseInt(e.target.value, 10))
-                }
-                className="min-h-[44px] w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-vc-coral"
+      {/* Recurring Unavailable Days */}
+      <section className="mb-6 rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Recurring Days Off
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Select days you're regularly unavailable.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {DAYS_OF_WEEK.map((day) => {
+            const active = recurringUnavailable.includes(day);
+            return (
+              <button
+                key={day}
+                onClick={() => toggleRecurringDay(day)}
+                className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-vc-coral text-white"
+                    : "bg-vc-sand/20 text-vc-text-secondary hover:bg-vc-sand/35"
+                }`}
               >
-                <option value={1}>Every week</option>
-                <option value={2}>Every other week</option>
-                <option value={3}>Every 3 weeks</option>
-                <option value={4}>Once a month</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-vc-text-secondary">
-                Max roles per month
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={maxRolesPerMonth || ""}
-                onChange={(e) =>
-                  setMaxRolesPerMonth(
-                    e.target.value ? parseInt(e.target.value, 10) : 0,
-                  )
-                }
-                placeholder="0 = no limit"
-                className="min-h-[44px] w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-vc-coral"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Save */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSave} loading={saving}>
-            Save Availability
-          </Button>
-          {saved && (
-            <Badge variant="success">Saved</Badge>
-          )}
+                {day}
+              </button>
+            );
+          })}
         </div>
+      </section>
+
+      {/* Blockout Dates */}
+      <section className="mb-6 rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Unavailable Dates
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Specific dates you can't serve — vacations, trips, family events.
+        </p>
+
+        {/* Add new */}
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            type="date"
+            value={newBlockoutDate}
+            min={today}
+            onChange={(e) => setNewBlockoutDate(e.target.value)}
+            className="min-h-[44px] rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+          />
+          <Button
+            size="sm"
+            onClick={addBlockoutDate}
+            disabled={!newBlockoutDate}
+          >
+            Add Date
+          </Button>
+        </div>
+
+        {/* List */}
+        {futureBlockouts.length === 0 && pastBlockouts.length === 0 ? (
+          <p className="text-sm text-vc-text-muted">
+            No unavailable dates set. Your team will assume you're available for
+            scheduling.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {futureBlockouts.map((date) => (
+              <div
+                key={date}
+                className="flex items-center justify-between rounded-lg bg-white px-3 py-2"
+              >
+                <span className="text-sm text-vc-text">
+                  {new Date(date + "T12:00:00").toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+                <button
+                  onClick={() => removeBlockoutDate(date)}
+                  className="flex h-8 w-8 items-center justify-center rounded text-vc-text-muted transition-colors hover:text-vc-danger"
+                  aria-label={`Remove ${date}`}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18 18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {pastBlockouts.length > 0 && (
+              <p className="pt-2 text-xs text-vc-text-muted">
+                {pastBlockouts.length} past date
+                {pastBlockouts.length !== 1 ? "s" : ""} will be cleaned up on
+                save.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Preferences */}
+      <section className="mb-6 rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Scheduling Preferences
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Help schedulers plan around your capacity.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-vc-text-secondary">
+              Preferred frequency (weeks between)
+            </label>
+            <select
+              value={preferredFrequency}
+              onChange={(e) =>
+                setPreferredFrequency(parseInt(e.target.value, 10))
+              }
+              className="min-h-[44px] w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+            >
+              <option value={1}>Every week</option>
+              <option value={2}>Every other week</option>
+              <option value={3}>Every 3 weeks</option>
+              <option value={4}>Once a month</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-vc-text-secondary">
+              Max roles per month
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={maxRolesPerMonth || ""}
+              onChange={(e) =>
+                setMaxRolesPerMonth(
+                  e.target.value ? parseInt(e.target.value, 10) : 0,
+                )
+              }
+              placeholder="0 = no limit"
+              className="min-h-[44px] w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Save */}
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} loading={saving}>
+          Save Availability
+        </Button>
+        {saved && <Badge variant="success">Saved</Badge>}
       </div>
     </div>
   );

@@ -109,7 +109,7 @@ export async function POST(
             });
 
             await resend.emails.send({
-              from: `${churchName} via VolunteerCal <noreply@volunteercal.org>`,
+              from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
               to: v.email,
               subject: email.subject,
               html: email.html,

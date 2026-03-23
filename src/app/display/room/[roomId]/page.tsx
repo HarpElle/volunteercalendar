@@ -73,6 +73,7 @@ export default function RoomDisplayPage() {
   const [data, setData] = useState<DisplayData | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(new Date());
+  const [wakeLockActive, setWakeLockActive] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!roomId || !token || !churchId) return;
@@ -91,6 +92,36 @@ export default function RoomDisplayPage() {
       setError("Network error");
     }
   }, [roomId, token, churchId]);
+
+  // Wake-lock: keep screen on for always-on signage
+  useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null;
+
+    async function requestWakeLock() {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+          setWakeLockActive(true);
+          wakeLock.addEventListener("release", () => setWakeLockActive(false));
+        }
+      } catch {
+        // Permission denied or not supported — silent fail
+      }
+    }
+
+    requestWakeLock();
+
+    // Re-acquire on visibility change (tab focus regained)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") requestWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      wakeLock?.release();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   // Initial fetch + polling
   useEffect(() => {
@@ -234,7 +265,17 @@ export default function RoomDisplayPage() {
         <h1 className="text-4xl font-bold text-white font-display">
           {data.room.name}
         </h1>
-        <p className="text-2xl text-white/80 font-medium">{currentTime}</p>
+        <div className="flex items-center gap-3">
+          {wakeLockActive && (
+            <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs text-white/60">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+              </svg>
+              Display Mode
+            </span>
+          )}
+          <p className="text-2xl text-white/80 font-medium">{currentTime}</p>
+        </div>
       </div>
 
       {/* Status badge */}

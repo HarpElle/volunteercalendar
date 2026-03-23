@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
-import { isScheduler } from "@/lib/utils/permissions";
+import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
 import { SmartCheckInBanner } from "@/components/ui/smart-check-in-banner";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileHeader } from "@/components/dashboard/mobile-header";
+import { BottomNav } from "@/components/dashboard/bottom-nav";
+import { MoreMenu } from "@/components/dashboard/more-menu";
 import type { SubscriptionTier } from "@/lib/types";
 import { TIER_LIMITS } from "@/lib/constants";
 
@@ -23,12 +25,12 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, profile, loading, signOut, memberships, activeMembership, switchOrg } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [churchName, setChurchName] = useState<string>("");
   const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map());
   const [showGuideDot, setShowGuideDot] = useState(false);
   const [hasPrerequisites, setHasPrerequisites] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("free");
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   // Register service worker for PWA + push notifications
   useServiceWorker();
@@ -81,9 +83,12 @@ export default function DashboardLayout({
   const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
   const roomsEnabled = TIER_LIMITS[subscriptionTier]?.rooms_enabled ?? false;
 
-  // Redirect volunteers from /dashboard to /dashboard/my-schedule
-  const isVolunteerOnly = activeMembership && !isScheduler(activeMembership);
+  // Role checks
+  const userIsAdmin = isAdmin(activeMembership);
+  const userIsScheduler = isScheduler(activeMembership);
+  const isVolunteerOnly = activeMembership && !userIsScheduler;
 
+  // Redirect volunteers from /dashboard to /dashboard/my-schedule
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/");
@@ -95,6 +100,11 @@ export default function DashboardLayout({
       router.replace("/dashboard/my-schedule");
     }
   }, [loading, user, isVolunteerOnly, pathname, router]);
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    router.push("/");
+  }, [signOut, router]);
 
   if (loading) {
     return (
@@ -108,21 +118,9 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-vc-bg">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-          role="button"
-          aria-label="Close navigation"
-        />
-      )}
-
+      {/* Desktop sidebar — hidden on mobile */}
       <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
         activeMembership={activeMembership}
-        hasPrerequisites={hasPrerequisites}
         worshipEnabled={worshipEnabled}
         checkinEnabled={checkinEnabled}
         roomsEnabled={roomsEnabled}
@@ -134,20 +132,39 @@ export default function DashboardLayout({
         switchOrg={switchOrg}
         displayName={profile?.display_name || "User"}
         email={user.email || ""}
-        signOut={async () => { await signOut(); router.push("/"); }}
+        signOut={handleSignOut}
       />
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        <MobileHeader onMenuOpen={() => setSidebarOpen(true)} />
+        {/* Slim mobile header — no hamburger, just branding */}
+        <MobileHeader />
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 xl:p-10">
+        {/* Page content — extra bottom padding on mobile for bottom nav */}
+        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
           <PwaInstallBanner />
           <SmartCheckInBanner />
           {children}
         </main>
       </div>
+
+      {/* Mobile bottom nav */}
+      <BottomNav
+        isAdmin={userIsAdmin || userIsScheduler}
+        worshipEnabled={worshipEnabled}
+        hasUnreadNotifications={false}
+        onMoreOpen={() => setMoreMenuOpen(true)}
+      />
+
+      {/* More menu (mobile admin) */}
+      <MoreMenu
+        open={moreMenuOpen}
+        onClose={() => setMoreMenuOpen(false)}
+        checkinEnabled={checkinEnabled}
+        roomsEnabled={roomsEnabled}
+        hasUnreadNotifications={false}
+        onSignOut={handleSignOut}
+      />
     </div>
   );
 }

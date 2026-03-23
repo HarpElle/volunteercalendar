@@ -127,7 +127,7 @@ export async function POST(
 
       // Send email (fire and forget batch)
       resend.emails.send({
-        from: `${churchName} via VolunteerCal <noreply@volunteercal.org>`,
+        from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
         to: volunteer.email,
         subject: email.subject,
         html: email.html,
