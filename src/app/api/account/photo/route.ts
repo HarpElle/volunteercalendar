@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { adminAuth, adminDb, adminStorage } from "@/lib/firebase/admin";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -43,16 +44,17 @@ export async function POST(req: NextRequest) {
     const fileRef = bucket.file(storagePath);
     const buffer = Buffer.from(await file.arrayBuffer());
 
+    const downloadToken = randomUUID();
     await fileRef.save(buffer, {
       metadata: {
         contentType: file.type,
-        metadata: { uploadedBy: uid },
+        metadata: { firebaseStorageDownloadTokens: downloadToken, uploadedBy: uid },
       },
     });
 
-    // Make publicly readable (bypasses Security Rules, which only gate client SDK)
-    await fileRef.makePublic();
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    // Build Firebase download URL (works with any bucket ACL mode)
+    const encodedPath = encodeURIComponent(storagePath);
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 
     // Delete old photo if exists
     const userDoc = await adminDb.doc(`users/${uid}`).get();
@@ -69,9 +71,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Update user profile
-    await adminDb.doc(`users/${uid}`).update({ photo_url: publicUrl });
+    await adminDb.doc(`users/${uid}`).update({ photo_url: downloadUrl });
 
-    return NextResponse.json({ photo_url: publicUrl });
+    return NextResponse.json({ photo_url: downloadUrl });
   } catch (err) {
     console.error("[API /account/photo] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
