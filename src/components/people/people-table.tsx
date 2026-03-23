@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { DataList, DataListRow, DataListCell } from "@/components/ui/data-list";
-import { formatPhone } from "@/lib/utils/phone";
+import { parseName } from "@/lib/utils/name";
 import { getOrgEligibility, type OrgEligibility } from "@/lib/utils/eligibility";
 import type { Volunteer, Membership, OnboardingStep, OrgRole } from "@/lib/types";
 
@@ -42,6 +42,16 @@ interface PeopleTableProps {
   onSelectPerson: (v: Volunteer, m: Membership | null) => void;
 }
 
+type SortField = "first" | "last";
+
+function getVolunteerNames(v: Volunteer) {
+  if (v.first_name !== undefined && v.last_name !== undefined) {
+    return { first: v.first_name, last: v.last_name };
+  }
+  const parsed = parseName(v.name);
+  return { first: parsed.first_name, last: parsed.last_name };
+}
+
 /**
  * Desktop table view for the People roster. Uses DataList for consistent styling.
  */
@@ -53,9 +63,14 @@ export function PeopleTable({
   onSelectPerson,
 }: PeopleTableProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortField, setSortField] = useState<SortField>("first");
 
   const sorted = [...people].sort((a, b) => {
-    const cmp = a.volunteer.name.localeCompare(b.volunteer.name);
+    const aN = getVolunteerNames(a.volunteer);
+    const bN = getVolunteerNames(b.volunteer);
+    const aVal = sortField === "last" ? (aN.last || aN.first) : aN.first;
+    const bVal = sortField === "last" ? (bN.last || bN.first) : bN.first;
+    const cmp = aVal.localeCompare(bVal);
     return sortDir === "asc" ? cmp : -cmp;
   });
 
@@ -63,20 +78,33 @@ export function PeopleTable({
     <div>
       {/* Header row */}
       <div className="flex items-center gap-4 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-vc-text-muted">
-        <button
-          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-          className="flex flex-1 items-center gap-1 hover:text-vc-indigo transition-colors"
-        >
-          Name
-          <svg
-            className={`h-3 w-3 transition-transform ${sortDir === "desc" ? "rotate-180" : ""}`}
-            fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+        <div className="flex flex-1 items-center gap-2">
+          <button
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            className="flex items-center gap-1 hover:text-vc-indigo transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
-        <span className="hidden lg:block w-48">Email</span>
-        <span className="hidden lg:block w-32">Phone</span>
+            Name
+            <svg
+              className={`h-3 w-3 transition-transform ${sortDir === "asc" ? "rotate-180" : ""}`}
+              fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+          <span className="text-vc-text-muted/50">|</span>
+          <button
+            onClick={() => setSortField("first")}
+            className={`transition-colors ${sortField === "first" ? "text-vc-indigo" : "hover:text-vc-indigo"}`}
+          >
+            First
+          </button>
+          <button
+            onClick={() => setSortField("last")}
+            className={`transition-colors ${sortField === "last" ? "text-vc-indigo" : "hover:text-vc-indigo"}`}
+          >
+            Last
+          </button>
+        </div>
         <span className="w-40">Teams</span>
         <span className="hidden sm:block w-24">Role</span>
         <span className="w-24">Status</span>
@@ -107,22 +135,11 @@ export function PeopleTable({
                   />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-vc-indigo truncate">{v.name}</p>
-                    {/* Show email on mobile where column is hidden */}
                     {v.email && (
                       <p className="lg:hidden text-xs text-vc-text-muted truncate">{v.email}</p>
                     )}
                   </div>
                 </div>
-              </DataListCell>
-
-              {/* Email — desktop only */}
-              <DataListCell className="hidden lg:block w-48">
-                <span className="text-sm text-vc-text-secondary truncate block">{v.email || "—"}</span>
-              </DataListCell>
-
-              {/* Phone — desktop only */}
-              <DataListCell className="hidden lg:block w-32">
-                <span className="text-sm text-vc-text-secondary">{v.phone ? formatPhone(v.phone) : "—"}</span>
               </DataListCell>
 
               {/* Teams */}
@@ -145,7 +162,7 @@ export function PeopleTable({
                     <span className="text-[11px] text-vc-text-muted">+{v.ministry_ids.length - 2}</span>
                   )}
                   {v.ministry_ids.length === 0 && (
-                    <span className="text-xs text-vc-text-muted">—</span>
+                    <span className="text-xs text-vc-text-muted">{"\u2014"}</span>
                   )}
                 </div>
               </DataListCell>

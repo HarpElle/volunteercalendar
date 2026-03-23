@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { parseName } from "@/lib/utils/name";
 
 /**
  * POST /api/account/sync-profile
@@ -53,8 +54,12 @@ export async function POST(req: NextRequest) {
       const existing = volSnap.data()!;
 
       // Merge profile data into volunteer, preserving volunteer-specific fields
+      const fullName = profile.display_name || existing.name;
+      const { first_name, last_name } = parseName(fullName);
       await volRef.update({
-        name: profile.display_name || existing.name,
+        name: fullName,
+        first_name,
+        last_name,
         email: profile.email || existing.email,
         phone: profile.phone ?? existing.phone,
         availability: {

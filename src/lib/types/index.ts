@@ -18,6 +18,8 @@ export interface UserProfile {
   role?: UserRole;
   /** @deprecated Use Membership ministry_scope instead. */
   ministry_ids?: string[];
+  /** Profile photo URL (Firebase Storage) */
+  photo_url?: string | null;
   /** Blockout dates shared across all orgs */
   global_availability: GlobalAvailability;
   created_at: string;
@@ -445,6 +447,10 @@ export interface Volunteer {
   id: string;
   church_id: string;
   name: string;
+  /** Parsed first name (derived from name) */
+  first_name?: string;
+  /** Parsed last name (derived from name) */
+  last_name?: string;
   email: string;
   phone: string | null;
   user_id: string | null;

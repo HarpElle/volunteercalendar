@@ -86,6 +86,9 @@ export default function HouseholdsPage() {
           Households
         </h1>
       </div>
+      <p className="mb-4 -mt-4 text-sm text-vc-text-secondary">
+        Manage guardian-child relationships for children&apos;s check-in.
+      </p>
 
       {/* Search */}
       <div className="mb-4">

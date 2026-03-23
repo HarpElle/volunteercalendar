@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { Avatar } from "@/components/ui/avatar";
 import type { Membership } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -151,7 +152,7 @@ function getNavSections(
     ...(checkinEnabled
       ? [
           {
-            label: "CHECK-IN",
+            label: "KIDS CHECK-IN",
             gate: (m: Membership | null) => isScheduler(m),
             collapsible: true,
             collapseKey: "vc_sidebar_checkin",
@@ -225,6 +226,7 @@ export interface SidebarProps {
   // User data
   displayName: string;
   email: string;
+  userPhotoUrl?: string | null;
   signOut: () => Promise<void>;
 }
 
@@ -322,38 +324,30 @@ export function Sidebar({
   switchOrg,
   displayName,
   email,
+  userPhotoUrl,
   signOut,
 }: SidebarProps) {
   const pathname = usePathname();
-  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const orgMenuRef = useRef<HTMLDivElement>(null);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   const hasMultipleOrgs = activeMemberships.length > 1;
-  const orgInitial = (churchName || "O").charAt(0).toUpperCase();
 
-  // Close menus when clicking outside
+  // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
-        orgMenuRef.current &&
-        !orgMenuRef.current.contains(e.target as Node)
+        accountMenuRef.current &&
+        !accountMenuRef.current.contains(e.target as Node)
       ) {
-        setOrgMenuOpen(false);
-      }
-      if (
-        userMenuRef.current &&
-        !userMenuRef.current.contains(e.target as Node)
-      ) {
-        setUserMenuOpen(false);
+        setAccountMenuOpen(false);
       }
     }
-    if (userMenuOpen || orgMenuOpen) {
+    if (accountMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [userMenuOpen, orgMenuOpen]);
+  }, [accountMenuOpen]);
 
   // Build and filter nav sections
   const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled);
@@ -373,7 +367,7 @@ export function Sidebar({
   const collapsibleSections = visibleSections.filter((s) => s.collapsible);
 
   async function handleSignOut() {
-    setUserMenuOpen(false);
+    setAccountMenuOpen(false);
     await signOut();
   }
 
@@ -476,9 +470,9 @@ export function Sidebar({
         {/* Notifications + Help */}
         <div className="mt-3 space-y-1">
           <Link
-            href="/dashboard/notifications"
+            href="/dashboard/reminders"
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/notifications")
+              pathname.startsWith("/dashboard/reminders")
                 ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
                 : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
             }`}
@@ -487,7 +481,7 @@ export function Sidebar({
               <Icon
                 d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
                 className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/notifications")
+                  pathname.startsWith("/dashboard/reminders")
                     ? "text-vc-indigo"
                     : "text-vc-text-muted"
                 }`}
@@ -496,7 +490,7 @@ export function Sidebar({
                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-vc-coral" />
               )}
             </span>
-            Notifications
+            Reminders
           </Link>
           <Link
             href="/dashboard/help"
@@ -539,12 +533,21 @@ export function Sidebar({
         </div>
       </nav>
 
-      {/* Bottom pinned area */}
+      {/* Bottom pinned area — merged account card */}
       <div className="mt-auto shrink-0">
-        {/* Org switcher */}
-        <div className="relative border-t border-vc-border-light px-3 py-3" ref={orgMenuRef}>
-          {orgMenuOpen && (
+        <div className="relative border-t border-vc-border-light px-3 py-3" ref={accountMenuRef}>
+          {/* Merged popover */}
+          {accountMenuOpen && (
             <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
+              {/* Header: name + email */}
+              <div className="border-b border-vc-border-light px-4 py-3">
+                <p className="truncate text-sm font-medium text-vc-indigo">
+                  {displayName}
+                </p>
+                <p className="truncate text-xs text-vc-text-muted">{email}</p>
+              </div>
+
+              {/* Org switcher (multi-org only) */}
               {hasMultipleOrgs && (
                 <div className="border-b border-vc-border-light py-1">
                   <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
@@ -561,7 +564,7 @@ export function Sidebar({
                         key={m.id}
                         onClick={() => {
                           switchOrg(m.church_id);
-                          setOrgMenuOpen(false);
+                          setAccountMenuOpen(false);
                         }}
                         className={`flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors ${
                           isCurrent
@@ -596,80 +599,11 @@ export function Sidebar({
                 </div>
               )}
 
-              <div className="py-1">
-                <Link
-                  href="/dashboard/my-orgs"
-                  onClick={() => setOrgMenuOpen(false)}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
-                >
-                  <Icon
-                    d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"
-                    className="h-4 w-4"
-                  />
-                  My Organizations
-                </Link>
-                <Link
-                  href="/dashboard/setup?mode=new"
-                  onClick={() => setOrgMenuOpen(false)}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium text-vc-coral transition-colors hover:bg-vc-coral/5"
-                >
-                  <Icon d="M12 4.5v15m7.5-7.5h-15" className="h-4 w-4" />
-                  Create New Organization
-                </Link>
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-            className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-sand/20"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-vc-coral/10 text-sm font-semibold text-vc-coral">
-              {orgInitial}
-            </div>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-medium text-vc-indigo">
-                {churchName || "No Organization"}
-              </p>
-              <p className="truncate text-xs capitalize text-vc-text-muted">
-                {activeMembership?.role || "member"}
-              </p>
-            </div>
-            <svg
-              className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${
-                orgMenuOpen ? "rotate-180" : ""
-              }`}
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              />
-            </svg>
-          </button>
-        </div>
-
-        {/* Account Card */}
-        <div
-          className="relative border-t border-vc-border-light p-4"
-          ref={userMenuRef}
-        >
-          {userMenuOpen && (
-            <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
-              <div className="border-b border-vc-border-light px-4 py-3">
-                <p className="truncate text-sm font-medium text-vc-indigo">
-                  {displayName}
-                </p>
-                <p className="truncate text-xs text-vc-text-muted">{email}</p>
-              </div>
+              {/* Links */}
               <div className="py-1">
                 <Link
                   href="/dashboard/account"
-                  onClick={() => setUserMenuOpen(false)}
+                  onClick={() => setAccountMenuOpen(false)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
                 >
                   <Icon
@@ -678,7 +612,20 @@ export function Sidebar({
                   />
                   Account Settings
                 </Link>
+                <Link
+                  href="/dashboard/my-orgs"
+                  onClick={() => setAccountMenuOpen(false)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                >
+                  <Icon
+                    d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"
+                    className="h-4 w-4"
+                  />
+                  My Organizations
+                </Link>
               </div>
+
+              {/* Sign out */}
               <div className="border-t border-vc-border-light py-1">
                 <button
                   onClick={handleSignOut}
@@ -694,22 +641,28 @@ export function Sidebar({
             </div>
           )}
 
+          {/* Merged trigger button */}
           <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            onClick={() => setAccountMenuOpen(!accountMenuOpen)}
             className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-sand/20"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-vc-indigo text-sm font-semibold text-white">
-              {(displayName || email || "?").charAt(0).toUpperCase()}
-            </div>
+            <Avatar
+              name={displayName || email || "?"}
+              photoUrl={userPhotoUrl}
+              size="sm"
+            />
             <div className="min-w-0 flex-1 text-left">
               <p className="truncate text-sm font-medium text-vc-indigo">
                 {displayName}
               </p>
-              <p className="truncate text-xs text-vc-text-muted">{email}</p>
+              <p className="truncate text-xs text-vc-text-muted">
+                {churchName || "No Organization"}
+                {activeMembership?.role ? ` \u00b7 ${activeMembership.role.charAt(0).toUpperCase() + activeMembership.role.slice(1)}` : ""}
+              </p>
             </div>
             <svg
               className={`h-4 w-4 shrink-0 text-vc-text-muted transition-transform ${
-                userMenuOpen ? "rotate-180" : ""
+                accountMenuOpen ? "rotate-180" : ""
               }`}
               fill="none"
               viewBox="0 0 24 24"

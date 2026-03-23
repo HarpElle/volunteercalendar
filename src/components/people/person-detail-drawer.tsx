@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { StepTypeIcon } from "@/components/ui/step-type-icon";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { normalizePhone, formatPhone } from "@/lib/utils/phone";
 import { updateChurchDocument } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
@@ -101,6 +102,7 @@ export function PersonDetailDrawer({
 
   // --- Photo upload ---
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   // Track changes for Profile & Contact fields only
   const hasProfileChanges =
@@ -306,13 +308,12 @@ export function PersonDetailDrawer({
     if (ok) onRemoveFromOrg();
   }
 
-  async function handlePhotoUpload(file: File) {
-    if (!file || file.size > 5 * 1024 * 1024) return;
+  async function handlePhotoUpload(blob: Blob) {
     setUploadingPhoto(true);
     try {
       const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", new File([blob], "photo.jpg", { type: blob.type || "image/jpeg" }));
       form.append("church_id", churchId);
       const res = await fetch(`/api/volunteers/${volunteer.id}/photo`, {
         method: "POST",
@@ -328,6 +329,23 @@ export function PersonDetailDrawer({
     } finally {
       setUploadingPhoto(false);
     }
+  }
+
+  function openPhotoPicker() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp,image/gif";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          alert("File too large. Maximum size is 5 MB.");
+          return;
+        }
+        setCropFile(file);
+      }
+    };
+    input.click();
   }
 
   // --- Eligibility data ---
@@ -383,135 +401,99 @@ export function PersonDetailDrawer({
   );
 
   return (
+    <>
     <Drawer open={open} onClose={onClose} title={volunteer.name} subtitle={volunteer.email || undefined}>
       <div className="space-y-6">
         {/* ================================================================
-            Hero — Avatar + Name + Eligibility Summary
+            Combined Hero — Avatar + Name + Contact + Edit
            ================================================================ */}
-        <div className="flex items-center gap-4 rounded-xl bg-vc-bg-warm/60 p-4 -mx-2">
-          <div className="relative">
-            <Avatar
-              name={volunteer.name}
-              photoUrl={volunteer.photo_url}
-              size="xl"
-              eligibility={orgEligibility}
-              showUploadOverlay={canManage && !isArchived}
-              onClick={canManage && !isArchived ? () => {
-                const input = document.createElement("input");
-                input.type = "file";
-                input.accept = "image/*";
-                input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0];
-                  if (file) handlePhotoUpload(file);
-                };
-                input.click();
-              } : undefined}
-            />
-            {uploadingPhoto && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-display text-lg text-vc-indigo truncate">{volunteer.name}</h3>
-            {isArchived && <Badge variant="default">Archived</Badge>}
-            {hasPrereqs && totalSteps > 0 && (
-              <div className="mt-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 flex-1 rounded-full bg-vc-border overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-vc-sage transition-all duration-500"
-                      style={{ width: `${(completedSteps / totalSteps) * 100}%` }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-[11px] font-medium text-vc-text-muted">
-                    {completedSteps} of {totalSteps}
-                  </span>
+        <div className="rounded-xl bg-vc-bg-warm/60 p-4 -mx-2">
+          <div className="flex items-start gap-4">
+            {/* Avatar with upload */}
+            <div className="relative shrink-0">
+              <Avatar
+                name={volunteer.name}
+                photoUrl={volunteer.photo_url}
+                size="xl"
+                eligibility={orgEligibility}
+                showUploadOverlay={canManage && !isArchived}
+                onClick={canManage && !isArchived ? openPhotoPicker : undefined}
+              />
+              {uploadingPhoto && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
                 </div>
-                <p className="mt-0.5 text-[11px] text-vc-text-muted">
-                  {completedSteps === totalSteps ? "All steps complete" : `${totalSteps - completedSteps} step${totalSteps - completedSteps !== 1 ? "s" : ""} remaining`}
-                </p>
+              )}
+            </div>
+
+            {/* Name + contact info OR edit form */}
+            {editMode ? (
+              <div className="min-w-0 flex-1 space-y-2.5">
+                <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+                <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input
+                  label="Phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onBlur={() => { if (phone) setPhone(formatPhone(phone)); }}
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <Button size="sm" loading={saving} onClick={handleSaveProfile} disabled={!hasProfileChanges}>
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setName(volunteer.name);
+                      setEmail(volunteer.email);
+                      setPhone(volunteer.phone || "");
+                      setEditMode(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-display text-lg text-vc-indigo truncate">
+                      {volunteer.name}
+                    </h3>
+                    {isArchived && <Badge variant="default">Archived</Badge>}
+                    {volunteer.email && (
+                      <p className="mt-0.5 text-sm text-vc-text-secondary truncate">{volunteer.email}</p>
+                    )}
+                    {volunteer.phone && (
+                      <p className="text-sm text-vc-text-muted">{formatPhone(volunteer.phone)}</p>
+                    )}
+                    {hasPrereqs && totalSteps > 0 && (
+                      <p className="mt-1 text-[11px] font-medium text-vc-text-muted">
+                        {completedSteps === totalSteps
+                          ? "All steps complete"
+                          : `${completedSteps} of ${totalSteps} steps`}
+                      </p>
+                    )}
+                  </div>
+                  {canManage && !isArchived && (
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="flex shrink-0 items-center gap-1.5 rounded-full border border-vc-border-light bg-white px-3 py-1.5 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/30 hover:text-vc-indigo"
+                    >
+                      Edit
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
-
-        {/* ================================================================
-            Section 1 — Profile & Contact (read-only default, edit toggle)
-           ================================================================ */}
-        <section>
-          <div className="mb-3 flex items-center gap-2">
-            <span className="h-px flex-1 bg-vc-border-light" />
-            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-vc-text-muted">
-              Profile & Contact
-            </h3>
-            <span className="h-px flex-1 bg-vc-border-light" />
-            {canManage && !isArchived && !editMode && (
-              <button
-                onClick={() => setEditMode(true)}
-                className="ml-1 rounded-lg p-1.5 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
-                title="Edit profile"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {editMode ? (
-            <div className="space-y-3">
-              <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Input
-                label="Phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onBlur={() => { if (phone) setPhone(formatPhone(phone)); }}
-              />
-              <div className="flex items-center gap-2 pt-1">
-                <Button size="sm" loading={saving} onClick={handleSaveProfile} disabled={!hasProfileChanges}>
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setName(volunteer.name);
-                    setEmail(volunteer.email);
-                    setPhone(volunteer.phone || "");
-                    setEditMode(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              <div className="flex items-start gap-3">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                </svg>
-                <p className="text-sm text-vc-text">{volunteer.name}</p>
-              </div>
-              <div className="flex items-start gap-3">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-                </svg>
-                <p className="text-sm text-vc-text">{volunteer.email || "\u2014"}</p>
-              </div>
-              <div className="flex items-start gap-3">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
-                </svg>
-                <p className="text-sm text-vc-text">{volunteer.phone ? formatPhone(volunteer.phone) : "\u2014"}</p>
-              </div>
-            </div>
-          )}
-        </section>
 
         {/* ================================================================
             Section 2 — Teams & Roles (always interactive)
@@ -974,5 +956,18 @@ export function PersonDetailDrawer({
         )}
       </div>
     </Drawer>
+
+    {/* Photo crop modal */}
+    {cropFile && (
+      <ImageCropModal
+        file={cropFile}
+        onCrop={(blob) => {
+          setCropFile(null);
+          handlePhotoUpload(blob);
+        }}
+        onCancel={() => setCropFile(null)}
+      />
+    )}
+    </>
   );
 }

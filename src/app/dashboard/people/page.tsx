@@ -783,7 +783,7 @@ function PeopleContent() {
             <p className="text-sm text-vc-text-secondary">
               {households.length === 0
                 ? "No families defined yet. Add a family to set household scheduling constraints."
-                : `${households.length} ${households.length === 1 ? "family" : "families"}`}
+                : `Group family members to set scheduling preferences\u2014serve together, never together, or never on the same day. ${households.length} ${households.length === 1 ? "family" : "families"}.`}
             </p>
             <Button
               size="sm"

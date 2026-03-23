@@ -132,6 +132,7 @@ export default function DashboardLayout({
         switchOrg={switchOrg}
         displayName={profile?.display_name || "User"}
         email={user.email || ""}
+        userPhotoUrl={profile?.photo_url}
         signOut={handleSignOut}
       />
 

@@ -8,6 +8,7 @@ import {
   updatePassword as fbUpdatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  verifyBeforeUpdateEmail,
   deleteUser,
   type User,
 } from "firebase/auth";
@@ -70,6 +71,14 @@ export async function changePassword(currentPassword: string, newPassword: strin
   const credential = EmailAuthProvider.credential(user.email, currentPassword);
   await reauthenticateWithCredential(user, credential);
   await fbUpdatePassword(user, newPassword);
+}
+
+export async function changeEmail(currentPassword: string, newEmail: string) {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Not authenticated");
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await verifyBeforeUpdateEmail(user, newEmail);
 }
 
 export async function deleteCurrentUser() {

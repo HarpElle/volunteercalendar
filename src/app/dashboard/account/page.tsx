@@ -16,9 +16,12 @@ import { db } from "@/lib/firebase/config";
 import {
   updateUserDisplayName,
   changePassword,
+  changeEmail,
 } from "@/lib/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar } from "@/components/ui/avatar";
+import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
@@ -58,6 +61,20 @@ export default function AccountPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [passwordOpen, setPasswordOpen] = useState(false);
+
+  // Email editing state
+  const [emailEditing, setEmailEditing] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState("");
+  const [emailError, setEmailError] = useState("");
+
+  // Photo state
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(profile?.photo_url || null);
 
   // Scheduler notification prefs state
   const [churchTier, setChurchTier] = useState("free");
@@ -165,6 +182,91 @@ export default function AccountPage() {
     } finally {
       setPasswordSaving(false);
     }
+  }
+
+  // --- Email change handler ---
+  async function handleEmailChange(e: FormEvent) {
+    e.preventDefault();
+    if (!newEmail || !emailPassword) return;
+    setEmailSaving(true);
+    setEmailError("");
+    setEmailSuccess("");
+    try {
+      await changeEmail(emailPassword, newEmail);
+      setEmailSuccess(`Verification email sent to ${newEmail}. Your email will update after you click the link.`);
+      setNewEmail("");
+      setEmailPassword("");
+      setEmailEditing(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update email";
+      if (msg.includes("wrong-password") || msg.includes("invalid-credential")) {
+        setEmailError("Incorrect password.");
+      } else if (msg.includes("email-already-in-use")) {
+        setEmailError("This email is already in use.");
+      } else {
+        setEmailError(msg);
+      }
+    } finally {
+      setEmailSaving(false);
+    }
+  }
+
+  // --- Photo handlers ---
+  async function handlePhotoUpload(blob: Blob) {
+    if (!user) return;
+    setUploadingPhoto(true);
+    try {
+      const token = await user.getIdToken();
+      const form = new FormData();
+      form.append("file", new File([blob], "photo.jpg", { type: blob.type || "image/jpeg" }));
+      const res = await fetch("/api/account/photo", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (res.ok) {
+        const { photo_url } = await res.json();
+        setUserPhotoUrl(photo_url);
+      }
+    } catch {
+      // silent
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function handlePhotoDelete() {
+    if (!user) return;
+    setUploadingPhoto(true);
+    try {
+      const token = await user.getIdToken();
+      await fetch("/api/account/photo", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserPhotoUrl(null);
+    } catch {
+      // silent
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  function openPhotoPicker() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp,image/gif";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          alert("File too large. Maximum size is 5 MB.");
+          return;
+        }
+        setCropFile(file);
+      }
+    };
+    input.click();
   }
 
   // --- Delete account handler ---
@@ -366,23 +468,58 @@ export default function AccountPage() {
 
       {/* Profile Section */}
       <section className="mb-10">
-        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Profile</h2>
-        <div className="rounded-xl border border-vc-border-light bg-white p-6">
+        <h2 className="mb-4 text-lg font-semibold text-vc-indigo">General</h2>
+        <p className="mb-4 -mt-2 text-sm text-vc-text-secondary">Manage your account information.</p>
+        <div className="rounded-xl border border-vc-border-light bg-white p-6 space-y-6">
+
+          {/* Profile picture */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-vc-text">Profile picture</label>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Avatar
+                  name={displayName || user?.email || "?"}
+                  photoUrl={userPhotoUrl}
+                  size="xl"
+                  onClick={openPhotoPicker}
+                  showUploadOverlay
+                />
+                {uploadingPhoto && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-white/70">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={openPhotoPicker} disabled={uploadingPhoto}>
+                  Upload
+                </Button>
+                {userPhotoUrl && (
+                  <button
+                    onClick={handlePhotoDelete}
+                    disabled={uploadingPhoto}
+                    className="rounded-lg p-2 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-danger"
+                    title="Remove photo"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-vc-border-light" />
+
+          {/* Full name */}
           <form onSubmit={handleProfileSave} className="space-y-4">
             <Input
-              label="Display Name"
+              label="Full name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
             />
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-vc-text">Email</label>
-              <input
-                value={user?.email || ""}
-                disabled
-                className="rounded-lg border border-vc-border bg-vc-bg-warm px-3 py-2 text-base text-vc-text-muted disabled:cursor-not-allowed"
-              />
-            </div>
             <Input
               label="Phone"
               type="tel"
@@ -401,30 +538,98 @@ export default function AccountPage() {
             </Button>
           </form>
 
-          {/* Change Password */}
-          <div className="mt-8 border-t border-vc-border-light pt-6">
-            <h3 className="mb-3 font-medium text-vc-indigo">Change Password</h3>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <Input
-                label="Current Password"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-              <Input
-                label="New Password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-              />
-              {passwordError && <p className="text-sm text-vc-danger">{passwordError}</p>}
-              {passwordSuccess && <p className="text-sm text-vc-sage">{passwordSuccess}</p>}
-              <Button type="submit" loading={passwordSaving} size="sm">
-                Change Password
+          <div className="border-t border-vc-border-light" />
+
+          {/* Email address */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-vc-text">Email address</label>
+            {!emailEditing ? (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 rounded-lg border border-vc-border bg-vc-bg-warm px-3 py-2 text-base text-vc-text">
+                  {user?.email || ""}
+                </span>
+                <button
+                  onClick={() => setEmailEditing(true)}
+                  className="rounded-lg p-2 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  title="Change email"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleEmailChange} className="space-y-3">
+                <Input
+                  label="New email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Current password"
+                  type="password"
+                  value={emailPassword}
+                  onChange={(e) => setEmailPassword(e.target.value)}
+                  required
+                />
+                <div className="flex items-center gap-2">
+                  <Button type="submit" size="sm" loading={emailSaving}>
+                    Update Email
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEmailEditing(false); setEmailError(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+            {emailError && <p className="mt-1 text-sm text-vc-danger">{emailError}</p>}
+            {emailSuccess && <p className="mt-1 text-sm text-vc-sage">{emailSuccess}</p>}
+          </div>
+
+          <div className="border-t border-vc-border-light" />
+
+          {/* Password */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-vc-text">Password</label>
+            {!passwordOpen ? (
+              <Button size="sm" variant="outline" onClick={() => setPasswordOpen(true)}>
+                <span className="flex items-center gap-1.5">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                  </svg>
+                  Change password
+                </span>
               </Button>
-            </form>
+            ) : (
+              <form onSubmit={handlePasswordChange} className="space-y-3">
+                <Input
+                  label="Current Password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
+                <Input
+                  label="New Password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+                {passwordError && <p className="text-sm text-vc-danger">{passwordError}</p>}
+                {passwordSuccess && <p className="text-sm text-vc-sage">{passwordSuccess}</p>}
+                <div className="flex items-center gap-2">
+                  <Button type="submit" loading={passwordSaving} size="sm">
+                    Change Password
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPasswordOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </section>
@@ -757,11 +962,11 @@ export default function AccountPage() {
         </section>
       )}
 
-      {/* Account Deletion */}
+      {/* Danger Zone */}
       <section className="mb-10">
-        <h2 className="mb-4 text-lg font-semibold text-vc-danger">Account Deletion</h2>
-        <div className="rounded-xl border border-vc-danger/30 bg-white p-6">
-          <h3 className="font-medium text-vc-indigo">Delete Account</h3>
+        <h2 className="mb-4 text-lg font-semibold text-vc-coral">Danger zone</h2>
+        <div className="rounded-xl border border-vc-coral/30 bg-white p-6">
+          <h3 className="font-medium text-vc-indigo">Delete account</h3>
           <p className="mt-1 text-sm text-vc-text-muted">
             Permanently delete your account, profile, and all memberships.
             If you are the sole administrator of any organization, that organization
@@ -845,6 +1050,18 @@ export default function AccountPage() {
       <p className="mt-12 text-center text-[11px] text-vc-text-muted">
         a HarpElle app
       </p>
+
+      {/* Photo crop modal */}
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          onCrop={(blob) => {
+            setCropFile(null);
+            handlePhotoUpload(blob);
+          }}
+          onCancel={() => setCropFile(null)}
+        />
+      )}
     </div>
   );
 }

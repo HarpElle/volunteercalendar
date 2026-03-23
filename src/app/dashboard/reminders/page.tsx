@@ -139,9 +139,9 @@ export default function NotificationsPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Notifications</h1>
+          <h1 className="font-display text-3xl text-vc-indigo">Reminders</h1>
           <p className="mt-1 text-vc-text-secondary">
-            Send reminders and view notification history.
+            Send reminders to volunteers and view delivery history.
           </p>
         </div>
       </div>

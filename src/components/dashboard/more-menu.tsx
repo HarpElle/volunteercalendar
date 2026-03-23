@@ -187,7 +187,7 @@ export function MoreMenu({
 
         {/* Standard items */}
         <Link
-          href="/dashboard/notifications"
+          href="/dashboard/reminders"
           onClick={onClose}
           className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary active:bg-vc-sand/20"
         >
@@ -200,7 +200,7 @@ export function MoreMenu({
               <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-vc-coral" />
             )}
           </span>
-          Notifications
+          Reminders
         </Link>
 
         <Link

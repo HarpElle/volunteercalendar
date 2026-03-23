@@ -7,6 +7,12 @@ service firebase.storage {
       allow write: if false; // All uploads go through Admin SDK in API routes
     }
 
+    // User profile photos — read for any authenticated user, writes via Admin SDK only
+    match /users/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // All uploads go through Admin SDK in API routes
+    }
+
     // Default: deny all
     match /{allPaths=**} {
       allow read, write: if false;
