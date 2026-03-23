@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
 // Extraction prompt for Claude Vision
 // ---------------------------------------------------------------------------
 
-const EXTRACTION_PROMPT = `You are extracting structured chord chart data from a SongSelect PDF chord chart.
+const EXTRACTION_PROMPT = `You are extracting structured chord chart data from a SongSelect PDF chord chart. Accuracy is critical — every word, chord, and punctuation mark must match the PDF exactly.
 
 Analyze this PDF and return a JSON object with this exact structure:
 
@@ -166,11 +166,14 @@ Analyze this PDF and return a JSON object with this exact structure:
 }
 
 Rules:
+- ACCURACY IS PARAMOUNT: Copy lyrics exactly as they appear in the PDF. Do not correct grammar, fix spelling, change capitalization, add or remove punctuation, or paraphrase. These are published song lyrics — every word must be verbatim.
 - Each section has a "type" from: verse, chorus, pre-chorus, bridge, intro, outro, ending, interlude, tag, instrumental, vamp, turnaround, misc
 - Each line's "segments" array pairs chords with the lyrics that follow them
 - If lyrics appear before any chord, use { "chord": null, "lyrics": "text" }
 - If a chord appears with no lyrics (e.g., instrumental), use { "chord": "G", "lyrics": "" }
 - Preserve the exact chord symbols as written (e.g., "D/F#", "Cadd9", "Em7")
+- Preserve spacing: include trailing spaces in lyrics segments so words don't run together (e.g., "Amazing grace how " not "Amazing grace how")
 - Section IDs should be "sec_1", "sec_2", etc.
-- Extract all metadata visible on the page (title, CCLI number, copyright, key, etc.)
+- Extract all metadata visible on the page (title, CCLI number, copyright, key, tempo, time signature, writers/authors, etc.)
+- For writer/author names, copy them exactly as printed — do not guess or abbreviate
 - Return ONLY the JSON object wrapped in \`\`\`json ... \`\`\` markers, no other text`;

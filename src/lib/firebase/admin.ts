@@ -20,6 +20,7 @@ function getAdminApp(): App {
   }
 
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   // Option 1: Full service account JSON blob (FIREBASE_ADMIN_KEY)
   const adminKey = process.env.FIREBASE_ADMIN_KEY;
@@ -28,6 +29,7 @@ function getAdminApp(): App {
     _app = initializeApp({
       credential: cert(serviceAccount),
       projectId,
+      storageBucket,
     });
     return _app;
   }
@@ -44,12 +46,13 @@ function getAdminApp(): App {
         privateKey: privateKey.replace(/\\n/g, "\n"),
       }),
       projectId,
+      storageBucket,
     });
     return _app;
   }
 
   // Fallback: Application Default Credentials (local dev with gcloud CLI)
-  _app = initializeApp({ projectId });
+  _app = initializeApp({ projectId, storageBucket });
   return _app;
 }
 
