@@ -95,8 +95,9 @@ export function PersonDetailDrawer({
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>(membership?.role || "volunteer");
   const [ministryScope, setMinistryScope] = useState<string[]>(membership?.ministry_scope || []);
 
-  // --- Danger zone collapse ---
+  // --- Collapsible sections ---
   const [dangerOpen, setDangerOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
 
   // --- Photo upload ---
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -120,6 +121,7 @@ export function PersonDetailDrawer({
     if (open) {
       setEditMode(false);
       setDangerOpen(false);
+      setAccessOpen(false);
       setName(volunteer.name);
       setEmail(volunteer.email);
       setPhone(volunteer.phone || "");
@@ -159,6 +161,42 @@ export function PersonDetailDrawer({
       setEditMode(false);
     } catch {
       // silent
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveTeamChanges() {
+    setSaving(true);
+    try {
+      const updateData = {
+        ministry_ids: selectedMinistries,
+        role_ids: selectedRoles,
+      };
+      await updateChurchDocument(churchId, "volunteers", volunteer.id, updateData);
+      onVolunteerUpdated({ ...volunteer, ...updateData });
+    } catch (err) {
+      console.error("[PersonDetailDrawer] Save team changes failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveBgCheck() {
+    setSaving(true);
+    try {
+      const background_check = bgCheckStatus === "not_required" ? null : {
+        status: bgCheckStatus as "cleared" | "pending" | "expired" | "not_required",
+        expires_at: bgCheckExpiry || null,
+        provider: volunteer.background_check?.provider || null,
+        checked_at: bgCheckStatus === "cleared" && volunteer.background_check?.status !== "cleared"
+          ? new Date().toISOString()
+          : volunteer.background_check?.checked_at || null,
+      };
+      await updateChurchDocument(churchId, "volunteers", volunteer.id, { background_check });
+      onVolunteerUpdated({ ...volunteer, background_check: background_check || undefined });
+    } catch (err) {
+      console.error("[PersonDetailDrawer] Save bg check failed:", err);
     } finally {
       setSaving(false);
     }
@@ -559,7 +597,7 @@ export function PersonDetailDrawer({
             {(JSON.stringify([...selectedMinistries].sort()) !== JSON.stringify([...volunteer.ministry_ids].sort()) ||
               JSON.stringify([...selectedRoles].sort()) !== JSON.stringify([...volunteer.role_ids].sort())) && (
               <div className="mt-3 flex items-center gap-2">
-                <Button size="sm" loading={saving} onClick={handleSaveProfile}>
+                <Button size="sm" loading={saving} onClick={handleSaveTeamChanges}>
                   Save Team Changes
                 </Button>
                 <Button
@@ -733,7 +771,7 @@ export function PersonDetailDrawer({
                 {(bgCheckStatus !== (volunteer.background_check?.status || "not_required") ||
                   bgCheckExpiry !== (volunteer.background_check?.expires_at || "")) && (
                   <div className="mt-3">
-                    <Button size="sm" loading={saving} onClick={handleSaveProfile}>
+                    <Button size="sm" loading={saving} onClick={handleSaveBgCheck}>
                       Save Background Check
                     </Button>
                   </div>
@@ -744,7 +782,7 @@ export function PersonDetailDrawer({
         )}
 
         {/* ================================================================
-            Section 4 — Access & Permissions
+            Section 4 — Access & Permissions (collapsible)
            ================================================================ */}
         {canManage && membership && (
           <section>
@@ -753,103 +791,102 @@ export function PersonDetailDrawer({
               Access & Permissions
               <span className="h-px flex-1 bg-vc-border-light" />
             </h3>
-            <div className="space-y-4">
-              {/* Organization Role */}
-              <div className="rounded-xl border border-vc-border-light bg-white p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                  Organization Role
-                </p>
-                {selectedOrgRole === "owner" ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="accent">Owner</Badge>
-                    <InfoTooltip text="Manages billing and organization settings. Ownership can be transferred on the Organization page." />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-sm font-medium ${selectedOrgRole === "admin" ? "text-vc-indigo" : "text-vc-text-secondary"}`}>
-                        {selectedOrgRole === "admin" ? "Administrator" : "Member"}
-                      </span>
-                      {selectedOrgRole === "admin" && <Badge variant="primary">Admin</Badge>}
-                    </div>
-                    {selectedOrgRole !== "admin" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOrgRoleChange("admin")}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                        </svg>
-                        Make Administrator
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleOrgRoleChange("volunteer")}
-                        className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
-                      >
-                        Remove admin access
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Team Roles */}
-              {selectedMinistries.length > 0 && (
-                <div className="rounded-xl border border-vc-border-light bg-white p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
-                    Team Roles
-                  </p>
-                  {selectedOrgRole === "admin" || selectedOrgRole === "owner" ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-vc-text-secondary">
-                        {selectedOrgRole === "owner" ? "Owners" : "Administrators"} can schedule all teams.
-                      </p>
-                      <div className="space-y-1">
-                        {selectedMinistries.map((mid) => {
-                          const m = ministries.find((x) => x.id === mid);
-                          if (!m) return null;
-                          return (
-                            <div key={mid} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                              <span className="text-sm text-vc-text flex-1">{m.name}</span>
-                              <span className="text-[11px] font-medium text-vc-text-muted">Admin</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {selectedMinistries.map((mid) => {
-                        const m = ministries.find((x) => x.id === mid);
-                        if (!m) return null;
-                        const isSchedulerForTeam = selectedOrgRole === "scheduler" && ministryScope.includes(mid);
-                        return (
-                          <div key={mid} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                            <span className="text-sm text-vc-text flex-1">{m.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleTeamRoleToggle(mid)}
-                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all min-h-[44px] ${
-                                isSchedulerForTeam
-                                  ? "border-vc-sand/50 bg-vc-sand/10 text-vc-warning"
-                                  : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
-                              }`}
-                            >
-                              {isSchedulerForTeam ? "Scheduler" : "Volunteer"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+            {/* Current role display */}
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm text-vc-text-secondary">Organization role:</span>
+              <Badge variant={selectedOrgRole === "owner" ? "accent" : selectedOrgRole === "admin" ? "primary" : "default"}>
+                {ROLE_LABELS[selectedOrgRole]}
+              </Badge>
+              {selectedOrgRole === "owner" && (
+                <InfoTooltip text="Manages billing and organization settings. Ownership can be transferred on the Organization page." />
               )}
             </div>
+
+            {/* Collapsible role management */}
+            {selectedOrgRole !== "owner" && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setAccessOpen(!accessOpen)}
+                  className="flex w-full items-center gap-2 rounded-lg border border-vc-border-light px-4 py-3 text-sm text-vc-text-muted transition-colors hover:bg-vc-bg-warm"
+                >
+                  <svg
+                    className={`h-4 w-4 transition-transform ${accessOpen ? "rotate-90" : ""}`}
+                    fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                  </svg>
+                  <span>Change organization role</span>
+                </button>
+
+                <AnimatePresence>
+                  {accessOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 rounded-xl border border-vc-border-light bg-white p-4 space-y-3">
+                        {selectedOrgRole !== "admin" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOrgRoleChange("admin")}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                            </svg>
+                            Make Administrator
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOrgRoleChange("volunteer")}
+                            className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
+                          >
+                            Remove admin access
+                          </button>
+                        )}
+
+                        {/* Scheduler scope — show when relevant */}
+                        {selectedOrgRole === "scheduler" && selectedMinistries.length > 0 && (
+                          <div className="pt-2 border-t border-vc-border-light">
+                            <p className="mb-2 text-xs font-semibold text-vc-text-muted">Scheduler access per team:</p>
+                            <div className="space-y-1">
+                              {selectedMinistries.map((mid) => {
+                                const m = ministries.find((x) => x.id === mid);
+                                if (!m) return null;
+                                const isSchedulerForTeam = ministryScope.includes(mid);
+                                return (
+                                  <div key={mid} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                                    <span className="text-sm text-vc-text flex-1">{m.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTeamRoleToggle(mid)}
+                                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all min-h-[44px] ${
+                                        isSchedulerForTeam
+                                          ? "border-vc-sand/50 bg-vc-sand/10 text-vc-warning"
+                                          : "border-vc-border text-vc-text-muted hover:border-vc-indigo/20"
+                                      }`}
+                                    >
+                                      {isSchedulerForTeam ? "Scheduler" : "Volunteer"}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </section>
         )}
 
