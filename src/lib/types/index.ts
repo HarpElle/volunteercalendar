@@ -907,6 +907,10 @@ export interface SongArrangement {
   chart_type: ChartType;
   chart_data: SongChartData;
   formatting: ArrangementFormatting;
+  /** Firebase Storage path to PDF file for this arrangement (PDF-based songs only). */
+  file_url: string | null;
+  /** Source format: "chordpro" charts have transposable data, "pdf" charts display the stored file. */
+  source_type: "chordpro" | "pdf";
   notes: string | null;
   /** One arrangement per song should be the default. */
   is_default: boolean;

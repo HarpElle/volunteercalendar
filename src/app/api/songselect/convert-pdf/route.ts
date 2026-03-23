@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
 import Anthropic from "@anthropic-ai/sdk";
-import type { SongChartData } from "@/lib/types";
 
 const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5 MB
 
@@ -9,7 +8,8 @@ const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5 MB
  * POST /api/songselect/convert-pdf
  *
  * Accept a PDF chord chart file, send it to Claude Vision API
- * for structured extraction, and return SongChartData JSON.
+ * for metadata extraction only (title, key, tempo, CCLI, etc.).
+ * The PDF itself is stored as-is for native display.
  *
  * Requires ANTHROPIC_API_KEY env var.
  */
@@ -58,12 +58,12 @@ export async function POST(req: NextRequest) {
     const buffer = await file.arrayBuffer();
     const base64 = Buffer.from(buffer).toString("base64");
 
-    // --- Call Claude Vision API ---
+    // --- Call Claude Vision API for metadata extraction ---
     const client = new Anthropic({ apiKey });
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 1024,
       messages: [
         {
           role: "user",
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const textBlock = response.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
       return NextResponse.json(
-        { error: "No text response from AI conversion" },
+        { error: "No text response from AI extraction" },
         { status: 502 },
       );
     }
@@ -100,22 +100,31 @@ export async function POST(req: NextRequest) {
 
     if (!jsonMatch) {
       return NextResponse.json(
-        { error: "Could not extract structured data from PDF" },
+        { error: "Could not extract metadata from PDF" },
         { status: 422 },
       );
     }
 
-    const chartData: SongChartData = JSON.parse(jsonMatch[1]);
+    const metadata = JSON.parse(jsonMatch[1]) as {
+      title: string;
+      artist: string | null;
+      writers: string | null;
+      original_key: string | null;
+      tempo: number | null;
+      time_signature: string | null;
+      ccli_number: string | null;
+      copyright: string | null;
+    };
 
     // Basic validation
-    if (!chartData.metadata || !Array.isArray(chartData.sections)) {
+    if (!metadata.title) {
       return NextResponse.json(
         { error: "AI response did not match expected format" },
         { status: 422 },
       );
     }
 
-    return NextResponse.json({ chart_data: chartData });
+    return NextResponse.json({ metadata });
   } catch (error) {
     if (error instanceof SyntaxError) {
       return NextResponse.json(
@@ -129,51 +138,28 @@ export async function POST(req: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// Extraction prompt for Claude Vision
+// Extraction prompt — metadata only (no chord/lyric structure)
 // ---------------------------------------------------------------------------
 
-const EXTRACTION_PROMPT = `You are extracting structured chord chart data from a SongSelect PDF chord chart. Accuracy is critical — every word, chord, and punctuation mark must match the PDF exactly.
+const EXTRACTION_PROMPT = `You are extracting metadata from a SongSelect PDF chord chart. Extract ONLY the metadata — do NOT extract chords, lyrics, or section structure.
 
 Analyze this PDF and return a JSON object with this exact structure:
 
 {
-  "metadata": {
-    "title": "Song Title",
-    "artist": "Artist Name" or null,
-    "writers": "Writer 1, Writer 2" or null,
-    "original_key": "G" or null,
-    "tempo": 120 or null,
-    "time_signature": "4/4" or null,
-    "ccli_number": "1234567" or null,
-    "copyright": "Copyright text" or null
-  },
-  "sections": [
-    {
-      "id": "sec_1",
-      "type": "verse",
-      "label": "Verse 1",
-      "lines": [
-        {
-          "segments": [
-            { "chord": "G", "lyrics": "Amazing grace how " },
-            { "chord": "C", "lyrics": "sweet the " },
-            { "chord": "G", "lyrics": "sound" }
-          ]
-        }
-      ]
-    }
-  ]
+  "title": "Song Title",
+  "artist": "Artist Name" or null,
+  "writers": "Writer 1, Writer 2" or null,
+  "original_key": "G" or null,
+  "tempo": 120 or null,
+  "time_signature": "4/4" or null,
+  "ccli_number": "1234567" or null,
+  "copyright": "Copyright text" or null
 }
 
 Rules:
-- ACCURACY IS PARAMOUNT: Copy lyrics exactly as they appear in the PDF. Do not correct grammar, fix spelling, change capitalization, add or remove punctuation, or paraphrase. These are published song lyrics — every word must be verbatim.
-- Each section has a "type" from: verse, chorus, pre-chorus, bridge, intro, outro, ending, interlude, tag, instrumental, vamp, turnaround, misc
-- Each line's "segments" array pairs chords with the lyrics that follow them
-- If lyrics appear before any chord, use { "chord": null, "lyrics": "text" }
-- If a chord appears with no lyrics (e.g., instrumental), use { "chord": "G", "lyrics": "" }
-- Preserve the exact chord symbols as written (e.g., "D/F#", "Cadd9", "Em7")
-- Preserve spacing: include trailing spaces in lyrics segments so words don't run together (e.g., "Amazing grace how " not "Amazing grace how")
-- Section IDs should be "sec_1", "sec_2", etc.
-- Extract all metadata visible on the page (title, CCLI number, copyright, key, tempo, time signature, writers/authors, etc.)
+- Extract all metadata visible on the page: title, CCLI number, copyright, key, tempo, time signature, writers/authors
 - For writer/author names, copy them exactly as printed — do not guess or abbreviate
+- The key should be a standard musical key (e.g., "G", "Bb", "F#m")
+- CCLI number should contain only digits
+- Tempo should be a number (BPM) or null if not shown
 - Return ONLY the JSON object wrapped in \`\`\`json ... \`\`\` markers, no other text`;

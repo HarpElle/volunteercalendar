@@ -68,6 +68,7 @@ export function SongSelectImportModal({
   const [importResult, setImportResult] = useState<{
     imported: number;
     duplicates: number;
+    added_keys: number;
     errors: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,17 +147,34 @@ export function SongSelectImportModal({
             continue;
           }
 
-          const { chart_data: chartData } = (await res.json()) as { chart_data: SongChartData };
+          const { metadata } = (await res.json()) as {
+            metadata: {
+              title: string;
+              artist: string | null;
+              writers: string | null;
+              original_key: string | null;
+              tempo: number | null;
+              time_signature: string | null;
+              ccli_number: string | null;
+              copyright: string | null;
+            };
+          };
+
+          // Build metadata-only chart_data (no sections — PDF is displayed natively)
+          const chartData: SongChartData = {
+            metadata,
+            sections: [],
+          };
 
           newSongs.push({
-            title: chartData.metadata.title,
-            artist: chartData.metadata.artist,
-            writers: chartData.metadata.writers,
-            key: chartData.metadata.original_key,
-            tempo: chartData.metadata.tempo,
-            time_signature: chartData.metadata.time_signature,
-            ccli_number: chartData.metadata.ccli_number,
-            copyright: chartData.metadata.copyright,
+            title: metadata.title,
+            artist: metadata.artist,
+            writers: metadata.writers,
+            key: metadata.original_key,
+            tempo: metadata.tempo,
+            time_signature: metadata.time_signature,
+            ccli_number: metadata.ccli_number,
+            copyright: metadata.copyright,
             chart_data: chartData,
             file,
             file_type: "pdf",
@@ -225,14 +243,27 @@ export function SongSelectImportModal({
         throw new Error(data.error || "Import failed");
       }
 
+      const result = await res.json();
+
       // Remove from preview list
       setPreviewSongs((prev) => prev.filter((s) => s !== song));
 
-      setImportResult((prev) => ({
-        imported: (prev?.imported || 0) + 1,
-        duplicates: prev?.duplicates || 0,
-        errors: prev?.errors || [],
-      }));
+      if (result.added_key) {
+        // Multi-key PDF bundled under existing song
+        setImportResult((prev) => ({
+          imported: prev?.imported || 0,
+          duplicates: prev?.duplicates || 0,
+          added_keys: (prev?.added_keys || 0) + 1,
+          errors: prev?.errors || [],
+        }));
+      } else {
+        setImportResult((prev) => ({
+          imported: (prev?.imported || 0) + 1,
+          duplicates: prev?.duplicates || 0,
+          added_keys: prev?.added_keys || 0,
+          errors: prev?.errors || [],
+        }));
+      }
 
       onImportComplete();
     } catch (err) {
@@ -241,6 +272,7 @@ export function SongSelectImportModal({
         setImportResult((prev) => ({
           imported: prev?.imported || 0,
           duplicates: (prev?.duplicates || 0) + 1,
+          added_keys: prev?.added_keys || 0,
           errors: prev?.errors || [],
         }));
         setPreviewSongs((prev) => prev.filter((s) => s !== song));
@@ -447,10 +479,13 @@ export function SongSelectImportModal({
           )}
 
           {/* Import result banner */}
-          {importResult && (importResult.imported > 0 || importResult.duplicates > 0) && (
+          {importResult && (importResult.imported > 0 || importResult.duplicates > 0 || importResult.added_keys > 0) && (
             <div className="mt-3 rounded-lg border border-vc-sage/30 bg-vc-sage/5 p-3 text-sm text-vc-sage-dark">
               {importResult.imported > 0 && (
                 <span>{importResult.imported} song{importResult.imported !== 1 ? "s" : ""} imported. </span>
+              )}
+              {importResult.added_keys > 0 && (
+                <span>{importResult.added_keys} additional key{importResult.added_keys !== 1 ? "s" : ""} added to existing song{importResult.added_keys !== 1 ? "s" : ""}. </span>
               )}
               {importResult.duplicates > 0 && (
                 <span>{importResult.duplicates} already in your library.</span>
@@ -487,6 +522,7 @@ export function SongSelectImportModal({
           {importResult && (
             <p className="mt-1 text-sm text-vc-text-secondary">
               {importResult.imported} song{importResult.imported !== 1 ? "s" : ""} imported
+              {importResult.added_keys > 0 && `, ${importResult.added_keys} key${importResult.added_keys !== 1 ? "s" : ""} added`}
               {importResult.duplicates > 0 && `, ${importResult.duplicates} skipped (already in library)`}
             </p>
           )}
@@ -552,39 +588,49 @@ function SongPreviewCard({
         )}
       </div>
 
-      {/* First section preview with chords rendered above lyrics */}
-      {firstSection && (
+      {/* Content preview — ChordPro shows chord/lyric structure, PDF shows notice */}
+      {song.file_type === "pdf" ? (
+        <div className="mt-3 rounded-lg bg-vc-bg-warm p-3 flex items-center gap-3">
+          <svg className="h-8 w-8 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
+          <div>
+            <p className="text-sm font-medium text-vc-indigo">PDF will be stored for native viewing</p>
+            <p className="text-xs text-vc-text-muted">The original PDF layout will be preserved exactly as-is.</p>
+          </div>
+        </div>
+      ) : firstSection ? (
         <div className="mt-3 rounded-lg bg-vc-bg-warm p-3">
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-vc-text-muted">
             {firstSection.label}
           </p>
-          {firstSection.lines.slice(0, 4).map((line, li) => (
-            <div key={li} className="mb-1">
-              {/* Chord row */}
-              <div className="flex text-xs font-semibold text-vc-coral">
+          {firstSection.lines.slice(0, 4).map((line, li) => {
+            const hasChords = line.segments.some((s) => s.chord);
+            return (
+              <div key={li} className="mb-1 whitespace-pre-wrap">
                 {line.segments.map((seg, si) => (
-                  <span key={si} className="mr-1 min-w-0">
-                    {seg.chord || "\u00A0"}
+                  <span
+                    key={si}
+                    style={{ display: "inline-flex", flexDirection: "column", verticalAlign: "bottom" }}
+                  >
+                    {hasChords && (
+                      <span className={`text-xs font-semibold ${seg.chord ? "text-vc-coral" : "invisible"}`}>
+                        {seg.chord || "\u00A0"}
+                      </span>
+                    )}
+                    <span className="text-sm text-vc-text">{seg.lyrics || "\u00A0"}</span>
                   </span>
                 ))}
               </div>
-              {/* Lyric row */}
-              <div className="flex text-sm text-vc-text">
-                {line.segments.map((seg, si) => (
-                  <span key={si} className="mr-0 min-w-0">
-                    {seg.lyrics || "\u00A0"}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {firstSection.lines.length > 4 && (
             <p className="mt-1 text-xs text-vc-text-muted italic">
               ...and {firstSection.lines.length - 4} more line{firstSection.lines.length - 4 !== 1 ? "s" : ""}
             </p>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Copyright */}
       {song.copyright && (

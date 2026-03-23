@@ -60,6 +60,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid chart_data JSON" }, { status: 400 });
     }
 
+    // For PDF uploads, ensure chart_data has empty sections (metadata only)
+    if (fileType === "pdf" && chartData.sections.length > 0) {
+      chartData = { metadata: chartData.metadata, sections: [] };
+    }
+
     const { metadata } = chartData;
     const now = new Date().toISOString();
 
@@ -74,6 +79,72 @@ export async function POST(req: NextRequest) {
         .get();
 
       if (!existingSnap.empty) {
+        const existingSong = existingSnap.docs[0];
+        const existingData = existingSong.data();
+        const incomingKey = metadata.original_key;
+
+        // If this is a PDF with a different key, add it as a new arrangement
+        if (fileType === "pdf" && incomingKey && !existingData.available_keys?.includes(incomingKey)) {
+          let arrangementFileUrl: string | null = null;
+
+          // Upload PDF to existing song's storage directory
+          if (file && file instanceof File && file.size <= MAX_FILE_SIZE) {
+            const storagePath = `churches/${churchId}/song_files/${existingSong.id}/${file instanceof File ? file.name : "chart.pdf"}`;
+            const bucket = adminStorage.bucket();
+            const storageFile = bucket.file(storagePath);
+            const buffer = Buffer.from(await file.arrayBuffer());
+            await storageFile.save(buffer, {
+              metadata: { contentType: file.type || "application/pdf" },
+            });
+            arrangementFileUrl = storagePath;
+          }
+
+          // Create new arrangement for this key
+          const arrangementData: Omit<SongArrangement, "id"> = {
+            song_id: existingSong.id,
+            church_id: churchId,
+            name: `Key of ${incomingKey}`,
+            key: incomingKey,
+            chart_type: "standard",
+            chart_data: chartData,
+            formatting: {
+              columns: 1,
+              font_scale: 1.0,
+              heading_bold: true,
+              chord_highlight: true,
+              fit_pages: null,
+            },
+            file_url: arrangementFileUrl,
+            source_type: "pdf",
+            notes: null,
+            is_default: false,
+            created_at: now,
+            updated_by: userId,
+          };
+
+          const arrangementRef = await adminDb
+            .collection("churches")
+            .doc(churchId)
+            .collection("arrangements")
+            .add(arrangementData);
+
+          // Update song's available_keys
+          const updatedKeys = [...(existingData.available_keys || []), incomingKey];
+          await existingSong.ref.update({ available_keys: updatedKeys });
+
+          const song: Song = {
+            id: existingSong.id,
+            ...existingData,
+            available_keys: updatedKeys,
+          } as Song;
+
+          return NextResponse.json({
+            song,
+            arrangement_id: arrangementRef.id,
+            added_key: true,
+          }, { status: 201 });
+        }
+
         return NextResponse.json(
           { error: `A song with CCLI #${metadata.ccli_number} already exists in your library` },
           { status: 409 },
@@ -96,7 +167,7 @@ export async function POST(req: NextRequest) {
       in_rotation: false,
       rotation_lists: [],
       lyric_source: "songselect",
-      lyrics: chartDataToLyrics(chartData),
+      lyrics: fileType === "pdf" ? null : chartDataToLyrics(chartData),
       chart_data: chartData,
       original_file_url: null, // Set after upload
       original_file_type: fileType,
@@ -161,6 +232,8 @@ export async function POST(req: NextRequest) {
       chart_type: "standard",
       chart_data: chartData,
       formatting: defaultFormatting,
+      file_url: fileType === "pdf" ? fileUrl : null,
+      source_type: fileType === "pdf" ? "pdf" : "chordpro",
       notes: null,
       is_default: true,
       created_at: now,

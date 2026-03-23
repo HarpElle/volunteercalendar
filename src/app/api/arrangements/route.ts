@@ -143,6 +143,8 @@ export async function POST(req: NextRequest) {
         chart_type: "standard",
         chart_data: song.chart_data || { metadata: { title: song.title, artist: null, writers: null, original_key: null, tempo: null, time_signature: null, ccli_number: null, copyright: null }, sections: [] },
         formatting: defaultFormatting,
+        file_url: null,
+        source_type: (song.original_file_type === "pdf" ? "pdf" : "chordpro") as "chordpro" | "pdf",
         notes: null,
         is_default: false,
         created_at: now,

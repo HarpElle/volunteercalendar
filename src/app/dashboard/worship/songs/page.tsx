@@ -258,7 +258,12 @@ export default function SongsPage() {
                   {/* Key */}
                   <td className="hidden px-4 py-4 sm:table-cell sm:px-6">
                     {song.default_key ? (
-                      <Badge variant="accent">{song.default_key}</Badge>
+                      <span className="flex items-center gap-1">
+                        <Badge variant="accent">{song.default_key}</Badge>
+                        {song.available_keys.length > 1 && (
+                          <span className="text-xs text-vc-text-muted">+{song.available_keys.length - 1}</span>
+                        )}
+                      </span>
                     ) : (
                       <span className="text-vc-text-muted">--</span>
                     )}
@@ -266,8 +271,14 @@ export default function SongsPage() {
 
                   {/* Chart indicator */}
                   <td className="hidden px-4 py-4 sm:table-cell sm:px-6">
-                    {song.chart_data ? (
-                      <span title="Has chord chart">
+                    {song.original_file_type === "pdf" ? (
+                      <span title="PDF Chart (view-only)">
+                        <svg className="h-4 w-4 text-vc-indigo" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                      </span>
+                    ) : song.chart_data && song.chart_data.sections?.length > 0 ? (
+                      <span title="ChordPro (transposable)">
                         <svg className="h-4 w-4 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
                         </svg>

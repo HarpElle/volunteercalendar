@@ -141,7 +141,7 @@ function SectionBlock({
 }
 
 // ---------------------------------------------------------------------------
-// Line Block — chord row above lyric row
+// Line Block — inline segments with chord stacked above lyrics
 // ---------------------------------------------------------------------------
 
 function LineBlock({
@@ -156,35 +156,23 @@ function LineBlock({
   const hasChords = line.segments.some((s) => s.chord);
 
   return (
-    <div className="mb-0.5">
-      {/* Chord row */}
-      {hasChords && (
-        <div
-          className="flex flex-wrap whitespace-pre"
-          style={{ fontSize: `${chordSize}px`, lineHeight: 1.4 }}
+    <div className="mb-0.5 whitespace-pre-wrap">
+      {line.segments.map((seg, si) => (
+        <span
+          key={si}
+          style={{ display: "inline-flex", flexDirection: "column", verticalAlign: "bottom" }}
         >
-          {line.segments.map((seg, si) => (
-            <span key={si} className={seg.chord ? chordClasses : "invisible"}>
-              {seg.chord || segmentWidth(seg.lyrics)}
+          {hasChords && (
+            <span
+              className={seg.chord ? chordClasses : "invisible"}
+              style={{ fontSize: `${chordSize}px`, lineHeight: 1.4 }}
+            >
+              {seg.chord || "\u00A0"}
             </span>
-          ))}
-        </div>
-      )}
-      {/* Lyric row */}
-      <div className="flex flex-wrap whitespace-pre-wrap">
-        {line.segments.map((seg, si) => (
-          <span key={si}>{seg.lyrics || "\u00A0"}</span>
-        ))}
-      </div>
+          )}
+          <span>{seg.lyrics || "\u00A0"}</span>
+        </span>
+      ))}
     </div>
   );
-}
-
-/**
- * Generate invisible placeholder text to maintain alignment when
- * a segment has no chord. Uses non-breaking spaces matching lyric width.
- */
-function segmentWidth(lyrics: string): string {
-  if (!lyrics) return "\u00A0";
-  return "\u00A0".repeat(Math.max(1, lyrics.length));
 }
