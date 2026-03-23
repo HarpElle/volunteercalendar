@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import { Button } from "./button";
 
 interface ImageCropModalProps {
@@ -13,150 +15,40 @@ interface ImageCropModalProps {
   onCancel: () => void;
 }
 
-const CANVAS_SIZE = 300; // output pixel size
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 3;
+const OUTPUT_SIZE = 300; // output pixel size
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
 
 /**
  * Modal for cropping an image to a circular profile photo.
- * Supports drag-to-pan and scroll/pinch-to-zoom. Canvas-based output.
+ * Uses react-easy-crop for drag, scroll-zoom, and pinch-to-zoom.
  */
 export function ImageCropModal({ file, onCrop, onCancel }: ImageCropModalProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Transform state
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-
-  // Drag state
-  const dragStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-
-  // Load image from file
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      imgRef.current = img;
-      // Fit image to fill the canvas area
-      const minDim = Math.min(img.width, img.height);
-      const fitScale = CANVAS_SIZE / minDim;
-      setScale(fitScale);
-      // Center the image
-      setOffset({
-        x: (CANVAS_SIZE - img.width * fitScale) / 2,
-        y: (CANVAS_SIZE - img.height * fitScale) / 2,
-      });
-      setImgLoaded(true);
-    };
-    img.src = URL.createObjectURL(file);
-    return () => URL.revokeObjectURL(img.src);
-  }, [file]);
-
-  // Draw the preview
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    const img = imgRef.current;
-    if (!canvas || !img) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-    // Draw image with current transform
-    ctx.save();
-    ctx.drawImage(img, offset.x, offset.y, img.width * scale, img.height * scale);
-    ctx.restore();
-
-    // Draw circular mask overlay
-    ctx.save();
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2 - 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Draw circle border
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2 - 4, 0, Math.PI * 2);
-    ctx.stroke();
-  }, [scale, offset]);
+  const imageUrl = useMemo(() => URL.createObjectURL(file), [file]);
 
   useEffect(() => {
-    if (imgLoaded) draw();
-  }, [imgLoaded, draw]);
+    return () => URL.revokeObjectURL(imageUrl);
+  }, [imageUrl]);
 
-  // Pointer events for drag
-  function handlePointerDown(e: React.PointerEvent) {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
-  }
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels);
+  }, []);
 
-  function handlePointerMove(e: React.PointerEvent) {
-    if (!dragStart.current) return;
-    e.preventDefault();
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    setOffset({ x: dragStart.current.ox + dx, y: dragStart.current.oy + dy });
-  }
-
-  function handlePointerUp() {
-    dragStart.current = null;
-  }
-
-  // Scroll/pinch to zoom
-  function handleWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    const delta = -e.deltaY * 0.002;
-    setScale((s) => {
-      const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s + delta * s));
-      // Zoom toward center
-      const ratio = newScale / s;
-      setOffset((o) => ({
-        x: CANVAS_SIZE / 2 - (CANVAS_SIZE / 2 - o.x) * ratio,
-        y: CANVAS_SIZE / 2 - (CANVAS_SIZE / 2 - o.y) * ratio,
-      }));
-      return newScale;
-    });
-  }
-
-  // Crop and output
   async function handleSave() {
-    const img = imgRef.current;
-    if (!img) return;
+    if (!croppedAreaPixels) return;
     setSaving(true);
 
-    const out = document.createElement("canvas");
-    out.width = CANVAS_SIZE;
-    out.height = CANVAS_SIZE;
-    const ctx = out.getContext("2d");
-    if (!ctx) return;
-
-    // Clip to circle
-    ctx.beginPath();
-    ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Draw image with same transform
-    ctx.drawImage(img, offset.x, offset.y, img.width * scale, img.height * scale);
-
-    out.toBlob(
-      (blob) => {
-        if (blob) onCrop(blob);
-        setSaving(false);
-      },
-      "image/jpeg",
-      0.9,
-    );
+    try {
+      const blob = await getCroppedBlob(imageUrl, croppedAreaPixels);
+      if (blob) onCrop(blob);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -178,33 +70,54 @@ export function ImageCropModal({ file, onCrop, onCancel }: ImageCropModalProps) 
             Crop profile photo
           </h3>
 
-          {/* Canvas area */}
+          {/* Crop area */}
           <div
-            ref={containerRef}
             className="relative mx-auto overflow-hidden rounded-xl bg-vc-bg"
-            style={{ width: CANVAS_SIZE, height: CANVAS_SIZE, touchAction: "none" }}
+            style={{ width: OUTPUT_SIZE, height: OUTPUT_SIZE }}
           >
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_SIZE}
-              height={CANVAS_SIZE}
-              className="cursor-grab active:cursor-grabbing"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-              onWheel={handleWheel}
+            <Cropper
+              image={imageUrl}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              cropShape="round"
+              showGrid={false}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+              minZoom={MIN_ZOOM}
+              maxZoom={MAX_ZOOM}
+              objectFit="contain"
+              style={{
+                containerStyle: { width: OUTPUT_SIZE, height: OUTPUT_SIZE, borderRadius: 12 },
+                mediaStyle: {},
+                cropAreaStyle: { border: "2px solid rgba(255,255,255,0.8)" },
+              }}
             />
-            {!imgLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
-              </div>
-            )}
           </div>
 
-          {/* Info text */}
-          <p className="mt-3 text-center text-xs text-vc-text-muted">
-            Drag to position {"\u00b7"} Scroll to zoom {"\u00b7"} JPEG, PNG, WebP, or GIF {"\u00b7"} Max 5 MB
+          {/* Zoom slider */}
+          <div className="mx-auto mt-4 flex max-w-[280px] items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-vc-text-muted">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="8" y1="11" x2="14" y2="11" />
+            </svg>
+            <input
+              type="range"
+              min={MIN_ZOOM}
+              max={MAX_ZOOM}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-vc-sand accent-vc-coral"
+            />
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-vc-text-muted">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="8" y1="11" x2="14" y2="11" /><line x1="11" y1="8" x2="11" y2="14" />
+            </svg>
+          </div>
+
+          {/* Help text */}
+          <p className="mt-2 text-center text-xs text-vc-text-muted">
+            Drag to position {"\u00b7"} Scroll or pinch to zoom
           </p>
 
           {/* Actions */}
@@ -212,7 +125,7 @@ export function ImageCropModal({ file, onCrop, onCancel }: ImageCropModalProps) 
             <Button variant="ghost" size="sm" onClick={onCancel}>
               Cancel
             </Button>
-            <Button size="sm" loading={saving} onClick={handleSave} disabled={!imgLoaded}>
+            <Button size="sm" loading={saving} onClick={handleSave} disabled={!croppedAreaPixels}>
               Save
             </Button>
           </div>
@@ -220,4 +133,43 @@ export function ImageCropModal({ file, onCrop, onCancel }: ImageCropModalProps) 
       </motion.div>
     </AnimatePresence>
   );
+}
+
+/** Extract the cropped region as a circular JPEG blob. */
+async function getCroppedBlob(src: string, crop: Area): Promise<Blob | null> {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = src;
+  await new Promise<void>((resolve) => {
+    if (image.complete) resolve();
+    else image.onload = () => resolve();
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = OUTPUT_SIZE;
+  canvas.height = OUTPUT_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  // Clip to circle
+  ctx.beginPath();
+  ctx.arc(OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Draw the cropped region scaled to output size
+  ctx.drawImage(
+    image,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    OUTPUT_SIZE,
+    OUTPUT_SIZE,
+  );
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9);
+  });
 }
