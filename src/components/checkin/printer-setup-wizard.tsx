@@ -9,6 +9,7 @@ import {
 
 interface PrinterSetupWizardProps {
   churchId: string;
+  stationName?: string;
   onComplete: (config: KioskPrinterConfig) => void;
   onSkip: () => void;
 }
@@ -22,12 +23,14 @@ interface DiscoveredPrinter {
 }
 
 /**
- * Printer Setup Wizard — shown on first launch in the Capacitor kiosk app.
- * Guides the user through selecting a printer brand, connection type,
- * discovering nearby printers, and running a test print.
+ * Printer Setup Wizard — shown from the kiosk when no printer is configured.
+ * Guides through: brand → connection type → discover → test → done.
+ * Saves config both to Firestore (server-side for label generation)
+ * and localStorage (client-side for connection routing).
  */
 export function PrinterSetupWizard({
   churchId,
+  stationName,
   onComplete,
   onSkip,
 }: PrinterSetupWizardProps) {
@@ -38,16 +41,68 @@ export function PrinterSetupWizard({
   const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState<DiscoveredPrinter | null>(null);
   const [testStatus, setTestStatus] = useState<"idle" | "printing" | "success" | "failed">("idle");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  /** Save printer config to Firestore via API + localStorage, then complete. */
+  const saveAndComplete = useCallback(async (config: KioskPrinterConfig) => {
+    setSaving(true);
+    setSaveError("");
+
+    const printerType =
+      config.print_method === "airprint"
+        ? "brother_ql" // AirPrint can work with any label format; default to Brother PNG
+        : brand === "brother"
+          ? "brother_ql"
+          : "zebra_zd";
+
+    try {
+      const res = await fetch("/api/checkin/printer-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          church_id: churchId,
+          printer: {
+            station_name: stationName || "Kiosk 1",
+            printer_type: printerType,
+            ip_address: config.ip_address,
+            print_method: config.print_method || "native_sdk",
+            connection_type: config.connection_type || "wifi",
+            bluetooth_address: config.bluetooth_address,
+            printer_model: config.printer_model,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setSaveError(data.error || "Failed to save printer config");
+        setSaving(false);
+        return;
+      }
+
+      // Save local connection config to localStorage
+      localStorage.setItem(
+        "vc_kiosk_printer",
+        JSON.stringify({ ...config, printer_type: printerType }),
+      );
+
+      setSaving(false);
+      onComplete(config);
+    } catch {
+      setSaveError("Could not save. Check your internet and try again.");
+      setSaving(false);
+    }
+  }, [brand, churchId, onComplete]);
 
   const handleBrandSelect = useCallback((b: "brother" | "zebra" | "airprint") => {
     setBrand(b);
     if (b === "airprint") {
-      // AirPrint doesn't need discovery — go straight to done
-      onComplete({ print_method: "airprint" });
+      saveAndComplete({ print_method: "airprint" });
       return;
     }
     setStep("connection");
-  }, [onComplete]);
+  }, [saveAndComplete]);
 
   const handleDiscover = useCallback(async () => {
     setStep("discover");
@@ -87,14 +142,14 @@ export function PrinterSetupWizard({
 
     if (result.success) {
       setTestStatus("success");
-      // Auto-complete after brief delay
+      // Save config and complete after brief delay
       setTimeout(() => {
-        onComplete(config);
+        saveAndComplete(config);
       }, 1500);
     } else {
       setTestStatus("failed");
     }
-  }, [selectedPrinter, brand, connectionType, onComplete]);
+  }, [selectedPrinter, brand, connectionType, saveAndComplete]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 max-w-md mx-auto">
@@ -113,8 +168,21 @@ export function PrinterSetupWizard({
         {step === "done" && "All Set!"}
       </h2>
 
+      {/* Save error */}
+      {saveError && (
+        <p className="text-red-500 text-sm text-center mb-4">{saveError}</p>
+      )}
+
+      {/* Saving overlay */}
+      {saving && (
+        <div className="flex items-center gap-3 text-gray-500 mb-4">
+          <span className="w-5 h-5 border-2 border-gray-300 border-t-vc-coral rounded-full animate-spin" />
+          Saving printer settings...
+        </div>
+      )}
+
       {/* Step: Brand selection */}
-      {step === "brand" && (
+      {step === "brand" && !saving && (
         <>
           <p className="text-gray-500 text-center mb-8">
             What kind of label printer will this kiosk use?
@@ -143,7 +211,7 @@ export function PrinterSetupWizard({
       )}
 
       {/* Step: Connection type */}
-      {step === "connection" && (
+      {step === "connection" && !saving && (
         <>
           <p className="text-gray-500 text-center mb-8">
             How is the printer connected?
@@ -167,7 +235,7 @@ export function PrinterSetupWizard({
       )}
 
       {/* Step: Discover */}
-      {step === "discover" && (
+      {step === "discover" && !saving && (
         <>
           <p className="text-gray-500 text-center mb-6">
             {searching
@@ -221,7 +289,7 @@ export function PrinterSetupWizard({
       )}
 
       {/* Step: Test print */}
-      {step === "test" && selectedPrinter && (
+      {step === "test" && selectedPrinter && !saving && (
         <>
           <p className="text-gray-500 text-center mb-2">
             Connected to <span className="font-medium text-vc-indigo">{selectedPrinter.name}</span>
@@ -250,7 +318,7 @@ export function PrinterSetupWizard({
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              Test print sent! Setting up...
+              Test print sent! Saving settings...
             </p>
           )}
           {testStatus === "failed" && (
