@@ -32,41 +32,12 @@ export default function HouseholdsPage() {
     try {
       const token = await user.getIdToken();
       const res = await fetch(
-        `/api/admin/checkin/children?church_id=${churchId}`,
+        `/api/admin/checkin/household?church_id=${churchId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) return;
       const data = await res.json();
-
-      // Group children by household
-      const householdMap = new Map<string, { count: number }>();
-      for (const child of data.children || []) {
-        const entry = householdMap.get(child.household_id) || { count: 0 };
-        entry.count++;
-        householdMap.set(child.household_id, entry);
-      }
-
-      // Fetch household details for each unique household
-      const results: HouseholdSummary[] = [];
-      for (const [householdId, info] of householdMap) {
-        try {
-          const hRes = await fetch(
-            `/api/admin/checkin/household/${householdId}?church_id=${churchId}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (hRes.ok) {
-            const hData = await hRes.json();
-            results.push({
-              ...hData.household,
-              children_count: info.count,
-            });
-          }
-        } catch {
-          // skip
-        }
-      }
-
-      setHouseholds(results);
+      setHouseholds(data.households || []);
     } catch {
       // silent
     } finally {

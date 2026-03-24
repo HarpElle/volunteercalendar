@@ -4,6 +4,66 @@ import { randomBytes } from "crypto";
 import type { CheckInHousehold } from "@/lib/types";
 
 /**
+ * GET /api/admin/checkin/household?church_id=...
+ * List all households for a church. Includes children_count.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const churchId = req.nextUrl.searchParams.get("church_id");
+    if (!churchId) {
+      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const membershipSnap = await adminDb
+      .doc(`memberships/${decoded.uid}_${churchId}`)
+      .get();
+    if (!membershipSnap.exists) {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    }
+    const role = membershipSnap.data()!.role as string;
+    if (!["owner", "admin", "scheduler"].includes(role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    const churchRef = adminDb.collection("churches").doc(churchId);
+
+    // Fetch all households
+    const householdsSnap = await churchRef
+      .collection("checkin_households")
+      .orderBy("primary_guardian_name")
+      .get();
+
+    // Fetch children counts
+    const childrenSnap = await churchRef
+      .collection("children")
+      .where("is_active", "==", true)
+      .select("household_id")
+      .get();
+
+    const countMap = new Map<string, number>();
+    for (const doc of childrenSnap.docs) {
+      const hid = doc.data().household_id;
+      countMap.set(hid, (countMap.get(hid) || 0) + 1);
+    }
+
+    const households = householdsSnap.docs.map((doc) => ({
+      ...doc.data(),
+      children_count: countMap.get(doc.id) || 0,
+    }));
+
+    return NextResponse.json({ households });
+  } catch (error) {
+    console.error("[GET /api/admin/checkin/household]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/admin/checkin/household
  * Create a new check-in household. Requires owner/admin/scheduler role.
  */
