@@ -155,6 +155,50 @@ export async function PUT(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ householdId: string }> },
+) {
+  try {
+    const { householdId } = await params;
+    const churchId = req.nextUrl.searchParams.get("church_id");
+    if (!churchId) {
+      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    }
+
+    const auth = await verifyAdmin(req, churchId);
+    if (auth instanceof NextResponse) return auth;
+
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const householdRef = churchRef
+      .collection("checkin_households")
+      .doc(householdId);
+
+    const householdSnap = await householdRef.get();
+    if (!householdSnap.exists) {
+      return NextResponse.json({ error: "Household not found" }, { status: 404 });
+    }
+
+    // Delete all children in this household
+    const childrenSnap = await churchRef
+      .collection("children")
+      .where("household_id", "==", householdId)
+      .get();
+
+    const batch = adminDb.batch();
+    for (const doc of childrenSnap.docs) {
+      batch.delete(doc.ref);
+    }
+    batch.delete(householdRef);
+    await batch.commit();
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[DELETE /api/admin/checkin/household/[id]]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 10) return `+1${digits}`;
