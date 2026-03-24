@@ -40,6 +40,7 @@ export default function CheckInDashboardPage() {
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [showKioskQr, setShowKioskQr] = useState(false);
   const [kioskQrDataUrl, setKioskQrDataUrl] = useState("");
+  const [activitySearch, setActivitySearch] = useState("");
 
   const kioskUrl = typeof window !== "undefined" && churchId
     ? `${window.location.origin}/checkin?church_id=${churchId}`
@@ -221,9 +222,6 @@ export default function CheckInDashboardPage() {
               width={280}
               height={280}
             />
-            <p className="text-xs text-vc-text-muted font-mono break-all mb-5">
-              {kioskUrl}
-            </p>
             <button
               type="button"
               onClick={() => setShowKioskQr(false)}
@@ -323,13 +321,54 @@ export default function CheckInDashboardPage() {
       </div>
 
       {/* Recent sessions */}
-      {!loading && stats?.sessions && stats.sessions.length > 0 && (
+      {!loading && stats?.sessions && stats.sessions.length > 0 && (() => {
+        const q = activitySearch.toLowerCase();
+        const filtered = q
+          ? stats.sessions.filter(
+              (s) =>
+                s.child_name.toLowerCase().includes(q) ||
+                s.room_name.toLowerCase().includes(q),
+            )
+          : stats.sessions;
+        const shown = filtered.slice(0, 50);
+        return (
         <div>
-          <h2 className="text-lg font-semibold text-vc-indigo font-display mb-3">
-            Today&apos;s Activity
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-lg font-semibold text-vc-indigo font-display">
+              Today&apos;s Activity
+            </h2>
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-vc-text-muted pointer-events-none"
+                fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="text"
+                value={activitySearch}
+                onChange={(e) => setActivitySearch(e.target.value)}
+                placeholder="Search by name or room..."
+                className="min-h-[44px] w-56 pl-9 pr-3 py-2 rounded-xl border border-vc-border-light
+                  text-sm text-vc-indigo placeholder:text-vc-text-muted outline-none
+                  focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+              />
+            </div>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="text-sm text-vc-text-muted py-4 text-center">
+              No matching check-ins found.
+            </p>
+          ) : (
+          <>
+          {filtered.length > shown.length && (
+            <p className="text-xs text-vc-text-muted mb-2">
+              Showing {shown.length} of {filtered.length}
+            </p>
+          )}
           <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm divide-y divide-vc-border-light">
-            {stats.sessions.slice(0, 10).map((session) => (
+            {shown.map((session) => (
               <div key={session.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="font-medium text-vc-indigo">{session.child_name}</p>
@@ -365,8 +404,11 @@ export default function CheckInDashboardPage() {
               </div>
             ))}
           </div>
+          </>
+          )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
