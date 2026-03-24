@@ -315,7 +315,10 @@ async function enrichSessions(
   const results: {
     id: string;
     child_name: string;
+    first_name: string;
+    last_name: string;
     room_name: string;
+    service_date: string;
     checked_in_at: string;
     checked_out_at: string | null;
     security_code: string;
@@ -324,7 +327,8 @@ async function enrichSessions(
 
   for (const doc of docs) {
     const data = doc.data();
-    let childName = "Unknown";
+    let firstName = "Unknown";
+    let lastName = "";
 
     const childSnap = await churchRef
       .collection("children")
@@ -332,13 +336,17 @@ async function enrichSessions(
       .get();
     if (childSnap.exists) {
       const c = childSnap.data()!;
-      childName = `${c.preferred_name || c.first_name} ${c.last_name}`;
+      firstName = c.preferred_name || c.first_name;
+      lastName = c.last_name || "";
     }
 
     results.push({
       id: data.id,
-      child_name: childName,
+      child_name: `${firstName} ${lastName}`.trim(),
+      first_name: firstName,
+      last_name: lastName,
       room_name: data.room_name,
+      service_date: data.service_date,
       checked_in_at: data.checked_in_at,
       checked_out_at: data.checked_out_at || null,
       security_code: data.security_code,

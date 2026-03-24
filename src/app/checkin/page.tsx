@@ -314,7 +314,7 @@ function CheckInKioskInner() {
           household_id: household!.household.id,
           child_ids: childIds,
           station_id: stationId,
-          service_date: new Date().toISOString().split("T")[0],
+          service_date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })(),
           service_id: selectedServiceId || undefined,
           alerts_acknowledged: true,
         }),

@@ -20,6 +20,11 @@ export function KioskInstallPrompt() {
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
+    // Don't show inside Capacitor native app
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cap = (window as any).Capacitor;
+    if (typeof cap?.isNativePlatform === "function" && cap.isNativePlatform()) return;
+
     // Don't show if already in standalone mode or dismissed
     const isStandalone = window.matchMedia(
       "(display-mode: standalone)",

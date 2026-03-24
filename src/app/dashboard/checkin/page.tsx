@@ -18,11 +18,20 @@ interface LiveStats {
   sessions: {
     id: string;
     child_name: string;
+    first_name: string;
+    last_name: string;
     room_name: string;
+    service_date: string;
     checked_in_at: string;
     checked_out_at: string | null;
   }[];
   rooms: RoomBreakdown[];
+}
+
+/** Get today's date as YYYY-MM-DD in the browser's local timezone. */
+function localToday(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 const POLL_INTERVAL = 15_000;
@@ -88,7 +97,7 @@ export default function CheckInDashboardPage() {
     if (!user || !churchId) return;
     try {
       const token = await user.getIdToken();
-      const today = new Date().toISOString().split("T")[0];
+      const today = localToday();
       const res = await fetch(
         `/api/admin/checkin/report?church_id=${churchId}&type=live&date=${today}`,
         { headers: { Authorization: `Bearer ${token}` } },
@@ -330,7 +339,15 @@ export default function CheckInDashboardPage() {
                 s.room_name.toLowerCase().includes(q),
             )
           : stats.sessions;
-        const shown = filtered.slice(0, 50);
+
+        // Sort by last name, then first name
+        const sorted = [...filtered].sort((a, b) => {
+          const lastCmp = (a.last_name || "").localeCompare(b.last_name || "");
+          if (lastCmp !== 0) return lastCmp;
+          return (a.first_name || "").localeCompare(b.first_name || "");
+        });
+
+        const shown = sorted.slice(0, 50);
         return (
         <div>
           <div className="flex items-center justify-between gap-3 mb-3">
@@ -367,42 +384,62 @@ export default function CheckInDashboardPage() {
               Showing {shown.length} of {filtered.length}
             </p>
           )}
-          <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm divide-y divide-vc-border-light">
-            {shown.map((session) => (
-              <div key={session.id} className="flex items-center justify-between px-4 py-3">
-                <div>
+          <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm overflow-hidden">
+            {/* Table header */}
+            <div className="hidden sm:grid sm:grid-cols-[1fr_1fr_auto_auto_auto] gap-2 px-4 py-2.5
+              bg-vc-indigo/5 text-xs font-semibold text-vc-text-secondary uppercase tracking-wide">
+              <span>Name</span>
+              <span>Room</span>
+              <span className="w-20 text-center">Checked In</span>
+              <span className="w-24 text-center">Checked Out</span>
+              <span className="w-20" />
+            </div>
+            <div className="divide-y divide-vc-border-light">
+              {shown.map((session) => (
+                <div key={session.id} className="flex flex-col sm:grid sm:grid-cols-[1fr_1fr_auto_auto_auto]
+                  sm:items-center gap-1 sm:gap-2 px-4 py-3">
+                  {/* Name */}
                   <p className="font-medium text-vc-indigo">{session.child_name}</p>
+                  {/* Room */}
                   <p className="text-sm text-vc-text-secondary">{session.room_name}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-sm text-vc-text-secondary">
-                      {new Date(session.checked_in_at).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                  {/* Checked In time */}
+                  <p className="text-sm text-vc-text-secondary w-20 text-center">
+                    {new Date(session.checked_in_at).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                  {/* Checked Out time or status */}
+                  <div className="w-24 text-center">
                     {session.checked_out_at ? (
-                      <span className="text-xs text-vc-sage font-medium">Checked out</span>
+                      <span className="text-sm text-vc-sage font-medium">
+                        {new Date(session.checked_out_at).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
                     ) : (
-                      <span className="text-xs text-vc-coral font-medium">Checked in</span>
+                      <span className="text-xs text-vc-coral font-medium">—</span>
                     )}
                   </div>
-                  {!session.checked_out_at && (
-                    <button
-                      type="button"
-                      onClick={() => handleAdminCheckout(session.id)}
-                      disabled={checkingOutId === session.id}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-vc-sage/15 text-vc-sage
-                        font-medium hover:bg-vc-sage/25 transition-colors
-                        disabled:opacity-50 min-h-[32px]"
-                    >
-                      {checkingOutId === session.id ? "..." : "Check Out"}
-                    </button>
-                  )}
+                  {/* Action */}
+                  <div className="w-20 flex justify-end">
+                    {!session.checked_out_at && (
+                      <button
+                        type="button"
+                        onClick={() => handleAdminCheckout(session.id)}
+                        disabled={checkingOutId === session.id}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-vc-sage/15 text-vc-sage
+                          font-medium hover:bg-vc-sage/25 transition-colors
+                          disabled:opacity-50 min-h-[32px]"
+                      >
+                        {checkingOutId === session.id ? "..." : "Check Out"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           </>
           )}
