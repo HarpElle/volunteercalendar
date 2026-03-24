@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: "#2D3A6E",
-          gap: hasOrg ? "20px" : "24px",
+          gap: "24px",
         }}
       >
         {/* Calendar icon — smaller when showing org name */}
@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
                 fontFamily: "Georgia, serif",
                 textAlign: "center",
                 maxWidth: "90%",
+                lineHeight: 1.2,
               }}
             >
               {title}
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest) {
                   fontSize: "28px",
                   color: "rgba(254, 252, 249, 0.8)",
                   fontFamily: "Helvetica, Arial, sans-serif",
+                  textAlign: "center",
                 }}
               >
                 {subtitle}
@@ -85,16 +87,18 @@ export async function GET(req: NextRequest) {
             <div
               style={{
                 display: "flex",
+                flexDirection: "row",
                 alignItems: "center",
+                flexWrap: "nowrap",
                 gap: "6px",
                 fontSize: "22px",
                 fontFamily: "Helvetica, Arial, sans-serif",
                 marginTop: "8px",
               }}
             >
-              <span style={{ color: "#D4A574" }}>powered by</span>
-              <span style={{ color: "#FEFCF9", fontWeight: 600 }}>Volunteer</span>
-              <span style={{ color: "#E07A5F", fontWeight: 600 }}>Cal</span>
+              <span style={{ color: "#D4A574", whiteSpace: "nowrap" }}>powered by</span>
+              <span style={{ color: "#FEFCF9", fontWeight: 600, whiteSpace: "nowrap" }}>Volunteer</span>
+              <span style={{ color: "#E07A5F", fontWeight: 600, whiteSpace: "nowrap" }}>Cal</span>
             </div>
           </>
         ) : (

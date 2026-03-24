@@ -15,7 +15,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "VolunteerCal — Flexible Volunteer Scheduling for Churches, Nonprofits & Teams",
+  title: "VolunteerCal — Flexible Volunteer Scheduling",
   description:
     "Auto-generate fair, conflict-free volunteer schedules across all your teams. Leaders review. Volunteers confirm. Works standalone or with Planning Center, Breeze, and Rock RMS.",
   keywords: [
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   openGraph: {
-    title: "VolunteerCal — Flexible Volunteer Scheduling for Churches, Nonprofits & Teams",
+    title: "VolunteerCal — Flexible Volunteer Scheduling",
     description:
       "Auto-generate fair, conflict-free volunteer schedules. Leaders review. Volunteers confirm and sync to their calendar.",
     url: "https://volunteercal.com",
