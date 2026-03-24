@@ -1099,8 +1099,10 @@ const featureGuides: HelpSection[] = [
             <dt className="font-medium text-vc-text">Running the Kiosk</dt>
             <dd className="mt-1">
               <ol className="mt-2 list-decimal space-y-1.5 pl-6">
-                <li>Open <strong>/checkin</strong> on a tablet or dedicated
-                  device. No login is required.</li>
+                <li>From the <strong>Check-In Dashboard</strong>, click
+                  the <strong>Launch Kiosk</strong> button to open the kiosk in a
+                  new tab. Use <strong>Copy URL</strong> to bookmark it on a
+                  tablet. No login is required on the kiosk device.</li>
                 <li><strong>Returning families:</strong> scan their household QR
                   code, or enter the last 4 digits of the guardian&apos;s phone
                   number.</li>

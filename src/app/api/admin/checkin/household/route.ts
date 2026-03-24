@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
     const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin", "scheduler"].includes(role)) {
+    const isCheckinVolunteer = membershipSnap.data()!.checkin_volunteer === true;
+    if (!["owner", "admin", "scheduler"].includes(role) && !isCheckinVolunteer) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 

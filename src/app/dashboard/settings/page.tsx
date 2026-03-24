@@ -286,7 +286,10 @@ function SettingsContent() {
       )}
 
       {activeTab === "checkin" && checkinEnabled && (
-        <CheckInSettingsTab churchId={churchId!} />
+        <CheckInSettingsTab
+          churchId={churchId!}
+          guardianSmsEnabled={limits.checkin_guardian_sms ?? false}
+        />
       )}
 
       {activeTab === "rooms" && roomsEnabled && (
@@ -319,12 +322,20 @@ function SettingsContent() {
 // Check-In Settings Tab (inline)
 // ---------------------------------------------------------------------------
 
-function CheckInSettingsTab({ churchId }: { churchId: string }) {
+function CheckInSettingsTab({
+  churchId,
+  guardianSmsEnabled,
+}: {
+  churchId: string;
+  guardianSmsEnabled: boolean;
+}) {
   const { user } = useAuth();
   const [thresholds, setThresholds] = useState({
     pre_checkin_window_minutes: 30,
     late_arrival_threshold_minutes: 15,
     capacity_sms_recipient_phone: "",
+    guardian_sms_on_checkin: false,
+    guardian_sms_on_checkout: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -349,6 +360,10 @@ function CheckInSettingsTab({ churchId }: { churchId: string }) {
               data.late_arrival_threshold_minutes ?? 15,
             capacity_sms_recipient_phone:
               data.capacity_sms_recipient_phone ?? "",
+            guardian_sms_on_checkin:
+              data.guardian_sms_on_checkin ?? false,
+            guardian_sms_on_checkout:
+              data.guardian_sms_on_checkout ?? false,
           });
         }
       } catch {
@@ -460,6 +475,59 @@ function CheckInSettingsTab({ churchId }: { churchId: string }) {
             />
           </div>
         </div>
+      </section>
+
+      {/* Guardian SMS Notifications */}
+      <section className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-6">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Guardian SMS Notifications
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Send text messages to the primary guardian when children are checked in or out.
+        </p>
+
+        {guardianSmsEnabled ? (
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 text-sm font-medium text-vc-text">
+              <input
+                type="checkbox"
+                checked={thresholds.guardian_sms_on_checkin}
+                onChange={(e) =>
+                  setThresholds((t) => ({
+                    ...t,
+                    guardian_sms_on_checkin: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4 rounded border-vc-border-light text-vc-coral accent-vc-coral"
+              />
+              SMS on check-in
+              <span className="text-xs font-normal text-vc-text-muted">
+                — Includes child name, room, and security code
+              </span>
+            </label>
+            <label className="flex items-center gap-3 text-sm font-medium text-vc-text">
+              <input
+                type="checkbox"
+                checked={thresholds.guardian_sms_on_checkout}
+                onChange={(e) =>
+                  setThresholds((t) => ({
+                    ...t,
+                    guardian_sms_on_checkout: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4 rounded border-vc-border-light text-vc-coral accent-vc-coral"
+              />
+              SMS on checkout
+              <span className="text-xs font-normal text-vc-text-muted">
+                — Confirms child has been picked up
+              </span>
+            </label>
+          </div>
+        ) : (
+          <p className="rounded-lg bg-vc-sand/20 px-3 py-2 text-sm text-vc-text-muted">
+            Guardian SMS is available on Growth plans and above.
+          </p>
+        )}
       </section>
 
       <div className="flex items-center gap-3">

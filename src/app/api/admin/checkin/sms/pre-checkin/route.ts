@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     // Load check-in settings
     const settingsSnap = await adminDb
-      .doc(`churches/${church_id}/checkinSettings/default`)
+      .doc(`churches/${church_id}/checkinSettings/config`)
       .get();
     if (!settingsSnap.exists) {
       return NextResponse.json(

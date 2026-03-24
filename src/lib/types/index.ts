@@ -58,6 +58,8 @@ export interface Membership {
   };
   /** Scheduler/admin notification preferences. Only relevant for scheduler+ roles. */
   scheduler_notification_preferences?: SchedulerNotificationPreferences;
+  /** Grants access to check-in dashboard, households, children, reports without full scheduler role */
+  checkin_volunteer?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1107,7 +1109,7 @@ export interface CheckInHousehold {
   /** Stable QR check-in token — URL: /checkin?token={qr_token} */
   qr_token: string;
   photo_url?: string;
-  imported_from?: "breeze" | "pco" | "manual";
+  imported_from?: "breeze" | "pco" | "generic" | "manual";
   external_id?: string;
   created_at: string;
   updated_at: string;
@@ -1143,7 +1145,7 @@ export interface Child {
   has_alerts: boolean;
   allergies?: string;
   medical_notes?: string;
-  imported_from?: "breeze" | "pco" | "manual";
+  imported_from?: "breeze" | "pco" | "generic" | "manual";
   external_id?: string;
   is_active: boolean;
   created_at: string;
@@ -1210,6 +1212,10 @@ export interface CheckInSettings {
   capacity_sms_recipient_phone?: string;
   printers: PrinterConfig[];
   breeze_import_grade_mapping?: Record<string, ChildGrade>;
+  /** Send SMS to guardian on check-in with room + security code (Growth+ tier) */
+  guardian_sms_on_checkin?: boolean;
+  /** Send SMS to guardian on checkout confirmation (Growth+ tier) */
+  guardian_sms_on_checkout?: boolean;
   updated_by: string;
   updated_at: string;
 }

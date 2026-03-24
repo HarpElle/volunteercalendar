@@ -100,6 +100,8 @@ export async function PUT(req: NextRequest) {
       "late_arrival_threshold_minutes",
       "capacity_sms_recipient_phone",
       "breeze_import_grade_mapping",
+      "guardian_sms_on_checkin",
+      "guardian_sms_on_checkout",
     ];
 
     const updates: Record<string, unknown> = {

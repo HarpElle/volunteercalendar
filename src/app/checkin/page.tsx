@@ -2,11 +2,14 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 import { FamilyLookup } from "@/components/checkin/family-lookup";
 import { ChildSelection } from "@/components/checkin/child-selection";
 import { AllergyConfirm } from "@/components/checkin/allergy-confirm";
 import { CheckInSuccess } from "@/components/checkin/checkin-success";
 import { VisitorRegistration } from "@/components/checkin/visitor-registration";
+import { CheckoutEntry, type CheckoutResult } from "@/components/checkin/checkout-entry";
+import { CheckoutSuccess } from "@/components/checkin/checkout-success";
 
 // --- Types for kiosk state ---
 
@@ -43,9 +46,25 @@ interface CheckInResult {
   print_server_url: string | null;
 }
 
-type KioskScreen = "lookup" | "register" | "select" | "confirm" | "success";
+interface ServiceOption {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  is_current: boolean;
+}
+
+type KioskScreen = "lookup" | "register" | "select" | "confirm" | "success" | "checkout-enter" | "checkout-success";
+type KioskMode = "checkin" | "checkout";
 
 const INACTIVITY_TIMEOUT = 30_000; // 30 seconds
+
+function formatTime12(time24: string): string {
+  const [h, m] = time24.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
+}
 
 /**
  * /checkin — Kiosk check-in page.
@@ -71,22 +90,68 @@ function CheckInKioskInner() {
   const churchId = searchParams.get("church_id") || "";
   const stationId = searchParams.get("station") || undefined;
 
+  // Keep screen awake for kiosk use
+  useWakeLock();
+
+  const [mode, setMode] = useState<KioskMode>("checkin");
   const [screen, setScreen] = useState<KioskScreen>("lookup");
   const [household, setHousehold] = useState<HouseholdResult | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [services, setServices] = useState<ServiceOption[]>([]);
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset to Screen 1
+  // Fetch today's services on mount
+  useEffect(() => {
+    if (!churchId) return;
+    const fetchServices = async () => {
+      try {
+        const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const svcList = data.services as ServiceOption[];
+          setServices(svcList);
+          // Auto-select if only one service today
+          if (svcList.length === 1) {
+            setSelectedServiceId(svcList[0].id);
+          } else {
+            // Auto-select the current one if there is one
+            const current = svcList.find((s) => s.is_current);
+            if (current) setSelectedServiceId(current.id);
+          }
+        }
+      } catch {
+        // Non-critical — service_id will remain null
+      }
+    };
+    fetchServices();
+  }, [churchId]);
+
+  // Reset to appropriate starting screen based on mode
   const resetKiosk = useCallback(() => {
-    setScreen("lookup");
+    setScreen(mode === "checkout" ? "checkout-enter" : "lookup");
     setHousehold(null);
     setSelectedChildIds([]);
     setCheckInResult(null);
+    setCheckoutResult(null);
     setError("");
-  }, []);
+  }, [mode]);
+
+  // Toggle between check-in and checkout modes
+  const toggleMode = useCallback(() => {
+    const newMode = mode === "checkin" ? "checkout" : "checkin";
+    setMode(newMode);
+    setScreen(newMode === "checkout" ? "checkout-enter" : "lookup");
+    setHousehold(null);
+    setSelectedChildIds([]);
+    setCheckInResult(null);
+    setCheckoutResult(null);
+    setError("");
+  }, [mode]);
 
   // Activity tracker — resets 30s inactivity timer
   const onActivity = useCallback(() => {
@@ -175,6 +240,7 @@ function CheckInKioskInner() {
           child_ids: childIds,
           station_id: stationId,
           service_date: new Date().toISOString().split("T")[0],
+          service_id: selectedServiceId || undefined,
           alerts_acknowledged: true,
         }),
       });
@@ -251,6 +317,61 @@ function CheckInKioskInner() {
 
   return (
     <div className="relative h-full">
+      {/* Service selector — show when multiple services today */}
+      {services.length > 1 && mode === "checkin" && screen === "lookup" && (
+        <div className="absolute top-4 left-4 z-40">
+          <select
+            value={selectedServiceId || ""}
+            onChange={(e) => {
+              setSelectedServiceId(e.target.value || null);
+              onActivity();
+            }}
+            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm
+              text-vc-indigo font-medium focus:border-vc-coral focus:ring-1
+              focus:ring-vc-coral/30 outline-none min-h-[44px]"
+          >
+            <option value="">Select Service</option>
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({formatTime12(s.start_time)})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Mode toggle — Check In / Check Out */}
+      <div className="absolute top-4 right-4 z-40">
+        <button
+          type="button"
+          onClick={() => { toggleMode(); onActivity(); }}
+          className={`
+            inline-flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm
+            transition-colors shadow-sm min-h-[44px]
+            ${mode === "checkin"
+              ? "bg-vc-sage/15 text-vc-sage hover:bg-vc-sage/25 border border-vc-sage/30"
+              : "bg-vc-coral/15 text-vc-coral hover:bg-vc-coral/25 border border-vc-coral/30"
+            }
+          `}
+        >
+          {mode === "checkin" ? (
+            <>
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+              </svg>
+              Switch to Check Out
+            </>
+          ) : (
+            <>
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+              </svg>
+              Switch to Check In
+            </>
+          )}
+        </button>
+      </div>
+
       {screen === "lookup" && (
         <FamilyLookup
           churchId={churchId}
@@ -311,6 +432,28 @@ function CheckInKioskInner() {
         <CheckInSuccess
           result={checkInResult}
           childNames={selectedChildNames}
+          onReset={resetKiosk}
+          onActivity={onActivity}
+        />
+      )}
+
+      {/* Checkout screens */}
+      {screen === "checkout-enter" && (
+        <CheckoutEntry
+          churchId={churchId}
+          onSuccess={(result) => {
+            setCheckoutResult(result);
+            setScreen("checkout-success");
+            onActivity();
+          }}
+          onBack={toggleMode}
+          onActivity={onActivity}
+        />
+      )}
+
+      {screen === "checkout-success" && checkoutResult && (
+        <CheckoutSuccess
+          result={checkoutResult}
           onReset={resetKiosk}
           onActivity={onActivity}
         />

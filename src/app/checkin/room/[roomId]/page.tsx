@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 import { RoomChildCard } from "@/components/checkin/room-child-card";
 import { AllergyDetailModal } from "@/components/checkin/allergy-detail-modal";
 
@@ -53,6 +54,10 @@ export default function RoomViewPage() {
   const [data, setData] = useState<RoomData | null>(null);
   const [error, setError] = useState("");
   const [selectedChild, setSelectedChild] = useState<RoomChild | null>(null);
+  const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
+
+  // Keep screen awake for teacher room view
+  useWakeLock();
 
   const fetchData = useCallback(async () => {
     if (!roomId || !token || !churchId) return;
@@ -74,6 +79,30 @@ export default function RoomViewPage() {
       setError("Network error");
     }
   }, [roomId, token, churchId, date]);
+
+  const handleTeacherCheckout = useCallback(async (sessionId: string) => {
+    if (!roomId || !token || !churchId) return;
+    setCheckingOutId(sessionId);
+    try {
+      const res = await fetch("/api/checkin/room-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          church_id: churchId,
+          room_id: roomId,
+          token,
+          session_id: sessionId,
+        }),
+      });
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch {
+      // Silent — next poll will catch up
+    } finally {
+      setCheckingOutId(null);
+    }
+  }, [roomId, token, churchId, fetchData]);
 
   // Initial fetch + polling
   useEffect(() => {
@@ -185,6 +214,8 @@ export default function RoomViewPage() {
                 isLate={child.is_late}
                 parentPhoneMasked={child.parent_phone_masked}
                 onTap={() => setSelectedChild(child)}
+                onCheckout={() => handleTeacherCheckout(child.session_id)}
+                checkingOut={checkingOutId === child.session_id}
               />
             ))}
           </div>

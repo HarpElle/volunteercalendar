@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 
 interface DisplayReservation {
   id: string;
@@ -73,7 +74,7 @@ export default function RoomDisplayPage() {
   const [data, setData] = useState<DisplayData | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(new Date());
-  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const wakeLockActive = useWakeLock();
 
   const fetchData = useCallback(async () => {
     if (!roomId || !token || !churchId) return;
@@ -92,36 +93,6 @@ export default function RoomDisplayPage() {
       setError("Network error");
     }
   }, [roomId, token, churchId]);
-
-  // Wake-lock: keep screen on for always-on signage
-  useEffect(() => {
-    let wakeLock: WakeLockSentinel | null = null;
-
-    async function requestWakeLock() {
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLock = await navigator.wakeLock.request("screen");
-          setWakeLockActive(true);
-          wakeLock.addEventListener("release", () => setWakeLockActive(false));
-        }
-      } catch {
-        // Permission denied or not supported — silent fail
-      }
-    }
-
-    requestWakeLock();
-
-    // Re-acquire on visibility change (tab focus regained)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") requestWakeLock();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      wakeLock?.release();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, []);
 
   // Initial fetch + polling
   useEffect(() => {

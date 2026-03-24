@@ -11,6 +11,8 @@ interface RoomChildCardProps {
   isLate: boolean;
   parentPhoneMasked: string;
   onTap: () => void;
+  onCheckout?: () => void;
+  checkingOut?: boolean;
 }
 
 /**
@@ -26,6 +28,8 @@ export function RoomChildCard({
   hasAlerts,
   isLate,
   onTap,
+  onCheckout,
+  checkingOut,
 }: RoomChildCardProps) {
   const checkInTime = new Date(checkedInAt).toLocaleTimeString([], {
     hour: "numeric",
@@ -78,8 +82,8 @@ export function RoomChildCard({
         </div>
       </div>
 
-      {/* Badges */}
-      <div className="flex gap-1.5 flex-shrink-0">
+      {/* Badges + Checkout */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         {isLate && !checkedOutAt && (
           <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
             Late
@@ -89,6 +93,27 @@ export function RoomChildCard({
           <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 font-medium">
             Alert
           </span>
+        )}
+        {onCheckout && !checkedOutAt && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCheckout();
+            }}
+            disabled={checkingOut}
+            className="text-xs px-3 py-1.5 rounded-full bg-vc-sage/15 text-vc-sage
+              font-medium hover:bg-vc-sage/25 transition-colors min-h-[32px]
+              disabled:opacity-50"
+          >
+            {checkingOut ? (
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 border-2 border-vc-sage/30 border-t-vc-sage rounded-full animate-spin" />
+              </span>
+            ) : (
+              "Check Out"
+            )}
+          </button>
         )}
       </div>
     </button>

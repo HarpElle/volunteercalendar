@@ -27,8 +27,10 @@ async function verifyAdmin(
   if (!membershipSnap.exists) {
     return NextResponse.json({ error: "Not a member" }, { status: 403 });
   }
-  const role = membershipSnap.data()!.role as string;
-  if (!["owner", "admin", "scheduler"].includes(role)) {
+  const membership = membershipSnap.data()!;
+  const role = membership.role as string;
+  const isCheckinVolunteer = membership.checkin_volunteer === true;
+  if (!["owner", "admin", "scheduler"].includes(role) && !isCheckinVolunteer) {
     return NextResponse.json(
       { error: "Insufficient permissions" },
       { status: 403 },

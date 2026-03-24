@@ -42,8 +42,10 @@ export async function GET(req: NextRequest) {
     if (!membershipSnap.exists) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
-    const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin", "scheduler"].includes(role)) {
+    const membership = membershipSnap.data()!;
+    const role = membership.role as string;
+    const isCheckinVolunteer = membership.checkin_volunteer === true;
+    if (!["owner", "admin", "scheduler"].includes(role) && !isCheckinVolunteer) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 },
@@ -229,6 +231,64 @@ export async function GET(req: NextRequest) {
           );
         }
         return NextResponse.json({ from, to, households });
+      }
+
+      case "live": {
+        const today = date || new Date().toISOString().split("T")[0];
+        const sessionsSnap = await churchRef
+          .collection("checkInSessions")
+          .where("service_date", "==", today)
+          .get();
+
+        const sessions = await enrichSessions(churchRef, sessionsSnap.docs);
+
+        // Build room breakdown with capacity
+        const roomIds = new Set<string>();
+        const roomBreakdown: Record<
+          string,
+          { name: string; checked_in: number; checked_out: number; capacity: number | null }
+        > = {};
+
+        for (const doc of sessionsSnap.docs) {
+          const data = doc.data();
+          const rid = data.room_id || "unassigned";
+          roomIds.add(rid);
+          if (!roomBreakdown[rid]) {
+            roomBreakdown[rid] = {
+              name: data.room_name || "Unassigned",
+              checked_in: 0,
+              checked_out: 0,
+              capacity: null,
+            };
+          }
+          if (data.checked_out_at) {
+            roomBreakdown[rid].checked_out++;
+          } else {
+            roomBreakdown[rid].checked_in++;
+          }
+        }
+
+        // Load capacities for rooms
+        const realRoomIds = [...roomIds].filter((id) => id !== "unassigned");
+        if (realRoomIds.length > 0) {
+          const roomDocs = await Promise.all(
+            realRoomIds.map((id) => churchRef.collection("rooms").doc(id).get()),
+          );
+          for (const roomDoc of roomDocs) {
+            if (roomDoc.exists && roomBreakdown[roomDoc.id]) {
+              roomBreakdown[roomDoc.id].capacity = roomDoc.data()!.capacity ?? null;
+            }
+          }
+        }
+
+        return NextResponse.json({
+          date: today,
+          sessions,
+          rooms: Object.entries(roomBreakdown).map(([id, r]) => ({
+            id,
+            ...r,
+          })),
+        });
       }
 
       default:

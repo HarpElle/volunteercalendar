@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       room_overrides,
       station_id,
       service_date,
+      service_id,
       alerts_acknowledged,
     } = body as {
       church_id: string;
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
       room_overrides?: Record<string, string>;
       station_id?: string;
       service_date: string;
+      service_id?: string;
       alerts_acknowledged?: boolean;
     };
 
@@ -64,6 +66,18 @@ export async function POST(req: NextRequest) {
       .doc("config")
       .get();
     const settings = settingsSnap.exists ? settingsSnap.data()! : null;
+
+    // Load household for guardian phone (used for SMS)
+    let guardianPhone: string | null = null;
+    if (settings?.guardian_sms_on_checkin) {
+      const householdSnap = await churchRef
+        .collection("checkin_households")
+        .doc(household_id)
+        .get();
+      if (householdSnap.exists) {
+        guardianPhone = (householdSnap.data()!.primary_guardian_phone as string) || null;
+      }
+    }
 
     // Find the printer for this station
     let printerConfig: PrinterConfig | null = null;
@@ -118,10 +132,11 @@ export async function POST(req: NextRequest) {
       const child = childSnap.data()!;
 
       // Resolve room
-      const roomId =
+      let roomId: string | null =
         room_overrides?.[childId] || child.default_room_id || null;
       let roomName = "Unassigned";
       let roomCapacity: number | undefined;
+      let overflowRoomId: string | undefined;
 
       if (roomId) {
         const roomSnap = await churchRef.collection("rooms").doc(roomId).get();
@@ -129,10 +144,11 @@ export async function POST(req: NextRequest) {
           const roomData = roomSnap.data()!;
           roomName = roomData.name;
           roomCapacity = roomData.capacity;
+          overflowRoomId = roomData.overflow_room_id;
         }
       }
 
-      // Check room capacity
+      // Check room capacity + auto-redirect to overflow if available
       if (roomId && roomCapacity) {
         const currentCount = await churchRef
           .collection("checkInSessions")
@@ -143,17 +159,26 @@ export async function POST(req: NextRequest) {
           .get();
         const count = currentCount.data().count;
 
-        // Trigger capacity SMS at 100% (but don't block check-in)
-        if (
-          count >= roomCapacity &&
-          settings?.capacity_sms_recipient_phone
-        ) {
-          await sendSms({
-            to: settings.capacity_sms_recipient_phone,
-            body: `[${churchName}] Check-In: ${roomName} has reached capacity (${count}/${roomCapacity}). Consider redirecting. – VolunteerCal`,
-          }).catch(() => {
-            // Non-blocking — don't fail check-in if SMS fails
-          });
+        if (count >= roomCapacity) {
+          // Auto-redirect to overflow room if configured
+          if (overflowRoomId) {
+            const overflowSnap = await churchRef
+              .collection("rooms")
+              .doc(overflowRoomId)
+              .get();
+            if (overflowSnap.exists) {
+              roomId = overflowRoomId;
+              roomName = overflowSnap.data()!.name;
+            }
+          }
+
+          // Capacity SMS (non-blocking)
+          if (settings?.capacity_sms_recipient_phone) {
+            await sendSms({
+              to: settings.capacity_sms_recipient_phone,
+              body: `[${churchName}] Check-In: ${roomName} has reached capacity (${count}/${roomCapacity}). Consider redirecting. – VolunteerCal`,
+            }).catch(() => {});
+          }
         }
       }
 
@@ -173,6 +198,7 @@ export async function POST(req: NextRequest) {
         child_id: childId,
         household_id,
         service_date,
+        service_id: service_id || undefined,
         room_id: roomId || "",
         room_name: roomName,
         security_code: securityCode,
@@ -234,6 +260,14 @@ export async function POST(req: NextRequest) {
       } catch {
         // Non-blocking
       }
+    }
+
+    // Guardian SMS — fire-and-forget (non-blocking)
+    if (settings?.guardian_sms_on_checkin && guardianPhone) {
+      const roomList = [...new Set(sessions.map((s) => s.room_name))].join(", ");
+      const nameList = childNames.join(", ");
+      const smsBody = `${nameList} checked in to ${roomList}. Security code: ${securityCode}`;
+      sendSms({ to: guardianPhone, body: smsBody }).catch(() => {});
     }
 
     return NextResponse.json({
