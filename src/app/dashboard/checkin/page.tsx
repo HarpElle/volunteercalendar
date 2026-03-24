@@ -146,9 +146,16 @@ export default function CheckInDashboardPage() {
     }
   }, [user, churchId, fetchStats]);
 
-  const checkedIn = stats?.sessions?.filter((s) => !s.checked_out_at).length ?? 0;
-  const checkedOut = stats?.sessions?.filter((s) => s.checked_out_at).length ?? 0;
-  const total = stats?.sessions?.length ?? 0;
+  // Filter stats to today's local date so counts exclude stale UTC-dated records
+  const todayForStats = localToday();
+  const todaySessionsForStats = stats?.sessions?.filter((s) => {
+    const d = new Date(s.checked_in_at);
+    const ld = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return ld === todayForStats;
+  }) ?? [];
+  const checkedIn = todaySessionsForStats.filter((s) => !s.checked_out_at).length;
+  const checkedOut = todaySessionsForStats.filter((s) => s.checked_out_at).length;
+  const total = todaySessionsForStats.length;
 
   return (
     <div>
@@ -331,20 +338,32 @@ export default function CheckInDashboardPage() {
 
       {/* Recent sessions */}
       {!loading && stats?.sessions && stats.sessions.length > 0 && (() => {
+        // Filter to only sessions whose checked_in_at falls on today's local date.
+        // Existing records may have service_date stored in UTC, so we can't rely on
+        // that field alone — the actual timestamp is the source of truth.
+        const today = localToday();
+        const todaySessions = stats.sessions.filter((s) => {
+          const d = new Date(s.checked_in_at);
+          const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return localDate === today;
+        });
+
         const q = activitySearch.toLowerCase();
         const filtered = q
-          ? stats.sessions.filter(
+          ? todaySessions.filter(
               (s) =>
                 s.child_name.toLowerCase().includes(q) ||
                 s.room_name.toLowerCase().includes(q),
             )
-          : stats.sessions;
+          : todaySessions;
 
-        // Sort by last name, then first name
+        // Sort by last name, then first name, then checked-in time
         const sorted = [...filtered].sort((a, b) => {
           const lastCmp = (a.last_name || "").localeCompare(b.last_name || "");
           if (lastCmp !== 0) return lastCmp;
-          return (a.first_name || "").localeCompare(b.first_name || "");
+          const firstCmp = (a.first_name || "").localeCompare(b.first_name || "");
+          if (firstCmp !== 0) return firstCmp;
+          return a.checked_in_at.localeCompare(b.checked_in_at);
         });
 
         const shown = sorted.slice(0, 50);
