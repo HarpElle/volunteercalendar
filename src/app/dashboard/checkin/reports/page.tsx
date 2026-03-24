@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   BarChart,
@@ -385,26 +385,8 @@ export default function CheckInReportsPage() {
         </div>
       )}
 
-      {/* Print styles */}
-      <style jsx global>{`
-        @media print {
-          /* Hide sidebar, header, nav, and report controls */
-          nav, header, aside,
-          [data-sidebar], [data-topbar], [data-mobile-nav] {
-            display: none !important;
-          }
-          /* Let the main content fill the page */
-          main, [data-main-content] {
-            margin: 0 !important;
-            padding: 0 !important;
-            max-width: 100% !important;
-          }
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-        }
-      `}</style>
+      {/* Print styles — injected via useEffect to avoid styled-jsx */}
+      <PrintStyles />
     </div>
   );
 }
@@ -728,6 +710,35 @@ function FirstTimeReportView({ data }: { data: FirstTimeReport }) {
       )}
     </div>
   );
+}
+
+// ─── Print Styles ────────────────────────────────────────────────────────────
+
+function PrintStyles() {
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.setAttribute("data-print-styles", "checkin-reports");
+    style.textContent = `
+      @media print {
+        nav, header, aside,
+        [data-sidebar], [data-topbar], [data-mobile-nav] {
+          display: none !important;
+        }
+        main, [data-main-content] {
+          margin: 0 !important;
+          padding: 0 !important;
+          max-width: 100% !important;
+        }
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+  return null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
