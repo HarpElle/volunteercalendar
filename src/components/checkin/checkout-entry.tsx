@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 interface CheckoutEntryProps {
   churchId: string;
+  churchName?: string;
   onSuccess: (result: CheckoutResult) => void;
   onBack: () => void;
   onActivity: () => void;
@@ -20,6 +21,7 @@ export interface CheckoutResult {
  */
 export function CheckoutEntry({
   churchId,
+  churchName,
   onSuccess,
   onBack,
   onActivity,
@@ -108,6 +110,9 @@ export function CheckoutEntry({
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
       <div className="max-w-md w-full text-center">
+        {churchName && (
+          <p className="text-lg text-vc-text-secondary font-medium mb-1">{churchName}</p>
+        )}
         <h1 className="text-3xl font-bold text-vc-indigo font-display mb-2">
           Check Out
         </h1>

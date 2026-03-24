@@ -7,6 +7,8 @@ interface HouseholdResult {
   household: {
     id: string;
     primary_guardian_name: string;
+    secondary_guardian_name?: string | null;
+    matched_guardian: "primary" | "secondary";
     primary_guardian_phone_masked: string;
   };
   children: {
@@ -24,7 +26,8 @@ interface HouseholdResult {
 
 interface FamilyLookupProps {
   churchId: string;
-  onHouseholdFound: (results: HouseholdResult[]) => void;
+  churchName?: string;
+  onHouseholdFound: (results: HouseholdResult[], method: "qr" | "phone") => void;
   onFirstTimeVisitor: () => void;
   onActivity: () => void;
 }
@@ -36,6 +39,7 @@ type LookupMode = "idle" | "phone" | "scanning";
  */
 export function FamilyLookup({
   churchId,
+  churchName,
   onHouseholdFound,
   onFirstTimeVisitor,
   onActivity,
@@ -91,8 +95,9 @@ export function FamilyLookup({
         return;
       }
 
+      const method: "qr" | "phone" = params.qr_token ? "qr" : "phone";
       if (households.length === 1) {
-        onHouseholdFound(households);
+        onHouseholdFound(households, method);
       } else {
         setDisambiguation(households);
       }
@@ -185,7 +190,7 @@ export function FamilyLookup({
               type="button"
               onClick={() => {
                 onActivity();
-                onHouseholdFound([result]);
+                onHouseholdFound([result], "phone");
                 setDisambiguation(null);
               }}
               className="w-full p-4 rounded-xl border-2 border-gray-200 bg-white
@@ -221,6 +226,9 @@ export function FamilyLookup({
     <div className="flex flex-col items-center justify-center h-full p-8 gap-6">
       {/* Header */}
       <div className="text-center mb-4">
+        {churchName && (
+          <p className="text-lg text-vc-text-secondary font-medium mb-1">{churchName}</p>
+        )}
         <h1 className="text-3xl font-bold text-vc-indigo font-display mb-2">
           Children&apos;s Check-In
         </h1>

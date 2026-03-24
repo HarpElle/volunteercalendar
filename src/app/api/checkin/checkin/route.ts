@@ -69,13 +69,16 @@ export async function POST(req: NextRequest) {
 
     // Load household for guardian phone (used for SMS)
     let guardianPhone: string | null = null;
+    let isFirstSms = false;
     if (settings?.guardian_sms_on_checkin) {
       const householdSnap = await churchRef
         .collection("checkin_households")
         .doc(household_id)
         .get();
       if (householdSnap.exists) {
-        guardianPhone = (householdSnap.data()!.primary_guardian_phone as string) || null;
+        const hData = householdSnap.data()!;
+        guardianPhone = (hData.primary_guardian_phone as string) || null;
+        isFirstSms = !hData.first_sms_sent;
       }
     }
 
@@ -266,8 +269,24 @@ export async function POST(req: NextRequest) {
     if (settings?.guardian_sms_on_checkin && guardianPhone) {
       const roomList = [...new Set(sessions.map((s) => s.room_name))].join(", ");
       const nameList = childNames.join(", ");
-      const smsBody = `${nameList} checked in to ${roomList}. Security code: ${securityCode}`;
+      let smsBody = `${nameList} checked in to ${roomList}. Security code: ${securityCode}`;
+
+      // On first SMS, append vCard download link so guardian can save the contact
+      if (isFirstSms) {
+        const origin = req.headers.get("origin") || req.nextUrl.origin;
+        smsBody += ` Save this contact: ${origin}/api/checkin/vcard?church_id=${church_id}`;
+      }
+
       sendSms({ to: guardianPhone, body: smsBody }).catch(() => {});
+
+      // Mark first SMS sent (fire-and-forget)
+      if (isFirstSms) {
+        churchRef
+          .collection("checkin_households")
+          .doc(household_id)
+          .update({ first_sms_sent: true })
+          .catch(() => {});
+      }
     }
 
     return NextResponse.json({

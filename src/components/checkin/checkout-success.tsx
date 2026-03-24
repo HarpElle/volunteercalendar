@@ -5,6 +5,7 @@ import type { CheckoutResult } from "./checkout-entry";
 
 interface CheckoutSuccessProps {
   result: CheckoutResult;
+  churchName?: string;
   onReset: () => void;
   onActivity: () => void;
 }
@@ -17,6 +18,7 @@ const AUTO_RESET_SECONDS = 10;
  */
 export function CheckoutSuccess({
   result,
+  churchName,
   onReset,
   onActivity,
 }: CheckoutSuccessProps) {
@@ -57,6 +59,9 @@ export function CheckoutSuccess({
           </svg>
         </div>
 
+        {churchName && (
+          <p className="text-sm text-vc-text-secondary font-medium mb-1">{churchName}</p>
+        )}
         <h1 className="text-3xl font-bold text-vc-indigo font-display mb-2">
           Checked Out
         </h1>

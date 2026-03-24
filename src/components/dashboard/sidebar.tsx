@@ -153,7 +153,7 @@ function getNavSections(
     ...(checkinEnabled
       ? [
           {
-            label: "KIDS CHECK-IN",
+            label: "CHILDREN'S CHECK-IN",
             gate: (m: Membership | null) => !!m && canAccessCheckin(m),
             collapsible: true,
             collapseKey: "vc_sidebar_checkin",

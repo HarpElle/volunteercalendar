@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import Link from "next/link";
+import QRCode from "qrcode";
 
 interface RoomBreakdown {
   id: string;
@@ -37,6 +38,8 @@ export default function CheckInDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
+  const [showKioskQr, setShowKioskQr] = useState(false);
+  const [kioskQrDataUrl, setKioskQrDataUrl] = useState("");
 
   const kioskUrl = typeof window !== "undefined" && churchId
     ? `${window.location.origin}/checkin?church_id=${churchId}`
@@ -62,6 +65,21 @@ export default function CheckInDashboardPage() {
       document.body.removeChild(input);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  }, [kioskUrl]);
+
+  const handleShowKioskQr = useCallback(async () => {
+    if (!kioskUrl) return;
+    try {
+      const url = await QRCode.toDataURL(kioskUrl, {
+        width: 280,
+        margin: 2,
+        color: { dark: "#2D3047", light: "#FEFCF9" },
+      });
+      setKioskQrDataUrl(url);
+      setShowKioskQr(true);
+    } catch {
+      // QR generation failed — non-critical
     }
   }, [kioskUrl]);
 
@@ -163,8 +181,60 @@ export default function CheckInDashboardPage() {
               </>
             )}
           </button>
+          <button
+            type="button"
+            onClick={handleShowKioskQr}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-vc-border-light text-vc-indigo
+              font-medium rounded-xl hover:bg-vc-bg-warm transition-colors text-sm"
+            title="Show QR code for quick kiosk setup"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.375 6.375h.008v.008h-.008v-.008Zm0 9.75h.008v.008h-.008v-.008Zm9.75-9.75h.008v.008h-.008v-.008ZM13.5 14.625v1.875m0 0v1.875m0-1.875h1.875M13.5 16.5h-1.875m4.875 1.875h.008v.008h-.008v-.008Zm0-3.75h.008v.008h-.008v-.008Z" />
+            </svg>
+            Show QR
+          </button>
         </div>
       </div>
+
+      {/* Kiosk QR Code modal */}
+      {showKioskQr && kioskQrDataUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setShowKioskQr(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-vc-indigo font-display mb-1">
+              Kiosk Setup
+            </h2>
+            <p className="text-sm text-vc-text-secondary mb-5">
+              Scan with your iPad or tablet camera to open the kiosk
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={kioskQrDataUrl}
+              alt="Kiosk QR code"
+              className="mx-auto mb-4 rounded-lg"
+              width={280}
+              height={280}
+            />
+            <p className="text-xs text-vc-text-muted font-mono break-all mb-5">
+              {kioskUrl}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowKioskQr(false)}
+              className="px-6 py-2.5 rounded-full border border-vc-border-light text-vc-indigo font-medium
+                hover:bg-vc-bg-warm transition-colors text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">

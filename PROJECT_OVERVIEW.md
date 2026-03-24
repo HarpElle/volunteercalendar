@@ -131,6 +131,9 @@ VolunteerCal/
 │   │   │   └── room/
 │   │   │       └── [roomId]/
 │   │   │           └── page.tsx   # Teacher room view (token auth, 5s polling)
+│   │   ├── guardian/               # Token-based guardian self-service portal (no auth)
+│   │   │   ├── layout.tsx         # Minimal layout (no sidebar, brand mark only)
+│   │   │   └── page.tsx           # Household info, children, check-in history, QR code
 │   │   ├── display/               # Room display signage (wall-mounted tablets)
 │   │   │   ├── layout.tsx         # Blank full-screen layout
 │   │   │   └── room/
@@ -334,9 +337,16 @@ VolunteerCal/
 │   │       │   │   └── route.ts    # POST reprint labels for existing sessions
 │   │       │   ├── register/
 │   │       │   │   └── route.ts    # POST first-time visitor registration (10 req/min)
+│   │       │   ├── services/
+│   │       │   │   └── route.ts    # GET today's service times + church name
+│   │       │   ├── vcard/
+│   │       │   │   └── route.ts    # GET downloadable vCard for SMS contact saving
 │   │       │   └── room/
 │   │       │       └── [roomId]/
 │   │       │           └── route.ts    # GET teacher room view (token auth)
+│   │       ├── guardian/             # Token-based guardian self-service API (no auth)
+│   │       │   └── household/
+│   │       │       └── route.ts      # GET household info + history, PUT update guardian contact
 │   │       ├── admin/
 │   │       │   ├── tier-override/
 │   │       │   │   └── route.ts    # Platform admin tier override (POST)
@@ -364,9 +374,19 @@ VolunteerCal/
 │   │       │       │       └── route.ts        # POST send pre-check-in SMS (Pro+)
 │   │       │       ├── report/
 │   │       │       │   └── route.ts            # GET reports (6 types + CSV)
-│   │       │       └── import/
-│   │       │           └── breeze/
-│   │       │               └── route.ts        # POST Breeze CSV import
+│   │       │       ├── import/
+│   │       │       │   ├── breeze/
+│   │       │       │   │   └── route.ts        # POST Breeze CSV import
+│   │       │       │   ├── pco/
+│   │       │       │   │   └── route.ts        # POST Planning Center CSV import
+│   │       │       │   └── generic/
+│   │       │       │       └── route.ts        # POST generic CSV import with column mapping
+│   │       │       ├── checkout/
+│   │       │       │   └── route.ts            # POST admin checkout (no security code)
+│   │       │       └── households/
+│   │       │           └── [householdId]/
+│   │       │               └── send-qr/
+│   │       │                   └── route.ts    # POST send QR link via SMS to guardian
 │   │       ├── rooms/                 # Room & reservation scheduling API
 │   │       │   ├── route.ts           # Room list (GET) + create (POST, tier-gated)
 │   │       │   ├── [roomId]/
@@ -425,7 +445,7 @@ VolunteerCal/
 │   │   ├── scheduling/         # Schedule matrix, draft view, approval cards, ministry-review-panel, event-roster, service-roster, team-schedule-view, calendar-feed-cta, self-remove-modal, attendance-toggle, cant-make-it-modal, cross-team-modal, approval-countdown, availability-campaign-banner, household-conflict-card
 │   │   ├── worship/            # Song library table, song form modal, service plan editor, song-import-modal (ChordPro/PDF upload), chord-chart-renderer, chord-chart-viewer, song-editor, arrangements-panel, stage-sync-conductor, stage-sync-viewer, stage-sync-share-modal
 │   │   ├── rooms/              # Room booking: room-booking-form (5-step wizard), recurrence-rule-picker, reservation-conflict-modal, room-calendar-view (month/week), room-timeline (horizontal time strip)
-│   │   └── checkin/            # Kiosk UI: family-lookup (QR+phone), child-selection (multi-select cards), allergy-confirm, checkin-success (security code display), numeric-keypad, child-card, room-picker-modal, room-child-card, allergy-detail-modal, visitor-registration (first-time family self-registration)
+│   │   └── checkin/            # Kiosk UI: family-lookup (QR+phone), child-selection (multi-select cards), allergy-confirm, checkin-success (security code display), numeric-keypad, child-card, room-picker-modal, room-child-card, allergy-detail-modal, visitor-registration (first-time family self-registration), checkout-entry, checkout-success, kiosk-install-prompt (PWA install banner)
 │   └── lib/
 │       ├── firebase/           # config.ts, auth.ts, firestore.ts, admin.ts, messaging.ts
 │       ├── context/            # auth-context.tsx, schedule-context.tsx

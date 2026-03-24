@@ -17,6 +17,7 @@ interface CheckInResult {
 interface CheckInSuccessProps {
   result: CheckInResult;
   childNames: string[];
+  churchName?: string;
   onReset: () => void;
   onActivity: () => void;
 }
@@ -28,6 +29,7 @@ interface CheckInSuccessProps {
 export function CheckInSuccess({
   result,
   childNames,
+  churchName,
   onReset,
   onActivity,
 }: CheckInSuccessProps) {
@@ -101,6 +103,9 @@ export function CheckInSuccess({
         </svg>
       </div>
 
+      {churchName && (
+        <p className="text-sm text-vc-text-secondary font-medium mb-1">{churchName}</p>
+      )}
       <h2 className="text-3xl font-bold text-vc-indigo font-display mb-2">
         Checked In!
       </h2>

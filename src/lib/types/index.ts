@@ -1111,6 +1111,8 @@ export interface CheckInHousehold {
   photo_url?: string;
   imported_from?: "breeze" | "pco" | "generic" | "manual";
   external_id?: string;
+  /** Whether the first SMS (with vCard link) has been sent to this household */
+  first_sms_sent?: boolean;
   created_at: string;
   updated_at: string;
   created_by?: string;

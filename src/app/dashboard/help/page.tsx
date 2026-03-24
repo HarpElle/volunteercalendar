@@ -1080,7 +1080,7 @@ const featureGuides: HelpSection[] = [
             <dt className="font-medium text-vc-text">Registering Households</dt>
             <dd className="mt-1">
               <ol className="mt-2 list-decimal space-y-1.5 pl-6">
-                <li>Go to Kids Check-In &rarr; Households in the sidebar.</li>
+                <li>Go to Children&apos;s Check-In &rarr; Households in the sidebar.</li>
                 <li>Click &ldquo;Add Household&rdquo; and enter the primary
                   guardian&apos;s name and phone number. Optionally add a
                   secondary guardian.</li>
@@ -1091,7 +1091,7 @@ const featureGuides: HelpSection[] = [
               <p className="mt-2">
                 Families can also self-register at the kiosk during their first
                 visit (see below), or you can bulk import from Breeze CSV via
-                Kids Check-In &rarr; Dashboard &rarr; Import.
+                Children&apos;s Check-In &rarr; Dashboard &rarr; Import.
               </p>
             </dd>
           </div>
@@ -1125,9 +1125,34 @@ const featureGuides: HelpSection[] = [
                   code.</li>
                 <li>A volunteer matches the code on the guardian&apos;s receipt
                   to the code on the child&apos;s name tag.</li>
-                <li>Mark the child as checked out from the Kids Check-In
+                <li>Mark the child as checked out from the Children&apos;s Check-In
                   dashboard.</li>
               </ol>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">Printer Setup for iPads &amp; Tablets</dt>
+            <dd className="mt-1">
+              <p className="mt-2">
+                Labels print automatically via the companion print server &mdash; no
+                AirPrint or browser print dialog is involved. The kiosk sends labels
+                directly over your local network.
+              </p>
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Install the companion print server on a computer on your
+                  church&apos;s network (Raspberry Pi, Mac, or Windows).</li>
+                <li>Connect your Brother QL or Zebra printer to the print server
+                  via USB or TCP/IP.</li>
+                <li>In Settings &rarr; Check-In, enter the print server URL
+                  (e.g., <code className="text-xs bg-gray-100 px-1 rounded">http://192.168.1.50:5000</code>).</li>
+                <li>Ensure your iPads and the print server are on the same Wi-Fi
+                  network. No additional iPad configuration is needed.</li>
+              </ol>
+              <p className="mt-2 text-sm text-vc-text-secondary">
+                Since labels are sent from the kiosk to the print server over HTTP,
+                the iOS print dialog is never shown. This works on any device with a
+                web browser.
+              </p>
             </dd>
           </div>
         </dl>

@@ -21,12 +21,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Load church doc for name
+    const churchSnap = await adminDb.collection("churches").doc(churchId).get();
+    const churchName = churchSnap.exists
+      ? (churchSnap.data()!.name as string)
+      : "";
+
     const settingsSnap = await adminDb
       .doc(`churches/${churchId}/checkinSettings/config`)
       .get();
 
     if (!settingsSnap.exists) {
-      return NextResponse.json({ services: [] });
+      return NextResponse.json({ services: [], church_name: churchName });
     }
 
     const settings = settingsSnap.data() as CheckInSettings;
@@ -50,7 +56,7 @@ export async function GET(req: NextRequest) {
           };
         });
 
-    return NextResponse.json({ services: todayServices });
+    return NextResponse.json({ services: todayServices, church_name: churchName });
   } catch (error) {
     console.error("[GET /api/checkin/services]", error);
     return NextResponse.json(

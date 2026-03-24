@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const churchRef = adminDb.collection("churches").doc(church_id);
     const householdsRef = churchRef.collection("checkin_households");
 
-    let matchedHouseholds: CheckInHousehold[] = [];
+    let matchedHouseholds: { household: CheckInHousehold; matched_guardian: "primary" | "secondary" }[] = [];
 
     if (qr_token) {
       // QR token lookup — exact match, returns 0 or 1
@@ -34,18 +34,22 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .get();
       matchedHouseholds = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as CheckInHousehold,
+        (d) => ({ household: { id: d.id, ...d.data() } as CheckInHousehold, matched_guardian: "primary" as const }),
       );
     } else if (phone_last4 && typeof phone_last4 === "string") {
       // Last 4 digits — fetch all households for church and filter
       const snap = await householdsRef.get();
-      matchedHouseholds = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as CheckInHousehold)
-        .filter((h) => {
-          const primary = h.primary_guardian_phone?.slice(-4);
-          const secondary = h.secondary_guardian_phone?.slice(-4);
-          return primary === phone_last4 || secondary === phone_last4;
-        });
+      for (const d of snap.docs) {
+        const h = { id: d.id, ...d.data() } as CheckInHousehold;
+        const primaryMatch = h.primary_guardian_phone?.slice(-4) === phone_last4;
+        const secondaryMatch = h.secondary_guardian_phone?.slice(-4) === phone_last4;
+        if (primaryMatch || secondaryMatch) {
+          matchedHouseholds.push({
+            household: h,
+            matched_guardian: primaryMatch ? "primary" : "secondary",
+          });
+        }
+      }
     } else if (phone_full && typeof phone_full === "string") {
       // Full phone — normalize and match
       const normalized = normalizePhone(phone_full);
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
         .limit(5)
         .get();
       matchedHouseholds = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as CheckInHousehold,
+        (d) => ({ household: { id: d.id, ...d.data() } as CheckInHousehold, matched_guardian: "primary" as const }),
       );
 
       // Also check secondary phone if no match on primary
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
           .limit(5)
           .get();
         matchedHouseholds = snap2.docs.map(
-          (d) => ({ id: d.id, ...d.data() }) as CheckInHousehold,
+          (d) => ({ household: { id: d.id, ...d.data() } as CheckInHousehold, matched_guardian: "secondary" as const }),
         );
       }
     } else {
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch children for each matched household
     const results = await Promise.all(
-      matchedHouseholds.map(async (household) => {
+      matchedHouseholds.map(async ({ household, matched_guardian }) => {
         const childSnap = await churchRef
           .collection("children")
           .where("household_id", "==", household.id)
@@ -131,6 +135,8 @@ export async function POST(req: NextRequest) {
           household: {
             id: household.id,
             primary_guardian_name: household.primary_guardian_name,
+            secondary_guardian_name: household.secondary_guardian_name || null,
+            matched_guardian,
             // Mask phone: show only last 4 digits
             primary_guardian_phone_masked: household.primary_guardian_phone
               ? `***${household.primary_guardian_phone.slice(-4)}`

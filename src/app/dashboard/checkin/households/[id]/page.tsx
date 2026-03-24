@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import QRCode from "qrcode";
 import type { CheckInHousehold, Child, ChildGrade } from "@/lib/types";
 
 const GRADES: { value: ChildGrade; label: string }[] = [
@@ -38,6 +39,9 @@ export default function HouseholdDetailPage() {
   const [showAddChild, setShowAddChild] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [sendingQrSms, setSendingQrSms] = useState(false);
+  const [qrSmsSent, setQrSmsSent] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user || !churchId || !id) return;
@@ -105,6 +109,78 @@ export default function HouseholdDetailPage() {
       }
     } catch {
       // silent
+    }
+  };
+
+  // Generate QR code when household loads or changes
+  useEffect(() => {
+    if (!household?.qr_token || !churchId) return;
+    const url = `${window.location.origin}/checkin?church_id=${churchId}&token=${household.qr_token}`;
+    QRCode.toDataURL(url, {
+      width: 200,
+      margin: 2,
+      color: { dark: "#2D3047", light: "#FEFCF9" },
+    }).then(setQrDataUrl).catch(() => {});
+  }, [household?.qr_token, churchId]);
+
+  const qrKioskUrl = household?.qr_token && churchId
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/checkin?church_id=${churchId}&token=${household.qr_token}`
+    : "";
+
+  const handleDownloadQr = () => {
+    if (!qrDataUrl || !household) return;
+    const link = document.createElement("a");
+    link.download = `checkin-qr-${household.primary_guardian_name.replace(/\s+/g, "-")}.png`;
+    link.href = qrDataUrl;
+    link.click();
+  };
+
+  const handlePrintQrCard = () => {
+    if (!qrDataUrl || !household) return;
+    const w = window.open("", "_blank", "width=400,height=500");
+    if (!w) return;
+    w.document.write(`
+      <html><head><title>QR Check-In Card</title>
+      <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; text-align: center; padding: 40px; }
+        h2 { margin: 0 0 4px; color: #2D3047; }
+        p { margin: 4px 0; color: #666; font-size: 14px; }
+        img { margin: 20px 0; }
+        .footer { margin-top: 16px; font-size: 12px; color: #999; }
+      </style></head>
+      <body>
+        <h2>${household.primary_guardian_name}</h2>
+        <p>Family Check-In QR Code</p>
+        <img src="${qrDataUrl}" width="200" height="200" />
+        <p style="font-size:13px">Scan at the kiosk to check in</p>
+        <div class="footer">VolunteerCal &middot; Children&rsquo;s Check-In</div>
+      </body></html>
+    `);
+    w.document.close();
+    w.print();
+  };
+
+  const handleSendQrSms = async () => {
+    if (!user || !churchId || !id) return;
+    setSendingQrSms(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/checkin/households/${id}/send-qr`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      if (res.ok) {
+        setQrSmsSent(true);
+        setTimeout(() => setQrSmsSent(false), 3000);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSendingQrSms(false);
     }
   };
 
@@ -179,27 +255,83 @@ export default function HouseholdDetailPage() {
         </div>
       </div>
 
-      {/* QR Token */}
+      {/* QR Code */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          QR Check-In Token
+          QR Check-In Code
         </h2>
-        <div className="flex items-center gap-3">
-          <code className="text-sm bg-gray-50 px-3 py-1.5 rounded font-mono text-vc-indigo">
-            {household.qr_token}
-          </code>
-          <button
-            type="button"
-            onClick={handleRegenerateQR}
-            disabled={regenerating}
-            className="text-sm text-vc-coral font-medium underline disabled:opacity-50"
-          >
-            {regenerating ? "Regenerating..." : "Regenerate"}
-          </button>
+        <div className="flex flex-col sm:flex-row items-start gap-4">
+          {qrDataUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={qrDataUrl}
+              alt="Family check-in QR code"
+              className="rounded-lg flex-shrink-0"
+              width={160}
+              height={160}
+            />
+          ) : (
+            <div className="w-[160px] h-[160px] bg-gray-50 rounded-lg flex items-center justify-center text-gray-300 text-sm">
+              Loading...
+            </div>
+          )}
+          <div className="flex-1 space-y-2">
+            <p className="text-sm text-vc-text-secondary">
+              Family members scan this code at the kiosk for instant check-in.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadQr}
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-vc-border-light text-vc-indigo
+                  font-medium rounded-lg hover:bg-vc-bg-warm transition-colors text-sm"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintQrCard}
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-vc-border-light text-vc-indigo
+                  font-medium rounded-lg hover:bg-vc-bg-warm transition-colors text-sm"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18.75 12h.008v.008h-.008V12Zm-1.5 0h.008v.008H17.25V12Z" />
+                </svg>
+                Print Card
+              </button>
+              {household.primary_guardian_phone && (
+                <button
+                  type="button"
+                  onClick={handleSendQrSms}
+                  disabled={sendingQrSms}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-vc-border-light text-vc-indigo
+                    font-medium rounded-lg hover:bg-vc-bg-warm transition-colors text-sm disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                  </svg>
+                  {qrSmsSent ? "Sent!" : sendingQrSms ? "Sending..." : "Send via SMS"}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleRegenerateQR}
+                disabled={regenerating}
+                className="text-xs text-vc-coral font-medium underline disabled:opacity-50"
+              >
+                {regenerating ? "Regenerating..." : "Regenerate QR"}
+              </button>
+              <span className="text-xs text-gray-400">
+                Invalidates the old code
+              </span>
+            </div>
+          </div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
-          Regenerating invalidates the old QR code. The family will need a new printout.
-        </p>
       </div>
 
       {/* Children */}

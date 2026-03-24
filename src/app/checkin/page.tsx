@@ -10,6 +10,7 @@ import { CheckInSuccess } from "@/components/checkin/checkin-success";
 import { VisitorRegistration } from "@/components/checkin/visitor-registration";
 import { CheckoutEntry, type CheckoutResult } from "@/components/checkin/checkout-entry";
 import { CheckoutSuccess } from "@/components/checkin/checkout-success";
+import { KioskInstallPrompt } from "@/components/checkin/kiosk-install-prompt";
 
 // --- Types for kiosk state ---
 
@@ -17,6 +18,8 @@ interface HouseholdResult {
   household: {
     id: string;
     primary_guardian_name: string;
+    secondary_guardian_name?: string | null;
+    matched_guardian: "primary" | "secondary";
     primary_guardian_phone_masked: string;
   };
   children: {
@@ -58,6 +61,35 @@ type KioskScreen = "lookup" | "register" | "select" | "confirm" | "success" | "c
 type KioskMode = "checkin" | "checkout";
 
 const INACTIVITY_TIMEOUT = 30_000; // 30 seconds
+
+/**
+ * Format guardian welcome name based on lookup method.
+ * QR with two guardians: "John & Jane Doe" or "John Doe & Jane Smith"
+ * Phone: show matched guardian's name only.
+ */
+function formatGuardianWelcome(
+  h: HouseholdResult["household"],
+  method: "qr" | "phone",
+): string {
+  if (method === "phone" || !h.secondary_guardian_name) {
+    // Phone lookup → show the matched guardian
+    return h.matched_guardian === "secondary" && h.secondary_guardian_name
+      ? h.secondary_guardian_name
+      : h.primary_guardian_name;
+  }
+  // QR lookup with both guardians
+  const primary = h.primary_guardian_name;
+  const secondary = h.secondary_guardian_name;
+  const pLast = primary.split(" ").slice(-1)[0];
+  const sLast = secondary.split(" ").slice(-1)[0];
+  const pFirst = primary.split(" ").slice(0, -1).join(" ") || primary;
+  const sFirst = secondary.split(" ").slice(0, -1).join(" ") || secondary;
+
+  if (pLast.toLowerCase() === sLast.toLowerCase()) {
+    return `${pFirst} & ${sFirst} ${pLast}`;
+  }
+  return `${primary} & ${secondary}`;
+}
 
 function formatTime12(time24: string): string {
   const [h, m] = time24.split(":").map(Number);
@@ -102,8 +134,10 @@ function CheckInKioskInner() {
   const [error, setError] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceOption[]>([]);
+  const [churchName, setChurchName] = useState("");
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lookupMethodRef = useRef<"qr" | "phone">("phone");
 
   // Fetch today's services on mount
   useEffect(() => {
@@ -115,6 +149,7 @@ function CheckInKioskInner() {
           const data = await res.json();
           const svcList = data.services as ServiceOption[];
           setServices(svcList);
+          if (data.church_name) setChurchName(data.church_name);
           // Auto-select if only one service today
           if (svcList.length === 1) {
             setSelectedServiceId(svcList[0].id);
@@ -174,6 +209,7 @@ function CheckInKioskInner() {
     const token = searchParams.get("token");
     if (token && churchId && screen === "lookup") {
       // Auto-trigger lookup with QR token
+      lookupMethodRef.current = "qr";
       const doLookup = async () => {
         try {
           const res = await fetch("/api/checkin/lookup", {
@@ -199,8 +235,9 @@ function CheckInKioskInner() {
 
   // --- Screen transition handlers ---
 
-  const handleHouseholdFound = (results: HouseholdResult[]) => {
+  const handleHouseholdFound = (results: HouseholdResult[], method?: "qr" | "phone") => {
     onActivity();
+    if (method) lookupMethodRef.current = method;
     setHousehold(results[0]);
     setScreen("select");
   };
@@ -375,6 +412,7 @@ function CheckInKioskInner() {
       {screen === "lookup" && (
         <FamilyLookup
           churchId={churchId}
+          churchName={churchName}
           onHouseholdFound={handleHouseholdFound}
           onFirstTimeVisitor={handleFirstTimeVisitor}
           onActivity={onActivity}
@@ -395,7 +433,7 @@ function CheckInKioskInner() {
 
       {screen === "select" && household && (
         <ChildSelection
-          guardianName={household.household.primary_guardian_name}
+          guardianName={formatGuardianWelcome(household.household, lookupMethodRef.current)}
           children={household.children}
           onConfirm={handleChildrenSelected}
           onBack={() => {
@@ -432,6 +470,7 @@ function CheckInKioskInner() {
         <CheckInSuccess
           result={checkInResult}
           childNames={selectedChildNames}
+          churchName={churchName}
           onReset={resetKiosk}
           onActivity={onActivity}
         />
@@ -441,6 +480,7 @@ function CheckInKioskInner() {
       {screen === "checkout-enter" && (
         <CheckoutEntry
           churchId={churchId}
+          churchName={churchName}
           onSuccess={(result) => {
             setCheckoutResult(result);
             setScreen("checkout-success");
@@ -454,6 +494,7 @@ function CheckInKioskInner() {
       {screen === "checkout-success" && checkoutResult && (
         <CheckoutSuccess
           result={checkoutResult}
+          churchName={churchName}
           onReset={resetKiosk}
           onActivity={onActivity}
         />
@@ -474,6 +515,9 @@ function CheckInKioskInner() {
           </div>
         </div>
       )}
+
+      {/* PWA install prompt — only shown when not in standalone mode */}
+      {screen === "lookup" && <KioskInstallPrompt />}
     </div>
   );
 }
