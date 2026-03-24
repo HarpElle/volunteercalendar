@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function CheckInSettingsRedirect() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/dashboard/settings?tab=checkin");
+    router.replace("/dashboard/org/check-ins");
   }, [router]);
   return null;
 }

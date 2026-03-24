@@ -22,7 +22,7 @@ export function OverLimitBanner({
       <p className="mt-1 text-xs text-vc-text-secondary">
         Your existing {resourceLabel} are preserved. To add more, remove some or{" "}
         <a
-          href="/dashboard/settings?tab=billing"
+          href="/dashboard/org/billing"
           className="font-medium text-vc-coral hover:underline"
         >
           upgrade your plan

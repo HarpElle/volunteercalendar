@@ -75,17 +75,17 @@ export async function POST(req: NextRequest) {
             reservations — helping prevent double-bookings and coordination issues for
             shared spaces.</p>
             <p>
-              <a href="${baseUrl}/dashboard/settings?tab=rooms"
+              <a href="${baseUrl}/dashboard/org/campuses"
                  style="display: inline-block; background: #E07A5F; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                 Review Invitation
               </a>
             </p>
             <p style="color: #6B7280; font-size: 14px; margin-top: 24px;">
-              You can accept or decline this invitation in Settings &rarr; Rooms.
+              You can accept or decline this invitation in Organization &rarr; Campuses.
             </p>
           </div>
         `,
-        text: `${invitingOrgName} has invited your organization to join the facility group "${facility_group_name || "Shared Facility"}". Review the invitation at ${baseUrl}/dashboard/settings?tab=rooms`,
+        text: `${invitingOrgName} has invited your organization to join the facility group "${facility_group_name || "Shared Facility"}". Review the invitation at ${baseUrl}/dashboard/org/campuses`,
       });
       sentCount++;
     }

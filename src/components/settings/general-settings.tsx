@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { OrgType, WorkflowMode, Church, Campus, Membership } from "@/lib/types";
+import type { OrgType, WorkflowMode, Church, Membership } from "@/lib/types";
 import type { User } from "firebase/auth";
 
 const TIMEZONE_OPTIONS = [
@@ -30,18 +30,6 @@ interface GeneralSettingsProps {
   orgTimezone: string;
   setOrgTimezone: (tz: string) => void;
   orgWorkflowMode: WorkflowMode;
-  // Check-in settings
-  selfCheckInEnabled: boolean;
-  setSelfCheckInEnabled: (v: boolean) => void;
-  windowBefore: number;
-  setWindowBefore: (v: number) => void;
-  windowAfter: number;
-  setWindowAfter: (v: number) => void;
-  proximityEnabled: boolean;
-  setProximityEnabled: (v: boolean) => void;
-  proximityRadius: number;
-  setProximityRadius: (v: number) => void;
-  campuses: Campus[];
   // Auth
   user: User | null;
   activeMembership: Membership | null;
@@ -58,27 +46,12 @@ export function GeneralSettings({
   orgTimezone,
   setOrgTimezone,
   orgWorkflowMode,
-  selfCheckInEnabled,
-  setSelfCheckInEnabled,
-  windowBefore,
-  setWindowBefore,
-  windowAfter,
-  setWindowAfter,
-  proximityEnabled,
-  setProximityEnabled,
-  proximityRadius,
-  setProximityRadius,
-  campuses,
   user,
   activeMembership,
 }: GeneralSettingsProps) {
   const [orgSaving, setOrgSaving] = useState(false);
   const [orgSuccess, setOrgSuccess] = useState("");
   const [orgError, setOrgError] = useState("");
-
-  const [checkInSaving, setCheckInSaving] = useState(false);
-  const [checkInSuccess, setCheckInSuccess] = useState("");
-
 
   const orgDirty =
     orgName !== (church.name || "") ||
@@ -113,30 +86,6 @@ export function GeneralSettings({
       setOrgError((err as Error).message || "Failed to update organization.");
     } finally {
       setOrgSaving(false);
-    }
-  }
-
-  // --- Check-in settings handler ---
-
-  async function handleCheckInSettingsSave() {
-    setCheckInSaving(true);
-    try {
-      const updatedSettings = {
-        ...church.settings,
-        self_check_in_enabled: selfCheckInEnabled,
-        check_in_window_before: windowBefore,
-        check_in_window_after: windowAfter,
-        proximity_check_in_enabled: proximityEnabled,
-        proximity_radius_meters: proximityRadius,
-      };
-      await updateDocument("churches", churchId, { settings: updatedSettings });
-      setChurch({ ...church, settings: updatedSettings });
-      setCheckInSuccess("Check-in settings saved.");
-      setTimeout(() => setCheckInSuccess(""), 3000);
-    } catch {
-      // silent
-    } finally {
-      setCheckInSaving(false);
     }
   }
 
@@ -205,142 +154,6 @@ export function GeneralSettings({
           </form>
         </div>
       </section>
-
-      {/* ── Check-In Settings ── */}
-      {isAdmin(activeMembership) && (
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Check-In Settings</h2>
-          <div className="rounded-xl border border-vc-border-light bg-white p-6">
-            <div className="space-y-5">
-              {/* Self-check-in toggle */}
-              <label className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-vc-indigo">Allow self-check-in</p>
-                  <p className="text-xs text-vc-text-muted">
-                    Volunteers can check in from the app without scanning a QR code
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={selfCheckInEnabled}
-                  onClick={() => setSelfCheckInEnabled(!selfCheckInEnabled)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                    selfCheckInEnabled ? "bg-vc-sage" : "bg-gray-200"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                      selfCheckInEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </label>
-
-              {/* Window settings (only visible when enabled) */}
-              {selfCheckInEnabled && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                      Minutes before service
-                    </label>
-                    <Input
-                      type="number"
-                      min={5}
-                      max={180}
-                      value={windowBefore}
-                      onChange={(e) => setWindowBefore(parseInt(e.target.value, 10) || 60)}
-                      className="max-w-[120px]"
-                    />
-                    <p className="mt-1 text-xs text-vc-text-muted">
-                      Check-in opens this many minutes before the service starts
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                      Minutes after start
-                    </label>
-                    <Input
-                      type="number"
-                      min={5}
-                      max={120}
-                      value={windowAfter}
-                      onChange={(e) => setWindowAfter(parseInt(e.target.value, 10) || 30)}
-                      className="max-w-[120px]"
-                    />
-                    <p className="mt-1 text-xs text-vc-text-muted">
-                      Check-in window closes this many minutes after service starts
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Proximity settings -- only show if at least one campus has coordinates */}
-              {selfCheckInEnabled && campuses.some((c) => c.location) && (
-                <>
-                  <div className="border-t border-vc-border-light pt-5">
-                    <label className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-vc-indigo">Enable proximity check-in</p>
-                        <p className="text-xs text-vc-text-muted">
-                          Volunteers near a campus will be prompted to check in automatically
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={proximityEnabled}
-                        onClick={() => setProximityEnabled(!proximityEnabled)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                          proximityEnabled ? "bg-vc-sage" : "bg-gray-200"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
-                            proximityEnabled ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </label>
-                  </div>
-
-                  {proximityEnabled && (
-                    <div className="max-w-xs">
-                      <label className="mb-1 block text-sm font-medium text-vc-indigo">
-                        Proximity radius (meters)
-                      </label>
-                      <Input
-                        type="number"
-                        min={50}
-                        max={2000}
-                        value={proximityRadius}
-                        onChange={(e) => setProximityRadius(parseInt(e.target.value, 10) || 200)}
-                      />
-                      <p className="mt-1 text-xs text-vc-text-muted">
-                        How close a volunteer must be to a campus to trigger proximity check-in
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Save */}
-              <div className="flex items-center gap-3">
-                <Button
-                  size="sm"
-                  onClick={handleCheckInSettingsSave}
-                  loading={checkInSaving}
-                >
-                  Save Check-In Settings
-                </Button>
-                {checkInSuccess && (
-                  <span className="text-sm text-vc-sage">{checkInSuccess}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* ── CCLI License & Worship ── */}
       {isAdmin(activeMembership) && (

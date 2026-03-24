@@ -32,6 +32,8 @@ interface TeamsSettingsProps {
   };
   currentTier: string;
   shortLinksLimit: number;
+  /** When true, hides the Short Links section (used on standalone Teams page) */
+  hideShortLinks?: boolean;
   mutationError: string;
   setMutationError: (error: string) => void;
   user: User | null;
@@ -46,6 +48,7 @@ export function TeamsSettings({
   terms,
   currentTier,
   shortLinksLimit,
+  hideShortLinks,
   mutationError,
   setMutationError,
   user,
@@ -290,7 +293,7 @@ export function TeamsSettings({
       </section>
 
       {/* ── Short Links ── */}
-      {isAdmin(activeMembership) && (
+      {!hideShortLinks && isAdmin(activeMembership) && (
         <ShortLinksSection
           churchId={churchId}
           currentTier={currentTier}
