@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
         child_id: childId,
         household_id,
         service_date,
-        service_id: service_id || undefined,
+        ...(service_id ? { service_id } : {}),
         room_id: roomId || "",
         room_name: roomName,
         security_code: securityCode,
@@ -209,12 +209,13 @@ export async function POST(req: NextRequest) {
         checked_in_at: now.toISOString(),
         pre_checked_in: false,
         alerts_acknowledged: !!alerts_acknowledged,
-        alert_snapshot:
-          child.has_alerts
-            ? [child.allergies, child.medical_notes]
+        ...(child.has_alerts
+          ? {
+              alert_snapshot: [child.allergies, child.medical_notes]
                 .filter(Boolean)
-                .join(" | ")
-            : undefined,
+                .join(" | "),
+            }
+          : {}),
         created_at: now.toISOString(),
       };
 

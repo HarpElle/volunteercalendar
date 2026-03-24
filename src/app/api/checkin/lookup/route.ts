@@ -89,7 +89,6 @@ export async function POST(req: NextRequest) {
 
         const children: Partial<Child>[] = childSnap.docs.map((d) => {
           const data = d.data();
-          // Data minimization: only return fields needed for kiosk display
           return {
             id: d.id,
             first_name: data.first_name,
@@ -99,7 +98,10 @@ export async function POST(req: NextRequest) {
             photo_url: data.photo_url,
             default_room_id: data.default_room_id,
             has_alerts: data.has_alerts,
-            // No allergies/medical_notes in lookup — only shown at allergy confirm screen
+            // Include alert details so the allergy-confirm screen can display them
+            ...(data.has_alerts
+              ? { allergies: data.allergies, medical_notes: data.medical_notes }
+              : {}),
           };
         });
 
