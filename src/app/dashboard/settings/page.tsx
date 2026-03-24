@@ -867,6 +867,8 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
   const [inviteChurchId, setInviteChurchId] = useState("");
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState("");
+  const [myShortCode, setMyShortCode] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -890,6 +892,25 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
     loadGroups();
   }, [loadGroups]);
 
+  // Fetch own setup code
+  useEffect(() => {
+    if (!user || !churchId) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/church-info?id=${churchId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.short_code) setMyShortCode(data.short_code);
+        }
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, [user, churchId]);
+
   async function handleCreate() {
     if (!newGroupName.trim()) return;
     setCreating(true);
@@ -908,44 +929,47 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
   }
 
   async function handleInvite(groupId: string) {
-    if (!inviteChurchId.trim()) return;
+    if (!inviteChurchId.trim() || !user) return;
     setInviting(true);
     setError("");
     try {
-      // Look up target church name
-      const targetSnap = await getDoc(doc(db, "churches", inviteChurchId.trim()));
-      if (!targetSnap.exists()) {
-        setError("Organization not found. Check the ID and try again.");
+      // Resolve via API — accepts both full church_id and short setup codes
+      const token = await user.getIdToken();
+      const infoRes = await fetch(
+        `/api/church-info?id=${encodeURIComponent(inviteChurchId.trim())}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!infoRes.ok) {
+        setError("Organization not found. Check the code and try again.");
         setInviting(false);
         return;
       }
-      const targetName = targetSnap.data()?.name || "Organization";
+      const targetInfo = await infoRes.json();
+      const targetId = targetInfo.id as string;
+      const targetName = targetInfo.name as string;
       const groupData = groups.find((g) => g.id === groupId);
 
       await inviteToFacilityGroup(
         groupId,
-        inviteChurchId.trim(),
+        targetId,
         targetName,
         churchId,
       );
 
       // Send notification email
-      if (user) {
-        const token = await user.getIdToken();
-        fetch("/api/notify/facility-invite", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            church_id: churchId,
-            target_church_id: inviteChurchId.trim(),
-            facility_group_id: groupId,
-            facility_group_name: groupData?.name || "Shared Facility",
-          }),
-        });
-      }
+      fetch("/api/notify/facility-invite", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          target_church_id: targetId,
+          facility_group_id: groupId,
+          facility_group_name: groupData?.name || "Shared Facility",
+        }),
+      });
 
       setInviteChurchId("");
       setInviteGroupId(null);
@@ -988,10 +1012,43 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
       <h2 className="mb-1 font-display text-lg text-vc-indigo">
         Shared Facility
       </h2>
-      <p className="mb-5 text-sm text-vc-text-secondary">
+      <p className="mb-4 text-sm text-vc-text-secondary">
         Link organizations that share the same building so everyone can see
         room reservations across groups.
       </p>
+
+      {myShortCode && (
+        <div className="mb-5 flex items-center gap-3 rounded-lg bg-white px-4 py-3 ring-1 ring-vc-border-light">
+          <span className="text-sm text-vc-text-secondary">Your Setup Code</span>
+          <span className="font-mono text-base font-semibold tracking-widest text-vc-indigo">
+            {myShortCode}
+          </span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(myShortCode);
+              setCopiedCode(true);
+              setTimeout(() => setCopiedCode(false), 2000);
+            }}
+            className="ml-auto flex items-center gap-1 rounded-md bg-vc-bg px-2.5 py-1 text-xs text-vc-text-secondary hover:bg-vc-sand/30"
+          >
+            {copiedCode ? (
+              <>
+                <svg className="h-3.5 w-3.5 text-vc-sage" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Copied
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {error && (
         <p className="mb-4 rounded-lg bg-vc-danger/10 px-3 py-2 text-sm text-vc-danger">
@@ -1111,7 +1168,7 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
                         type="text"
                         value={inviteChurchId}
                         onChange={(e) => setInviteChurchId(e.target.value)}
-                        placeholder="Organization ID"
+                        placeholder="Setup code"
                         className="min-h-[36px] flex-1 rounded-lg border border-vc-border-light bg-white px-3 py-1.5 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
                       />
                       <Button
