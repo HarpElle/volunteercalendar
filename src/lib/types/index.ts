@@ -110,6 +110,8 @@ export interface Church {
   id: string;
   name: string;
   slug: string;
+  /** 6-char uppercase alphanumeric code for manual kiosk setup entry */
+  short_code: string;
   org_type: OrgType;
   workflow_mode: WorkflowMode;
   timezone: string;

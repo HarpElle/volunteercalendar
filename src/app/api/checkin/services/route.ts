@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { SHORT_CODE_RE, generateShortCode, resolveShortCode } from "@/lib/utils/short-code";
 import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
 
 /**
  * GET /api/checkin/services?church_id=...
  * Public endpoint — returns today's active service times for a church.
+ * Accepts a full church_id OR a 6-char setup code (short_code).
  * If only one service matches today, the kiosk can auto-select it.
  */
 export async function GET(req: NextRequest) {
@@ -13,23 +15,45 @@ export async function GET(req: NextRequest) {
   if (limited) return limited;
 
   try {
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
+    const rawId = req.nextUrl.searchParams.get("church_id");
+    if (!rawId) {
       return NextResponse.json(
         { error: "Missing church_id" },
         { status: 400 },
       );
     }
 
-    // Load church doc for name — reject if church doesn't exist
-    const churchSnap = await adminDb.collection("churches").doc(churchId).get();
+    // Resolve: try direct doc lookup first, then short_code query
+    let churchId = rawId;
+    let churchSnap = await adminDb.collection("churches").doc(rawId).get();
+
+    if (!churchSnap.exists && SHORT_CODE_RE.test(rawId.toUpperCase())) {
+      const resolved = await resolveShortCode(rawId);
+      if (resolved) {
+        churchId = resolved;
+        churchSnap = await adminDb.collection("churches").doc(churchId).get();
+      }
+    }
+
     if (!churchSnap.exists) {
       return NextResponse.json(
         { error: "Church not found" },
         { status: 404 },
       );
     }
-    const churchName = churchSnap.data()!.name as string;
+
+    const churchData = churchSnap.data()!;
+    const churchName = churchData.name as string;
+
+    // Backfill short_code for existing churches that don't have one
+    if (!churchData.short_code) {
+      try {
+        const code = await generateShortCode();
+        await adminDb.collection("churches").doc(churchId).update({ short_code: code });
+      } catch {
+        // Non-critical — will retry on next request
+      }
+    }
 
     const settingsSnap = await adminDb
       .doc(`churches/${churchId}/checkinSettings/config`)

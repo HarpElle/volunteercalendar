@@ -52,11 +52,32 @@ export default function CheckInDashboardPage() {
   const [showKioskQr, setShowKioskQr] = useState(false);
   const [kioskQrDataUrl, setKioskQrDataUrl] = useState("");
   const [activitySearch, setActivitySearch] = useState("");
+  const [shortCode, setShortCode] = useState("");
   const kioskMenuRef = useRef<HTMLDivElement>(null);
 
   const kioskUrl = typeof window !== "undefined" && churchId
     ? `${window.location.origin}/checkin?church_id=${churchId}`
     : "";
+
+  // Fetch the church's short setup code
+  useEffect(() => {
+    if (!user || !churchId) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(
+          `/api/church-info?id=${churchId}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.short_code) setShortCode(data.short_code);
+        }
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, [user, churchId]);
 
   const handleLaunchKiosk = useCallback(() => {
     if (kioskUrl) window.open(kioskUrl, "_blank");
@@ -96,15 +117,16 @@ export default function CheckInDashboardPage() {
     }
   }, [kioskUrl]);
 
-  const handleCopyChurchId = useCallback(async () => {
-    if (!churchId) return;
+  const handleCopySetupCode = useCallback(async () => {
+    const code = shortCode || churchId;
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(churchId);
+      await navigator.clipboard.writeText(code);
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     } catch {
       const input = document.createElement("input");
-      input.value = churchId;
+      input.value = code;
       document.body.appendChild(input);
       input.select();
       document.execCommand("copy");
@@ -112,7 +134,7 @@ export default function CheckInDashboardPage() {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     }
-  }, [churchId]);
+  }, [shortCode, churchId]);
 
   // Close kiosk menu on outside click or Escape
   useEffect(() => {
@@ -223,19 +245,19 @@ export default function CheckInDashboardPage() {
           {showKioskMenu && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-vc-border-light
               shadow-lg z-40 overflow-hidden">
-              {/* Church ID row */}
-              {churchId && (
+              {/* Setup Code row */}
+              {(shortCode || churchId) && (
                 <div className="px-4 py-3 bg-vc-indigo/5 border-b border-vc-border-light">
-                  <p className="text-xs text-vc-text-secondary mb-1">Church ID</p>
+                  <p className="text-xs text-vc-text-secondary mb-1">Setup Code</p>
                   <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono text-vc-indigo select-all flex-1 truncate">
-                      {churchId}
+                    <code className="text-sm font-mono text-vc-indigo select-all flex-1 tracking-widest">
+                      {shortCode || churchId}
                     </code>
                     <button
                       type="button"
-                      onClick={handleCopyChurchId}
+                      onClick={handleCopySetupCode}
                       className="shrink-0 p-1.5 rounded-lg hover:bg-vc-sand/20 transition-colors"
-                      title="Copy Church ID"
+                      title="Copy setup code"
                     >
                       {copiedId ? (
                         <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -323,15 +345,17 @@ export default function CheckInDashboardPage() {
               width={280}
               height={280}
             />
-            {churchId && (
+            {(shortCode || churchId) && (
               <div className="flex items-center justify-center gap-2 mb-5 px-4 py-2.5 rounded-lg bg-vc-bg-warm">
-                <span className="text-xs text-vc-text-secondary">Church ID:</span>
-                <code className="text-sm font-mono text-vc-indigo select-all">{churchId}</code>
+                <span className="text-xs text-vc-text-secondary">Setup Code:</span>
+                <code className="text-sm font-mono text-vc-indigo select-all tracking-widest">
+                  {shortCode || churchId}
+                </code>
                 <button
                   type="button"
-                  onClick={handleCopyChurchId}
+                  onClick={handleCopySetupCode}
                   className="p-1 rounded hover:bg-vc-sand/20 transition-colors"
-                  title="Copy Church ID"
+                  title="Copy setup code"
                 >
                   {copiedId ? (
                     <svg className="h-3.5 w-3.5 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

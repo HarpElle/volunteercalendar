@@ -27,5 +27,6 @@ export async function GET(req: NextRequest) {
     id: snap.id,
     name: data.name || "Organization",
     type: data.type || "church",
+    short_code: data.short_code || null,
   });
 }

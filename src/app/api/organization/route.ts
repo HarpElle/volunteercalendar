@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
 import { buildOrgDeletedEmail, buildOrgDeletedMembersEmail } from "@/lib/utils/email-templates";
 import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
+import { generateShortCode } from "@/lib/utils/short-code";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -46,11 +47,13 @@ export async function POST(req: NextRequest) {
       .replace(/^-|-$/g, "");
 
     const now = new Date().toISOString();
+    const shortCode = await generateShortCode();
 
     // Create church doc
     await adminDb.doc(`churches/${churchId}`).set({
       name,
       slug,
+      short_code: shortCode,
       org_type,
       workflow_mode,
       timezone,

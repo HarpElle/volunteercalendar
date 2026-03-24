@@ -689,9 +689,11 @@ function CheckInKioskInner() {
   );
 }
 
-/** Extract church_id from a URL string or return the raw input as an ID. */
+/** Extract church_id (or setup code) from a URL string or return raw input. */
 function extractChurchId(raw: string): string {
   const trimmed = raw.trim();
+  // If it looks like a 6-char setup code, return as-is (uppercase)
+  if (/^[A-Za-z0-9]{6}$/.test(trimmed)) return trimmed.toUpperCase();
   try {
     const url = new URL(trimmed.startsWith("http") ? trimmed : `https://x.com?church_id=${trimmed}`);
     return url.searchParams.get("church_id") || trimmed;
@@ -716,7 +718,7 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string, kioskName: 
 
   const validateChurch = useCallback(async (churchId: string) => {
     if (!churchId) {
-      setError("Please enter a church ID or paste the kiosk URL.");
+      setError("Please enter a setup code or paste the kiosk URL.");
       return;
     }
     setValidating(true);
@@ -724,7 +726,7 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string, kioskName: 
     try {
       const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
       if (!res.ok) {
-        setError("Church not found. Check the ID and try again.");
+        setError("Church not found. Check the code and try again.");
         setValidating(false);
         return;
       }
@@ -827,7 +829,7 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string, kioskName: 
         </h1>
         <p className="text-gray-500 text-sm mb-6">
           Scan the QR code from your Check-In dashboard,
-          or enter your church ID below.
+          or enter your setup code below.
         </p>
 
         {/* QR scan button */}
@@ -855,7 +857,7 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string, kioskName: 
           type="text"
           value={input}
           onChange={(e) => { setInput(e.target.value); setError(""); }}
-          placeholder="Kiosk URL or church ID"
+          placeholder="Kiosk URL or setup code"
           className="w-full px-4 py-3 rounded-xl border border-vc-border-light text-vc-indigo
             placeholder:text-gray-400 outline-none focus:border-vc-coral focus:ring-1
             focus:ring-vc-coral/30 text-base min-h-[44px] mb-3"
