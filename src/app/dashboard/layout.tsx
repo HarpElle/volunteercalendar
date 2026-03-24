@@ -138,6 +138,7 @@ export default function DashboardLayout({
         displayName={profile?.display_name || "User"}
         email={user.email || ""}
         userPhotoUrl={profile?.photo_url}
+        hasPrerequisites={hasPrerequisites}
         signOut={handleSignOut}
       />
 

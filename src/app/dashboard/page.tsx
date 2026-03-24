@@ -497,7 +497,7 @@ export default function DashboardPage() {
             <div className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
               <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-vc-indigo">Most Scheduled Volunteers</h2>
-                <Link href="/dashboard/volunteers" className="text-xs text-vc-coral hover:underline">View all</Link>
+                <Link href="/dashboard/people" className="text-xs text-vc-coral hover:underline">View all</Link>
               </div>
               {stats.topVolunteers.length === 0 ? (
                 <div className="p-5 text-center text-sm text-vc-text-muted">No assignments yet. Generate your first schedule to see who&apos;s serving.</div>

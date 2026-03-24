@@ -228,6 +228,7 @@ export interface SidebarProps {
   displayName: string;
   email: string;
   userPhotoUrl?: string | null;
+  hasPrerequisites?: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -326,6 +327,7 @@ export function Sidebar({
   displayName,
   email,
   userPhotoUrl,
+  hasPrerequisites,
   signOut,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -488,6 +490,44 @@ export function Sidebar({
             />
             My Schedule
           </Link>
+          <Link
+            href="/dashboard/my-availability"
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/dashboard/my-availability")
+                ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
+                : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
+            }`}
+          >
+            <Icon
+              d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              className={`h-5 w-5 ${
+                pathname.startsWith("/dashboard/my-availability")
+                  ? "text-vc-indigo"
+                  : "text-vc-text-muted"
+              }`}
+            />
+            My Availability
+          </Link>
+          {hasPrerequisites && (
+            <Link
+              href="/dashboard/my-journey"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                pathname.startsWith("/dashboard/my-journey")
+                  ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
+                  : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
+              }`}
+            >
+              <Icon
+                d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342"
+                className={`h-5 w-5 ${
+                  pathname.startsWith("/dashboard/my-journey")
+                    ? "text-vc-indigo"
+                    : "text-vc-text-muted"
+                }`}
+              />
+              My Journey
+            </Link>
+          )}
           <Link
             href="/dashboard/inbox"
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
