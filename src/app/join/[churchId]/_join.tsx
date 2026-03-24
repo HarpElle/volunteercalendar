@@ -166,7 +166,7 @@ export default function JoinChurchPage() {
               <p className="text-center text-vc-text-secondary">
                 Your request to join <strong className="text-vc-indigo">{churchName}</strong> is waiting for admin approval. You'll get an email when you're approved.
               </p>
-              <p className="mt-2 text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
+              <p className="mt-2 text-center text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
             </>
           )}
 
@@ -183,7 +183,7 @@ export default function JoinChurchPage() {
               <p className="text-center text-vc-text-secondary">
                 Your request to join <strong className="text-vc-indigo">{churchName}</strong> has been sent to the admin team. You'll receive an email once you're approved.
               </p>
-              <p className="mt-2 text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
+              <p className="mt-2 text-center text-xs text-vc-text-muted">Most requests are reviewed within 24–48 hours.</p>
             </>
           )}
 

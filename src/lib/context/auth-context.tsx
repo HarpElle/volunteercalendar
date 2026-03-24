@@ -108,9 +108,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // --- Helpers ---
 
+const ACTIVE_ORG_KEY = "vc_active_church_id";
+
 /**
  * Pick the best active membership to use by default.
- * Priority: default_church_id from profile, then first active membership.
+ * Priority: localStorage selection, default_church_id from profile, then first active membership.
  */
 function pickActiveMembership(
   memberships: Membership[],
@@ -118,6 +120,19 @@ function pickActiveMembership(
 ): Membership | null {
   const active = memberships.filter((m) => m.status === "active");
   if (active.length === 0) return null;
+
+  // Prefer the last-selected org from localStorage
+  if (typeof window !== "undefined") {
+    try {
+      const saved = localStorage.getItem(ACTIVE_ORG_KEY);
+      if (saved) {
+        const fromStorage = active.find((m) => m.church_id === saved);
+        if (fromStorage) return fromStorage;
+      }
+    } catch {
+      // localStorage unavailable (SSR, private browsing, etc.)
+    }
+  }
 
   // Prefer the user's stored default church
   if (profile?.default_church_id) {
@@ -276,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (m) => m.church_id === churchId && m.status === "active",
       );
       if (membership) {
+        try { localStorage.setItem(ACTIVE_ORG_KEY, churchId); } catch {}
         dispatch({ type: "SWITCH_ORG", membership });
       }
     },
