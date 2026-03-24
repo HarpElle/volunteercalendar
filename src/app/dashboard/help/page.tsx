@@ -267,17 +267,64 @@ const featureGuides: HelpSection[] = [
       <>
         <p>
           Define the requirements volunteers must complete before serving &mdash;
-          things like background checks, training classes, or orientation
-          sessions.
+          background checks, training classes, orientation sessions, and more.
+          Volunteers won&apos;t appear as available for scheduling until all
+          required prerequisites are complete.
         </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Creating Prerequisites</dt>
+            <dd className="mt-1">
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Go to People &rarr; Onboarding in the sidebar.</li>
+                <li>Open the &ldquo;Manage Prerequisites&rdquo; tab.</li>
+                <li>Click &ldquo;+ Add prerequisite&rdquo; and choose a type:
+                  orientation class, background check, minimum services,
+                  ministry tenure, shadow, or custom.</li>
+                <li>Set the scope: all roles, teams only, events only, or
+                  specific roles.</li>
+                <li>Use the quick-add presets for common requirements like
+                  orientation or background check.</li>
+                <li>Prerequisites auto-save as you add them.</li>
+              </ol>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">
+              Assigning &amp; Tracking Progress
+            </dt>
+            <dd className="mt-1">
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Switch to the &ldquo;Volunteer Progress&rdquo; tab.</li>
+                <li>The table shows every volunteer with their name, overall
+                  status (Not Started, In Progress, or Cleared to Serve), and
+                  a progress bar.</li>
+                <li>Click a volunteer&apos;s row to expand and see individual
+                  prerequisite status.</li>
+                <li>Use the dropdown on each step to change status:
+                  Pending &rarr; In Progress &rarr; Completed or Waived.</li>
+                <li>Changes auto-save with your user ID as verifier and a
+                  timestamp.</li>
+              </ol>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">
+              Volunteer&apos;s View (My Journey)
+            </dt>
+            <dd className="mt-1">
+              <p>Volunteers see their personal progress at Account
+                Settings &rarr; My Journey. The page shows prerequisites
+                grouped by organization-wide and per-team, with status badges
+                (Not Started, In Progress, Complete, Waived) and completion
+                dates. An &ldquo;all clear&rdquo; state displays when
+                everything is complete.</p>
+            </dd>
+          </div>
+        </dl>
         <p className="mt-3">
-          On the Onboarding page, use the &ldquo;Manage Prerequisites&rdquo; tab
-          to set up organization-wide requirements (applied to every team) and
-          team-specific requirements. Then switch to the &ldquo;Volunteer
-          Progress&rdquo; tab to track each volunteer&apos;s status through the
-          pipeline. Volunteers won&apos;t appear as available for scheduling
-          until they&apos;ve completed all required prerequisites &mdash; both
-          org-wide and team-specific.
+          See the &ldquo;Training Sessions&rdquo; guide below for scheduling
+          group training events tied to prerequisites.
         </p>
       </>
     ),
@@ -859,46 +906,66 @@ const featureGuides: HelpSection[] = [
       <>
         <p>
           Stage Sync lets you broadcast your order of service in real time so
-          your worship team can follow along on any device.
+          your worship team can follow along on any device. Available on
+          Growth tier and above.
         </p>
         <dl className="mt-3 space-y-4">
           <div>
             <dt className="font-medium text-vc-text">Starting a Session</dt>
             <dd className="mt-1">
-              Open a published service plan and click &ldquo;Start Stage
-              Sync.&rdquo; A share modal appears with a QR code and a direct
-              URL. Share either with your team members.
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Go to Worship &rarr; Service Plans and open the plan you
+                  want to present.</li>
+                <li>Click the &ldquo;Stage Sync&rdquo; button on the plan
+                  detail page.</li>
+                <li>A share modal opens with two links:
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    <li><strong>Conductor link</strong> &mdash; for the person
+                      controlling the presentation.</li>
+                    <li><strong>Viewer link</strong> &mdash; for band members
+                      and participants to follow along.</li>
+                  </ul>
+                </li>
+                <li>Share the viewer link with your team via QR code or direct
+                  URL.</li>
+              </ol>
             </dd>
           </div>
           <div>
             <dt className="font-medium text-vc-text">Conductor View</dt>
             <dd className="mt-1">
-              The conductor page shows your full order of service with the
-              current item highlighted. Use the Next and Previous buttons to
-              advance through the plan, or use keyboard shortcuts: Right Arrow or
-              Space to advance, Left Arrow to go back.
+              <p>Open the conductor link to get a full-screen control
+                interface.</p>
+              <ul className="mt-2 list-disc space-y-1.5 pl-6">
+                <li>Use the <strong>Next</strong> and <strong>Previous</strong>
+                  buttons on screen to advance through the plan.</li>
+                <li>Keyboard shortcuts: <strong>Space</strong>,{" "}
+                  <strong>Enter</strong>, or <strong>Right Arrow</strong> to
+                  advance; <strong>Left Arrow</strong> to go back.</li>
+                <li>Click any progress dot to jump directly to a specific
+                  item.</li>
+                <li>Current item shows title, type, key (if a song), and chord
+                  chart (if available).</li>
+              </ul>
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Participant View</dt>
+            <dt className="font-medium text-vc-text">Participant / Viewer</dt>
             <dd className="mt-1">
-              Team members open the shared link or scan the QR code on their
-              phone, tablet, or laptop. The current item displays in a clear,
-              large format that updates in real time as the conductor advances.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-vc-text">Reconnection</dt>
-            <dd className="mt-1">
-              If a participant loses their connection briefly (e.g., switching
-              between apps), the view automatically resumes at the current item
-              when they reconnect. No manual refresh needed.
+              <ul className="mt-2 list-disc space-y-1.5 pl-6">
+                <li>Open the viewer link on any device &mdash; phone, tablet,
+                  or laptop.</li>
+                <li>The display automatically follows the conductor in real
+                  time via live sync.</li>
+                <li>Chord charts display at a larger scale for easy
+                  readability.</li>
+                <li>If connection drops, a &ldquo;Reconnecting&hellip;&rdquo;
+                  banner appears and the view auto-resumes when back
+                  online.</li>
+              </ul>
             </dd>
           </div>
         </dl>
-        <p className="mt-3">
-          Stage Sync is available on Growth tier and above.
-        </p>
       </>
     ),
   },
@@ -992,50 +1059,76 @@ const featureGuides: HelpSection[] = [
       <>
         <p>
           VolunteerCal includes a dedicated children&apos;s check-in system
-          designed for safety, speed, and simplicity.
+          designed for safety, speed, and simplicity. Available on Growth tier
+          and above.
         </p>
         <dl className="mt-3 space-y-4">
           <div>
-            <dt className="font-medium text-vc-text">Kiosk Mode</dt>
+            <dt className="font-medium text-vc-text">Setting Up Check-In</dt>
             <dd className="mt-1">
-              Set up a tablet or computer as a check-in kiosk. Parents search
-              for their household, select the children to check in, and the
-              system assigns each child to the appropriate room based on their
-              grade.
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Go to Settings &rarr; Check-In tab.</li>
+                <li>Add your service times (day, start time, end time). These
+                  control pre-check-in windows and security code expiry.</li>
+                <li>Optionally configure printers: station name, printer type
+                  (Brother QL, Zebra ZD, or Dymo), IP address, and label size.</li>
+                <li>Use the &ldquo;Test&rdquo; button to verify printer connectivity.</li>
+              </ol>
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Room Assignment</dt>
+            <dt className="font-medium text-vc-text">Registering Households</dt>
             <dd className="mt-1">
-              Each room can be configured with grade ranges (e.g., K&ndash;2nd
-              grade). When a child checks in, they&apos;re automatically routed
-              to the correct room. If a room reaches capacity, children are
-              directed to a designated overflow room.
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Go to Kids Check-In &rarr; Households in the sidebar.</li>
+                <li>Click &ldquo;Add Household&rdquo; and enter the primary
+                  guardian&apos;s name and phone number. Optionally add a
+                  secondary guardian.</li>
+                <li>Add children: first/last name, grade, default room,
+                  allergies, and medical notes.</li>
+                <li>Each household receives a QR token for fast kiosk lookup.</li>
+              </ol>
+              <p className="mt-2">
+                Families can also self-register at the kiosk during their first
+                visit (see below), or you can bulk import from Breeze CSV via
+                Kids Check-In &rarr; Dashboard &rarr; Import.
+              </p>
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Label Printing</dt>
+            <dt className="font-medium text-vc-text">Running the Kiosk</dt>
             <dd className="mt-1">
-              After check-in, two labels print automatically: a name tag for
-              the child and a guardian receipt with a matching security code.
-              The security code is required for pickup. Configure printers in
-              Settings &rarr; Check-In.
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Open <strong>/checkin</strong> on a tablet or dedicated
+                  device. No login is required.</li>
+                <li><strong>Returning families:</strong> scan their household QR
+                  code, or enter the last 4 digits of the guardian&apos;s phone
+                  number.</li>
+                <li><strong>New families:</strong> tap &ldquo;New Family&rdquo;
+                  to open the visitor registration form &mdash; enter guardian
+                  info, add children, and review.</li>
+                <li>Select which children to check in, then acknowledge any
+                  allergy or medical alerts.</li>
+                <li>The success screen shows a 4-character security code and
+                  prints labels (child name tag + guardian receipt).</li>
+                <li>The kiosk auto-resets after 30 seconds of inactivity.</li>
+              </ol>
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Security Codes</dt>
+            <dt className="font-medium text-vc-text">Pick-Up / Checkout</dt>
             <dd className="mt-1">
-              Each check-in generates a unique security code shared between
-              the child&apos;s name tag and the guardian&apos;s receipt. At
-              pickup, volunteers verify the codes match before releasing a
-              child.
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>The guardian presents their receipt label with the security
+                  code.</li>
+                <li>A volunteer matches the code on the guardian&apos;s receipt
+                  to the code on the child&apos;s name tag.</li>
+                <li>Mark the child as checked out from the Kids Check-In
+                  dashboard.</li>
+              </ol>
             </dd>
           </div>
         </dl>
-        <p className="mt-3">
-          Children&apos;s check-in is available on Growth tier and above.
-          Configure rooms and printers in Settings &rarr; Check-In.
-        </p>
       </>
     ),
   },
@@ -1078,10 +1171,9 @@ const featureGuides: HelpSection[] = [
           <div>
             <dt className="font-medium text-vc-text">Room Display Signage</dt>
             <dd className="mt-1">
-              Each room has a public display URL for wall-mounted tablets.
-              The display shows the room&apos;s current status (Available, In
-              Use, Starting Soon), a countdown timer, and today&apos;s full
-              schedule. Find the display URL in Settings &rarr; Rooms.
+              Mount a tablet or screen outside a room to show its live
+              schedule. See the dedicated &ldquo;Room Display Setup&rdquo;
+              guide below for step-by-step device setup instructions.
             </dd>
           </div>
           <div>
@@ -1098,6 +1190,56 @@ const featureGuides: HelpSection[] = [
           above unlock recurring reservations, public calendars, and more rooms.
           Configure rooms in Settings &rarr; Rooms.
         </p>
+      </>
+    ),
+  },
+  {
+    title: "Room Display Setup",
+    content: (
+      <>
+        <p>
+          Mount a tablet or screen outside any room to show a live status
+          display. The page stays on permanently and refreshes automatically.
+        </p>
+        <dl className="mt-3 space-y-4">
+          <div>
+            <dt className="font-medium text-vc-text">Setting Up a Device</dt>
+            <dd className="mt-1">
+              <ol className="mt-2 list-decimal space-y-1.5 pl-6">
+                <li>Go to Settings &rarr; Rooms and select the room you want
+                  to display.</li>
+                <li>Copy the room&apos;s display URL. It follows the pattern:
+                  <strong> /display/room/[roomId]?token=[calendar_token]&amp;church_id=[your_church_id]</strong></li>
+                <li>On your wall-mounted tablet or screen, open that URL in a
+                  browser.</li>
+                <li>Set the browser to full-screen mode (F11 on desktop, or
+                  enable Kiosk Mode on a tablet).</li>
+                <li>The page uses Screen Wake Lock to prevent the device from
+                  sleeping &mdash; no screen-saver app needed.</li>
+              </ol>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-vc-text">What the Display Shows</dt>
+            <dd className="mt-1">
+              <ul className="mt-2 list-disc space-y-1.5 pl-6">
+                <li><strong>Room name</strong> in large header text.</li>
+                <li><strong>Live clock</strong> that updates every second.</li>
+                <li><strong>Status badge:</strong> green &ldquo;Available,&rdquo;
+                  coral &ldquo;In Use,&rdquo; or amber &ldquo;Starting
+                  Soon&rdquo; (within 15 minutes).</li>
+                <li><strong>Countdown timer:</strong> time remaining (if in use)
+                  or time until next event (if starting soon).</li>
+                <li><strong>Today&apos;s schedule strip</strong> at the bottom
+                  showing all confirmed reservations.</li>
+              </ul>
+              <p className="mt-2">
+                The display polls for updated data every 30 seconds
+                automatically.
+              </p>
+            </dd>
+          </div>
+        </dl>
       </>
     ),
   },
