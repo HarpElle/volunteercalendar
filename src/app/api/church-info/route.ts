@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { generateShortCode } from "@/lib/utils/short-code";
 
 /**
  * GET /api/church-info?id=xxx
@@ -23,10 +24,22 @@ export async function GET(req: NextRequest) {
   }
 
   const data = snap.data()!;
+
+  // Backfill short_code for existing churches that don't have one
+  let shortCode = data.short_code || null;
+  if (!shortCode) {
+    try {
+      shortCode = await generateShortCode();
+      await adminDb.doc(`churches/${churchId}`).update({ short_code: shortCode });
+    } catch {
+      // Non-critical — will retry on next request
+    }
+  }
+
   return NextResponse.json({
     id: snap.id,
     name: data.name || "Organization",
     type: data.type || "church",
-    short_code: data.short_code || null,
+    short_code: shortCode,
   });
 }
