@@ -46,10 +46,13 @@ export default function CheckInDashboardPage() {
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
+  const [showKioskMenu, setShowKioskMenu] = useState(false);
   const [showKioskQr, setShowKioskQr] = useState(false);
   const [kioskQrDataUrl, setKioskQrDataUrl] = useState("");
   const [activitySearch, setActivitySearch] = useState("");
+  const kioskMenuRef = useRef<HTMLDivElement>(null);
 
   const kioskUrl = typeof window !== "undefined" && churchId
     ? `${window.location.origin}/checkin?church_id=${churchId}`
@@ -92,6 +95,43 @@ export default function CheckInDashboardPage() {
       // QR generation failed — non-critical
     }
   }, [kioskUrl]);
+
+  const handleCopyChurchId = useCallback(async () => {
+    if (!churchId) return;
+    try {
+      await navigator.clipboard.writeText(churchId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch {
+      const input = document.createElement("input");
+      input.value = churchId;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  }, [churchId]);
+
+  // Close kiosk menu on outside click or Escape
+  useEffect(() => {
+    if (!showKioskMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (kioskMenuRef.current && !kioskMenuRef.current.contains(e.target as Node)) {
+        setShowKioskMenu(false);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowKioskMenu(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [showKioskMenu]);
 
   const fetchStats = useCallback(async () => {
     if (!user || !churchId) return;
@@ -163,54 +203,99 @@ export default function CheckInDashboardPage() {
         <h1 className="text-2xl font-bold text-vc-indigo font-display">
           Children&apos;s Check-In
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="relative" ref={kioskMenuRef}>
           <button
             type="button"
-            onClick={handleLaunchKiosk}
+            onClick={() => setShowKioskMenu((v) => !v)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-vc-coral text-white font-semibold rounded-xl
               hover:bg-vc-coral/90 transition-colors shadow-sm text-sm"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25h-13.5A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25h-13.5A2.25 2.25 0 0 1 3 12V5.25" />
             </svg>
-            Launch Kiosk
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyKioskUrl}
-            className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-vc-border-light text-vc-indigo
-              font-medium rounded-xl hover:bg-vc-bg-warm transition-colors text-sm"
-            title="Copy kiosk URL for bookmarking on tablets"
-          >
-            {copied ? (
-              <>
-                <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-                Copied!
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                </svg>
-                Copy URL
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleShowKioskQr}
-            className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-vc-border-light text-vc-indigo
-              font-medium rounded-xl hover:bg-vc-bg-warm transition-colors text-sm"
-            title="Show QR code for quick kiosk setup"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.375 6.375h.008v.008h-.008v-.008Zm0 9.75h.008v.008h-.008v-.008Zm9.75-9.75h.008v.008h-.008v-.008ZM13.5 14.625v1.875m0 0v1.875m0-1.875h1.875M13.5 16.5h-1.875m4.875 1.875h.008v.008h-.008v-.008Zm0-3.75h.008v.008h-.008v-.008Z" />
+            Kiosk Setup
+            <svg className={`h-4 w-4 transition-transform ${showKioskMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
             </svg>
-            Show QR
           </button>
+
+          {/* Dropdown sub-menu */}
+          {showKioskMenu && (
+            <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-vc-border-light
+              shadow-lg z-40 overflow-hidden">
+              {/* Church ID row */}
+              {churchId && (
+                <div className="px-4 py-3 bg-vc-indigo/5 border-b border-vc-border-light">
+                  <p className="text-xs text-vc-text-secondary mb-1">Church ID</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-sm font-mono text-vc-indigo select-all flex-1 truncate">
+                      {churchId}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyChurchId}
+                      className="shrink-0 p-1.5 rounded-lg hover:bg-vc-sand/20 transition-colors"
+                      title="Copy Church ID"
+                    >
+                      {copiedId ? (
+                        <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action items */}
+              <div className="py-1">
+                <button
+                  type="button"
+                  onClick={() => { handleLaunchKiosk(); setShowKioskMenu(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-vc-indigo
+                    hover:bg-vc-bg-warm transition-colors text-left"
+                >
+                  <svg className="h-4.5 w-4.5 text-vc-coral shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                  Open Kiosk
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyKioskUrl}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-vc-indigo
+                    hover:bg-vc-bg-warm transition-colors text-left"
+                >
+                  {copied ? (
+                    <svg className="h-4.5 w-4.5 text-vc-sage shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4.5 w-4.5 text-vc-text-secondary shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                  )}
+                  {copied ? "Copied!" : "Copy Kiosk URL"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { handleShowKioskQr(); setShowKioskMenu(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-vc-indigo
+                    hover:bg-vc-bg-warm transition-colors text-left"
+                >
+                  <svg className="h-4.5 w-4.5 text-vc-text-secondary shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.375 6.375h.008v.008h-.008v-.008Zm0 9.75h.008v.008h-.008v-.008Zm9.75-9.75h.008v.008h-.008v-.008ZM13.5 14.625v1.875m0 0v1.875m0-1.875h1.875M13.5 16.5h-1.875m4.875 1.875h.008v.008h-.008v-.008Zm0-3.75h.008v.008h-.008v-.008Z" />
+                  </svg>
+                  Show QR Code
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -238,6 +323,28 @@ export default function CheckInDashboardPage() {
               width={280}
               height={280}
             />
+            {churchId && (
+              <div className="flex items-center justify-center gap-2 mb-5 px-4 py-2.5 rounded-lg bg-vc-bg-warm">
+                <span className="text-xs text-vc-text-secondary">Church ID:</span>
+                <code className="text-sm font-mono text-vc-indigo select-all">{churchId}</code>
+                <button
+                  type="button"
+                  onClick={handleCopyChurchId}
+                  className="p-1 rounded hover:bg-vc-sand/20 transition-colors"
+                  title="Copy Church ID"
+                >
+                  {copiedId ? (
+                    <svg className="h-3.5 w-3.5 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    <svg className="h-3.5 w-3.5 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setShowKioskQr(false)}
