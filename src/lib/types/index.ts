@@ -1195,6 +1195,11 @@ export type BrotherLabelSize = "DK-2251" | "DK-1201" | "DK-2205";
 export type ZebraLabelSize = "2x1" | "2x2" | "4x1";
 export type DymoLabelSize = "30256" | "30321";
 
+/** How the kiosk delivers label data to the printer */
+export type PrintMethod = "native_sdk" | "print_server" | "airprint";
+/** Physical connection between kiosk device and printer */
+export type PrinterConnectionType = "bluetooth" | "wifi";
+
 export interface PrinterConfig {
   id: string;
   station_name: string;
@@ -1205,6 +1210,14 @@ export interface PrinterConfig {
   /** LAN URL of companion print service (e.g. http://printserver.local:3001) */
   print_server_url?: string;
   is_active: boolean;
+  /** How this station prints — defaults to "print_server" for backward compat */
+  print_method?: PrintMethod;
+  /** For native SDK: bluetooth or wifi */
+  connection_type?: PrinterConnectionType;
+  /** Bluetooth/MAC address for native SDK Bluetooth printing */
+  bluetooth_address?: string;
+  /** Printer model name (e.g. "QL-820NWB", "ZD421") */
+  printer_model?: string;
 }
 
 export interface CheckInSettings {

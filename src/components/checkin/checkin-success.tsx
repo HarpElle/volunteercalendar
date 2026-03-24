@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  printLabels as printVia,
+  detectPrintPath,
+  type KioskPrinterConfig,
+} from "@/lib/services/kiosk-print-bridge";
 
 interface CheckInResult {
   sessions: {
@@ -12,6 +17,7 @@ interface CheckInResult {
   security_code: string;
   label_payloads: { format: string; data: string; printer_id: string }[];
   print_server_url: string | null;
+  printer_config?: KioskPrinterConfig | null;
 }
 
 interface CheckInSuccessProps {
@@ -25,6 +31,11 @@ interface CheckInSuccessProps {
 /**
  * Screen 4: Success confirmation with security code display.
  * Shows large security code, print status, auto-resets after 8s.
+ *
+ * Printing routes through the kiosk print bridge:
+ *   Capacitor native → Brother SDK (silent) or AirPrint
+ *   Web + print_server_url → LAN print server
+ *   Otherwise → "No printer configured"
  */
 export function CheckInSuccess({
   result,
@@ -33,32 +44,32 @@ export function CheckInSuccess({
   onReset,
   onActivity,
 }: CheckInSuccessProps) {
-  const [printStatus, setPrintStatus] = useState<"sending" | "sent" | "failed" | "no_printer">(
-    result.print_server_url ? "sending" : "no_printer",
+  const printPath = detectPrintPath(
+    result.printer_config,
+    result.print_server_url,
   );
+  const hasPrinter = printPath !== "none";
+
+  const [printStatus, setPrintStatus] = useState<
+    "sending" | "sent" | "failed" | "no_printer"
+  >(hasPrinter && result.label_payloads.length > 0 ? "sending" : "no_printer");
   const [countdown, setCountdown] = useState(8);
 
-  // Send labels to companion print service
+  // Send labels via the print bridge
   useEffect(() => {
-    if (!result.print_server_url || result.label_payloads.length === 0) return;
+    if (!hasPrinter || result.label_payloads.length === 0) return;
 
-    const printLabels = async () => {
-      try {
-        for (const payload of result.label_payloads) {
-          await fetch(`${result.print_server_url}/print`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        }
-        setPrintStatus("sent");
-      } catch {
-        setPrintStatus("failed");
-      }
+    const doPrint = async () => {
+      const res = await printVia(
+        result.label_payloads,
+        result.printer_config,
+        result.print_server_url,
+      );
+      setPrintStatus(res.success ? "sent" : "failed");
     };
 
-    printLabels();
-  }, [result.print_server_url, result.label_payloads]);
+    doPrint();
+  }, [hasPrinter, result.label_payloads, result.printer_config, result.print_server_url]);
 
   // Auto-reset countdown
   useEffect(() => {
@@ -75,24 +86,16 @@ export function CheckInSuccess({
     return () => clearInterval(timer);
   }, [onReset]);
 
-  const handleRetryPrint = async () => {
+  const handleRetryPrint = useCallback(async () => {
     onActivity();
-    if (!result.print_server_url) return;
-
     setPrintStatus("sending");
-    try {
-      for (const payload of result.label_payloads) {
-        await fetch(`${result.print_server_url}/print`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
-      setPrintStatus("sent");
-    } catch {
-      setPrintStatus("failed");
-    }
-  };
+    const res = await printVia(
+      result.label_payloads,
+      result.printer_config,
+      result.print_server_url,
+    );
+    setPrintStatus(res.success ? "sent" : "failed");
+  }, [onActivity, result.label_payloads, result.printer_config, result.print_server_url]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">

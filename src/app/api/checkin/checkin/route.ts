@@ -300,6 +300,20 @@ export async function POST(req: NextRequest) {
       security_code: securityCode,
       label_payloads: labelPayloads,
       print_server_url: printerConfig?.print_server_url || null,
+      // Native kiosk app uses this to route to Brother SDK / AirPrint
+      ...(printerConfig
+        ? {
+            printer_config: {
+              print_method: printerConfig.print_method || "print_server",
+              printer_type: printerConfig.printer_type,
+              connection_type: printerConfig.connection_type,
+              bluetooth_address: printerConfig.bluetooth_address,
+              ip_address: printerConfig.ip_address,
+              label_size: printerConfig.label_size,
+              printer_model: printerConfig.printer_model,
+            },
+          }
+        : {}),
     });
   } catch (error) {
     console.error("[POST /api/checkin/checkin]", error);

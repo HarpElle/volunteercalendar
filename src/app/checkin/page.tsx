@@ -119,8 +119,20 @@ export default function CheckInKiosk() {
 
 function CheckInKioskInner() {
   const searchParams = useSearchParams();
-  const churchId = searchParams.get("church_id") || "";
+  const urlChurchId = searchParams.get("church_id") || "";
   const stationId = searchParams.get("station") || undefined;
+
+  // In the Capacitor kiosk app, there's no church_id in the URL.
+  // Resolve from localStorage (saved during kiosk setup).
+  const [storedChurchId, setStoredChurchId] = useState("");
+  useEffect(() => {
+    if (!urlChurchId) {
+      const saved = localStorage.getItem("vc_kiosk_church_id");
+      if (saved) setStoredChurchId(saved);
+    }
+  }, [urlChurchId]);
+
+  const churchId = urlChurchId || storedChurchId;
 
   // Keep screen awake for kiosk use
   useWakeLock();
@@ -330,20 +342,12 @@ function CheckInKioskInner() {
     setScreen("lookup");
   };
 
-  // No church_id — show error
+  // No church_id — show kiosk setup screen
   if (!churchId) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center p-8">
-          <h1 className="text-2xl font-bold text-vc-indigo font-display mb-2">
-            Kiosk Not Configured
-          </h1>
-          <p className="text-gray-500">
-            This kiosk needs a church_id parameter in the URL.
-          </p>
-        </div>
-      </div>
-    );
+    return <KioskSetup onComplete={(id) => {
+      localStorage.setItem("vc_kiosk_church_id", id);
+      setStoredChurchId(id);
+    }} />;
   }
 
   // Get selected child names for success screen
@@ -518,6 +522,89 @@ function CheckInKioskInner() {
 
       {/* PWA install prompt — only shown when not in standalone mode */}
       {screen === "lookup" && <KioskInstallPrompt />}
+    </div>
+  );
+}
+
+/**
+ * Kiosk Setup — shown when no church_id is available.
+ * In the Capacitor app, this is the first screen the admin sees.
+ * They paste the kiosk URL from the dashboard or enter the church ID.
+ */
+function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) {
+  const [input, setInput] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    // Accept a full URL (volunteercalendar.org/checkin?church_id=xxx) or a raw church_id
+    let churchId = input.trim();
+    try {
+      const url = new URL(churchId.startsWith("http") ? churchId : `https://x.com?church_id=${churchId}`);
+      const parsed = url.searchParams.get("church_id");
+      if (parsed) churchId = parsed;
+    } catch {
+      // Not a URL — use raw input as church_id
+    }
+
+    if (!churchId) {
+      setError("Please enter a church ID or paste the kiosk URL.");
+      return;
+    }
+
+    setValidating(true);
+    setError("");
+    try {
+      // Validate by fetching services — this confirms the church exists
+      const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
+      if (!res.ok) {
+        setError("Church not found. Check the ID and try again.");
+        setValidating(false);
+        return;
+      }
+      onComplete(churchId);
+    } catch {
+      setError("Could not connect. Check your internet and try again.");
+      setValidating(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="max-w-sm w-full p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-vc-coral/10 flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-vc-coral" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold text-vc-indigo font-display mb-2">
+          Set Up Kiosk
+        </h1>
+        <p className="text-gray-500 text-sm mb-6">
+          Paste the kiosk URL from your Check-In dashboard,
+          or enter your church ID.
+        </p>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setError(""); }}
+          placeholder="Kiosk URL or church ID"
+          className="w-full px-4 py-3 rounded-xl border border-vc-border-light text-vc-indigo
+            placeholder:text-gray-400 outline-none focus:border-vc-coral focus:ring-1
+            focus:ring-vc-coral/30 text-base min-h-[44px] mb-3"
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+        />
+        {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={validating}
+          className="w-full py-3 rounded-xl bg-vc-coral text-white font-semibold text-base
+            min-h-[44px] disabled:opacity-50"
+        >
+          {validating ? "Verifying..." : "Connect Kiosk"}
+        </button>
+      </div>
     </div>
   );
 }
