@@ -690,8 +690,8 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) 
 }
 
 /**
- * QR Scanner — uses the device camera + BarcodeDetector API (WebKit/Safari 15.4+).
- * Falls back to a message if BarcodeDetector is unavailable.
+ * QR Scanner — uses the device camera + jsQR library (same as family-lookup).
+ * Works in all WebViews including Capacitor on iOS.
  */
 function QrScanner({
   onResult,
@@ -701,10 +701,16 @@ function QrScanner({
   onCancel: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scannerRef = useRef<number | null>(null);
   const [cameraError, setCameraError] = useState("");
 
   const stopCamera = useCallback(() => {
+    if (scannerRef.current) {
+      cancelAnimationFrame(scannerRef.current);
+      scannerRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -713,17 +719,8 @@ function QrScanner({
 
   useEffect(() => {
     let cancelled = false;
-    let animFrameId: number;
 
     const start = async () => {
-      // Check for BarcodeDetector support
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const BarcodeDetectorCtor = (window as any).BarcodeDetector;
-      if (!BarcodeDetectorCtor) {
-        setCameraError("QR scanning is not supported on this device. Please enter the kiosk URL manually.");
-        return;
-      }
-
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -739,29 +736,42 @@ function QrScanner({
         return;
       }
 
-      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
-      const scan = async () => {
-        if (cancelled || !videoRef.current) return;
-        try {
-          const barcodes = await detector.detect(videoRef.current);
-          if (barcodes.length > 0 && barcodes[0].rawValue) {
-            stopCamera();
-            onResult(barcodes[0].rawValue);
-            return;
-          }
-        } catch {
-          // Detection frame error — keep scanning
+      // Dynamic import of jsQR (same library used by family-lookup scanner)
+      const { default: jsQR } = await import("jsqr");
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      if (!canvas || !video || cancelled) return;
+
+      const ctx = canvas.getContext("2d")!;
+
+      const scan = () => {
+        if (cancelled || !video.videoWidth) {
+          scannerRef.current = requestAnimationFrame(scan);
+          return;
         }
-        animFrameId = requestAnimationFrame(scan);
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+        if (code?.data) {
+          stopCamera();
+          onResult(code.data);
+          return;
+        }
+
+        scannerRef.current = requestAnimationFrame(scan);
       };
-      // Start scanning after a short delay to let the camera warm up
-      setTimeout(() => { if (!cancelled) scan(); }, 500);
+
+      scannerRef.current = requestAnimationFrame(scan);
     };
 
     start();
     return () => {
       cancelled = true;
-      cancelAnimationFrame(animFrameId);
       stopCamera();
     };
   }, [onResult, stopCamera]);
@@ -782,6 +792,7 @@ function QrScanner({
               playsInline
               muted
             />
+            <canvas ref={canvasRef as RefObject<HTMLCanvasElement>} className="hidden" />
             {/* Scanning overlay with viewfinder cutout */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="relative w-64 h-64">
