@@ -33,6 +33,8 @@ interface NavItem {
   href: string;
   iconPath: string;
   gate?: (m: Membership | null) => boolean;
+  /** Show a notification dot on the icon */
+  badge?: boolean;
 }
 
 interface NavSection {
@@ -49,6 +51,8 @@ function getNavSections(
   worshipEnabled: boolean,
   checkinEnabled: boolean,
   roomsEnabled: boolean,
+  hasPrerequisites: boolean,
+  hasUnreadNotifications: boolean,
 ): NavSection[] {
   return [
     /* ── Home ── */
@@ -56,20 +60,79 @@ function getNavSections(
       label: "HOME",
       items: [
         {
-          label: "Dashboard",
+          label: "Overview",
           href: "/dashboard",
           iconPath:
             "m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25",
           gate: (m) => isAdmin(m),
         },
+        {
+          label: "My Schedule",
+          href: "/dashboard/my-schedule",
+          iconPath:
+            "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z",
+        },
+        ...(hasPrerequisites
+          ? [
+              {
+                label: "My Journey",
+                href: "/dashboard/my-journey",
+                iconPath:
+                  "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
+              },
+            ]
+          : []),
+        {
+          label: "Inbox",
+          href: "/dashboard/inbox",
+          iconPath:
+            "M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0",
+          badge: hasUnreadNotifications,
+        },
       ],
     },
 
-    /* ── Schedule ── */
+    /* ── People ── */
     {
-      label: "SCHEDULE",
+      label: "PEOPLE",
       gate: (m) => isScheduler(m),
       items: [
+        {
+          label: "Team Health",
+          href: "/dashboard/volunteer-health",
+          iconPath:
+            "M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z",
+          gate: (m) => isScheduler(m),
+        },
+        {
+          label: "Volunteers",
+          href: "/dashboard/people",
+          iconPath:
+            "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z",
+          gate: (m) => isScheduler(m),
+        },
+        {
+          label: "Onboarding",
+          href: "/dashboard/onboarding",
+          iconPath:
+            "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
+          gate: (m) => isAdmin(m),
+        },
+      ],
+    },
+
+    /* ── Scheduling ── */
+    {
+      label: "SCHEDULING",
+      gate: (m) => isScheduler(m),
+      items: [
+        {
+          label: "Dashboard",
+          href: "/dashboard/scheduling-dashboard",
+          iconPath:
+            "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z",
+          gate: (m) => isScheduler(m),
+        },
         {
           label: "Schedules",
           href: "/dashboard/schedules",
@@ -78,18 +141,18 @@ function getNavSections(
           gate: (m) => isScheduler(m),
         },
         {
+          label: "Send Reminders",
+          href: "/dashboard/reminders",
+          iconPath:
+            "M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38a1.125 1.125 0 0 1-1.54-.413l-.34-.59a9.867 9.867 0 0 1-.985-2.783m2.91-9.09a9.868 9.868 0 0 1 .985-2.783l.34-.59a1.125 1.125 0 0 1 1.54-.413l.657.38c.524.3.71.96.463 1.51a9.866 9.866 0 0 0-.985 2.783m-2.91 9.09h2.91",
+          gate: (m) => isScheduler(m),
+        },
+        {
           label: "Services & Events",
           href: "/dashboard/services-events",
           iconPath:
             "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
           gate: (m) => isAdmin(m),
-        },
-        {
-          label: "Live Status",
-          href: "/dashboard/scheduling-dashboard",
-          iconPath:
-            "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z",
-          gate: (m) => isScheduler(m),
         },
       ],
     },
@@ -102,52 +165,23 @@ function getNavSections(
             gate: (m: Membership | null) => isAdmin(m),
             items: [
               {
-                label: "Songs",
-                href: "/dashboard/worship/songs",
-                iconPath:
-                  "m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-              {
                 label: "Service Plans",
                 href: "/dashboard/worship/plans",
                 iconPath:
                   "M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z",
                 gate: (m: Membership | null) => isAdmin(m),
               },
+              {
+                label: "Songs",
+                href: "/dashboard/worship/songs",
+                iconPath:
+                  "m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z",
+                gate: (m: Membership | null) => isAdmin(m),
+              },
             ],
           },
         ]
       : []),
-
-    /* ── People ── */
-    {
-      label: "PEOPLE",
-      gate: (m) => isScheduler(m),
-      items: [
-        {
-          label: "Volunteers",
-          href: "/dashboard/people",
-          iconPath:
-            "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Team Health",
-          href: "/dashboard/volunteer-health",
-          iconPath:
-            "M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Onboarding",
-          href: "/dashboard/onboarding",
-          iconPath:
-            "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
-          gate: (m) => isAdmin(m),
-        },
-      ],
-    },
 
     /* ── Check-In (tier-gated, collapsible) ── */
     ...(checkinEnabled
@@ -177,28 +211,28 @@ function getNavSections(
         ]
       : []),
 
-    /* ── Rooms (tier-gated, collapsible) ── */
+    /* ── Resources (tier-gated, collapsible) ── */
     ...(roomsEnabled
       ? [
           {
-            label: "ROOMS",
+            label: "RESOURCES",
             gate: (m: Membership | null) => isScheduler(m),
             collapsible: true,
             collapseKey: "vc_sidebar_rooms",
             items: [
-              {
-                label: "Bookings",
-                href: "/dashboard/rooms",
-                iconPath:
-                  "M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21",
-                gate: (m: Membership | null) => isScheduler(m),
-              },
               {
                 label: "Requests",
                 href: "/dashboard/rooms/requests",
                 iconPath:
                   "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
                 gate: (m: Membership | null) => isAdmin(m),
+              },
+              {
+                label: "Rooms",
+                href: "/dashboard/rooms",
+                iconPath:
+                  "M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21",
+                gate: (m: Membership | null) => isScheduler(m),
               },
             ],
           },
@@ -353,7 +387,7 @@ export function Sidebar({
   }, [accountMenuOpen]);
 
   // Build and filter nav sections
-  const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled);
+  const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled, !!hasPrerequisites, !!hasUnreadNotifications);
   const visibleSections = navSections
     .map((section) => {
       if (section.gate && !section.gate(activeMembership)) return null;
@@ -389,10 +423,20 @@ export function Sidebar({
             : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
         }`}
       >
-        <Icon
-          d={item.iconPath}
-          className={`h-5 w-5 ${isActive ? "text-vc-indigo" : "text-vc-text-muted"}`}
-        />
+        {item.badge ? (
+          <span className="relative">
+            <Icon
+              d={item.iconPath}
+              className={`h-5 w-5 ${isActive ? "text-vc-indigo" : "text-vc-text-muted"}`}
+            />
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-vc-coral" />
+          </span>
+        ) : (
+          <Icon
+            d={item.iconPath}
+            className={`h-5 w-5 ${isActive ? "text-vc-indigo" : "text-vc-text-muted"}`}
+          />
+        )}
         {item.label}
         {item.href === "/dashboard" && showGuideDot && (
           <span
@@ -470,105 +514,26 @@ export function Sidebar({
         {/* Divider before bottom items */}
         <div className="mx-3 mt-4 border-t border-vc-border-light" />
 
-        {/* My Schedule + Notifications + Help */}
+        {/* Organization Settings + Help */}
         <div className="mt-3 space-y-1">
-          <Link
-            href="/dashboard/my-schedule"
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/my-schedule")
-                ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-            }`}
-          >
-            <Icon
-              d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z"
-              className={`h-5 w-5 ${
-                pathname.startsWith("/dashboard/my-schedule")
-                  ? "text-vc-indigo"
-                  : "text-vc-text-muted"
-              }`}
-            />
-            My Schedule
-          </Link>
-          <Link
-            href="/dashboard/my-availability"
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/my-availability")
-                ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-            }`}
-          >
-            <Icon
-              d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-              className={`h-5 w-5 ${
-                pathname.startsWith("/dashboard/my-availability")
-                  ? "text-vc-indigo"
-                  : "text-vc-text-muted"
-              }`}
-            />
-            My Availability
-          </Link>
-          {hasPrerequisites && (
+          {isAdmin(activeMembership) && (
             <Link
-              href="/dashboard/my-journey"
+              href="/dashboard/settings"
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                pathname.startsWith("/dashboard/my-journey")
+                pathname.startsWith("/dashboard/settings")
                   ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
                   : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
               }`}
             >
               <Icon
-                d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342"
+                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
                 className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/my-journey")
+                  pathname.startsWith("/dashboard/settings")
                     ? "text-vc-indigo"
                     : "text-vc-text-muted"
                 }`}
               />
-              My Journey
-            </Link>
-          )}
-          <Link
-            href="/dashboard/inbox"
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/inbox")
-                ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-            }`}
-          >
-            <span className="relative">
-              <Icon
-                d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
-                className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/inbox")
-                    ? "text-vc-indigo"
-                    : "text-vc-text-muted"
-                }`}
-              />
-              {hasUnreadNotifications && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-vc-coral" />
-              )}
-            </span>
-            Inbox
-          </Link>
-          {isScheduler(activeMembership) && (
-            <Link
-              href="/dashboard/reminders"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                pathname.startsWith("/dashboard/reminders")
-                  ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                  : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-              }`}
-            >
-              <Icon
-                d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38a1.125 1.125 0 0 1-1.54-.413l-.34-.59a9.867 9.867 0 0 1-.985-2.783m2.91-9.09a9.868 9.868 0 0 1 .985-2.783l.34-.59a1.125 1.125 0 0 1 1.54-.413l.657.38c.524.3.71.96.463 1.51a9.866 9.866 0 0 0-.985 2.783m-2.91 9.09h2.91"
-                className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/reminders")
-                    ? "text-vc-indigo"
-                    : "text-vc-text-muted"
-                }`}
-              />
-              Send Reminders
+              Organization Settings
             </Link>
           )}
           <Link
@@ -589,26 +554,6 @@ export function Sidebar({
             />
             Help
           </Link>
-          {isAdmin(activeMembership) && (
-            <Link
-              href="/dashboard/settings"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                pathname.startsWith("/dashboard/settings")
-                  ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                  : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-              }`}
-            >
-              <Icon
-                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-                className={`h-5 w-5 ${
-                  pathname.startsWith("/dashboard/settings")
-                    ? "text-vc-indigo"
-                    : "text-vc-text-muted"
-                }`}
-              />
-              Settings
-            </Link>
-          )}
         </div>
       </nav>
 
