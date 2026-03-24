@@ -683,10 +683,27 @@ export default function MySchedulePage() {
                 );
               })}
             </div>
-            {reminderChannels.includes("sms") && !profile?.phone && (
-              <p className="mt-3 text-xs text-vc-sand-dark">
-                To receive SMS reminders, add your phone number in Account Settings.
-              </p>
+            {reminderChannels.includes("sms") && (
+              <div className="mt-3 rounded-lg border border-vc-border-light bg-vc-bg-warm px-4 py-3">
+                <p className="text-xs text-vc-text-muted leading-relaxed">
+                  By enabling text message reminders, you agree to receive SMS from VolunteerCal
+                  related to your volunteer schedule. Msg frequency varies based on your scheduling
+                  activity. Msg &amp; data rates may apply. Reply STOP to any message to opt out, or
+                  HELP for assistance. See our{" "}
+                  <a href="/privacy" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+                    Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a href="/terms" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+                    Terms of Service
+                  </a>.
+                </p>
+                {!profile?.phone && (
+                  <p className="mt-2 text-xs text-vc-sand-dark">
+                    To receive SMS reminders, add your phone number in Account Settings.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

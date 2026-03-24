@@ -926,6 +926,22 @@ export default function AccountPage() {
                   </div>
                 </div>
               </div>
+              {schedNotifPrefs.channels.urgent.includes("sms") && (
+                <div className="rounded-lg border border-vc-border-light bg-vc-bg-warm px-4 py-3">
+                  <p className="text-xs text-vc-text-muted leading-relaxed">
+                    By enabling SMS notifications, you agree to receive text messages from VolunteerCal
+                    for urgent scheduling alerts. Msg frequency varies. Msg &amp; data rates may apply.
+                    Reply STOP to opt out, HELP for assistance. See our{" "}
+                    <a href="/privacy" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+                      Privacy Policy
+                    </a>{" "}
+                    and{" "}
+                    <a href="/terms" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+                      Terms of Service
+                    </a>.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Ministry scope (optional) */}
