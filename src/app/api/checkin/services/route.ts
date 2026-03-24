@@ -21,11 +21,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Load church doc for name
+    // Load church doc for name — reject if church doesn't exist
     const churchSnap = await adminDb.collection("churches").doc(churchId).get();
-    const churchName = churchSnap.exists
-      ? (churchSnap.data()!.name as string)
-      : "";
+    if (!churchSnap.exists) {
+      return NextResponse.json(
+        { error: "Church not found" },
+        { status: 404 },
+      );
+    }
+    const churchName = churchSnap.data()!.name as string;
 
     const settingsSnap = await adminDb
       .doc(`churches/${churchId}/checkinSettings/config`)

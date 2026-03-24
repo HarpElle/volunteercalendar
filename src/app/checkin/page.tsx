@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 import { FamilyLookup } from "@/components/checkin/family-lookup";
@@ -136,6 +136,22 @@ function CheckInKioskInner() {
 
   // Keep screen awake for kiosk use
   useWakeLock();
+
+  // In Capacitor WebView, the keyboard can cover inputs.
+  // Scroll the focused input into view when the keyboard appears.
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+        // Delay to let the keyboard finish opening
+        setTimeout(() => {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+      }
+    };
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
+  }, []);
 
   const [mode, setMode] = useState<KioskMode>("checkin");
   const [screen, setScreen] = useState<KioskScreen>("lookup");
@@ -526,36 +542,36 @@ function CheckInKioskInner() {
   );
 }
 
+/** Extract church_id from a URL string or return the raw input as an ID. */
+function extractChurchId(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const url = new URL(trimmed.startsWith("http") ? trimmed : `https://x.com?church_id=${trimmed}`);
+    return url.searchParams.get("church_id") || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
 /**
  * Kiosk Setup — shown when no church_id is available.
  * In the Capacitor app, this is the first screen the admin sees.
- * They paste the kiosk URL from the dashboard or enter the church ID.
+ * Options: scan the dashboard's Check-In QR code, paste a URL, or type a church ID.
  */
 function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) {
   const [input, setInput] = useState("");
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
 
-  const handleSubmit = async () => {
-    // Accept a full URL (volunteercalendar.org/checkin?church_id=xxx) or a raw church_id
-    let churchId = input.trim();
-    try {
-      const url = new URL(churchId.startsWith("http") ? churchId : `https://x.com?church_id=${churchId}`);
-      const parsed = url.searchParams.get("church_id");
-      if (parsed) churchId = parsed;
-    } catch {
-      // Not a URL — use raw input as church_id
-    }
-
+  const validateAndComplete = useCallback(async (churchId: string) => {
     if (!churchId) {
       setError("Please enter a church ID or paste the kiosk URL.");
       return;
     }
-
     setValidating(true);
     setError("");
     try {
-      // Validate by fetching services — this confirms the church exists
       const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
       if (!res.ok) {
         setError("Church not found. Check the ID and try again.");
@@ -567,7 +583,29 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) 
       setError("Could not connect. Check your internet and try again.");
       setValidating(false);
     }
-  };
+  }, [onComplete]);
+
+  const handleSubmit = () => validateAndComplete(extractChurchId(input));
+
+  const handleQrResult = useCallback((scannedValue: string) => {
+    setScanning(false);
+    const churchId = extractChurchId(scannedValue);
+    if (churchId) {
+      setInput(scannedValue);
+      validateAndComplete(churchId);
+    } else {
+      setError("QR code didn't contain a valid kiosk URL.");
+    }
+  }, [validateAndComplete]);
+
+  if (scanning) {
+    return (
+      <QrScanner
+        onResult={handleQrResult}
+        onCancel={() => setScanning(false)}
+      />
+    );
+  }
 
   return (
     <div className="flex items-center justify-center h-full">
@@ -581,9 +619,31 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) 
           Set Up Kiosk
         </h1>
         <p className="text-gray-500 text-sm mb-6">
-          Paste the kiosk URL from your Check-In dashboard,
-          or enter your church ID.
+          Scan the QR code from your Check-In dashboard,
+          or enter your church ID below.
         </p>
+
+        {/* QR scan button */}
+        <button
+          type="button"
+          onClick={() => { setScanning(true); setError(""); }}
+          className="w-full flex items-center justify-center gap-3 py-4 rounded-xl
+            bg-vc-indigo text-white font-semibold text-base min-h-[56px] mb-4
+            hover:bg-vc-indigo/90 transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+          </svg>
+          Scan QR Code
+        </button>
+
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400 uppercase tracking-wide">or</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
         <input
           type="text"
           value={input}
@@ -605,6 +665,141 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string) => void }) 
           {validating ? "Verifying..." : "Connect Kiosk"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * QR Scanner — uses the device camera + BarcodeDetector API (WebKit/Safari 15.4+).
+ * Falls back to a message if BarcodeDetector is unavailable.
+ */
+function QrScanner({
+  onResult,
+  onCancel,
+}: {
+  onResult: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState("");
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let animFrameId: number;
+
+    const start = async () => {
+      // Check for BarcodeDetector support
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const BarcodeDetectorCtor = (window as any).BarcodeDetector;
+      if (!BarcodeDetectorCtor) {
+        setCameraError("QR scanning is not supported on this device. Please enter the kiosk URL manually.");
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+      } catch {
+        setCameraError("Camera access denied. Please allow camera access and try again.");
+        return;
+      }
+
+      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
+      const scan = async () => {
+        if (cancelled || !videoRef.current) return;
+        try {
+          const barcodes = await detector.detect(videoRef.current);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            stopCamera();
+            onResult(barcodes[0].rawValue);
+            return;
+          }
+        } catch {
+          // Detection frame error — keep scanning
+        }
+        animFrameId = requestAnimationFrame(scan);
+      };
+      // Start scanning after a short delay to let the camera warm up
+      setTimeout(() => { if (!cancelled) scan(); }, 500);
+    };
+
+    start();
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animFrameId);
+      stopCamera();
+    };
+  }, [onResult, stopCamera]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      {/* Camera viewfinder */}
+      <div className="flex-1 relative overflow-hidden">
+        {cameraError ? (
+          <div className="flex items-center justify-center h-full p-8">
+            <p className="text-white text-center text-lg">{cameraError}</p>
+          </div>
+        ) : (
+          <>
+            <video
+              ref={videoRef as RefObject<HTMLVideoElement>}
+              className="absolute inset-0 w-full h-full object-cover"
+              playsInline
+              muted
+            />
+            {/* Scanning overlay with viewfinder cutout */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="relative w-64 h-64">
+                {/* Corner brackets */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-white rounded-tl-lg" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-3 border-r-3 border-white rounded-tr-lg" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-3 border-l-3 border-white rounded-bl-lg" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-3 border-r-3 border-white rounded-br-lg" />
+                {/* Scanning line animation */}
+                <div className="absolute left-2 right-2 h-0.5 bg-vc-coral/80 animate-[scan_2s_ease-in-out_infinite]" />
+              </div>
+            </div>
+            <p className="absolute bottom-8 left-0 right-0 text-center text-white/80 text-sm font-medium">
+              Point at the QR code on your Check-In dashboard
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Cancel button */}
+      <div className="bg-black/90 p-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => { stopCamera(); onCancel(); }}
+          className="px-8 py-3 rounded-full border-2 border-white/30 text-white font-semibold
+            text-base min-h-[44px] hover:bg-white/10 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+
+      {/* Scanning line animation keyframes */}
+      <style>{`
+        @keyframes scan {
+          0%, 100% { top: 8px; }
+          50% { top: calc(100% - 8px); }
+        }
+      `}</style>
     </div>
   );
 }
