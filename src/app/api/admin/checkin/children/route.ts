@@ -109,25 +109,27 @@ export async function POST(req: NextRequest) {
     const childId = adminDb.collection("_").doc().id;
     const hasAlerts = !!(body.allergies || body.medical_notes);
 
-    const child: Child = {
+    const child: Record<string, unknown> = {
       id: childId,
       church_id,
       household_id,
       first_name,
       last_name,
-      preferred_name: body.preferred_name || undefined,
-      date_of_birth: body.date_of_birth || undefined,
-      grade: body.grade || undefined,
-      photo_url: body.photo_url || undefined,
-      default_room_id: body.default_room_id || undefined,
       has_alerts: hasAlerts,
-      allergies: body.allergies || undefined,
-      medical_notes: body.medical_notes || undefined,
       imported_from: "manual",
       is_active: true,
       created_at: now,
       updated_at: now,
     };
+
+    // Only include optional fields if they have values (Firestore rejects undefined)
+    if (body.preferred_name) child.preferred_name = body.preferred_name;
+    if (body.date_of_birth) child.date_of_birth = body.date_of_birth;
+    if (body.grade) child.grade = body.grade;
+    if (body.photo_url) child.photo_url = body.photo_url;
+    if (body.default_room_id) child.default_room_id = body.default_room_id;
+    if (body.allergies) child.allergies = body.allergies;
+    if (body.medical_notes) child.medical_notes = body.medical_notes;
 
     await churchRef.collection("children").doc(childId).set(child);
 

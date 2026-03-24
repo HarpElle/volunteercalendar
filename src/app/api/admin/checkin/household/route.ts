@@ -122,21 +122,28 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const householdId = adminDb.collection("_").doc().id;
 
-    const household: CheckInHousehold = {
+    const household: Record<string, unknown> = {
       id: householdId,
       church_id,
       primary_guardian_name,
       primary_guardian_phone: normalizedPhone,
-      secondary_guardian_name: secondary_guardian_name || undefined,
-      secondary_guardian_phone: secondary_guardian_phone
-        ? normalizePhone(secondary_guardian_phone) || undefined
-        : undefined,
       qr_token: randomBytes(16).toString("hex"),
       imported_from: "manual",
       created_at: now,
       updated_at: now,
       created_by: userId,
     };
+
+    // Only include optional fields if present (Firestore rejects undefined)
+    if (secondary_guardian_name) {
+      household.secondary_guardian_name = secondary_guardian_name;
+    }
+    if (secondary_guardian_phone) {
+      const normalizedSecondary = normalizePhone(secondary_guardian_phone);
+      if (normalizedSecondary) {
+        household.secondary_guardian_phone = normalizedSecondary;
+      }
+    }
 
     await adminDb
       .collection("churches")
