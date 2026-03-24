@@ -3,9 +3,88 @@ import { stripe, PRICE_TO_TIER } from "@/lib/stripe";
 import { adminDb } from "@/lib/firebase/admin";
 import type Stripe from "stripe";
 import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
+import { buildDowngradeNotificationEmail } from "@/lib/utils/emails/downgrade-notification";
+import { isDowngrade, computeLostFeatures, computeOverLimitItems } from "@/lib/utils/tier-enforcement";
 import { Resend } from "resend";
 
 const VALID_TIERS = ["free", "starter", "growth", "pro", "enterprise"];
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Send a plan-change notification email to the org owner when downgrading. */
+async function sendDowngradeEmail(churchId: string, oldTier: string, newTier: string) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  try {
+    const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+    const churchName = churchSnap.exists
+      ? (churchSnap.data()?.name as string) || "Your organization"
+      : "Your organization";
+
+    // Find the owner
+    const ownerSnap = await adminDb
+      .collection("memberships")
+      .where("church_id", "==", churchId)
+      .where("role", "==", "owner")
+      .where("status", "==", "active")
+      .limit(1)
+      .get();
+    if (ownerSnap.empty) return;
+
+    const ownerUserId = ownerSnap.docs[0].data().user_id as string;
+    const ownerUserSnap = await adminDb.doc(`users/${ownerUserId}`).get();
+    if (!ownerUserSnap.exists) return;
+
+    const ownerEmail = ownerUserSnap.data()?.email as string;
+    const ownerName = (ownerUserSnap.data()?.display_name as string) || "there";
+    if (!ownerEmail) return;
+
+    // Compute lost features and over-limit items
+    const lostFeatures = computeLostFeatures(oldTier, newTier);
+
+    const ministriesCount = (
+      await adminDb.collection(`churches/${churchId}/ministries`).count().get()
+    ).data().count;
+    const volunteersCount = (
+      await adminDb.collection(`churches/${churchId}/volunteers`).count().get()
+    ).data().count;
+    const roomsSnap = await adminDb
+      .collection(`churches/${churchId}/rooms`)
+      .where("is_active", "==", true)
+      .count()
+      .get();
+    const roomsCount = roomsSnap.data().count;
+
+    const overLimitItems = computeOverLimitItems(newTier, {
+      ministries: ministriesCount,
+      volunteers: volunteersCount,
+      rooms: roomsCount,
+    });
+
+    const { subject, html, text } = buildDowngradeNotificationEmail({
+      userName: ownerName,
+      churchName,
+      oldPlanName: capitalize(oldTier),
+      newPlanName: capitalize(newTier),
+      lostFeatures,
+      overLimitItems,
+    });
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "VolunteerCal <noreply@harpelle.com>",
+      replyTo: "info@volunteercal.com",
+      to: [ownerEmail],
+      subject,
+      html,
+      text,
+    });
+  } catch (err) {
+    console.error("Downgrade notification email failed:", err);
+  }
+}
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -101,9 +180,20 @@ export async function POST(req: NextRequest) {
         const isActive =
           subscription.status === "active" ||
           subscription.status === "trialing";
+        const newTier = isActive ? tier : "free";
+        const currentTier = (updatedChurchSnap.data()?.subscription_tier as string) || "free";
+
         await adminDb.doc(`churches/${churchId}`).update({
-          subscription_tier: isActive ? tier : "free",
+          subscription_tier: newTier,
+          ...(isDowngrade(currentTier, newTier)
+            ? { previous_tier: currentTier, tier_changed_at: new Date().toISOString() }
+            : {}),
         });
+
+        // Send downgrade notification email if applicable
+        if (isDowngrade(currentTier, newTier)) {
+          sendDowngradeEmail(churchId, currentTier, newTier).catch(() => {});
+        }
         break;
       }
 
@@ -122,9 +212,19 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        const deletedCurrentTier = (deletedChurchSnap.data()?.subscription_tier as string) || "free";
+
         await adminDb.doc(`churches/${churchId}`).update({
           subscription_tier: "free",
+          ...(deletedCurrentTier !== "free"
+            ? { previous_tier: deletedCurrentTier, tier_changed_at: new Date().toISOString() }
+            : {}),
         });
+
+        // Send downgrade notification if they were on a paid plan
+        if (deletedCurrentTier !== "free") {
+          sendDowngradeEmail(churchId, deletedCurrentTier, "free").catch(() => {});
+        }
         break;
       }
     }

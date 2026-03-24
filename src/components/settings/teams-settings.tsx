@@ -16,6 +16,8 @@ import {
   type MinistryFormData,
 } from "@/components/forms/ministry-form-modal";
 import type { User } from "firebase/auth";
+import { TIER_LIMITS } from "@/lib/constants";
+import { OverLimitBanner } from "@/components/ui/over-limit-banner";
 
 interface TeamsSettingsProps {
   churchId: string;
@@ -85,6 +87,27 @@ export function TeamsSettings({
           prev.map((m) => (m.id === editingMinistryId ? { ...m, ...data } : m))
         );
       } else {
+        // Server-side tier limit check before creating
+        const token = await user.getIdToken();
+        const checkRes = await fetch("/api/tier-check", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ church_id: churchId, resource: "ministries" }),
+        });
+        if (checkRes.ok) {
+          const check = await checkRes.json();
+          if (!check.allowed) {
+            setMutationError(
+              `Your plan allows ${check.limit} ${terms.pluralLower}. Remove a ${terms.singularLower} or upgrade to add more.`,
+            );
+            setMinistrySaving(false);
+            return;
+          }
+        }
+
         const ref = await addChurchDocument(churchId, "ministries", data);
         setMinistries((prev) => [...prev, { id: ref.id, ...data } as Ministry]);
       }
@@ -134,6 +157,12 @@ export function TeamsSettings({
           )}
         </div>
 
+        <OverLimitBanner
+          resourceLabel={terms.pluralLower}
+          currentCount={ministries.length}
+          limit={(TIER_LIMITS[currentTier] || TIER_LIMITS.free).ministries}
+        />
+
         <MinistryFormModal
           open={showMinistryForm}
           onClose={closeMinistryForm}
@@ -161,6 +190,8 @@ export function TeamsSettings({
                 }
               : undefined;
           })()}
+          showTemplatePicker={!editingMinistryId}
+          existingMinistryNames={ministries.map((m) => m.name)}
         />
 
         {/* Ministry list */}

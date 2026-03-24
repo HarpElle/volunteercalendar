@@ -48,6 +48,8 @@ import type {
   InviteQueueItem,
   OnboardingStep,
 } from "@/lib/types";
+import { TIER_LIMITS } from "@/lib/constants";
+import { OverLimitBanner } from "@/components/ui/over-limit-banner";
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -313,6 +315,26 @@ function PeopleContent() {
           (v) => v.user_id === m.user_id || (memEmail && v.email?.toLowerCase() === memEmail),
         );
         if (!alreadyOnRoster) {
+          // Server-side tier limit check before creating volunteer
+          const authToken = await getAuth().currentUser?.getIdToken();
+          if (authToken) {
+            const checkRes = await fetch("/api/tier-check", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ church_id: churchId, resource: "volunteers" }),
+            });
+            if (checkRes.ok) {
+              const check = await checkRes.json();
+              if (!check.allowed) {
+                console.warn("Volunteer limit reached — skipping auto-creation");
+                return;
+              }
+            }
+          }
+
           const now = new Date().toISOString();
           const volData = {
             church_id: churchId,
@@ -589,6 +611,12 @@ function PeopleContent() {
       {/* === ROSTER TAB === */}
       {tab === "roster" && (
         <>
+          <OverLimitBanner
+            resourceLabel="volunteers"
+            currentCount={volunteers.length}
+            limit={(TIER_LIMITS[churchTier] || TIER_LIMITS.free).volunteers}
+          />
+
           {/* Search & Filters */}
           <FilterBar
             searchQuery={searchQuery}

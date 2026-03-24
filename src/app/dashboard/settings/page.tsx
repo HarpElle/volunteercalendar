@@ -869,6 +869,7 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
   const [error, setError] = useState("");
   const [myShortCode, setMyShortCode] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -1009,13 +1010,35 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
 
   return (
     <section className="mt-8 rounded-xl border border-vc-border-light bg-vc-bg-warm p-6">
-      <h2 className="mb-1 font-display text-lg text-vc-indigo">
-        Shared Facility
-      </h2>
-      <p className="mb-4 text-sm text-vc-text-secondary">
-        Link organizations that share the same building so everyone can see
-        room reservations across groups.
-      </p>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <div>
+          <h2 className="mb-1 font-display text-lg text-vc-indigo">
+            Shared Facility
+          </h2>
+          <p className="text-sm text-vc-text-secondary">
+            Link organizations that share the same building so everyone can see
+            room reservations across groups.
+          </p>
+        </div>
+        <svg
+          className={`ml-4 h-5 w-5 shrink-0 text-vc-text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      <div
+        className={`overflow-hidden transition-all duration-200 ${expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}
+      >
+        <div className="pt-5">
 
       {myShortCode && (
         <div className="mb-5 flex items-center gap-3 rounded-lg bg-white px-4 py-3 ring-1 ring-vc-border-light">
@@ -1200,6 +1223,9 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
           </div>
         </>
       )}
+
+        </div>
+      </div>
     </section>
   );
 }

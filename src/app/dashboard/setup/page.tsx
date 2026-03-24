@@ -12,6 +12,7 @@ import {
   WORKFLOW_MODES,
   CHURCH_MINISTRY_TEMPLATES,
   MINISTRY_CATEGORY_LABELS,
+  TIER_LIMITS,
 } from "@/lib/constants";
 import type { WorkflowMode, OrgType } from "@/lib/types";
 
@@ -56,6 +57,9 @@ function SetupContent() {
   const [templateNames, setTemplateNames] = useState<Map<number, string>>(
     new Map(),
   );
+
+  // New orgs always start on the free tier
+  const FREE_MINISTRY_LIMIT = TIER_LIMITS.free.ministries;
 
   const selectedWorkflow = WORKFLOW_MODES.find((m) => m.value === workflowMode);
 
@@ -105,7 +109,7 @@ function SetupContent() {
       const next = new Set(prev);
       if (next.has(index)) {
         next.delete(index);
-      } else {
+      } else if (next.size < FREE_MINISTRY_LIMIT) {
         next.add(index);
       }
       return next;
@@ -113,11 +117,11 @@ function SetupContent() {
   }
 
   function toggleAll() {
-    if (selectedTemplates.size === CHURCH_MINISTRY_TEMPLATES.length) {
+    if (selectedTemplates.size > 0) {
       setSelectedTemplates(new Set());
     } else {
       setSelectedTemplates(
-        new Set(CHURCH_MINISTRY_TEMPLATES.map((_, i) => i)),
+        new Set(CHURCH_MINISTRY_TEMPLATES.slice(0, FREE_MINISTRY_LIMIT).map((_, i) => i)),
       );
     }
   }
@@ -177,9 +181,9 @@ function SetupContent() {
         body: JSON.stringify({ church_id: churchId }),
       }).catch(() => {});
 
-      // Create selected ministry templates
+      // Create selected ministry templates (capped to Free tier limit)
       if (orgType === "church" && selectedTemplates.size > 0) {
-        const templateArray = Array.from(selectedTemplates);
+        const templateArray = Array.from(selectedTemplates).slice(0, FREE_MINISTRY_LIMIT);
         await Promise.all(
           templateArray.map(async (idx) => {
             const template = CHURCH_MINISTRY_TEMPLATES[idx];
@@ -357,6 +361,7 @@ function SetupContent() {
             onToggle={toggleTemplate}
             onToggleAll={toggleAll}
             onRename={renameTemplate}
+            maxSelections={FREE_MINISTRY_LIMIT}
           />
         )}
 
@@ -427,15 +432,16 @@ function MinistryTemplateStep({
   onToggle,
   onToggleAll,
   onRename,
+  maxSelections,
 }: {
   selectedTemplates: Set<number>;
   templateNames: Map<number, string>;
   onToggle: (index: number) => void;
   onToggleAll: () => void;
   onRename: (index: number, name: string) => void;
+  maxSelections: number;
 }) {
-  const allSelected =
-    selectedTemplates.size === CHURCH_MINISTRY_TEMPLATES.length;
+  const limitReached = selectedTemplates.size >= maxSelections;
 
   // Group templates by category
   const categories = Object.keys(MINISTRY_CATEGORY_LABELS);
@@ -443,18 +449,24 @@ function MinistryTemplateStep({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onToggleAll}
-          className="text-sm font-medium text-vc-coral hover:text-vc-coral-dark"
-        >
-          {allSelected ? "Deselect All" : "Select All"}
-        </button>
-        <span className="text-sm text-vc-text-muted">
-          {selectedTemplates.size} of {CHURCH_MINISTRY_TEMPLATES.length}{" "}
-          selected
+        {selectedTemplates.size > 0 && (
+          <button
+            type="button"
+            onClick={onToggleAll}
+            className="text-sm font-medium text-vc-coral hover:text-vc-coral-dark"
+          >
+            Clear All
+          </button>
+        )}
+        <span className="ml-auto text-sm text-vc-text-muted">
+          {selectedTemplates.size} of {maxSelections} selected
         </span>
       </div>
+      {limitReached && (
+        <p className="mb-4 rounded-lg bg-vc-sand/30 px-3 py-2 text-xs text-vc-text-secondary">
+          Free plan allows up to {maxSelections} teams. You can upgrade after setup for more.
+        </p>
+      )}
 
       <div className="space-y-6">
         {categories.map((cat) => {
@@ -476,6 +488,7 @@ function MinistryTemplateStep({
                     index={template.index}
                     template={template}
                     selected={selectedTemplates.has(template.index)}
+                    disabled={limitReached && !selectedTemplates.has(template.index)}
                     customName={templateNames.get(template.index)}
                     onToggle={() => onToggle(template.index)}
                     onRename={(n) => onRename(template.index, n)}
@@ -494,6 +507,7 @@ function TemplateCard({
   index,
   template,
   selected,
+  disabled,
   customName,
   onToggle,
   onRename,
@@ -501,6 +515,7 @@ function TemplateCard({
   index: number;
   template: { name: string; description: string; color: string; requires_background_check: boolean };
   selected: boolean;
+  disabled?: boolean;
   customName: string | undefined;
   onToggle: () => void;
   onRename: (name: string) => void;
@@ -534,14 +549,17 @@ function TemplateCard({
       className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${
         selected
           ? "border-vc-coral/40 bg-vc-coral/5"
-          : "border-vc-border-light bg-white"
+          : disabled
+            ? "border-vc-border-light bg-white opacity-50 cursor-not-allowed"
+            : "border-vc-border-light bg-white"
       }`}
     >
       <input
         type="checkbox"
         checked={selected}
         onChange={onToggle}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-vc-border text-vc-coral accent-vc-coral"
+        disabled={disabled}
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-vc-border text-vc-coral accent-vc-coral disabled:cursor-not-allowed"
       />
       <div
         className="mt-1 h-3 w-3 shrink-0 rounded-full"

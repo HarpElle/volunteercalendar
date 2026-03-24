@@ -55,12 +55,18 @@ export function BillingSettings({
   const [overrideSuccess, setOverrideSuccess] = useState("");
 
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;
+  const volOverLimit =
+    limits.volunteers !== Infinity && volunteerCount > limits.volunteers;
   const volNearLimit =
-    limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
+    !volOverLimit && limits.volunteers !== Infinity && volunteerCount >= limits.volunteers * 0.8;
+  const minOverLimit =
+    limits.ministries !== Infinity && ministriesCount > limits.ministries;
   const minNearLimit =
-    limits.ministries !== Infinity && ministriesCount >= limits.ministries * 0.8;
+    !minOverLimit && limits.ministries !== Infinity && ministriesCount >= limits.ministries * 0.8;
+  const eventOverLimit =
+    limits.active_events !== Infinity && activeEventCount > limits.active_events;
   const eventNearLimit =
-    limits.active_events !== Infinity &&
+    !eventOverLimit && limits.active_events !== Infinity &&
     activeEventCount >= limits.active_events * 0.8;
   const subscriptionSource: SubscriptionSource =
     church?.subscription_source || "stripe";
@@ -311,7 +317,7 @@ export function BillingSettings({
                 </div>
                 <div className="h-2 rounded-full bg-vc-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${volNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    className={`h-full rounded-full transition-all ${volOverLimit ? "bg-red-500" : volNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
                     style={{
                       width:
                         limits.volunteers === Infinity
@@ -320,11 +326,15 @@ export function BillingSettings({
                     }}
                   />
                 </div>
-                {volNearLimit && (
+                {volOverLimit ? (
+                  <p className="mt-1 text-xs font-medium text-red-600">
+                    Over limit — existing volunteers preserved, new additions paused
+                  </p>
+                ) : volNearLimit ? (
                   <p className="mt-1 text-xs text-vc-coral">
                     Approaching volunteer limit
                   </p>
-                )}
+                ) : null}
               </div>
               <div className="rounded-lg bg-vc-bg-warm p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -340,7 +350,7 @@ export function BillingSettings({
                 </div>
                 <div className="h-2 rounded-full bg-vc-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${minNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    className={`h-full rounded-full transition-all ${minOverLimit ? "bg-red-500" : minNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
                     style={{
                       width:
                         limits.ministries === Infinity
@@ -349,11 +359,15 @@ export function BillingSettings({
                     }}
                   />
                 </div>
-                {minNearLimit && (
+                {minOverLimit ? (
+                  <p className="mt-1 text-xs font-medium text-red-600">
+                    Over limit — existing {terms.pluralLower} preserved, new additions paused
+                  </p>
+                ) : minNearLimit ? (
                   <p className="mt-1 text-xs text-vc-coral">
                     Approaching {terms.singularLower} limit
                   </p>
-                )}
+                ) : null}
               </div>
               <div className="rounded-lg bg-vc-bg-warm p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -369,7 +383,7 @@ export function BillingSettings({
                 </div>
                 <div className="h-2 rounded-full bg-vc-border overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${eventNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
+                    className={`h-full rounded-full transition-all ${eventOverLimit ? "bg-red-500" : eventNearLimit ? "bg-vc-coral" : "bg-vc-sage"}`}
                     style={{
                       width:
                         limits.active_events === Infinity
@@ -378,11 +392,15 @@ export function BillingSettings({
                     }}
                   />
                 </div>
-                {eventNearLimit && (
+                {eventOverLimit ? (
+                  <p className="mt-1 text-xs font-medium text-red-600">
+                    Over limit — existing events preserved, new additions paused
+                  </p>
+                ) : eventNearLimit ? (
                   <p className="mt-1 text-xs text-vc-coral">
                     Approaching event limit
                   </p>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

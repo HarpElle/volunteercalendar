@@ -33,3 +33,4 @@ export { buildEligibleNotifyEmail } from "./prerequisite-eligible-notify";
 export { buildExpiryWarningEmail } from "./prerequisite-expiry-warning";
 export { buildPrerequisiteNudgeEmail } from "./prerequisite-nudge";
 export { buildTrainingSessionInviteEmail } from "./training-session-invite";
+export { buildDowngradeNotificationEmail } from "./downgrade-notification";
