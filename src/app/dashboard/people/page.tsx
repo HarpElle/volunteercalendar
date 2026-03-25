@@ -505,7 +505,7 @@ function PeopleContent() {
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl text-vc-indigo">People</h1>
+          <h1 className="font-display text-3xl text-vc-indigo">Volunteers</h1>
           <p className="mt-1 text-vc-text-secondary">
             {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingMems.length} pending
           </p>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
@@ -22,13 +23,25 @@ const TABS: Array<{ key: CheckInsTab; label: string }> = [
 ];
 
 export default function CheckInsPage() {
+  return (
+    <Suspense>
+      <CheckInsContent />
+    </Suspense>
+  );
+}
+
+function CheckInsContent() {
   const { user, profile, activeMembership } = useAuth();
+  const searchParams = useSearchParams();
   const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [church, setChurch] = useState<Church | null>(null);
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<CheckInsTab>("volunteers");
+
+  const rawTab = searchParams.get("tab");
+  const initialTab: CheckInsTab = rawTab === "children" ? "children" : "volunteers";
+  const [activeTab, setActiveTab] = useState<CheckInsTab>(initialTab);
 
   // Volunteer check-in settings state
   const [selfCheckInEnabled, setSelfCheckInEnabled] = useState(true);
@@ -115,44 +128,44 @@ export default function CheckInsPage() {
             setProximityRadius={setProximityRadius}
             campuses={campuses}
           />
-
-          {checkinEnabled && (
-            <CheckinThresholdsSettings
-              churchId={churchId!}
-              guardianSmsEnabled={limits.checkin_guardian_sms ?? false}
-            />
-          )}
         </div>
       )}
 
       {activeTab === "children" && (
-        <div className="space-y-4">
+        <div className="space-y-8">
           {checkinEnabled ? (
             <>
-              <p className="text-sm text-vc-text-secondary mb-6">
-                Manage children&apos;s check-in from these pages:
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  { label: "Check-In Dashboard", href: "/dashboard/checkin", desc: "Live check-in activity and kiosk setup" },
-                  { label: "Households", href: "/dashboard/checkin/households", desc: "Manage families and guardians" },
-                  { label: "Room Configuration", href: "/dashboard/checkin/rooms", desc: "Grade ranges, capacity, and overflow" },
-                  { label: "Import Households", href: "/dashboard/checkin/import", desc: "Bulk import from CSV" },
-                ].map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center justify-between rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-vc-indigo">{item.label}</p>
-                      <p className="mt-0.5 text-xs text-vc-text-muted">{item.desc}</p>
-                    </div>
-                    <svg className="h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                    </svg>
-                  </Link>
-                ))}
+              <CheckinThresholdsSettings
+                churchId={churchId!}
+                guardianSmsEnabled={limits.checkin_guardian_sms ?? false}
+              />
+
+              <div className="space-y-4">
+                <p className="text-sm text-vc-text-secondary">
+                  Manage children&apos;s check-in from these pages:
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: "Check-In Dashboard", href: "/dashboard/checkin", desc: "Live check-in activity and kiosk setup" },
+                    { label: "Households", href: "/dashboard/checkin/households", desc: "Manage families and guardians" },
+                    { label: "Room Configuration", href: "/dashboard/checkin/rooms", desc: "Grade ranges, capacity, and overflow" },
+                    { label: "Import Households", href: "/dashboard/checkin/import", desc: "Bulk import from CSV" },
+                  ].map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center justify-between rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-vc-indigo">{item.label}</p>
+                        <p className="mt-0.5 text-xs text-vc-text-muted">{item.desc}</p>
+                      </div>
+                      <svg className="h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                      </svg>
+                    </Link>
+                  ))}
+                </div>
               </div>
             </>
           ) : (

@@ -170,6 +170,7 @@ export default function DashboardLayout({
         checkinEnabled={checkinEnabled}
         roomsEnabled={roomsEnabled}
         hasUnreadNotifications={hasUnread}
+        isAdmin={userIsAdmin}
         onSignOut={handleSignOut}
       />
     </div>
