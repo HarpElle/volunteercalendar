@@ -59,7 +59,8 @@ export default function MyFeedbackPage() {
           const data = await res.json();
           setItems(data.items as FeedbackItem[]);
         } else {
-          console.error("[My Feedback] API returned", res.status);
+          const errBody = await res.json().catch(() => ({}));
+          console.error("[My Feedback] API returned", res.status, errBody);
           setError(true);
         }
       } catch (err) {

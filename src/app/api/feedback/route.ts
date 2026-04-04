@@ -45,10 +45,8 @@ export async function GET(req: NextRequest) {
 
   const feedbackRef = adminDb.collection("churches").doc(churchId).collection("feedback");
 
-  let query: FirebaseFirestore.Query = feedbackRef.orderBy("created_at", "desc");
-
   if (scope === "mine") {
-    query = query.where("submitted_by_user_id", "==", caller.uid);
+    // where before orderBy so Firestore uses the composite index
   } else {
     // Verify admin/owner for "all" scope
     const memSnap = await adminDb
@@ -67,18 +65,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const snap = await query.limit(200).get();
-  let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  try {
+    // Build query: where() before orderBy() so Firestore correctly matches composite index
+    let query: FirebaseFirestore.Query = scope === "mine"
+      ? feedbackRef.where("submitted_by_user_id", "==", caller.uid).orderBy("created_at", "desc")
+      : feedbackRef.orderBy("created_at", "desc");
 
-  // Client-side filters (Firestore doesn't allow multiple inequality/orderBy combos easily)
-  if (statusFilter) {
-    items = items.filter((i) => (i as Record<string, unknown>).status === statusFilter);
-  }
-  if (categoryFilter) {
-    items = items.filter((i) => (i as Record<string, unknown>).category === categoryFilter);
-  }
+    const snap = await query.limit(200).get();
+    let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-  return NextResponse.json({ items });
+    // Client-side filters (Firestore doesn't allow multiple inequality/orderBy combos easily)
+    if (statusFilter) {
+      items = items.filter((i) => (i as Record<string, unknown>).status === statusFilter);
+    }
+    if (categoryFilter) {
+      items = items.filter((i) => (i as Record<string, unknown>).category === categoryFilter);
+    }
+
+    return NextResponse.json({ items });
+  } catch (error) {
+    console.error("[GET /api/feedback]", error);
+    return NextResponse.json(
+      { error: "Failed to load feedback", detail: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 },
+    );
+  }
 }
 
 // ─── POST ─────────────────────────────────────────────────────────────────────
