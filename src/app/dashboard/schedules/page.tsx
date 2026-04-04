@@ -8,7 +8,7 @@ import {
   updateChurchDocument,
   removeChurchDocument,
 } from "@/lib/firebase/firestore";
-import { generateDraftSchedule } from "@/lib/services/scheduler";
+import { generateDraftSchedule, computeTotalSlots } from "@/lib/services/scheduler";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import type {
   Household,
   Assignment,
   ScheduleConflict,
+  ScheduleStats,
   SchedulingResult,
   MinistryApproval,
   OnboardingStep,
@@ -61,7 +62,7 @@ export default function SchedulesPage() {
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [activeAssignments, setActiveAssignments] = useState<Assignment[]>([]);
   const [activeConflicts, setActiveConflicts] = useState<ScheduleConflict[]>([]);
-  const [activeStats, setActiveStats] = useState<SchedulingResult["stats"] | null>(null);
+  const [activeStats, setActiveStats] = useState<ScheduleStats | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [notifyResult, setNotifyResult] = useState<string | null>(null);
   const [scheduleNotes, setScheduleNotes] = useState("");
@@ -112,6 +113,7 @@ export default function SchedulesPage() {
         published_at: null,
         ministry_approvals: {},
         notes: null,
+        ministry_ids: options.ministryIds,
         ...(options.availabilityDueDate
           ? {
               availability_window: {
@@ -187,14 +189,33 @@ export default function SchedulesPage() {
         (a) => a.schedule_id === schedule.id
       );
       setActiveAssignments(schedAssignments);
-      const totalSlots = services.reduce(
-        (sum, s) => sum + s.roles.reduce((rs, r) => rs + r.count, 0), 0,
+
+      // Scope services to the schedule's ministry filter
+      const schedMinistryIds = schedule.ministry_ids || [];
+      const scopedSvcs = schedMinistryIds.length > 0
+        ? services.filter((s) => {
+            const ids = [s.ministry_id, ...(s.ministries?.map((m) => m.ministry_id) ?? [])];
+            return schedMinistryIds.some((id) => ids.includes(id));
+          })
+        : services;
+
+      const totalSlots = computeTotalSlots(
+        scopedSvcs, schedule.date_range_start, schedule.date_range_end,
       );
+      const uniqueVols = new Set(schedAssignments.map((a) => a.volunteer_id)).size;
+
       setActiveStats({
         total_slots: totalSlots,
         filled_slots: schedAssignments.length,
+        unfilled_slots: totalSlots - schedAssignments.length,
         fill_rate: totalSlots > 0 ? Math.round((schedAssignments.length / totalSlots) * 100) : 0,
         fairness_score: 0,
+        unique_volunteers: uniqueVols,
+        by_status: {
+          confirmed: schedAssignments.filter((a) => a.status === "confirmed").length,
+          pending: schedAssignments.filter((a) => a.status === "draft").length,
+          declined: schedAssignments.filter((a) => a.status === "declined").length,
+        },
       });
     } catch {
       // silent
@@ -618,14 +639,12 @@ export default function SchedulesPage() {
 
           {/* Stats bar */}
           {activeStats && (
-            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
-                <p className="text-xs font-medium text-vc-text-muted">Total Slots</p>
-                <p className="text-xl font-semibold text-vc-indigo">{activeStats.total_slots}</p>
-              </div>
-              <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
-                <p className="text-xs font-medium text-vc-text-muted">Filled</p>
-                <p className="text-xl font-semibold text-vc-sage">{activeStats.filled_slots}</p>
+                <p className="text-xs font-medium text-vc-text-muted">Slots</p>
+                <p className="text-xl font-semibold text-vc-indigo">
+                  {activeStats.filled_slots} / {activeStats.total_slots}
+                </p>
               </div>
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
                 <p className="text-xs font-medium text-vc-text-muted">Fill Rate</p>
@@ -634,9 +653,29 @@ export default function SchedulesPage() {
                 </p>
               </div>
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
-                <p className="text-xs font-medium text-vc-text-muted">Fairness</p>
-                <p className="text-xl font-semibold text-vc-indigo">{activeStats.fairness_score}%</p>
+                <p className="text-xs font-medium text-vc-text-muted">Volunteers</p>
+                <p className="text-xl font-semibold text-vc-indigo">{activeStats.unique_volunteers}</p>
               </div>
+              <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
+                <p className="text-xs font-medium text-vc-text-muted">Status</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {activeStats.by_status.confirmed > 0 && (
+                    <span className="text-sm font-medium text-vc-sage">{activeStats.by_status.confirmed} confirmed</span>
+                  )}
+                  {activeStats.by_status.pending > 0 && (
+                    <span className="text-sm font-medium text-vc-sand-dark">{activeStats.by_status.pending} pending</span>
+                  )}
+                  {activeStats.by_status.declined > 0 && (
+                    <span className="text-sm font-medium text-vc-danger">{activeStats.by_status.declined} declined</span>
+                  )}
+                </div>
+              </div>
+              {activeStats.unfilled_slots > 0 && (
+                <div className="rounded-lg bg-white border border-vc-danger/20 px-4 py-3">
+                  <p className="text-xs font-medium text-vc-text-muted">Unfilled</p>
+                  <p className="text-xl font-semibold text-vc-danger">{activeStats.unfilled_slots}</p>
+                </div>
+              )}
             </div>
           )}
 

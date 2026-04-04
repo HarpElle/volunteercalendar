@@ -577,6 +577,8 @@ export interface Schedule {
   approval_workflow?: ApprovalWorkflow;
   /** Scheduling quality metrics. */
   meta?: ScheduleMeta;
+  /** Ministry IDs this schedule was scoped to. Empty/undefined = all ministries. */
+  ministry_ids?: string[];
 }
 
 // --- Attendance ---
@@ -698,15 +700,24 @@ export interface ScheduleConflict {
   message: string;
 }
 
+export interface ScheduleStats {
+  total_slots: number;
+  filled_slots: number;
+  unfilled_slots: number;
+  fill_rate: number;
+  fairness_score: number;
+  unique_volunteers: number;
+  by_status: {
+    confirmed: number;
+    pending: number;
+    declined: number;
+  };
+}
+
 export interface SchedulingResult {
   assignments: Omit<Assignment, "id" | "confirmation_token" | "responded_at" | "reminder_sent_at">[];
   conflicts: ScheduleConflict[];
-  stats: {
-    total_slots: number;
-    filled_slots: number;
-    fill_rate: number;
-    fairness_score: number;
-  };
+  stats: ScheduleStats;
 }
 
 // --- Event Signups ---

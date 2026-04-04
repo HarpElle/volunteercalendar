@@ -92,6 +92,25 @@ export function generateOccurrences(
   });
 }
 
+/** Count total role-slots across all service occurrences in a date range. */
+export function computeTotalSlots(
+  services: Service[],
+  startDate: string,
+  endDate: string,
+): number {
+  const occurrences = generateOccurrences(services, startDate, endDate);
+  let total = 0;
+  for (const { service, date } of occurrences) {
+    const serviceMinistries = getServiceMinistries(service, date);
+    for (const sm of serviceMinistries) {
+      for (const role of sm.roles) {
+        total += role.count;
+      }
+    }
+  }
+  return total;
+}
+
 // --- Constraint Checking ---
 
 export interface VolunteerAssignmentCount {
@@ -422,14 +441,23 @@ export function generateDraftSchedule(
   const filledSlots = assignments.length;
   const volunteerIds = volunteers.map((v) => v.id);
 
+  const uniqueVolunteers = new Set(assignments.map((a) => a.volunteer_id)).size;
+
   return {
     assignments,
     conflicts,
     stats: {
       total_slots: totalSlots,
       filled_slots: filledSlots,
+      unfilled_slots: totalSlots - filledSlots,
       fill_rate: totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0,
       fairness_score: Math.round(fairnessScore(counts, volunteerIds) * 100),
+      unique_volunteers: uniqueVolunteers,
+      by_status: {
+        confirmed: 0,
+        pending: filledSlots, // All newly generated assignments are draft/pending
+        declined: 0,
+      },
     },
   };
 }
