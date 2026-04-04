@@ -113,9 +113,7 @@ export default function OnboardingPage() {
   // Count stats
   const pipelineStats = filteredMinistries.map((ministry) => {
     const ministryVols = volunteers.filter(
-      (v) =>
-        v.ministry_ids.includes(ministry.id) ||
-        v.ministry_ids.length === 0,
+      (v) => v.ministry_ids.includes(ministry.id),
     );
     const stages: Record<PipelineStage, Volunteer[]> = {
       not_started: [],
