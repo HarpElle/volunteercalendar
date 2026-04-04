@@ -15,6 +15,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileHeader } from "@/components/dashboard/mobile-header";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { MoreMenu } from "@/components/dashboard/more-menu";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import type { SubscriptionTier } from "@/lib/types";
 import { TIER_LIMITS } from "@/lib/constants";
 
@@ -162,6 +163,9 @@ export default function DashboardLayout({
         hasUnreadNotifications={hasUnread}
         onMoreOpen={() => setMoreMenuOpen(true)}
       />
+
+      {/* Floating feedback button */}
+      <FeedbackButton />
 
       {/* More menu (mobile admin) */}
       <MoreMenu

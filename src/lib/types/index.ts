@@ -1627,3 +1627,93 @@ export interface FeatureFlags {
   calendar_feeds: boolean;
   custom_notifications: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Feedback System
+// ---------------------------------------------------------------------------
+
+export type FeedbackCategory = "bug" | "pain_point" | "feature_request" | "idea" | "question";
+
+export type FeedbackPriority = "critical" | "high" | "medium" | "low" | "unset";
+
+export type FeedbackStatus =
+  | "submitted"
+  | "acknowledged"
+  | "triaged"
+  | "in_progress"
+  | "resolved"
+  | "wont_do"
+  | "duplicate";
+
+export type FeedbackDisposition =
+  | "ignore"
+  | "exclude"
+  | "consider"
+  | "planned"
+  | "shipped";
+
+export interface FeedbackItem {
+  id: string;
+  church_id: string;
+  // Submitter
+  submitted_by_user_id: string;
+  submitted_by_name: string;
+  submitted_by_email: string;
+  submitted_by_role: OrgRole;
+  // Content
+  category: FeedbackCategory;
+  title: string;
+  description: string;
+  steps_to_reproduce: string | null;
+  expected_behavior: string | null;
+  screenshot_urls: string[];
+  // Auto-captured context
+  page_url: string;
+  user_agent: string;
+  app_version: string | null;
+  // Admin triage
+  priority: FeedbackPriority;
+  status: FeedbackStatus;
+  disposition: FeedbackDisposition | null;
+  assigned_to: string | null;
+  tags: string[];
+  // Resolution
+  resolution_notes: string | null;
+  related_feedback_ids: string[];
+  duplicate_of_id: string | null;
+  // Timestamps
+  acknowledged_at: string | null;
+  triaged_at: string | null;
+  resolved_at: string | null;
+  // Submitter-visible response
+  admin_response: string | null;
+  admin_response_at: string | null;
+  // Metadata
+  created_at: string;
+  updated_at: string;
+  /** True if submitted via Sunday Incident mode */
+  is_sunday_incident?: boolean;
+}
+
+export type FeedbackActivityType =
+  | "status_change"
+  | "priority_change"
+  | "category_change"
+  | "disposition_change"
+  | "comment"
+  | "admin_response"
+  | "assignment_change"
+  | "tag_change"
+  | "duplicate_linked";
+
+export interface FeedbackActivity {
+  id: string;
+  feedback_id: string;
+  type: FeedbackActivityType;
+  actor_user_id: string;
+  actor_name: string;
+  previous_value: string | null;
+  new_value: string | null;
+  comment: string | null;
+  created_at: string;
+}
