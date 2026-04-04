@@ -60,6 +60,10 @@ export interface Membership {
   scheduler_notification_preferences?: SchedulerNotificationPreferences;
   /** Grants access to check-in dashboard, households, children, reports without full scheduler role */
   checkin_volunteer?: boolean;
+  /** Grants access to event management without full admin role */
+  event_coordinator?: boolean;
+  /** Grants access to room/resource management without full admin role */
+  facility_coordinator?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -126,6 +130,10 @@ export interface Church {
   ccli_number: string | null;
   /** ISO timestamp when the CCLI attestation checkbox was accepted */
   ccli_attestation_at: string | null;
+  /** Feature flags derived from subscription_tier, with manual override support */
+  feature_flags?: FeatureFlags;
+  /** Denormalized count of people in the people collection (for tier limit enforcement) */
+  person_count?: number;
   created_at: string;
 }
 
@@ -1424,4 +1432,196 @@ export interface RoomSettings {
   conflict_notification_user_ids: string[];
   updated_by: string;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Unified Person Model (Phase 0 — Foundation)
+// ---------------------------------------------------------------------------
+// Replaces the separate Volunteer, CheckInHousehold, and Child entities with
+// a single Person document per individual. Children are Person documents with
+// person_type: "child". Scheduling fields are inline for single-query perf.
+
+// ─── Permission System ─────────────────────────────────────────────────────
+
+export type PermissionFlag = "event_coordinator" | "facility_coordinator" | "checkin_volunteer";
+
+// ─── Person Types ──────────────────────────────────────────────────────────
+
+export type PersonType = "adult" | "child";
+export type PersonStatus = "active" | "inactive" | "archived";
+
+/** Scheduling-specific data embedded on a Person document (volunteers only). */
+export interface SchedulingProfile {
+  skills: string[];
+  max_services_per_month: number;
+  /** ISO date strings; supports date ranges like "2026-04-01/2026-04-07" */
+  blockout_dates: string[];
+  /** Day names: "sunday", "monday", etc. */
+  recurring_unavailable: string[];
+  preferred_frequency: number;
+  /** Carried from existing VolunteerAvailability */
+  max_roles_per_month: number;
+}
+
+/** Child-specific data embedded on a Person document (children only). */
+export interface ChildProfile {
+  date_of_birth: string | null;
+  grade: ChildGrade | null;
+  allergies: string | null;
+  medical_notes: string | null;
+  default_room_id: string | null;
+  has_alerts: boolean;
+  authorized_pickups: PersonAuthorizedPickup[];
+  photo_url: string | null;
+}
+
+/** An authorized pickup contact for a child. */
+export interface PersonAuthorizedPickup {
+  name: string;
+  phone: string | null;
+  relationship: string | null;
+}
+
+/**
+ * Unified Person document — replaces Volunteer, CheckInHousehold guardian,
+ * and Child as separate entities.
+ * Firestore: churches/{churchId}/people/{personId}
+ */
+export interface Person {
+  id: string;
+  church_id: string;
+  /** Array for blended family support — a child can belong to multiple households */
+  household_ids: string[];
+  person_type: PersonType;
+
+  first_name: string;
+  last_name: string;
+  preferred_name: string | null;
+  /** Denormalized "First Last" for display */
+  name: string;
+  /** Lowercase for Firestore prefix queries */
+  search_name: string;
+
+  email: string | null;
+  phone: string | null;
+  /** Digits-only phone variants for kiosk lookup via array-contains */
+  search_phones: string[];
+  photo_url: string | null;
+  status: PersonStatus;
+
+  // Auth linkage
+  /** Firebase Auth UID — null for non-logged-in people */
+  user_id: string | null;
+  /** Link to the Membership doc for logged-in members */
+  membership_id: string | null;
+
+  // Volunteer capability flags (top-level for Firestore querying)
+  is_volunteer: boolean;
+  ministry_ids: string[];
+  role_ids: string[];
+  campus_ids: string[];
+
+  // Embedded profiles
+  scheduling_profile: SchedulingProfile | null;
+  child_profile: ChildProfile | null;
+
+  // Volunteer stats (inline for dashboard queries)
+  stats: VolunteerStats | null;
+
+  // Existing fields carried forward from Volunteer
+  imported_from: ImportSource | null;
+  background_check: {
+    status: "cleared" | "pending" | "expired" | "not_required";
+    expires_at: string | null;
+    provider: string | null;
+    checked_at: string | null;
+  } | null;
+  role_constraints: {
+    conditional_roles: ConditionalRole[];
+    allow_multi_role: boolean;
+  } | null;
+  volunteer_journey: VolunteerJourneyStep[] | null;
+
+  /** Stable QR token for check-in families */
+  qr_token: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Unified Household ─────────────────────────────────────────────────────
+// Firestore: churches/{churchId}/households/{householdId}
+// Replaces the separate scheduling Household and CheckInHousehold entities.
+
+export interface UnifiedHousehold {
+  id: string;
+  church_id: string;
+  /** Display name, e.g. "The Smith Family" */
+  name: string;
+  /** Person ID of the primary contact (for notifications, check-in display) */
+  primary_guardian_id: string | null;
+  /** Stable QR token for fast check-in */
+  qr_token: string | null;
+
+  constraints: {
+    never_same_service: boolean;
+    prefer_same_service: boolean;
+    /** Hard constraint: no household members assigned to any service on the same date */
+    never_same_time: boolean;
+  };
+
+  notes: string | null;
+  imported_from: "breeze" | "pco" | "generic" | "manual" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Scheduling Algorithm Adapter ──────────────────────────────────────────
+// Memory-only type — the scheduler consumes this, not raw Person docs.
+// Built from Person via personToSchedulable() in the compat layer.
+
+export interface SchedulableVolunteer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  user_id: string | null;
+  membership_id: string | null;
+  status: PersonStatus;
+  ministry_ids: string[];
+  role_ids: string[];
+  campus_ids: string[];
+  /** Primary household for constraint checking */
+  household_id: string | null;
+  photo_url: string | null;
+  availability: {
+    blockout_dates: string[];
+    recurring_unavailable: string[];
+    preferred_frequency: number;
+    max_roles_per_month: number;
+  };
+  stats: VolunteerStats;
+  background_check: Person["background_check"];
+  role_constraints: Person["role_constraints"];
+  volunteer_journey: VolunteerJourneyStep[] | null;
+  imported_from: ImportSource | null;
+}
+
+// ─── Feature Flags ─────────────────────────────────────────────────────────
+// Added to Church document. Derived from subscription_tier but decoupled
+// to allow manual overrides (beta testers, founding church discounts).
+
+export interface FeatureFlags {
+  checkin_enabled: boolean;
+  rooms_enabled: boolean;
+  stage_sync_enabled: boolean;
+  service_planning_enabled: boolean;
+  /** -1 = unlimited */
+  max_volunteers: number;
+  /** -1 = unlimited */
+  max_teams: number;
+  retention_dashboard: boolean;
+  background_checks: boolean;
+  calendar_feeds: boolean;
+  custom_notifications: boolean;
 }
