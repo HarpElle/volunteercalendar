@@ -41,8 +41,8 @@ const VALID_TRANSITIONS: Record<string, ScheduleStatus[]> = {
 };
 
 export default function SchedulesPage() {
-  const { profile, user } = useAuth();
-  const churchId = profile?.church_id;
+  const { profile, user, activeMembership } = useAuth();
+  const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [services, setServices] = useState<Service[]>([]);

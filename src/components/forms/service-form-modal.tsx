@@ -392,9 +392,9 @@ export function ServiceFormModal({
 
           <div className="space-y-4">
             {formMinistries.map((fm) => {
-              const availableMinistries = ministries.filter(
-                (m) => m.id === fm.ministry_id || !usedMinistryIds.includes(m.id),
-              );
+              const availableMinistries = ministries
+                .filter((m) => m.id === fm.ministry_id || !usedMinistryIds.includes(m.id))
+                .sort((a, b) => a.name.localeCompare(b.name));
 
               return (
                 <div
