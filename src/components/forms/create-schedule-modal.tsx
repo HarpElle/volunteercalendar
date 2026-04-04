@@ -214,7 +214,7 @@ export function CreateScheduleModal({
               </button>
 
               {/* Individual ministries */}
-              {ministries.map((ministry) => {
+              {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((ministry) => {
                 const selected = ministryIds.includes(ministry.id);
                 return (
                   <button
