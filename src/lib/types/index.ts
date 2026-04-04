@@ -1721,6 +1721,8 @@ export interface FeedbackItem {
   updated_at: string;
   /** True if submitted via Sunday Incident mode */
   is_sunday_incident?: boolean;
+  /** True if a copy was forwarded to the platform team (bugs & feature requests) */
+  platform_feedback?: boolean;
 }
 
 export type FeedbackActivityType =

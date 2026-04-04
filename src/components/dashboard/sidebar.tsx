@@ -45,6 +45,8 @@ interface NavSection {
   collapsible?: boolean;
   /** localStorage key for persisting collapsed state */
   collapseKey?: string;
+  /** Clicking the section header label navigates here (and expands) */
+  primaryHref?: string;
 }
 
 function getNavSections(
@@ -110,6 +112,7 @@ function getNavSections(
       gate: (m) => isScheduler(m),
       collapsible: true,
       collapseKey: "vc_sidebar_people",
+      primaryHref: "/dashboard/people",
       items: [
         {
           label: "Team Health",
@@ -155,6 +158,7 @@ function getNavSections(
       gate: (m) => isScheduler(m),
       collapsible: true,
       collapseKey: "vc_sidebar_scheduling",
+      primaryHref: "/dashboard/scheduling-dashboard",
       items: [
         {
           label: "Dashboard",
@@ -202,6 +206,7 @@ function getNavSections(
             gate: (m: Membership | null) => isAdmin(m),
             collapsible: true,
             collapseKey: "vc_sidebar_worship",
+            primaryHref: "/dashboard/worship/plans",
             items: [
               {
                 label: "Service Plans",
@@ -230,6 +235,7 @@ function getNavSections(
             gate: (m: Membership | null) => !!m && canAccessCheckin(m),
             collapsible: true,
             collapseKey: "vc_sidebar_checkin",
+            primaryHref: "/dashboard/checkin",
             items: [
               {
                 label: "Dashboard",
@@ -258,6 +264,7 @@ function getNavSections(
             gate: (m: Membership | null) => isScheduler(m),
             collapsible: true,
             collapseKey: "vc_sidebar_rooms",
+            primaryHref: "/dashboard/rooms",
             items: [
               {
                 label: "Bookings",
@@ -284,6 +291,7 @@ function getNavSections(
       gate: (m: Membership | null) => isAdmin(m),
       collapsible: true,
       collapseKey: "vc_sidebar_org",
+      primaryHref: "/dashboard/settings",
       items: [
         {
           label: "Teams",
@@ -360,12 +368,14 @@ function CollapsibleSection({
   children,
   pathname,
   sectionHrefs,
+  primaryHref,
 }: {
   label: string;
   collapseKey: string;
   children: React.ReactNode;
   pathname: string;
   sectionHrefs: string[];
+  primaryHref?: string;
 }) {
   // Auto-expand if the current route is inside this section
   const isInSection = sectionHrefs.some(
@@ -390,31 +400,52 @@ function CollapsibleSection({
     localStorage.setItem(collapseKey, next ? "1" : "0");
   }
 
+  function handleLabelClick() {
+    // Always expand when clicking the label
+    if (!expanded) {
+      setExpanded(true);
+      localStorage.setItem(collapseKey, "1");
+    }
+  }
+
   return (
     <div>
-      <button
-        onClick={toggle}
-        className="flex w-full items-center justify-between px-3 pt-5 pb-1.5"
-      >
-        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted">
-          {label}
-        </span>
-        <svg
-          className={`h-3.5 w-3.5 text-vc-text-muted transition-transform duration-200 ${
-            expanded ? "rotate-180" : ""
-          }`}
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
+      <div className="flex w-full items-center justify-between px-3 pt-5 pb-1.5">
+        {primaryHref ? (
+          <Link
+            href={primaryHref}
+            onClick={handleLabelClick}
+            className="text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted hover:text-vc-indigo transition-colors"
+          >
+            {label}
+          </Link>
+        ) : (
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted">
+            {label}
+          </span>
+        )}
+        <button
+          onClick={toggle}
+          className="flex h-[44px] w-[44px] items-center justify-center -mr-3"
+          aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="m19.5 8.25-7.5 7.5-7.5-7.5"
-          />
-        </svg>
-      </button>
+          <svg
+            className={`h-3.5 w-3.5 text-vc-text-muted transition-transform duration-200 ${
+              expanded ? "rotate-180" : ""
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m19.5 8.25-7.5 7.5-7.5-7.5"
+            />
+          </svg>
+        </button>
+      </div>
       <div
         className={`overflow-hidden transition-all duration-200 ${
           expanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
@@ -590,6 +621,7 @@ export function Sidebar({
             collapseKey={section.collapseKey!}
             pathname={pathname}
             sectionHrefs={section.items.map((i) => i.href)}
+            primaryHref={section.primaryHref}
           >
             {section.items.map(renderNavItem)}
           </CollapsibleSection>

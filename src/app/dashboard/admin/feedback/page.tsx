@@ -79,6 +79,7 @@ export default function AdminFeedbackPage() {
   // Inline edit state for selected item
   const [editResponse, setEditResponse] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [responseSent, setResponseSent] = useState(false);
   const [activities, setActivities] = useState<Array<{ id: string; type: string; actor_name: string; previous_value: string; new_value: string; created_at: string }>>([]);
 
   const loadFeedback = useCallback(async () => {
@@ -392,17 +393,30 @@ export default function AdminFeedbackPage() {
                   rows={3}
                   className="w-full rounded-lg border border-vc-border-light bg-white px-3.5 py-2.5 text-sm text-vc-indigo placeholder:text-vc-text-muted/60 focus:border-vc-coral focus:outline-none focus:ring-1 focus:ring-vc-coral resize-y"
                 />
-                <button
-                  onClick={() => {
-                    if (editResponse.trim()) {
-                      updateFeedback(selected.id, { admin_response: editResponse.trim() });
-                    }
-                  }}
-                  disabled={saving || !editResponse.trim()}
-                  className="mt-2 rounded-lg bg-vc-coral px-4 py-2 text-sm font-semibold text-white hover:bg-vc-coral/90 disabled:opacity-50 transition-colors"
-                >
-                  {saving ? "Saving..." : "Send Response"}
-                </button>
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      if (editResponse.trim()) {
+                        await updateFeedback(selected.id, { admin_response: editResponse.trim() });
+                        setEditResponse("");
+                        setResponseSent(true);
+                        setTimeout(() => setResponseSent(false), 3000);
+                      }
+                    }}
+                    disabled={saving || !editResponse.trim()}
+                    className="rounded-lg bg-vc-coral px-4 py-2 text-sm font-semibold text-white hover:bg-vc-coral/90 disabled:opacity-50 transition-colors"
+                  >
+                    {saving ? "Saving..." : "Send Response"}
+                  </button>
+                  {responseSent && (
+                    <span className="flex items-center gap-1 text-sm font-medium text-vc-sage animate-in fade-in">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Response sent
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Internal Notes (admin-only) */}

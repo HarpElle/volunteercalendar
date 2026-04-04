@@ -84,14 +84,21 @@ export async function POST(
       .get();
 
     // Generate confirmation tokens and send emails
+    // Try people collection first (unified model), fall back to volunteers
+    const peopleSnap = await churchRef.collection("people").get();
     const [volSnap, serviceSnap] = await Promise.all([
-      churchRef.collection("volunteers").get(),
+      peopleSnap.empty ? churchRef.collection("volunteers").get() : Promise.resolve(peopleSnap),
       churchRef.collection("services").get(),
     ]);
 
     const volunteersMap = new Map<string, Volunteer>();
     volSnap.docs.forEach((d) => {
-      volunteersMap.set(d.id, { id: d.id, ...d.data() } as Volunteer);
+      const data = d.data();
+      // Person docs have person_type; Volunteer docs don't
+      const vol = "person_type" in data
+        ? { id: d.id, name: data.name, email: data.email, ...data } as unknown as Volunteer
+        : { id: d.id, ...data } as Volunteer;
+      volunteersMap.set(d.id, vol);
     });
 
     const servicesMap = new Map<string, Service>();
@@ -105,7 +112,7 @@ export async function POST(
 
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
-      const volunteer = volunteersMap.get(assignment.volunteer_id);
+      const volunteer = volunteersMap.get(assignment.person_id || assignment.volunteer_id);
       const service = assignment.service_id ? servicesMap.get(assignment.service_id) : null;
 
       if (!volunteer?.email) continue;

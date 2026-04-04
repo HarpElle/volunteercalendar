@@ -13,7 +13,8 @@ import { canScheduleMinistry } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
 import { printRoster } from "@/lib/utils/print-roster";
 import { normalizeAttendance } from "@/lib/types";
-import type { Service, Assignment, Ministry, Volunteer, Membership, AttendanceStatus } from "@/lib/types";
+import type { Service, Assignment, Ministry, Volunteer, Person, Membership, AttendanceStatus } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { AttendanceToggle } from "@/components/scheduling/attendance-toggle";
 
 interface ServiceRosterProps {
@@ -76,18 +77,22 @@ export function ServiceRoster({
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [assignData, minData, volData] = await Promise.all([
+      const [assignData, minData, rawVolData] = await Promise.all([
         getServiceAssignments(churchId, service.id, serviceDate),
         getChurchDocuments(churchId, "ministries"),
-        getChurchDocuments(churchId, "volunteers"),
+        getChurchDocuments(churchId, "people").then((docs) =>
+          docs.length > 0 ? docs : getChurchDocuments(churchId, "volunteers"),
+        ),
       ]);
       // Exclude declined assignments from roster
       const active = assignData.filter((a) => a.status !== "declined");
       setAssignments(active);
       setMinistries(minData as unknown as Ministry[]);
 
-      // Build volunteer name lookup
-      const vols = volData as unknown as Volunteer[];
+      // Build volunteer name lookup — handle both Person and Volunteer shapes
+      const vols = rawVolData.map((d) =>
+        "person_type" in d ? personToLegacyVolunteer(d as Person) : (d as unknown as Volunteer),
+      );
       const nameMap = new Map<string, string>();
       for (const v of vols) {
         nameMap.set(v.id, v.name);

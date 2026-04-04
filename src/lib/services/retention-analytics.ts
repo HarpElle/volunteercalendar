@@ -63,6 +63,10 @@ export interface RetentionSummary {
   healthRate: number;
   fairnessScore: number;
   thinBenchCount: number;
+  /** True when the org has too little data for meaningful metrics */
+  isNewOrg: boolean;
+  /** Total assignment count used for data confidence */
+  totalAssignments: number;
 }
 
 // ─── Burnout Risk ──────────────────���─────────────────────���────────────────────
@@ -348,8 +352,10 @@ export function calculateFairnessScore(
   }
 
   const totals = [...counts.values()];
-  const mean = totals.reduce((a, b) => a + b, 0) / totals.length;
-  if (mean === 0) return 1;
+  const totalAssignments = totals.reduce((a, b) => a + b, 0);
+  const mean = totalAssignments / totals.length;
+  // Not enough data to measure fairness meaningfully
+  if (mean === 0 || volunteers.length < 3 || totalAssignments < 5) return 1;
 
   const variance = totals.reduce((sum, t) => sum + Math.pow(t - mean, 2), 0) / totals.length;
   const stdDev = Math.sqrt(variance);
@@ -367,6 +373,7 @@ export function calculateRetentionSummary(
   ministries: { id: string; name: string }[],
 ): RetentionSummary {
   const active = volunteers.filter((v) => v.status === "active");
+  const isNewOrg = assignments.length < 10;
 
   // Health classification (same logic as volunteer-health page)
   let healthyCount = 0;
@@ -392,7 +399,12 @@ export function calculateRetentionSummary(
         healthyCount++;
       }
     } else {
-      inactiveCount++;
+      // No last_served_date: for new orgs, assume healthy (not enough data to judge)
+      if (isNewOrg) {
+        healthyCount++;
+      } else {
+        inactiveCount++;
+      }
     }
   }
 
@@ -413,5 +425,7 @@ export function calculateRetentionSummary(
     healthRate: active.length > 0 ? Math.round((healthyCount / active.length) * 100) : 100,
     fairnessScore,
     thinBenchCount,
+    isNewOrg,
+    totalAssignments: assignments.length,
   };
 }

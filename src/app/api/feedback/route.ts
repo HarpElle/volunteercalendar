@@ -166,6 +166,7 @@ export async function POST(req: NextRequest) {
       created_at: now,
       updated_at: now,
       is_sunday_incident: is_sunday_incident || false,
+      platform_feedback: ["bug", "feature_request"].includes(category),
     };
 
     const newDoc = await feedbackRef.add(feedbackData);
@@ -206,6 +207,31 @@ export async function POST(req: NextRequest) {
         }
       })
       .catch(() => {});
+
+    // Fire-and-forget: forward bugs & feature requests to the platform team
+    if (feedbackData.platform_feedback) {
+      (async () => {
+        try {
+          const churchDoc = await adminDb.collection("churches").doc(church_id).get();
+          const churchName = churchDoc.exists ? (churchDoc.data()!.name as string) || "Unknown Org" : "Unknown Org";
+          await sendEmail({
+            to: "info@volunteercal.com",
+            subject: `[Platform ${category === "bug" ? "Bug" : "Feature Request"}] ${title}`,
+            html: `
+              <h2>${title}</h2>
+              <p><strong>Org:</strong> ${churchName} (${church_id})</p>
+              <p><strong>Category:</strong> ${category} | <strong>Priority:</strong> ${feedbackData.priority}</p>
+              <p><strong>From:</strong> ${feedbackData.submitted_by_name} (${feedbackData.submitted_by_role})</p>
+              <p>${description.slice(0, 1000)}${description.length > 1000 ? "..." : ""}</p>
+              ${steps_to_reproduce ? `<p><strong>Steps to reproduce:</strong> ${steps_to_reproduce}</p>` : ""}
+              ${expected_behavior ? `<p><strong>Expected:</strong> ${expected_behavior}</p>` : ""}
+              <p><strong>Page:</strong> ${page_url || "N/A"}</p>
+            `,
+            text: `${title}\nOrg: ${churchName} (${church_id})\nCategory: ${category} | Priority: ${feedbackData.priority}\nFrom: ${feedbackData.submitted_by_name}\n\n${description.slice(0, 1000)}`,
+          });
+        } catch { /* silent */ }
+      })();
+    }
 
     return NextResponse.json({ id: newDoc.id, ...feedbackData }, { status: 201 });
   } catch (error) {
@@ -357,7 +383,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: feedback_id, ...existingData, ...updateData });
+    return NextResponse.json({ id: feedback_id, ...updateData });
   } catch (error) {
     console.error("[PATCH /api/feedback]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

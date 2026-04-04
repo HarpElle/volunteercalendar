@@ -41,6 +41,7 @@ export default function MyFeedbackPage() {
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FeedbackItem[]>([]);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!churchId || !user) {
@@ -57,9 +58,13 @@ export default function MyFeedbackPage() {
         if (res.ok) {
           const data = await res.json();
           setItems(data.items as FeedbackItem[]);
+        } else {
+          console.error("[My Feedback] API returned", res.status);
+          setError(true);
         }
-      } catch {
-        // silent
+      } catch (err) {
+        console.error("[My Feedback] Load failed:", err);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -84,7 +89,19 @@ export default function MyFeedbackPage() {
         </p>
       </div>
 
-      {items.length === 0 ? (
+      {error ? (
+        <div className="rounded-xl border border-dashed border-vc-danger/30 bg-vc-danger/5 p-12 text-center">
+          <p className="text-vc-text-secondary">
+            Unable to load your feedback. Please try refreshing the page.
+          </p>
+          <button
+            onClick={() => { setError(false); setLoading(true); window.location.reload(); }}
+            className="mt-3 rounded-lg bg-vc-coral px-4 py-2 text-sm font-semibold text-white hover:bg-vc-coral/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-vc-border-light bg-vc-bg-warm p-12 text-center">
           <svg className="mx-auto h-10 w-10 text-vc-text-muted/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />

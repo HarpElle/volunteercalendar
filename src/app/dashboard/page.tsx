@@ -596,6 +596,11 @@ export default function DashboardPage() {
                     }`}>{retention.thinBenchCount}</p>
                   </div>
                 </div>
+                {retention.isNewOrg && (
+                  <p className="mt-3 text-xs text-vc-text-muted italic">
+                    Metrics become meaningful as your team grows and schedules are published.
+                  </p>
+                )}
               </Link>
             </div>
           )}
