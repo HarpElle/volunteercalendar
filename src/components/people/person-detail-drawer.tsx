@@ -534,6 +534,25 @@ export function PersonDetailDrawer({
                       {m.name}
                     </button>
                   ))}
+                  {/* Orphaned ministry IDs (ministry was deleted) */}
+                  {selectedMinistries
+                    .filter((id) => !ministries.some((m) => m.id === id))
+                    .map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedMinistries((prev) => prev.filter((x) => x !== id))
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-vc-border bg-vc-bg-warm px-3 py-1.5 text-sm font-medium text-vc-text-muted transition-all min-h-[44px] hover:border-red-300 hover:text-red-500"
+                        title="This team was deleted. Click to remove."
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                        Unknown team (deleted)
+                      </button>
+                    ))}
                 </div>
               </div>
             )}
