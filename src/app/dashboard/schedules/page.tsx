@@ -126,8 +126,26 @@ export default function SchedulesPage() {
       const schedRef = await addChurchDocument(churchId, "schedules", scheduleData);
       const scheduleId = schedRef.id;
 
+      // Filter to selected ministries when scoped scheduling is requested
+      const scopedServices =
+        options.ministryIds.length > 0
+          ? services.filter((s) => {
+              const ids = [
+                s.ministry_id,
+                ...(s.ministries?.map((m) => m.ministry_id) ?? []),
+              ];
+              return options.ministryIds.some((id) => ids.includes(id));
+            })
+          : services;
+      const scopedVolunteers =
+        options.ministryIds.length > 0
+          ? volunteers.filter((v) =>
+              v.ministry_ids.some((id) => options.ministryIds.includes(id))
+            )
+          : volunteers;
+
       const result = generateDraftSchedule(
-        scheduleId, churchId, services, volunteers, households, options.startDate, options.endDate, ministries, orgPrerequisites,
+        scheduleId, churchId, scopedServices, scopedVolunteers, households, options.startDate, options.endDate, ministries, orgPrerequisites,
       );
 
       const savedAssignments: Assignment[] = [];
@@ -435,6 +453,7 @@ export default function SchedulesPage() {
         generating={generating}
         serviceCount={services.length}
         volunteerCount={volunteers.length}
+        ministries={ministries}
       />
 
       {/* Active schedule view */}

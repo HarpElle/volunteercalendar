@@ -5,12 +5,13 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { WorkflowMode } from "@/lib/types";
+import type { WorkflowMode, Ministry } from "@/lib/types";
 
 export interface CreateScheduleOptions {
   startDate: string;
   endDate: string;
   workflowMode: WorkflowMode;
+  ministryIds: string[];
   availabilityDueDate: string | null;
   availabilityMessage: string | null;
 }
@@ -22,6 +23,7 @@ interface CreateScheduleModalProps {
   generating: boolean;
   serviceCount: number;
   volunteerCount: number;
+  ministries: Ministry[];
 }
 
 function defaultStartDate() {
@@ -42,7 +44,7 @@ function defaultDueDate() {
   return d.toISOString().split("T")[0];
 }
 
-const STEPS = ["Workflow", "Coverage Period", "Review"] as const;
+const STEPS = ["Workflow", "Ministry Scope", "Coverage Period", "Review"] as const;
 
 export function CreateScheduleModal({
   open,
@@ -51,9 +53,11 @@ export function CreateScheduleModal({
   generating,
   serviceCount,
   volunteerCount,
+  ministries,
 }: CreateScheduleModalProps) {
   const [step, setStep] = useState(0);
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("centralized");
+  const [ministryIds, setMinistryIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
   const [collectAvailability, setCollectAvailability] = useState(false);
@@ -64,6 +68,7 @@ export function CreateScheduleModal({
     if (open) {
       setStep(0);
       setWorkflowMode("centralized");
+      setMinistryIds([]);
       setStartDate(defaultStartDate());
       setEndDate(defaultEndDate());
       setCollectAvailability(false);
@@ -78,18 +83,33 @@ export function CreateScheduleModal({
       startDate,
       endDate,
       workflowMode,
+      ministryIds,
       availabilityDueDate: collectAvailability ? availabilityDueDate : null,
       availabilityMessage: collectAvailability && availabilityMessage ? availabilityMessage : null,
     });
   }
 
   function canAdvance(): boolean {
-    if (step === 1) {
+    if (step === 2) {
       if (!startDate || !endDate) return false;
       if (collectAvailability && !availabilityDueDate) return false;
     }
     return true;
   }
+
+  function toggleMinistry(id: string) {
+    setMinistryIds((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  }
+
+  const selectedMinistryNames =
+    ministryIds.length === 0
+      ? "All Ministries"
+      : ministries
+          .filter((m) => ministryIds.includes(m.id))
+          .map((m) => m.name)
+          .join(", ");
 
   return (
     <Modal open={open} onClose={onClose} title="New Schedule" maxWidth="max-w-2xl">
@@ -149,8 +169,98 @@ export function CreateScheduleModal({
           </div>
         )}
 
-        {/* Step 2: Coverage Period + Availability */}
+        {/* Step 2: Ministry Scope */}
         {step === 1 && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-vc-text-secondary">
+                Schedule for all ministries or scope to specific teams.
+              </p>
+              {workflowMode === "ministry-first" && (
+                <p className="mt-1 text-xs text-vc-coral">
+                  Team-First mode: select the team you are scheduling on behalf of.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-vc-border-light bg-white divide-y divide-vc-border-light overflow-hidden">
+              {/* All Ministries option */}
+              <button
+                type="button"
+                onClick={() => setMinistryIds([])}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  ministryIds.length === 0
+                    ? "bg-vc-coral/5"
+                    : "hover:bg-vc-bg-warm/60"
+                }`}
+              >
+                <div
+                  className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    ministryIds.length === 0
+                      ? "border-vc-coral bg-vc-coral"
+                      : "border-vc-border"
+                  }`}
+                >
+                  {ministryIds.length === 0 && (
+                    <svg className="h-2.5 w-2.5 text-white" fill="currentColor" viewBox="0 0 12 12">
+                      <path d="M10 3L5 8.5 2 5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-vc-indigo">All Ministries</span>
+                  <p className="text-xs text-vc-text-muted">Generate a schedule covering every team</p>
+                </div>
+              </button>
+
+              {/* Individual ministries */}
+              {ministries.map((ministry) => {
+                const selected = ministryIds.includes(ministry.id);
+                return (
+                  <button
+                    key={ministry.id}
+                    type="button"
+                    onClick={() => toggleMinistry(ministry.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      selected ? "bg-vc-coral/5" : "hover:bg-vc-bg-warm/60"
+                    }`}
+                  >
+                    <div
+                      className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        selected ? "border-vc-coral bg-vc-coral" : "border-vc-border"
+                      }`}
+                    >
+                      {selected && (
+                        <svg className="h-2.5 w-2.5 text-white" fill="currentColor" viewBox="0 0 12 12">
+                          <path d="M10 3L5 8.5 2 5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: ministry.color }}
+                      />
+                      <span className="text-sm font-medium text-vc-indigo">{ministry.name}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <Button type="button" variant="ghost" onClick={() => setStep(0)}>
+                Back
+              </Button>
+              <Button type="button" onClick={() => setStep(2)}>
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Coverage Period + Availability */}
+        {step === 2 && (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -212,18 +322,18 @@ export function CreateScheduleModal({
             </div>
 
             <div className="flex justify-between pt-2">
-              <Button type="button" variant="ghost" onClick={() => setStep(0)}>
+              <Button type="button" variant="ghost" onClick={() => setStep(1)}>
                 Back
               </Button>
-              <Button type="button" onClick={() => setStep(2)} disabled={!canAdvance()}>
+              <Button type="button" onClick={() => setStep(3)} disabled={!canAdvance()}>
                 Next
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Review */}
-        {step === 2 && (
+        {/* Step 4: Review */}
+        {step === 3 && (
           <div className="space-y-4">
             <div className="rounded-xl border border-vc-border-light bg-white p-4 space-y-3">
               <div className="flex justify-between text-sm">
@@ -231,6 +341,10 @@ export function CreateScheduleModal({
                 <span className="font-medium text-vc-indigo">
                   {WORKFLOW_MODES.find((m) => m.value === workflowMode)?.label}
                 </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-vc-text-muted">Ministry Scope</span>
+                <span className="font-medium text-vc-indigo">{selectedMinistryNames}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-vc-text-muted">Coverage Period</span>
@@ -261,7 +375,7 @@ export function CreateScheduleModal({
             )}
 
             <div className="flex justify-between pt-2">
-              <Button type="button" variant="ghost" onClick={() => setStep(1)}>
+              <Button type="button" variant="ghost" onClick={() => setStep(2)}>
                 Back
               </Button>
               <Button type="submit" loading={generating}>
