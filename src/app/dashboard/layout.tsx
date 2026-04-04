@@ -160,6 +160,7 @@ export default function DashboardLayout({
       <BottomNav
         isAdmin={userIsAdmin || userIsScheduler}
         worshipEnabled={worshipEnabled}
+        checkinEnabled={checkinEnabled}
         hasUnreadNotifications={hasUnread}
         onMoreOpen={() => setMoreMenuOpen(true)}
       />
@@ -173,6 +174,7 @@ export default function DashboardLayout({
         onClose={() => setMoreMenuOpen(false)}
         checkinEnabled={checkinEnabled}
         roomsEnabled={roomsEnabled}
+        worshipEnabled={worshipEnabled}
         hasUnreadNotifications={hasUnread}
         isAdmin={userIsAdmin}
         onSignOut={handleSignOut}

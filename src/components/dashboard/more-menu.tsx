@@ -13,6 +13,7 @@ export interface MoreMenuProps {
   onClose: () => void;
   checkinEnabled: boolean;
   roomsEnabled: boolean;
+  worshipEnabled: boolean;
   hasUnreadNotifications: boolean;
   isAdmin: boolean;
   onSignOut: () => Promise<void>;
@@ -95,6 +96,7 @@ export function MoreMenu({
   onClose,
   checkinEnabled,
   roomsEnabled,
+  worshipEnabled,
   hasUnreadNotifications,
   isAdmin,
   onSignOut,
@@ -161,6 +163,28 @@ export function MoreMenu({
           </ExpandableSection>
         )}
 
+        {worshipEnabled && isAdmin && (
+          <ExpandableSection
+            label="Worship"
+            iconPath="m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z"
+          >
+            <Link
+              href="/dashboard/worship/plans"
+              onClick={onClose}
+              className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
+            >
+              Service Plans
+            </Link>
+            <Link
+              href="/dashboard/worship/songs"
+              onClick={onClose}
+              className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
+            >
+              Songs
+            </Link>
+          </ExpandableSection>
+        )}
+
         {roomsEnabled && (
           <ExpandableSection
             label="Rooms"
@@ -183,7 +207,7 @@ export function MoreMenu({
           </ExpandableSection>
         )}
 
-        {(checkinEnabled || roomsEnabled) && (
+        {(checkinEnabled || roomsEnabled || worshipEnabled) && (
           <div className="mx-5 border-t border-vc-border-light" />
         )}
 
