@@ -21,6 +21,7 @@ import type {
   ScheduleStatus,
   Service,
   Volunteer,
+  Person,
   Ministry,
   Household,
   Assignment,
@@ -32,6 +33,7 @@ import type {
 } from "@/lib/types";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 const VALID_TRANSITIONS: Record<string, ScheduleStatus[]> = {
   draft: ["in_review"],
@@ -72,17 +74,29 @@ export default function SchedulesPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [scheds, svcs, vols, mins, hhs, churchSnap] = await Promise.all([
+        const [scheds, svcs, peopleOrVols, mins, hhs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "services"),
-          getChurchDocuments(churchId!, "volunteers"),
+          // Read from `people` collection (unified); fall back to `volunteers` if empty
+          getChurchDocuments(churchId!, "people").then((docs) =>
+            docs.length > 0 ? docs : getChurchDocuments(churchId!, "volunteers"),
+          ),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "households").catch(() => []),
           getDoc(doc(db, "churches", churchId!)),
         ]);
         setSchedules(scheds as unknown as Schedule[]);
         setServices(svcs as unknown as Service[]);
-        setVolunteers((vols as unknown as Volunteer[]).filter(v => v.status === "active"));
+        // Convert Person docs to legacy Volunteer shape if reading from people collection
+        const rawDocs = peopleOrVols as unknown as (Person | Volunteer)[];
+        const asVolunteers = rawDocs
+          .filter((d) => {
+            // Person docs have person_type; legacy Volunteer docs don't
+            if ("person_type" in d) return (d as Person).is_volunteer && (d as Person).status === "active";
+            return (d as Volunteer).status === "active";
+          })
+          .map((d) => ("person_type" in d ? personToLegacyVolunteer(d as Person) : (d as Volunteer)));
+        setVolunteers(asVolunteers);
         setMinistries(mins as unknown as Ministry[]);
         setHouseholds(hhs as unknown as Household[]);
         if (churchSnap.exists()) {

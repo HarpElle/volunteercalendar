@@ -61,15 +61,21 @@ export async function GET(request: Request) {
     const assignSnap = await getDocs(assignmentsRef);
     let assignments = assignSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Fetch services and ministries for event details
-    const [servicesSnap, ministriesSnap, volunteersSnap] = await Promise.all([
+    // Fetch services, ministries, and people for event details
+    // Read from `people` collection (unified); fall back to `volunteers` if empty
+    const [servicesSnap, ministriesSnap, peopleSnap, volunteersSnap] = await Promise.all([
       getDocs(collection(db, "churches", churchId, "services")),
       getDocs(collection(db, "churches", churchId, "ministries")),
+      getDocs(collection(db, "churches", churchId, "people")),
       getDocs(collection(db, "churches", churchId, "volunteers")),
     ]);
     const serviceMap = new Map(servicesSnap.docs.map((d) => [d.id, d.data()]));
     const ministryMap = new Map(ministriesSnap.docs.map((d) => [d.id, d.data()]));
+    // Merge people + volunteers maps (people take precedence for shared IDs)
     const volunteerMap = new Map(volunteersSnap.docs.map((d) => [d.id, d.data()]));
+    for (const d of peopleSnap.docs) {
+      volunteerMap.set(d.id, d.data());
+    }
 
     // Filter based on feed type
     let calendarName = `${churchName} - Volunteer Schedule`;
@@ -77,7 +83,10 @@ export async function GET(request: Request) {
     const targetId = feed.target_id as string;
 
     if (feedType === "personal") {
-      assignments = assignments.filter((a) => (a as Record<string, unknown>).volunteer_id === targetId);
+      assignments = assignments.filter((a) => {
+        const data = a as Record<string, unknown>;
+        return (data.person_id ?? data.volunteer_id) === targetId;
+      });
       const vol = volunteerMap.get(targetId);
       calendarName = `${(vol as Record<string, unknown>)?.name || "My"} Schedule - ${churchName}`;
     } else if (feedType === "ministry") {
@@ -137,7 +146,8 @@ export async function GET(request: Request) {
         for (const a of groupAssignments) {
           const data = a as Record<string, unknown>;
           const roleTitle = (data.role_title as string) || "Unknown Role";
-          const volName = ((volunteerMap.get(data.volunteer_id as string) as Record<string, unknown>)?.name as string) || "Unknown";
+          const personOrVolId = (data.person_id ?? data.volunteer_id) as string;
+          const volName = ((volunteerMap.get(personOrVolId) as Record<string, unknown>)?.name as string) || "Unknown";
           if (!roleMap.has(roleTitle)) roleMap.set(roleTitle, []);
           roleMap.get(roleTitle)!.push(volName);
         }

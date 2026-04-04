@@ -19,7 +19,9 @@ import type {
   ServiceRole,
   Ministry,
   Volunteer,
+  Person,
 } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -96,12 +98,23 @@ export function ServicesList({
     if (!churchId) return;
     Promise.all([
       getChurchDocuments(churchId, "services"),
-      getChurchDocuments(churchId, "volunteers"),
+      // Read from `people` (unified); fall back to `volunteers` if empty
+      getChurchDocuments(churchId, "people").then((docs) =>
+        docs.length > 0 ? docs : getChurchDocuments(churchId!, "volunteers"),
+      ),
       getChurchDocuments(churchId, "campuses"),
     ])
-      .then(([svcs, vols, camps]) => {
+      .then(([svcs, peopleOrVols, camps]) => {
         setServices(svcs as unknown as Service[]);
-        setVolunteers((vols as unknown as Volunteer[]).filter((v) => v.status === "active"));
+        const rawDocs = peopleOrVols as unknown as (Person | Volunteer)[];
+        setVolunteers(
+          rawDocs
+            .filter((d) => {
+              if ("person_type" in d) return (d as Person).is_volunteer && (d as Person).status === "active";
+              return (d as Volunteer).status === "active";
+            })
+            .map((d) => ("person_type" in d ? personToLegacyVolunteer(d as Person) : (d as Volunteer))),
+        );
         setCampuses((camps as unknown as { id: string; name: string }[]).map((c) => ({ id: c.id, name: c.name })));
       })
       .catch(() => {})

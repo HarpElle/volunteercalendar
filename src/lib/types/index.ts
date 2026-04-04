@@ -625,6 +625,8 @@ export interface Assignment {
   event_id: string | null;
   service_date: string;
   volunteer_id: string;
+  /** Unified Person ID. During migration, falls back to volunteer_id. */
+  person_id?: string;
   role_id: string;
   role_title: string;
   ministry_id: string;

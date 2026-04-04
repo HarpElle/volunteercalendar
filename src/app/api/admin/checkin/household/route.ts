@@ -6,6 +6,9 @@ import type { CheckInHousehold } from "@/lib/types";
 /**
  * GET /api/admin/checkin/household?church_id=...
  * List all households for a church. Includes children_count.
+ *
+ * Reads from unified `households` + `people` when available,
+ * falling back to legacy `checkin_households` + `children`.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -33,13 +36,73 @@ export async function GET(req: NextRequest) {
 
     const churchRef = adminDb.collection("churches").doc(churchId);
 
-    // Fetch all households
+    // Detect whether unified `people` collection is populated
+    const peopleSample = await churchRef.collection("people").limit(1).get();
+    const useUnified = !peopleSample.empty;
+
+    if (useUnified) {
+      // Read from unified households + people collections
+      const [hhSnap, childrenSnap] = await Promise.all([
+        churchRef.collection("households").orderBy("name").get(),
+        churchRef
+          .collection("people")
+          .where("person_type", "==", "child")
+          .where("status", "==", "active")
+          .get(),
+      ]);
+
+      // Count children per household via household_ids array
+      const countMap = new Map<string, number>();
+      for (const doc of childrenSnap.docs) {
+        const hhIds = doc.data().household_ids as string[] | undefined;
+        if (hhIds) {
+          for (const hid of hhIds) {
+            countMap.set(hid, (countMap.get(hid) || 0) + 1);
+          }
+        }
+      }
+
+      // Find primary adult per household for guardian name
+      const adultsSnap = await churchRef
+        .collection("people")
+        .where("person_type", "==", "adult")
+        .where("status", "==", "active")
+        .get();
+
+      const adultsByHousehold = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      for (const doc of adultsSnap.docs) {
+        const hhIds = doc.data().household_ids as string[] | undefined;
+        if (hhIds) {
+          for (const hid of hhIds) {
+            if (!adultsByHousehold.has(hid)) adultsByHousehold.set(hid, doc);
+          }
+        }
+      }
+
+      const households = hhSnap.docs.map((doc) => {
+        const data = doc.data();
+        const adult = adultsByHousehold.get(doc.id)?.data();
+        return {
+          id: doc.id,
+          primary_guardian_name: adult?.name || data.name || "Unknown",
+          primary_guardian_phone: adult?.phone || null,
+          secondary_guardian_name: null,
+          qr_token: data.qr_token || null,
+          children_count: countMap.get(doc.id) || 0,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        };
+      });
+
+      return NextResponse.json({ households });
+    }
+
+    // Legacy: read from checkin_households + children
     const householdsSnap = await churchRef
       .collection("checkin_households")
       .orderBy("primary_guardian_name")
       .get();
 
-    // Fetch children counts
     const childrenSnap = await churchRef
       .collection("children")
       .where("is_active", "==", true)
@@ -121,6 +184,126 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date().toISOString();
+    const churchRef = adminDb.collection("churches").doc(church_id);
+
+    // Detect whether unified `people` collection is populated
+    const peopleSample = await churchRef.collection("people").limit(1).get();
+    const useUnified = !peopleSample.empty;
+
+    if (useUnified) {
+      // Create unified household + adult Person docs
+      const householdId = adminDb.collection("_").doc().id;
+      const qrToken = randomBytes(16).toString("hex");
+
+      const hhData: Record<string, unknown> = {
+        id: householdId,
+        church_id,
+        name: primary_guardian_name,
+        qr_token: qrToken,
+        created_at: now,
+        updated_at: now,
+      };
+      await churchRef.collection("households").doc(householdId).set(hhData);
+
+      // Create primary guardian as Person
+      const phoneDigits = normalizedPhone.replace(/\D/g, "");
+      const nameParts = primary_guardian_name.split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      const primaryPerson: Record<string, unknown> = {
+        church_id,
+        person_type: "adult",
+        first_name: firstName,
+        last_name: lastName,
+        preferred_name: null,
+        name: primary_guardian_name,
+        search_name: primary_guardian_name.toLowerCase(),
+        email: null,
+        phone: normalizedPhone,
+        search_phones: [phoneDigits],
+        photo_url: null,
+        user_id: null,
+        membership_id: null,
+        status: "active",
+        is_volunteer: false,
+        ministry_ids: [],
+        role_ids: [],
+        campus_ids: [],
+        household_ids: [householdId],
+        scheduling_profile: null,
+        child_profile: null,
+        stats: null,
+        imported_from: "manual",
+        background_check: null,
+        role_constraints: null,
+        volunteer_journey: null,
+        qr_token: null,
+        created_at: now,
+        updated_at: now,
+      };
+      await churchRef.collection("people").add(primaryPerson);
+
+      // Create secondary guardian if provided
+      if (secondary_guardian_name) {
+        const secNameParts = secondary_guardian_name.split(" ");
+        const secPerson: Record<string, unknown> = {
+          church_id,
+          person_type: "adult",
+          first_name: secNameParts[0] || "",
+          last_name: secNameParts.slice(1).join(" ") || "",
+          preferred_name: null,
+          name: secondary_guardian_name,
+          search_name: secondary_guardian_name.toLowerCase(),
+          email: null,
+          phone: secondary_guardian_phone ? normalizePhone(secondary_guardian_phone) : null,
+          search_phones: secondary_guardian_phone
+            ? [normalizePhone(secondary_guardian_phone)?.replace(/\D/g, "") || ""]
+            : [],
+          photo_url: null,
+          user_id: null,
+          membership_id: null,
+          status: "active",
+          is_volunteer: false,
+          ministry_ids: [],
+          role_ids: [],
+          campus_ids: [],
+          household_ids: [householdId],
+          scheduling_profile: null,
+          child_profile: null,
+          stats: null,
+          imported_from: "manual",
+          background_check: null,
+          role_constraints: null,
+          volunteer_journey: null,
+          qr_token: null,
+          created_at: now,
+          updated_at: now,
+        };
+        await churchRef.collection("people").add(secPerson);
+      }
+
+      // Return in legacy-compatible shape for the admin UI
+      const result: Record<string, unknown> = {
+        id: householdId,
+        church_id,
+        primary_guardian_name,
+        primary_guardian_phone: normalizedPhone,
+        qr_token: qrToken,
+        imported_from: "manual",
+        created_at: now,
+        updated_at: now,
+        created_by: userId,
+      };
+      if (secondary_guardian_name) result.secondary_guardian_name = secondary_guardian_name;
+      if (secondary_guardian_phone) {
+        const ns = normalizePhone(secondary_guardian_phone);
+        if (ns) result.secondary_guardian_phone = ns;
+      }
+      return NextResponse.json(result, { status: 201 });
+    }
+
+    // Legacy: write to checkin_households
     const householdId = adminDb.collection("_").doc().id;
 
     const household: Record<string, unknown> = {
@@ -146,9 +329,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await adminDb
-      .collection("churches")
-      .doc(church_id)
+    await churchRef
       .collection("checkin_households")
       .doc(householdId)
       .set(household);

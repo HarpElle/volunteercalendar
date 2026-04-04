@@ -403,6 +403,7 @@ export function generateDraftSchedule(
               signup_type: "scheduled" as const,
               service_date: date,
               volunteer_id: bestVolunteer.id,
+              person_id: bestVolunteer.id,
               role_id: role.role_id,
               role_title: role.title,
               ministry_id: sm.ministry_id,
