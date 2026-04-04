@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { sendEmail, orgFrom } from "@/lib/services/email";
 import type { FeedbackItem, FeedbackStatus, FeedbackPriority, FeedbackDisposition } from "@/lib/types";
 
 /**
@@ -161,12 +162,50 @@ export async function POST(req: NextRequest) {
       resolved_at: null,
       admin_response: null,
       admin_response_at: null,
+      internal_notes: null,
       created_at: now,
       updated_at: now,
       is_sunday_incident: is_sunday_incident || false,
     };
 
     const newDoc = await feedbackRef.add(feedbackData);
+
+    // Fire-and-forget: notify admins via email
+    const isCritical = feedbackData.priority === "critical";
+    const subjectPrefix = is_sunday_incident ? "SUNDAY INCIDENT" : isCritical ? "CRITICAL" : "New";
+    const adminNotifSubject = `[Feedback] ${subjectPrefix}: ${title}`;
+
+    // Find admin emails for this church
+    adminDb
+      .collection("memberships")
+      .where("church_id", "==", church_id)
+      .where("status", "==", "active")
+      .where("role", "in", ["admin", "owner"])
+      .get()
+      .then(async (adminSnap) => {
+        const adminUserIds = adminSnap.docs.map((d) => d.data().user_id as string);
+        for (const uid of adminUserIds) {
+          try {
+            const uDoc = await adminDb.collection("users").doc(uid).get();
+            const email = uDoc.data()?.email as string | undefined;
+            if (email) {
+              await sendEmail({
+                to: email,
+                subject: adminNotifSubject,
+                html: `
+                  <h2>${title}</h2>
+                  <p><strong>Category:</strong> ${category} | <strong>Priority:</strong> ${feedbackData.priority}</p>
+                  <p><strong>From:</strong> ${feedbackData.submitted_by_name} (${feedbackData.submitted_by_role})</p>
+                  <p>${description.slice(0, 500)}${description.length > 500 ? "..." : ""}</p>
+                  <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com"}/dashboard/admin/feedback">Open Triage Dashboard</a></p>
+                `,
+                text: `${title}\nCategory: ${category} | Priority: ${feedbackData.priority}\nFrom: ${feedbackData.submitted_by_name}\n\n${description.slice(0, 500)}`,
+              });
+            }
+          } catch { /* silent */ }
+        }
+      })
+      .catch(() => {});
 
     return NextResponse.json({ id: newDoc.id, ...feedbackData }, { status: 201 });
   } catch (error) {
@@ -234,7 +273,7 @@ export async function PATCH(req: NextRequest) {
     const allowedFields: (keyof FeedbackItem)[] = [
       "status", "priority", "disposition", "category",
       "assigned_to", "tags", "admin_response", "resolution_notes",
-      "duplicate_of_id",
+      "duplicate_of_id", "internal_notes",
     ];
 
     for (const field of allowedFields) {
@@ -287,6 +326,36 @@ export async function PATCH(req: NextRequest) {
     }
 
     await batch.commit();
+
+    // Fire-and-forget: notify submitter when admin responds or resolves
+    const newStatus = updates.status as FeedbackStatus | undefined;
+    const hasNewResponse = updates.admin_response && updates.admin_response !== existingData.admin_response;
+    const isResolved = newStatus === "resolved" || newStatus === "wont_do";
+
+    if (hasNewResponse || isResolved) {
+      const submitterEmail = existingData.submitted_by_email as string;
+      if (submitterEmail) {
+        const churchDoc = await adminDb.collection("churches").doc(church_id).get();
+        const churchName = churchDoc.exists ? (churchDoc.data()!.name as string) || "Your Church" : "Your Church";
+
+        const emailSubject = isResolved && !hasNewResponse
+          ? `Your feedback "${existingData.title}" has been resolved`
+          : `Response to your feedback: "${existingData.title}"`;
+
+        sendEmail({
+          to: submitterEmail,
+          subject: emailSubject,
+          from: orgFrom(churchName),
+          html: `
+            <h2>${existingData.title}</h2>
+            ${hasNewResponse ? `<p><strong>Admin response:</strong></p><p>${updates.admin_response}</p>` : ""}
+            ${isResolved ? `<p>This item has been marked as <strong>${newStatus === "resolved" ? "resolved" : "won't do"}</strong>.</p>` : ""}
+            <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com"}/dashboard/feedback">View your feedback</a></p>
+          `,
+          text: `${existingData.title}\n${hasNewResponse ? `Admin response: ${updates.admin_response}\n` : ""}${isResolved ? `Status: ${newStatus}\n` : ""}`,
+        }).catch(() => {});
+      }
+    }
 
     return NextResponse.json({ id: feedback_id, ...existingData, ...updateData });
   } catch (error) {

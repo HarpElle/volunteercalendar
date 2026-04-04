@@ -1714,6 +1714,8 @@ export interface FeedbackItem {
   // Submitter-visible response
   admin_response: string | null;
   admin_response_at: string | null;
+  /** Admin-only internal notes (not visible to submitter) */
+  internal_notes: string | null;
   // Metadata
   created_at: string;
   updated_at: string;

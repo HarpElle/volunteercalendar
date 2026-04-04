@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +78,8 @@ export default function AdminFeedbackPage() {
 
   // Inline edit state for selected item
   const [editResponse, setEditResponse] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [activities, setActivities] = useState<Array<{ id: string; type: string; actor_name: string; previous_value: string; new_value: string; created_at: string }>>([]);
 
   const loadFeedback = useCallback(async () => {
     if (!churchId || !user) return;
@@ -147,11 +150,19 @@ export default function AdminFeedbackPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-vc-indigo">Feedback Triage</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          {openCount} open &middot; {criticalCount > 0 ? `${criticalCount} critical` : "no critical items"}
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-3xl text-vc-indigo">Feedback Triage</h1>
+          <p className="mt-1 text-vc-text-secondary">
+            {openCount} open &middot; {criticalCount > 0 ? `${criticalCount} critical` : "no critical items"}
+          </p>
+        </div>
+        <Link
+          href="/dashboard/admin/feedback/insights"
+          className="rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
+        >
+          Insights
+        </Link>
       </div>
 
       {/* Filters */}
@@ -193,7 +204,21 @@ export default function AdminFeedbackPage() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setSelected(item); setEditResponse(item.admin_response || ""); }}
+                  onClick={() => {
+                    setSelected(item);
+                    setEditResponse(item.admin_response || "");
+                    setEditNotes(item.internal_notes || "");
+                    // Load activity timeline
+                    if (user && churchId) {
+                      user.getIdToken().then((token) =>
+                        fetch(`/api/feedback/activity?church_id=${churchId}&feedback_id=${item.id}`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        }).then((r) => r.ok ? r.json() : { activities: [] })
+                          .then((d) => setActivities(d.activities || []))
+                          .catch(() => setActivities([]))
+                      );
+                    }
+                  }}
                   className={`w-full text-left rounded-xl border p-4 transition-colors ${
                     selected?.id === item.id
                       ? "border-vc-coral bg-vc-coral/5"
@@ -379,6 +404,55 @@ export default function AdminFeedbackPage() {
                   {saving ? "Saving..." : "Send Response"}
                 </button>
               </div>
+
+              {/* Internal Notes (admin-only) */}
+              <div className="border-t border-vc-border-light pt-4">
+                <h3 className="text-xs font-semibold uppercase text-vc-text-muted mb-2">
+                  Internal Notes
+                  <span className="font-normal ml-1">(admin-only, not visible to submitter)</span>
+                </h3>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Private notes about this item..."
+                  rows={3}
+                  className="w-full rounded-lg border border-vc-border-light bg-vc-bg-warm/50 px-3.5 py-2.5 text-sm text-vc-indigo placeholder:text-vc-text-muted/60 focus:border-vc-indigo/50 focus:outline-none focus:ring-1 focus:ring-vc-indigo/30 resize-y"
+                />
+                {editNotes !== (selected.internal_notes || "") && (
+                  <button
+                    onClick={() => updateFeedback(selected.id, { internal_notes: editNotes.trim() || null })}
+                    disabled={saving}
+                    className="mt-2 rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-indigo hover:bg-vc-bg-warm disabled:opacity-50 transition-colors"
+                  >
+                    {saving ? "Saving..." : "Save Notes"}
+                  </button>
+                )}
+              </div>
+
+              {/* Activity Timeline */}
+              {activities.length > 0 && (
+                <div className="border-t border-vc-border-light pt-4">
+                  <h3 className="text-xs font-semibold uppercase text-vc-text-muted mb-3">Activity</h3>
+                  <div className="space-y-2">
+                    {activities.map((a) => (
+                      <div key={a.id} className="flex gap-2 text-xs text-vc-text-muted">
+                        <span className="shrink-0 text-vc-text-secondary font-medium">
+                          {a.actor_name || "System"}
+                        </span>
+                        <span>
+                          {a.type.replace(/_/g, " ")}
+                          {a.previous_value && a.new_value ? (
+                            <> from <em>{a.previous_value}</em> to <strong className="text-vc-indigo">{a.new_value}</strong></>
+                          ) : a.new_value ? (
+                            <> → <strong className="text-vc-indigo">{a.new_value}</strong></>
+                          ) : null}
+                        </span>
+                        <span className="ml-auto shrink-0">{timeAgo(a.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
