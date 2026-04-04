@@ -208,6 +208,17 @@ export async function updateMembershipRole(
   await updateDoc(doc(db, MEMBERSHIPS, membershipId), data);
 }
 
+/** Update a membership's permission flags. */
+export async function updateMembershipPermissions(
+  membershipId: string,
+  flags: Record<string, boolean>,
+): Promise<void> {
+  await updateDoc(doc(db, MEMBERSHIPS, membershipId), {
+    ...flags,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 /** Update a membership's reminder preferences. */
 export async function updateMembershipReminders(
   membershipId: string,

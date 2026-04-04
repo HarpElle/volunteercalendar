@@ -12,8 +12,9 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { normalizePhone, formatPhone } from "@/lib/utils/phone";
-import { updateChurchDocument } from "@/lib/firebase/firestore";
+import { updateChurchDocument, updateMembershipPermissions } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
+import type { PermissionFlag } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
   Volunteer,
@@ -31,6 +32,12 @@ const ROLE_LABELS: Record<OrgRole, string> = {
   scheduler: "Scheduler",
   volunteer: "Volunteer",
 };
+
+const PERMISSION_FLAGS: { flag: PermissionFlag; label: string; description: string }[] = [
+  { flag: "event_coordinator", label: "Event Coordinator", description: "Can create and manage events" },
+  { flag: "facility_coordinator", label: "Facility Coordinator", description: "Can manage rooms and resources" },
+  { flag: "checkin_volunteer", label: "Check-In Volunteer", description: "Can operate the check-in kiosk" },
+];
 
 const JOURNEY_STATUS_OPTIONS: { value: JourneyStepStatus; label: string }[] = [
   { value: "pending", label: "Not Started" },
@@ -96,6 +103,14 @@ export function PersonDetailDrawer({
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>(membership?.role || "volunteer");
   const [ministryScope, setMinistryScope] = useState<string[]>(membership?.ministry_scope || []);
 
+  // --- Permission flags ---
+  const [permFlags, setPermFlags] = useState<Record<PermissionFlag, boolean>>({
+    event_coordinator: !!membership?.event_coordinator,
+    facility_coordinator: !!membership?.facility_coordinator,
+    checkin_volunteer: !!membership?.checkin_volunteer,
+  });
+  const [savingPerms, setSavingPerms] = useState(false);
+
   // --- Collapsible sections ---
   const [dangerOpen, setDangerOpen] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
@@ -133,7 +148,13 @@ export function PersonDetailDrawer({
       setBgCheckExpiry(volunteer.background_check?.expires_at || "");
       setSelectedOrgRole(membership?.role || "volunteer");
       setMinistryScope(membership?.ministry_scope || []);
+      setPermFlags({
+        event_coordinator: !!membership?.event_coordinator,
+        facility_coordinator: !!membership?.facility_coordinator,
+        checkin_volunteer: !!membership?.checkin_volunteer,
+      });
       setSaving(false);
+      setSavingPerms(false);
     }
   }, [open, volunteer, membership]);
 
@@ -285,6 +306,22 @@ export function PersonDetailDrawer({
       setSelectedOrgRole("scheduler");
       setMinistryScope(nextScope);
       if (membership) onRoleChanged(membership, "scheduler", nextScope);
+    }
+  }
+
+  async function handlePermFlagToggle(flag: PermissionFlag) {
+    if (!membership) return;
+    const newValue = !permFlags[flag];
+    const updated = { ...permFlags, [flag]: newValue };
+    setPermFlags(updated);
+    setSavingPerms(true);
+    try {
+      await updateMembershipPermissions(membership.id, { [flag]: newValue });
+    } catch {
+      // Revert on failure
+      setPermFlags(permFlags);
+    } finally {
+      setSavingPerms(false);
     }
   }
 
@@ -886,6 +923,36 @@ export function PersonDetailDrawer({
                     </motion.div>
                   )}
                 </AnimatePresence>
+              </div>
+            )}
+
+            {/* Permission flags — admin/owner get all implicitly */}
+            {selectedOrgRole !== "owner" && selectedOrgRole !== "admin" && !isArchived && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold text-vc-text-muted">Permission flags</p>
+                <div className="space-y-2">
+                  {PERMISSION_FLAGS.map(({ flag, label, description }) => (
+                    <label
+                      key={flag}
+                      className="flex items-center gap-3 rounded-lg border border-vc-border-light bg-white px-4 py-3 cursor-pointer transition-colors hover:bg-vc-bg-warm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={permFlags[flag]}
+                        onChange={() => handlePermFlagToggle(flag)}
+                        disabled={savingPerms}
+                        className="h-4 w-4 rounded border-vc-border text-vc-coral accent-vc-coral focus:ring-vc-coral/30"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-medium text-vc-text">{label}</span>
+                        <p className="text-[11px] text-vc-text-muted">{description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-vc-text-muted italic">
+                  Admins and owners have all permissions automatically.
+                </p>
               </div>
             )}
           </section>
