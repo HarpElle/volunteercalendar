@@ -66,13 +66,23 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Build query: where() before orderBy() so Firestore correctly matches composite index
+    // For scope=mine, use only where() (no orderBy) to avoid composite index requirement.
+    // We sort in JS instead — feedback volume per user is small.
     let query: FirebaseFirestore.Query = scope === "mine"
-      ? feedbackRef.where("submitted_by_user_id", "==", caller.uid).orderBy("created_at", "desc")
+      ? feedbackRef.where("submitted_by_user_id", "==", caller.uid)
       : feedbackRef.orderBy("created_at", "desc");
 
     const snap = await query.limit(200).get();
     let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Sort by created_at descending (needed for scope=mine since we skip orderBy)
+    if (scope === "mine") {
+      items.sort((a, b) => {
+        const aDate = (a as Record<string, unknown>).created_at as string || "";
+        const bDate = (b as Record<string, unknown>).created_at as string || "";
+        return bDate.localeCompare(aDate);
+      });
+    }
 
     // Client-side filters (Firestore doesn't allow multiple inequality/orderBy combos easily)
     if (statusFilter) {
