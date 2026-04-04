@@ -55,8 +55,37 @@ function getNavSections(
   roomsEnabled: boolean,
   hasPrerequisites: boolean,
   hasUnreadNotifications: boolean,
+  isPlatformAdmin: boolean,
 ): NavSection[] {
   return [
+    /* ── Platform (superadmin only) ── */
+    ...(isPlatformAdmin
+      ? [
+          {
+            label: "PLATFORM",
+            items: [
+              {
+                label: "Overview",
+                href: "/dashboard/platform",
+                iconPath:
+                  "M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6",
+              },
+              {
+                label: "Feedback",
+                href: "/dashboard/platform/feedback",
+                iconPath:
+                  "M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
+              },
+              {
+                label: "Organizations",
+                href: "/dashboard/platform/orgs",
+                iconPath:
+                  "M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z",
+              },
+            ],
+          },
+        ]
+      : []),
     /* ── Home ── */
     {
       label: "HOME",
@@ -356,6 +385,7 @@ export interface SidebarProps {
   userPhotoUrl?: string | null;
   hasPrerequisites?: boolean;
   signOut: () => Promise<void>;
+  isPlatformAdmin?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -478,6 +508,7 @@ export function Sidebar({
   userPhotoUrl,
   hasPrerequisites,
   signOut,
+  isPlatformAdmin,
 }: SidebarProps) {
   const pathname = usePathname();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -502,7 +533,7 @@ export function Sidebar({
   }, [accountMenuOpen]);
 
   // Build and filter nav sections
-  const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled, !!hasPrerequisites, !!hasUnreadNotifications);
+  const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled, !!hasPrerequisites, !!hasUnreadNotifications, !!isPlatformAdmin);
   const visibleSections = navSections
     .map((section) => {
       if (section.gate && !section.gate(activeMembership)) return null;

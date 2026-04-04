@@ -33,6 +33,7 @@ export default function DashboardLayout({
   const [hasPrerequisites, setHasPrerequisites] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("free");
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   // Register service worker for PWA + push notifications
   useServiceWorker();
@@ -83,6 +84,16 @@ export default function DashboardLayout({
     }
     loadOrgNames();
   }, [hasMultipleOrgs, memberships]);
+
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token) => {
+      fetch("/api/platform/me", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => setIsPlatformAdmin(d.is_platform_admin === true))
+        .catch(() => {});
+    });
+  }, [user]);
 
   const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
   const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
@@ -141,6 +152,7 @@ export default function DashboardLayout({
         userPhotoUrl={profile?.photo_url}
         hasPrerequisites={hasPrerequisites}
         signOut={handleSignOut}
+        isPlatformAdmin={isPlatformAdmin}
       />
 
       {/* Main content */}

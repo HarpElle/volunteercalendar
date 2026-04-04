@@ -363,6 +363,26 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // Handle platform escalation (one-way: org admin can escalate but not de-escalate)
+    if (updates.escalate_to_platform === true && !existingData.escalated_to_platform) {
+      updateData.escalated_to_platform = true;
+      updateData.escalated_at = now;
+      updateData.escalated_by = caller.uid;
+      if (!updateData.platform_status) {
+        updateData.platform_status = "pending";
+      }
+      activities.push({
+        feedback_id,
+        type: "escalated_to_platform",
+        actor_user_id: caller.uid,
+        actor_name: actorName,
+        previous_value: "",
+        new_value: "true",
+        comment: null,
+        created_at: now,
+      });
+    }
+
     // Batch: update feedback + add activities
     const batch = adminDb.batch();
     batch.update(feedbackRef, updateData);
@@ -402,6 +422,28 @@ export async function PATCH(req: NextRequest) {
           text: `${existingData.title}\n${hasNewResponse ? `Admin response: ${updates.admin_response}\n` : ""}${isResolved ? `Status: ${newStatus}\n` : ""}`,
         }).catch(() => {});
       }
+    }
+
+    // Fire-and-forget: notify platform team when feedback is escalated
+    if (updates.escalate_to_platform === true && !existingData.escalated_to_platform) {
+      (async () => {
+        try {
+          const churchDoc = await adminDb.collection("churches").doc(church_id).get();
+          const churchName = churchDoc.exists ? (churchDoc.data()!.name as string) || "Unknown Org" : "Unknown Org";
+          await sendEmail({
+            to: "info@volunteercal.com",
+            subject: `[Escalated] ${existingData.title}`,
+            html: `
+              <h2>${existingData.title}</h2>
+              <p><strong>Escalated by:</strong> ${actorName} (${role})</p>
+              <p><strong>Org:</strong> ${churchName} (${church_id})</p>
+              <p><strong>Category:</strong> ${existingData.category} | <strong>Priority:</strong> ${existingData.priority}</p>
+              <p>${(existingData.description as string || "").slice(0, 500)}</p>
+            `,
+            text: `Escalated: ${existingData.title}\nBy: ${actorName}\nOrg: ${churchName}\n\n${(existingData.description as string || "").slice(0, 500)}`,
+          });
+        } catch { /* silent */ }
+      })();
     }
 
     return NextResponse.json({ id: feedback_id, ...updateData });

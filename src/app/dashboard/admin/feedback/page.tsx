@@ -235,6 +235,11 @@ export default function AdminFeedbackPage() {
                         {item.is_sunday_incident && (
                           <span className="text-[10px] font-bold text-vc-danger uppercase">Sunday</span>
                         )}
+                        {(item.escalated_to_platform || item.platform_feedback) && (
+                          <span className="text-[10px] font-medium text-vc-coral">
+                            {item.escalated_to_platform ? "Escalated" : "Sent to Product"}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-medium text-vc-indigo truncate">{item.title}</p>
                       <p className="mt-0.5 text-xs text-vc-text-muted truncate">
@@ -378,6 +383,74 @@ export default function AdminFeedbackPage() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Platform Escalation */}
+              <div className="border-t border-vc-border-light pt-4">
+                {selected.escalated_to_platform ? (
+                  <div className="rounded-lg bg-vc-indigo/5 border border-vc-indigo/20 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <svg className="h-4 w-4 text-vc-indigo" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5" />
+                      </svg>
+                      <span className="text-xs font-semibold text-vc-indigo">Escalated to Product Team</span>
+                      {selected.platform_status && (
+                        <Badge variant={
+                          selected.platform_status === "shipped" ? "success"
+                          : selected.platform_status === "wont_fix" ? "danger"
+                          : selected.platform_status === "planned" ? "warning"
+                          : selected.platform_status === "reviewing" ? "accent"
+                          : "default"
+                        }>
+                          {selected.platform_status === "wont_fix" ? "Won't Fix" : selected.platform_status.charAt(0).toUpperCase() + selected.platform_status.slice(1)}
+                        </Badge>
+                      )}
+                    </div>
+                    {selected.platform_response && (
+                      <div className="mt-2 rounded-lg bg-white border border-vc-border-light px-3 py-2">
+                        <p className="text-xs font-semibold text-vc-sage mb-1">Product Team Response</p>
+                        <p className="text-sm text-vc-text-secondary">{selected.platform_response}</p>
+                        {selected.platform_response_at && (
+                          <p className="text-xs text-vc-text-muted mt-1">{timeAgo(selected.platform_response_at)}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : selected.platform_feedback ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-vc-text-muted">
+                      This {selected.category === "bug" ? "bug report" : "feature request"} was automatically shared with the product team.
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (confirm("Escalate this item to the Product Team for direct attention?")) {
+                          updateFeedback(selected.id, { escalate_to_platform: true });
+                        }
+                      }}
+                      disabled={saving}
+                      className="shrink-0 rounded-lg border border-vc-indigo/30 bg-vc-indigo/5 px-3 py-1.5 text-xs font-semibold text-vc-indigo hover:bg-vc-indigo/10 disabled:opacity-50 transition-colors"
+                    >
+                      Escalate to Product
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-vc-text-muted">
+                      Need the product team to look at this?
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (confirm("Escalate this item to the Product Team for direct attention?")) {
+                          updateFeedback(selected.id, { escalate_to_platform: true });
+                        }
+                      }}
+                      disabled={saving}
+                      className="shrink-0 rounded-lg border border-vc-indigo/30 bg-vc-indigo/5 px-3 py-1.5 text-xs font-semibold text-vc-indigo hover:bg-vc-indigo/10 disabled:opacity-50 transition-colors"
+                    >
+                      Escalate to Product
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Admin Response */}

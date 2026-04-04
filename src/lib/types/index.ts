@@ -1723,6 +1723,18 @@ export interface FeedbackItem {
   is_sunday_incident?: boolean;
   /** True if a copy was forwarded to the platform team (bugs & feature requests) */
   platform_feedback?: boolean;
+  // Platform escalation
+  escalated_to_platform?: boolean;
+  escalated_at?: string | null;
+  escalated_by?: string | null;
+  // Platform admin triage
+  platform_status?: "pending" | "reviewing" | "planned" | "shipped" | "wont_fix" | null;
+  platform_response?: string | null;
+  platform_response_at?: string | null;
+  platform_response_by?: string | null;
+  platform_internal_notes?: string | null;
+  platform_priority?: FeedbackPriority | null;
+  platform_tags?: string[];
 }
 
 export type FeedbackActivityType =
@@ -1734,7 +1746,11 @@ export type FeedbackActivityType =
   | "admin_response"
   | "assignment_change"
   | "tag_change"
-  | "duplicate_linked";
+  | "duplicate_linked"
+  | "escalated_to_platform"
+  | "platform_status_change"
+  | "platform_response"
+  | "platform_priority_change";
 
 export interface FeedbackActivity {
   id: string;
@@ -1746,4 +1762,28 @@ export interface FeedbackActivity {
   new_value: string | null;
   comment: string | null;
   created_at: string;
+}
+
+// --- Platform Stats ---
+
+export interface PlatformStats {
+  total_orgs: number;
+  new_orgs_30d: number;
+  new_orgs_60d: number;
+  new_orgs_90d: number;
+  tier_distribution: Record<SubscriptionTier, number>;
+  total_people: number;
+  total_volunteers: number;
+  new_people_30d: number;
+  new_people_60d: number;
+  new_people_90d: number;
+  total_assignments: number;
+  total_feedback: number;
+  open_platform_feedback: number;
+  feature_adoption: {
+    worship_enabled: number;
+    checkin_enabled: number;
+    rooms_enabled: number;
+  };
+  computed_at: string;
 }
