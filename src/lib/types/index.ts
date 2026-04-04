@@ -1447,6 +1447,32 @@ export interface RoomSettings {
 
 export type PermissionFlag = "event_coordinator" | "facility_coordinator" | "checkin_volunteer";
 
+// ─── Background Check Integration ─────────────────────────────────────────
+
+export type BackgroundCheckStatus = "cleared" | "pending" | "failed" | "expired" | "not_required";
+
+/**
+ * Interface for pluggable background check providers.
+ * Implement this for Protect My Ministry, Checkr, Sterling, etc.
+ */
+export interface BackgroundCheckProvider {
+  /** Provider display name (e.g. "Protect My Ministry") */
+  name: string;
+  /** Initiate a background check for a person */
+  initiateCheck(person: { id: string; name: string; email: string }): Promise<{
+    checkId: string;
+    status: "pending";
+  }>;
+  /** Poll for status update on an existing check */
+  getStatus(checkId: string): Promise<{
+    status: BackgroundCheckStatus;
+    expiresAt?: string;
+    details?: string;
+  }>;
+  /** Optional: generate a link for the candidate to complete their check */
+  getCandidateUrl?(checkId: string): Promise<string | null>;
+}
+
 // ─── Person Types ──────────────────────────────────────────────────────────
 
 export type PersonType = "adult" | "child";
