@@ -7,7 +7,8 @@ import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import type { Volunteer, Assignment } from "@/lib/types";
+import type { Volunteer, Assignment, Person } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 // --- Helpers ---
 
@@ -113,11 +114,25 @@ export default function VolunteerHealthPage() {
     if (!churchId) { setLoading(false); return; }
     async function load() {
       try {
-        const [volDocs, assignDocs] = await Promise.all([
+        const [peopleDocs, volDocs, assignDocs] = await Promise.all([
+          getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "assignments"),
         ]);
-        setVolunteers((volDocs as unknown as Volunteer[]).filter((v) => v.status === "active"));
+
+        // Prefer unified `people` collection when populated
+        let vols: Volunteer[];
+        if (peopleDocs.length > 0) {
+          vols = (peopleDocs as unknown as Record<string, unknown>[])
+            .filter((d) => d.is_volunteer === true && d.status === "active")
+            .map((d) => {
+              if ("person_type" in d) return personToLegacyVolunteer(d as unknown as Person);
+              return d as unknown as Volunteer;
+            });
+        } else {
+          vols = (volDocs as unknown as Volunteer[]).filter((v) => v.status === "active");
+        }
+        setVolunteers(vols);
         setAssignments(assignDocs as unknown as Assignment[]);
       } catch {
         // silent

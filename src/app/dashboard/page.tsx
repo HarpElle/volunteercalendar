@@ -7,9 +7,11 @@ import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
-import type { Schedule, Assignment, Service, Volunteer, Ministry } from "@/lib/types";
+import type { Schedule, Assignment, Service, Volunteer, Ministry, Person } from "@/lib/types";
 import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
 import { isAdmin } from "@/lib/utils/permissions";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+import { calculateRetentionSummary, type RetentionSummary } from "@/lib/services/retention-analytics";
 
 interface DashboardStats {
   volunteers: number;
@@ -30,6 +32,7 @@ interface DashboardStats {
 export default function DashboardPage() {
   const { user, profile, activeMembership } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [retention, setRetention] = useState<RetentionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingApprovals, setPendingApprovals] = useState<Array<Record<string, unknown>>>([]);
 
@@ -40,7 +43,8 @@ export default function DashboardPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [vols, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
+        const [peopleDocs, vols, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
+          getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "services"),
@@ -49,7 +53,18 @@ export default function DashboardPage() {
           getDoc(doc(db, "churches", churchId!)),
         ]);
 
-        const volunteers = vols as unknown as Volunteer[];
+        // Prefer unified `people` collection when populated
+        let volunteers: Volunteer[];
+        if (peopleDocs.length > 0) {
+          volunteers = (peopleDocs as unknown as Record<string, unknown>[])
+            .filter((d) => d.is_volunteer === true && d.status === "active")
+            .map((d) => {
+              if ("person_type" in d) return personToLegacyVolunteer(d as unknown as Person);
+              return d as unknown as Volunteer;
+            });
+        } else {
+          volunteers = vols as unknown as Volunteer[];
+        }
         const ministries = mins as unknown as Ministry[];
         const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];
         const hasPrereqs = orgPrereqs.length > 0 || ministries.some((m) => m.prerequisites && m.prerequisites.length > 0);
@@ -88,7 +103,8 @@ export default function DashboardPage() {
         // Volunteer equity — count assignments per volunteer
         const volCounts = new Map<string, number>();
         for (const a of activeAssignments) {
-          volCounts.set(a.volunteer_id, (volCounts.get(a.volunteer_id) || 0) + 1);
+          const vid = a.person_id || a.volunteer_id;
+          volCounts.set(vid, (volCounts.get(vid) || 0) + 1);
         }
         const topVolunteers = Array.from(volCounts.entries())
           .sort((a, b) => b[1] - a[1])
@@ -98,7 +114,7 @@ export default function DashboardPage() {
             count,
           }));
 
-        const scheduledVolIds = new Set(activeAssignments.map((a) => a.volunteer_id));
+        const scheduledVolIds = new Set(activeAssignments.map((a) => a.person_id || a.volunteer_id));
         const unscheduledVolunteers = volunteers.filter((v) => !scheduledVolIds.has(v.id)).length;
 
         // Upcoming services (next 14 days)
@@ -149,6 +165,10 @@ export default function DashboardPage() {
           upcomingServices,
           hasPrerequisites: hasPrereqs,
         });
+
+        // Calculate retention summary for the health card
+        const minList = ministries.map((m) => ({ id: m.id, name: m.name }));
+        setRetention(calculateRetentionSummary(volunteers, assignments, minList));
       } catch {
         setStats(null);
       } finally {
@@ -533,6 +553,52 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {/* Retention Health Summary */}
+          {retention && isAdmin(activeMembership) && stats.volunteers > 0 && (
+            <div className="mt-6">
+              <Link
+                href="/dashboard/retention"
+                className="block rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold text-vc-indigo flex items-center gap-2">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                    </svg>
+                    Team Health
+                  </h2>
+                  <span className="text-xs text-vc-coral">View details &rarr;</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div>
+                    <p className="text-xs text-vc-text-muted">Health Rate</p>
+                    <p className={`text-lg font-semibold ${
+                      retention.healthRate >= 80 ? "text-vc-sage" : retention.healthRate >= 60 ? "text-vc-sand" : "text-vc-coral"
+                    }`}>{retention.healthRate}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-vc-text-muted">Fairness</p>
+                    <p className={`text-lg font-semibold ${
+                      retention.fairnessScore >= 0.8 ? "text-vc-sage" : "text-vc-sand"
+                    }`}>{Math.round(retention.fairnessScore * 100)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-vc-text-muted">Burnout Alerts</p>
+                    <p className={`text-lg font-semibold ${
+                      retention.burnoutCount === 0 ? "text-vc-sage" : "text-vc-coral"
+                    }`}>{retention.burnoutCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-vc-text-muted">Thin Benches</p>
+                    <p className={`text-lg font-semibold ${
+                      retention.thinBenchCount === 0 ? "text-vc-sage" : "text-vc-sand"
+                    }`}>{retention.thinBenchCount}</p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          )}
 
           {/* Confirmation response bar */}
           {stats.totalAssignments > 0 && (
