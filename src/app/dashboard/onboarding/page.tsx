@@ -100,9 +100,10 @@ export default function OnboardingPage() {
 
   // Filter ministries that have prerequisites (org-wide or team-specific)
   const hasAnyPrereqs = orgPrereqs.length > 0;
-  const ministriesWithPrereqs = hasAnyPrereqs
+  const ministriesWithPrereqs = (hasAnyPrereqs
     ? ministries // all ministries inherit org-wide prereqs
-    : ministries.filter((m) => m.prerequisites && m.prerequisites.length > 0);
+    : ministries.filter((m) => m.prerequisites && m.prerequisites.length > 0)
+  ).slice().sort((a, b) => a.name.localeCompare(b.name));
 
   // Build pipeline data
   const filteredMinistries =
@@ -318,7 +319,7 @@ export default function OnboardingPage() {
               </p>
             ) : (
               <div className="space-y-3">
-                {ministries.map((ministry) => {
+                {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((ministry) => {
                   const isExpanded = expandedManageMinistry === ministry.id;
                   const prereqCount = ministry.prerequisites?.length || 0;
                   return (
