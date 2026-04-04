@@ -24,6 +24,20 @@ import { getServiceMinistries } from "@/lib/utils/service-helpers";
 
 // --- Date Helpers ---
 
+/** Parse a YYYY-MM-DD string as a local-time Date (avoids UTC-offset day shift). */
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/** Format a Date as YYYY-MM-DD using local time (not UTC). */
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /** Generate all dates a service occurs within a range */
 export function generateOccurrences(
   services: Service[],
@@ -31,8 +45,8 @@ export function generateOccurrences(
   endDate: string,
 ): ServiceOccurrence[] {
   const occurrences: ServiceOccurrence[] = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
 
   for (const service of services) {
     const current = new Date(start);
@@ -45,7 +59,7 @@ export function generateOccurrences(
     while (current <= end) {
       occurrences.push({
         service,
-        date: current.toISOString().split("T")[0],
+        date: formatLocalDate(current),
       });
       occurrenceCount++;
 

@@ -452,7 +452,7 @@ export default function SchedulesPage() {
         onGenerate={handleGenerate}
         generating={generating}
         serviceCount={services.length}
-        volunteerCount={volunteers.length}
+        volunteers={volunteers}
         ministries={ministries}
       />
 

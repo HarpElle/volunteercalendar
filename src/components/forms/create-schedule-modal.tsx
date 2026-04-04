@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { WorkflowMode, Ministry } from "@/lib/types";
+import type { WorkflowMode, Ministry, Volunteer } from "@/lib/types";
 
 export interface CreateScheduleOptions {
   startDate: string;
@@ -22,7 +22,7 @@ interface CreateScheduleModalProps {
   onGenerate: (options: CreateScheduleOptions) => Promise<void>;
   generating: boolean;
   serviceCount: number;
-  volunteerCount: number;
+  volunteers: Volunteer[];
   ministries: Ministry[];
 }
 
@@ -52,7 +52,7 @@ export function CreateScheduleModal({
   onGenerate,
   generating,
   serviceCount,
-  volunteerCount,
+  volunteers,
   ministries,
 }: CreateScheduleModalProps) {
   const [step, setStep] = useState(0);
@@ -358,7 +358,13 @@ export function CreateScheduleModal({
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-vc-text-muted">Volunteers</span>
-                <span className="font-medium text-vc-indigo">{volunteerCount}</span>
+                <span className="font-medium text-vc-indigo">
+                  {ministryIds.length === 0
+                    ? volunteers.length
+                    : volunteers.filter((v) =>
+                        v.ministry_ids.some((id) => ministryIds.includes(id))
+                      ).length}
+                </span>
               </div>
               {collectAvailability && (
                 <div className="flex justify-between text-sm">
