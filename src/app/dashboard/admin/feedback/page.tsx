@@ -10,7 +10,6 @@ import type {
   FeedbackCategory,
   FeedbackStatus,
   FeedbackPriority,
-  FeedbackDisposition,
 } from "@/lib/types";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -41,14 +40,6 @@ const PRIORITY_OPTIONS: { value: FeedbackPriority; label: string; color: string 
   { value: "unset", label: "Unset", color: "bg-vc-bg-warm text-vc-text-muted" },
 ];
 
-const DISPOSITION_OPTIONS: { value: FeedbackDisposition | "none"; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "consider", label: "Consider" },
-  { value: "planned", label: "Planned" },
-  { value: "shipped", label: "Shipped" },
-  { value: "ignore", label: "Ignore" },
-  { value: "exclude", label: "Exclude" },
-];
 
 function timeAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -348,23 +339,6 @@ export default function AdminFeedbackPage() {
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Disposition */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-vc-text-secondary w-20">Decision</span>
-                  <select
-                    value={selected.disposition || "none"}
-                    onChange={(e) => updateFeedback(selected.id, {
-                      disposition: e.target.value === "none" ? null : e.target.value,
-                    })}
-                    disabled={saving}
-                    className="rounded-lg border border-vc-border-light bg-white px-3 py-1.5 text-sm text-vc-indigo"
-                  >
-                    {DISPOSITION_OPTIONS.map((d) => (
-                      <option key={d.value} value={d.value}>{d.label}</option>
                     ))}
                   </select>
                 </div>

@@ -8,9 +8,19 @@ import type {
   FeedbackItem,
   FeedbackCategory,
   FeedbackPriority,
+  FeedbackDisposition,
 } from "@/lib/types";
 
 type PlatformFeedbackStatus = "pending" | "reviewing" | "planned" | "shipped" | "wont_fix";
+
+const DISPOSITION_OPTIONS: { value: FeedbackDisposition | "none"; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "consider", label: "Consider" },
+  { value: "planned", label: "Planned" },
+  { value: "shipped", label: "Shipped" },
+  { value: "ignore", label: "Ignore" },
+  { value: "exclude", label: "Exclude" },
+];
 
 const CATEGORY_LABELS: Record<FeedbackCategory, string> = {
   bug: "Bug",
@@ -69,6 +79,7 @@ export default function PlatformFeedbackPage() {
   // Edit state
   const [editPlatformStatus, setEditPlatformStatus] = useState<string>("");
   const [editPlatformPriority, setEditPlatformPriority] = useState<string>("");
+  const [editDisposition, setEditDisposition] = useState<string>("none");
   const [editPlatformResponse, setEditPlatformResponse] = useState("");
   const [editPlatformNotes, setEditPlatformNotes] = useState("");
   const [responseSent, setResponseSent] = useState(false);
@@ -108,6 +119,7 @@ export default function PlatformFeedbackPage() {
     setSelected(item);
     setEditPlatformStatus(item.platform_status || "pending");
     setEditPlatformPriority(item.platform_priority || item.priority || "unset");
+    setEditDisposition(item.disposition || "none");
     setEditPlatformResponse("");
     setEditPlatformNotes(item.platform_internal_notes || "");
     setResponseSent(false);
@@ -405,6 +417,33 @@ export default function PlatformFeedbackPage() {
                   <option value="planned">Planned</option>
                   <option value="shipped">Shipped</option>
                   <option value="wont_fix">Won&apos;t Fix</option>
+                </select>
+              </div>
+
+              {/* Product Decision */}
+              <div>
+                <p className="text-xs font-semibold text-vc-text-muted mb-2">
+                  Decision
+                  <span className="ml-1 font-normal text-vc-text-muted">
+                    (product roadmap disposition)
+                  </span>
+                </p>
+                <select
+                  value={editDisposition}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditDisposition(val);
+                    updatePlatformField({
+                      disposition: val === "none" ? null : val,
+                    });
+                  }}
+                  className="rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm"
+                >
+                  {DISPOSITION_OPTIONS.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 

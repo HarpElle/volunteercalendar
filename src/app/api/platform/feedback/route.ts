@@ -100,6 +100,7 @@ export async function PATCH(req: NextRequest) {
       platform_priority,
       platform_internal_notes,
       platform_tags,
+      disposition,
     } = body;
 
     if (!church_id || !feedback_id) {
@@ -139,6 +140,7 @@ export async function PATCH(req: NextRequest) {
       { key: "platform_priority", value: platform_priority },
       { key: "platform_internal_notes", value: platform_internal_notes },
       { key: "platform_tags", value: platform_tags },
+      { key: "disposition", value: disposition },
     ];
 
     for (const { key, value } of platformFields) {
