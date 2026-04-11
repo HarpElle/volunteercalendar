@@ -119,7 +119,7 @@ export async function GET(request: Request) {
             `Ministry: ${(ministry?.name as string) || "Unknown"}`,
             `Role: ${a.role_title}`,
             `Status: ${a.status}`,
-          ].join("\\n"),
+          ].join("\n"),
           dtstart: a.service_date as string,
           startTime: (service?.start_time as string) || "09:00",
           durationMinutes: (service?.duration_minutes as number) || 90,
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
         return {
           uid: `${serviceId}_${serviceDate}`,
           summary: (service?.name as string) || "Service",
-          description: descLines.join("\\n"),
+          description: descLines.join("\n"),
           dtstart: serviceDate,
           startTime: (service?.start_time as string) || "09:00",
           durationMinutes: (service?.duration_minutes as number) || 90,
