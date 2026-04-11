@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { DocumentData } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
 
@@ -11,19 +12,30 @@ export async function GET(request: Request) {
       return new NextResponse("Missing token", { status: 400 });
     }
 
-    // Look up calendar feed by secret token across all churches
-    const feedSnap = await adminDb
-      .collectionGroup("calendar_feeds")
-      .where("secret_token", "==", token)
-      .limit(1)
-      .get();
+    // Look up calendar feed by secret token — iterate over churches to avoid
+    // needing a collection group index (automatic single-field indexes cover this)
+    const churchesSnap = await adminDb.collection("churches").get();
+    let feed: DocumentData | null = null;
+    let churchId = "";
 
-    if (feedSnap.empty) {
-      return new NextResponse("Feed not found", { status: 404 });
+    for (const churchDoc of churchesSnap.docs) {
+      const feedSnap = await adminDb
+        .collection("churches")
+        .doc(churchDoc.id)
+        .collection("calendar_feeds")
+        .where("secret_token", "==", token)
+        .limit(1)
+        .get();
+      if (!feedSnap.empty) {
+        feed = feedSnap.docs[0].data();
+        churchId = churchDoc.id;
+        break;
+      }
     }
 
-    const feed = feedSnap.docs[0].data();
-    const churchId = feed.church_id as string;
+    if (!feed) {
+      return new NextResponse("Feed not found", { status: 404 });
+    }
     const feedType = (feed.type as string) || "personal";
     const targetId = feed.target_id as string;
 
