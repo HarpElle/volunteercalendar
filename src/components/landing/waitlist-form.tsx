@@ -110,7 +110,7 @@ export function WaitlistForm() {
                   />
                 </motion.svg>
               </div>
-              <h2 className="font-display text-3xl text-vc-indigo">
+              <h2 className="font-editorial text-3xl text-vc-indigo">
                 Thanks for reaching out!
               </h2>
               <p className="mt-3 text-lg text-vc-text-secondary">
@@ -124,7 +124,7 @@ export function WaitlistForm() {
                 <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-coral">
                   Need Help Getting Started?
                 </p>
-                <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
+                <h2 className="mt-3 text-center font-editorial text-4xl text-vc-indigo sm:text-5xl">
                   Talk to a real person
                 </h2>
                 <p className="mx-auto mt-4 max-w-md text-center text-lg text-vc-text-secondary">

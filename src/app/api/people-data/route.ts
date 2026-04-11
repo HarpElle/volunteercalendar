@@ -133,10 +133,23 @@ export async function GET(req: NextRequest) {
       (m: Record<string, unknown>) => m.status === "active" && m.user_id && !volsByUserId.has(m.user_id as string),
     );
 
+    // Batch-fetch user docs for all active members needing auto-sync
+    const activeMemberUserIds = activeMembers.map((m) => m.user_id as string);
+    const activeMemberUserDocs = activeMemberUserIds.length > 0
+      ? await adminDb.getAll(
+          ...activeMemberUserIds.map((id) => adminDb.collection("users").doc(id)),
+        )
+      : [];
+    const activeMemberUserMap = new Map<string, Record<string, unknown>>();
+    for (const udoc of activeMemberUserDocs) {
+      if (udoc.exists) {
+        activeMemberUserMap.set(udoc.id, udoc.data()!);
+      }
+    }
+
     const created: Record<string, unknown>[] = [];
     for (const mem of activeMembers) {
-      const userDoc = await adminDb.collection("users").doc(mem.user_id as string).get();
-      const userData = userDoc.data() || {};
+      const userData = activeMemberUserMap.get(mem.user_id as string) || {};
       const memEmail = (userData.email as string)?.toLowerCase() || "";
       if (volsByEmail.has(memEmail)) continue;
 

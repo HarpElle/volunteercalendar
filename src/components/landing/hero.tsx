@@ -32,7 +32,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="text-center font-display text-5xl leading-[1.1] tracking-tight text-vc-indigo sm:text-6xl lg:text-7xl"
+          className="text-center font-editorial text-5xl leading-[1.1] tracking-tight text-vc-indigo sm:text-6xl lg:text-7xl"
         >
           Scheduling that serves{" "}
           <br className="hidden sm:block" />
@@ -63,8 +63,9 @@ export function Hero() {
           transition={{ duration: 0.6, delay: 0.5 }}
           className="mx-auto mt-8 max-w-2xl text-center text-lg leading-relaxed text-vc-text-secondary sm:text-xl"
         >
-          Every team covered. Every volunteer confirmed. Stop chasing spreadsheets
-          and start running a schedule your whole organization can rely on.
+          Thoughtfully built to keep every team covered and every volunteer
+          confirmed. Replace the spreadsheets with a reliable schedule your
+          whole organization can count on.
         </motion.p>
 
         {/* CTAs */}
@@ -104,8 +105,8 @@ export function Hero() {
           transition={{ duration: 0.8, delay: 1.0 }}
           className="mt-16 flex flex-col items-center gap-3"
         >
-          <p className="text-sm font-medium text-vc-text-muted">
-            Thoughtfully built for churches, nonprofits, and volunteer-driven organizations
+          <p className="text-sm font-semibold tracking-wide text-vc-text-secondary">
+            Crafted with intention for churches, nonprofits, and volunteer-driven teams
           </p>
           <div className="flex items-center gap-6 text-sm text-vc-text-muted">
             <span className="flex items-center gap-1.5">

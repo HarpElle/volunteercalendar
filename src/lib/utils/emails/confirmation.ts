@@ -44,7 +44,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
                       <tr>
   <td>
     <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-    <span style="font-size:15px;font-weight:600;color:#2D2B55;">${data.roleTitle}</span>
+    <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.roleTitle}</span>
   </td>
 </tr>
                     </table>`)}
@@ -53,7 +53,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
               <table width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td align="center" style="padding-bottom:12px;">
-      <a href="${data.confirmUrl}" style="display:inline-block;background-color:#6B9B7D;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
+      <a href="${data.confirmUrl}" style="display:inline-block;background-color:#81B29A;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
         Confirm or Decline
       </a>
     </td>

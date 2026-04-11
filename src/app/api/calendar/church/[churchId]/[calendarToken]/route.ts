@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
+import { rateLimit } from "@/lib/utils/rate-limit";
 
 /**
  * GET /api/calendar/church/[churchId]/[calendarToken]
@@ -8,12 +9,15 @@ import { generateICalFeed } from "@/lib/utils/ical";
  * Token validated against roomSettings.public_calendar_token.
  */
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   {
     params,
   }: { params: Promise<{ churchId: string; calendarToken: string }> },
 ) {
   try {
+    const rl = await rateLimit(request, { limit: 60, windowMs: 60_000 });
+    if (rl) return rl;
+
     const { churchId, calendarToken } = await params;
 
     // Validate token against room settings

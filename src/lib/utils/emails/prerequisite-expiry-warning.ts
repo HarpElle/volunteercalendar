@@ -43,11 +43,11 @@ export function buildExpiryWarningEmail(data: ExpiryWarningEmailData): {
     <tr>
       <td>
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Days Remaining</span><br>
-        <span style="font-size:15px;font-weight:600;color:#E87461;">${data.daysRemaining} day${data.daysRemaining === 1 ? "" : "s"}</span>
+        <span style="font-size:15px;font-weight:600;color:#E07A5F;">${data.daysRemaining} day${data.daysRemaining === 1 ? "" : "s"}</span>
       </td>
     </tr>
   </table>`)}
-  ${ctaButton(data.dashboardUrl, "View My Journey", "#E87461")}`;
+  ${ctaButton(data.dashboardUrl, "View My Journey", "#E07A5F")}`;
 
   const html = wrapInLayout({
     headerText: "Renewal Needed",

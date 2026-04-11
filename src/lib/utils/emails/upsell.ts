@@ -63,7 +63,7 @@ export function buildUpsellEmail(data: UpsellData): {
               <table width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td align="center" style="padding-bottom:12px;">
-      <a href="https://volunteercal.com/dashboard/billing" style="display:inline-block;background-color:#E87461;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
+      <a href="https://volunteercal.com/dashboard/billing" style="display:inline-block;background-color:#E07A5F;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
         See Plans &amp; Pricing
       </a>
     </td>
@@ -77,7 +77,7 @@ export function buildUpsellEmail(data: UpsellData): {
   const html = wrapInLayout({
     headerText: nearLimit ? "You're Getting Close" : "Room to Grow",
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `${subject}

@@ -458,6 +458,7 @@ function CollapsibleSection({
           onClick={toggle}
           className="flex h-[44px] w-[44px] items-center justify-center -mr-3"
           aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
+          aria-expanded={expanded}
         >
           <svg
             className={`h-3.5 w-3.5 text-vc-text-muted transition-transform duration-200 ${

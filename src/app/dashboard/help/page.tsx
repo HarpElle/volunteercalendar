@@ -64,8 +64,8 @@ const gettingStarted: HelpSection[] = [
     title: "6. Notify volunteers",
     content: (
       <p>
-        Published schedules trigger notifications to assigned volunteers via
-        their preferred channel (email or SMS). Volunteers confirm or decline
+        Once you publish a schedule, your team receives notifications via
+        their preferred channel (email or SMS). They&apos;ll confirm or decline
         directly from the notification or their My Schedule page.
       </p>
     ),
@@ -107,9 +107,9 @@ const featureGuides: HelpSection[] = [
           </li>
         </ul>
         <p className="mt-3">
-          Classifications update automatically based on scheduling data. Use the
-          outreach tools to send a thoughtful check-in email directly from the
-          dashboard.
+          Classifications update automatically as your team&apos;s scheduling
+          data comes in. You can send a thoughtful check-in email directly
+          from the dashboard whenever you&apos;d like to reach out.
         </p>
       </>
     ),
@@ -221,9 +221,9 @@ const featureGuides: HelpSection[] = [
         </dl>
         <p className="mt-3">
           All three methods log attendance automatically and feed into Volunteer
-          Health classifications. Admins can configure check-in settings
-          (self-check-in toggle, time windows, proximity radius) in Organization
-          Settings.
+          Health classifications. You can configure check-in settings
+          (self-check-in toggle, time windows, proximity radius) in your
+          Organization Settings.
         </p>
         <dl className="mt-4 space-y-3">
           <div>
@@ -378,8 +378,8 @@ const featureGuides: HelpSection[] = [
           </div>
         </dl>
         <p className="mt-3">
-          Training sessions are a powerful way to move multiple volunteers
-          through the onboarding pipeline at once, especially for recurring
+          Training sessions are a great way to move several people through
+          the onboarding pipeline together, especially for recurring
           requirements like safety orientations or policy reviews.
         </p>
       </>
@@ -482,8 +482,8 @@ const featureGuides: HelpSection[] = [
           </div>
         </dl>
         <p className="mt-3">
-          All prerequisite notifications are sent automatically by a background
-          process. Admins do not need to configure or trigger them manually.
+          All of these notifications are handled automatically in the
+          background — you don&apos;t need to configure or trigger them yourself.
         </p>
       </>
     ),

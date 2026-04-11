@@ -54,6 +54,7 @@ export default function SchedulesPage() {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [orgPrerequisites, setOrgPrerequisites] = useState<OnboardingStep[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -96,7 +97,7 @@ export default function SchedulesPage() {
           setOrgPrerequisites(churchSnap.data().org_prerequisites || []);
         }
       } catch {
-        // silent
+        setFetchError(true);
       } finally {
         setLoading(false);
       }
@@ -903,12 +904,31 @@ export default function SchedulesPage() {
         <>
           {loading ? (
             <div className="py-12 flex justify-center"><Spinner /></div>
+          ) : fetchError && schedules.length === 0 ? (
+            <div className="rounded-xl border border-vc-danger/20 bg-vc-danger/5 p-6 text-center">
+              <p className="text-sm text-vc-text-secondary">Something went wrong loading your schedules.</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-3 text-sm font-medium text-vc-coral hover:underline"
+              >
+                Try again
+              </button>
+            </div>
           ) : schedules.length === 0 && !showCreate ? (
             <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
-              <p className="text-vc-text-secondary">No schedules yet.</p>
+              <svg className="mx-auto h-10 w-10 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+              <p className="mt-3 font-medium text-vc-indigo">No schedules yet</p>
               <p className="mt-1 text-sm text-vc-text-muted">
-                Generate a draft schedule to auto-assign volunteers to services.
+                Generate a draft schedule to auto-assign volunteers to your services fairly and conflict-free.
               </p>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-5 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+              >
+                Create Your First Schedule
+              </button>
             </div>
           ) : (
             <div className="space-y-3">

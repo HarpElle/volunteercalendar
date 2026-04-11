@@ -70,7 +70,7 @@ export function buildDowngradeNotificationEmail(
     headerText: "Your Plan Has Changed",
     headerSubtitle: `${data.newPlanName} Plan`,
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> &middot; Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> &middot; Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   // Plain text version

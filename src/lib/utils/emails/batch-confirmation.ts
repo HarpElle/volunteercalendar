@@ -45,14 +45,14 @@ export function buildBatchConfirmationEmail(
         <tr>
           <td>
             <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-            <span style="font-size:15px;font-weight:600;color:#2D2B55;">${a.roleTitle}</span>
+            <span style="font-size:15px;font-weight:600;color:#2D3047;">${a.roleTitle}</span>
           </td>
         </tr>
       </table>`)}
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td align="center" style="padding-bottom:20px;">
-            <a href="${a.confirmUrl}" style="display:inline-block;background-color:#6B9B7D;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:12px;letter-spacing:-0.2px;">
+            <a href="${a.confirmUrl}" style="display:inline-block;background-color:#81B29A;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:12px;letter-spacing:-0.2px;">
               Confirm or Decline
             </a>
           </td>

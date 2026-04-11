@@ -45,20 +45,20 @@ export function buildReminderEmail(data: ReminderEmailData): {
                       <tr>
                         <td style="padding-bottom:12px;">
                           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Date</span><br>
-                          <span style="font-size:15px;font-weight:600;color:#2D2B55;">${formattedDate}</span>
+                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${formattedDate}</span>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding-bottom:12px;">
                           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Service</span><br>
-                          <span style="font-size:15px;font-weight:600;color:#2D2B55;">${data.serviceName}</span>
+                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.serviceName}</span>
                           ${data.startTime ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${data.startTime}</span>` : ""}
                         </td>
                       </tr>
                       <tr>
                         <td>
                           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-                          <span style="font-size:15px;font-weight:600;color:#2D2B55;">${data.roleTitle}</span>
+                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.roleTitle}</span>
                           <span style="font-size:13px;color:#9A9BB5;"> &middot; ${data.ministryName}</span>
                         </td>
                       </tr>
@@ -66,7 +66,7 @@ export function buildReminderEmail(data: ReminderEmailData): {
                   </td>
                 </tr>
               </table>
-              ${ctaButton(data.confirmUrl, "View or Update Status", "#6B9B7D")}
+              ${ctaButton(data.confirmUrl, "View or Update Status", "#81B29A")}
               ${mutedCenter("Can't make it? Click above to let us know — no login required.")}`;
 
   const html = wrapInLayout({

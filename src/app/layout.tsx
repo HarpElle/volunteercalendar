@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Zilla_Slab } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/lib/context/auth-context";
@@ -12,6 +12,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
   weight: ["300", "400", "500", "600", "700"],
+});
+
+const zillaSlab = Zilla_Slab({
+  variable: "--font-zilla-slab",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["300", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -59,8 +66,15 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
       <body
-        className={`${plusJakartaSans.variable} font-sans antialiased`}
+        className={`${plusJakartaSans.variable} ${zillaSlab.variable} font-sans antialiased`}
       >
+        {/* Skip-to-main for keyboard accessibility */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-vc-indigo focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>{children}</ConfirmProvider>

@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [retention, setRetention] = useState<RetentionSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<Array<Record<string, unknown>>>([]);
 
   const churchId = activeMembership?.church_id || profile?.default_church_id || profile?.church_id;
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!churchId) return;
     async function load() {
+      setError(false);
       try {
         const [peopleDocs, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "people"),
@@ -161,6 +163,7 @@ export default function DashboardPage() {
         setRetention(calculateRetentionSummary(volunteers, assignments, minList));
       } catch {
         setStats(null);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -301,6 +304,16 @@ export default function DashboardPage() {
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
+      ) : error && !stats ? (
+        <div className="rounded-xl border border-vc-danger/20 bg-vc-danger/5 p-6 text-center">
+          <p className="text-sm text-vc-text-secondary">Something went wrong loading your dashboard.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-3 text-sm font-medium text-vc-coral hover:underline"
+          >
+            Try again
+          </button>
+        </div>
       ) : (
         <>
           {/* Setup Guide — persistent until complete or dismissed */}

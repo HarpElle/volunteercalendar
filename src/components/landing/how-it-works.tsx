@@ -50,7 +50,7 @@ export function HowItWorks() {
           <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-coral-light">
             How It Works
           </p>
-          <h2 className="mt-3 text-center font-display text-4xl text-vc-text-on-dark sm:text-5xl">
+          <h2 className="mt-3 text-center font-editorial text-4xl text-vc-text-on-dark sm:text-5xl">
             Four steps to a better schedule
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-indigo-muted/80">

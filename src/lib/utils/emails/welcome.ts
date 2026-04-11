@@ -11,14 +11,14 @@ export interface AccountCreatedEmailData {
 }
 
 function stepBubble(num: number): string {
-  return `<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background-color:#2D2B55;color:#ffffff;text-align:center;line-height:24px;font-size:12px;font-weight:700;margin-right:10px;">${num}</span>`;
+  return `<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background-color:#2D3047;color:#ffffff;text-align:center;line-height:24px;font-size:12px;font-weight:700;margin-right:10px;">${num}</span>`;
 }
 
 function stepRow(num: number, title: string, desc: string, isLast = false): string {
   return `<tr>
                         <td${isLast ? "" : ` style="padding-bottom:14px;"`}>
                           ${stepBubble(num)}
-                          <span style="font-size:14px;font-weight:600;color:#2D2B55;">${title}</span><br>
+                          <span style="font-size:14px;font-weight:600;color:#2D3047;">${title}</span><br>
                           <span style="font-size:13px;color:#4A4A6A;margin-left:34px;display:inline-block;">${desc}</span>
                         </td>
                       </tr>`;
@@ -65,9 +65,9 @@ export function buildWelcomeEmail(data: WelcomeEmailData): {
               </p>`;
 
   const html = wrapInLayout({
-    headerText: 'Welcome to Volunteer<span style="color:#E87461;">Cal</span>',
+    headerText: 'Welcome to Volunteer<span style="color:#E07A5F;">Cal</span>',
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `Welcome to VolunteerCal
@@ -119,9 +119,9 @@ export function buildAccountCreatedEmail(data: AccountCreatedEmailData): {
               ${ctaButton("https://volunteercal.com/dashboard", "Go to Your Dashboard")}`;
 
   const html = wrapInLayout({
-    headerText: 'Welcome to Volunteer<span style="color:#E87461;">Cal</span>',
+    headerText: 'Welcome to Volunteer<span style="color:#E07A5F;">Cal</span>',
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `Your VolunteerCal account is ready

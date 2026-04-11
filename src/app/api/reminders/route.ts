@@ -237,12 +237,6 @@ export async function POST(request: Request) {
         });
       }
 
-      // Mark this reminder as sent on the assignment
-      const existingSent = (assignment.reminder_sent_at as string[]) || [];
-      await adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`).update({
-        reminder_sent_at: [...existingSent, `${reminderType}:${new Date().toISOString()}`],
-      });
-
       // Fire-and-forget: create in-app reminder notification
       try {
         const reminderUserId = await resolveUserId(church_id, assignment.volunteer_id as string);
@@ -266,6 +260,18 @@ export async function POST(request: Request) {
         console.error("User notification error (reminder):", notifErr);
       }
     }
+
+    // Batch-update all assignments to mark reminders as sent
+    const batch = adminDb.batch();
+    const batchTimestamp = new Date().toISOString();
+    for (const assignment of targetAssignments) {
+      const existingSent = (assignment.reminder_sent_at as string[]) || [];
+      const ref = adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`);
+      batch.update(ref, {
+        reminder_sent_at: [...existingSent, `${reminderType}:${batchTimestamp}`],
+      });
+    }
+    await batch.commit();
 
     return NextResponse.json({
       success: true,

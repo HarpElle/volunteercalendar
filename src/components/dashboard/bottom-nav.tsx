@@ -145,6 +145,7 @@ export function BottomNav({
               <button
                 key="more"
                 onClick={onMoreOpen}
+                aria-label="More menu"
                 className="relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 text-vc-text-muted"
               >
                 <svg

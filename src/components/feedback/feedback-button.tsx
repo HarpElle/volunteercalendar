@@ -144,7 +144,7 @@ export function FeedbackButton() {
   return (
     <>
       {/* Floating Button */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+      <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-6 lg:right-6">
         <button
           onClick={() => handleOpen(false)}
           className="flex h-12 w-12 items-center justify-center rounded-full bg-vc-coral text-white shadow-lg transition-all hover:bg-vc-coral/90 hover:scale-105 active:scale-95"

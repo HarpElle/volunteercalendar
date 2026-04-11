@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
+import { rateLimit } from "@/lib/utils/rate-limit";
 
 /**
  * GET /api/calendar/room/[roomId]/[calendarToken]
@@ -8,10 +9,13 @@ import { generateICalFeed } from "@/lib/utils/ical";
  * Returns confirmed reservations within a 90-day window.
  */
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ roomId: string; calendarToken: string }> },
 ) {
   try {
+    const rl = await rateLimit(request, { limit: 60, windowMs: 60_000 });
+    if (rl) return rl;
+
     const { roomId, calendarToken } = await params;
 
     // Find the room by scanning churches — we need to locate which church owns this room

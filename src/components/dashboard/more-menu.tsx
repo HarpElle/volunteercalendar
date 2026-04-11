@@ -56,6 +56,7 @@ function ExpandableSection({
     <div>
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="flex w-full items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary transition-colors active:bg-vc-sand/20"
       >
         <Icon d={iconPath} className="h-5 w-5 text-vc-text-muted" />

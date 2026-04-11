@@ -119,6 +119,7 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
 
   --font-sans: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: var(--font-zilla-slab), "Zilla Slab", serif;
 }
 
 /* Noise texture overlay for sections */
@@ -178,8 +179,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* font-display: Plus Jakarta Sans with SemiBold weight for heading distinction */
+/* font-display: Plus Jakarta Sans SemiBold for UI headings (modals, cards, dashboards) */
 .font-display {
+  font-weight: 600;
+}
+
+/* font-editorial: Zilla Slab for H1/H2 editorial headlines (landing page, major page titles) */
+.font-editorial {
+  font-family: var(--font-editorial);
   font-weight: 600;
 }
 
@@ -210,6 +217,16 @@ body {
 ::selection {
   background: var(--vc-coral-glow);
   color: var(--vc-indigo);
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Print-friendly styles */

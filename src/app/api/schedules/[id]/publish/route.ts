@@ -127,7 +127,7 @@ export async function POST(
         roleTitle: assignment.role_title,
         serviceDate: assignment.service_date,
         startTime: service?.start_time || "",
-        confirmUrl: `${baseUrl}/api/confirm?token=${confirmToken}`,
+        confirmUrl: `${baseUrl}/confirm/${confirmToken}`,
       });
 
       try {

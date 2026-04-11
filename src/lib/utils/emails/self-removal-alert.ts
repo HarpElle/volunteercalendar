@@ -47,7 +47,7 @@ export function buildSelfRemovalAlertEmail(data: SelfRemovalAlertData): {
   );
 
   const noteBlock = data.note
-    ? `<div style="margin:16px 0;padding:12px 16px;background:#FBF7F0;border-left:3px solid #E87461;border-radius:4px;font-size:14px;color:#4A4A6A;line-height:1.6;">
+    ? `<div style="margin:16px 0;padding:12px 16px;background:#FBF7F0;border-left:3px solid #E07A5F;border-radius:4px;font-size:14px;color:#4A4A6A;line-height:1.6;">
         <strong ${BOLD}>Note from ${data.volunteerName}:</strong><br/>
         ${data.note.replace(/\n/g, "<br/>")}
       </div>`

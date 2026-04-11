@@ -30,7 +30,7 @@ export function buildStepCompletedEmail(data: StepCompletedEmailData): {
   const progressBar = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
   <tr>
     <td style="background-color:#E8E4DE;border-radius:8px;height:8px;">
-      <div style="width:${progressPct}%;background-color:#6B9B7D;border-radius:8px;height:8px;"></div>
+      <div style="width:${progressPct}%;background-color:#81B29A;border-radius:8px;height:8px;"></div>
     </td>
   </tr>
   <tr>
@@ -50,7 +50,7 @@ export function buildStepCompletedEmail(data: StepCompletedEmailData): {
   <p ${P}>
     ${allDone ? "You've finished all the prerequisites! You're now eligible to serve." : `Just ${remaining} more step${remaining === 1 ? "" : "s"} to go. Keep it up!`}
   </p>
-  ${ctaButton(data.dashboardUrl, "View My Journey", "#6B9B7D")}`;
+  ${ctaButton(data.dashboardUrl, "View My Journey", "#81B29A")}`;
 
   const html = wrapInLayout({
     headerText: allDone ? "All Steps Complete!" : "Step Completed!",

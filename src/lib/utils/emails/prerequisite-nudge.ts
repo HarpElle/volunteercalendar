@@ -26,7 +26,7 @@ export function buildPrerequisiteNudgeEmail(data: PrerequisiteNudgeEmailData): {
   const progressBar = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
   <tr>
     <td style="background-color:#E8E4DE;border-radius:8px;height:8px;">
-      <div style="width:${progressPct}%;background-color:#6B9B7D;border-radius:8px;height:8px;"></div>
+      <div style="width:${progressPct}%;background-color:#81B29A;border-radius:8px;height:8px;"></div>
     </td>
   </tr>
   <tr>
@@ -46,7 +46,7 @@ export function buildPrerequisiteNudgeEmail(data: PrerequisiteNudgeEmailData): {
   <p ${P}>
     Check in on your journey page to see what's next and keep moving forward.
   </p>
-  ${ctaButton(data.dashboardUrl, "Continue My Journey", "#6B9B7D")}`;
+  ${ctaButton(data.dashboardUrl, "Continue My Journey", "#81B29A")}`;
 
   const html = wrapInLayout({
     headerText: "Keep Going!",

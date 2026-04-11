@@ -201,9 +201,9 @@ export function Features() {
           <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-sage-dark">
             Features
           </p>
-          <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
+          <h2 className="mt-3 text-center font-editorial text-4xl text-vc-indigo sm:text-5xl">
             Everything you need,{" "}
-            <span className="font-display italic text-vc-coral">nothing you don&apos;t</span>
+            <span className="font-editorial italic text-vc-coral">nothing you don&apos;t</span>
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-text-secondary">
             Built for churches, nonprofits, and organizations with multiple volunteer teams who need reliable, cross-team scheduling.

@@ -80,7 +80,7 @@ export function Footer() {
             >
               HarpElle
             </a>
-            {" "}product &middot; Thoughtfully built.
+            {" "}product &middot; Thoughtfully built. Reliably supported.
           </p>
           <p>
             <a

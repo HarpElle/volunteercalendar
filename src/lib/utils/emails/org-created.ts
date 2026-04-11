@@ -20,8 +20,8 @@ function checkItem(text: string): string {
 function nextStep(num: number, title: string, desc: string): string {
   return `<tr>
             <td style="padding-bottom:12px;font-size:14px;line-height:1.5;color:#4A4A6A;">
-              <span style="display:inline-block;width:22px;height:22px;border-radius:6px;background-color:#2D2B55;color:#ffffff;text-align:center;line-height:22px;font-size:11px;font-weight:700;margin-right:10px;">${num}</span>
-              <strong style="color:#2D2B55;">${title}</strong><br>
+              <span style="display:inline-block;width:22px;height:22px;border-radius:6px;background-color:#2D3047;color:#ffffff;text-align:center;line-height:22px;font-size:11px;font-weight:700;margin-right:10px;">${num}</span>
+              <strong style="color:#2D3047;">${title}</strong><br>
               <span style="margin-left:32px;display:inline-block;font-size:13px;color:#9A9BB5;">${desc}</span>
             </td>
           </tr>`;
@@ -48,7 +48,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F0F7F2;border-radius:12px;margin-bottom:20px;">
                 <tr>
                   <td style="padding:16px 20px;">
-                    <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D2B55;text-transform:uppercase;letter-spacing:0.5px;">Done</p>
+                    <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D3047;text-transform:uppercase;letter-spacing:0.5px;">Done</p>
                     <table width="100%" cellpadding="0" cellspacing="0">
                       ${checkItem("Account created")}
                       ${checkItem(`${data.orgName} organization set up`)}
@@ -61,7 +61,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF7F0;border-radius:12px;margin-bottom:24px;">
                 <tr>
                   <td style="padding:16px 20px;">
-                    <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D2B55;text-transform:uppercase;letter-spacing:0.5px;">Next steps</p>
+                    <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D3047;text-transform:uppercase;letter-spacing:0.5px;">Next steps</p>
                     <table width="100%" cellpadding="0" cellspacing="0">
                       ${nextStep(1, `Create your first ${teamWord === "ministries" ? "ministry" : "team"}`, `Organize volunteers into ${teamWord} with color-coded labels.`)}
                       ${nextStep(2, "Add your volunteers", "Import from a CSV, paste from your ChMS, or add them one by one.")}
@@ -82,7 +82,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
     headerText: "You're All Set!",
     headerSubtitle: `${data.orgName} is ready to go`,
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `${data.orgName} is live on VolunteerCal

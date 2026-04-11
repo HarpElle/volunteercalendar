@@ -45,11 +45,11 @@ export function buildTrainingSessionInviteEmail(data: TrainingSessionInviteEmail
     <tr>
       <td>
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Spots Remaining</span><br>
-        <span style="font-size:15px;font-weight:600;color:${data.spotsRemaining <= 3 ? "#E87461" : "#2D2B55"};">${data.spotsRemaining}</span>
+        <span style="font-size:15px;font-weight:600;color:${data.spotsRemaining <= 3 ? "#E07A5F" : "#2D3047"};">${data.spotsRemaining}</span>
       </td>
     </tr>
   </table>`)}
-  ${ctaButton(data.rsvpUrl, "RSVP Now", "#6B9B7D")}`;
+  ${ctaButton(data.rsvpUrl, "RSVP Now", "#81B29A")}`;
 
   const html = wrapInLayout({
     headerText: "Training Session Invitation",

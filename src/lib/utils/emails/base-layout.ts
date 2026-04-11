@@ -4,8 +4,8 @@
  * Design tokens (inline — email clients ignore external CSS):
  *   Background:  #FEFCF9  (vc-bg)
  *   Card:        #FFFFFF
- *   Header bg:   #2D2B55  (vc-indigo)
- *   Coral accent: #E87461 (vc-coral)
+ *   Header bg:   #2D3047  (vc-indigo — matches globals.css)
+ *   Coral accent: #E07A5F (vc-coral — matches globals.css)
  *   Body text:   #4A4A6A
  *   Muted text:  #9A9BB5
  *   Warm surface: #FBF7F0 (vc-bg-warm)
@@ -34,7 +34,7 @@ export function wrapInLayout(opts: LayoutOptions): string {
 
   const footer =
     opts.footerHtml ??
-    `<span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> &middot; Thoughtfully built by HarpElle`;
+    `<span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> &middot; Thoughtfully built by HarpElle`;
 
   return `<!DOCTYPE html>
 <html>
@@ -49,7 +49,7 @@ export function wrapInLayout(opts: LayoutOptions): string {
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E8E4DE;">
           <!-- Header -->
           <tr>
-            <td style="background-color:#2D2B55;padding:28px 32px;text-align:center;">
+            <td style="background-color:#2D3047;padding:28px 32px;text-align:center;">
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
                 ${opts.headerText}
               </h1>
@@ -85,7 +85,7 @@ export const P = 'style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4
 export const P_LAST = 'style="margin:0;font-size:15px;line-height:1.7;color:#4A4A6A;"';
 
 /** Bold inline text in indigo. */
-export const BOLD = 'style="color:#2D2B55;"';
+export const BOLD = 'style="color:#2D3047;"';
 
 /** Warm detail card wrapper (for assignment details, event details, etc.). */
 export function detailCard(innerHtml: string): string {
@@ -99,13 +99,13 @@ export function detailRow(label: string, value: string, extra?: string): string 
   return `<tr>
   <td style="padding-bottom:12px;">
     <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">${label}</span><br>
-    <span style="font-size:15px;font-weight:600;color:#2D2B55;">${value}</span>${extra ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${extra}</span>` : ""}
+    <span style="font-size:15px;font-weight:600;color:#2D3047;">${value}</span>${extra ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${extra}</span>` : ""}
   </td>
 </tr>`;
 }
 
 /** Centered CTA button. */
-export function ctaButton(href: string, label: string, color = "#E87461"): string {
+export function ctaButton(href: string, label: string, color = "#E07A5F"): string {
   return `<table width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td align="center" style="padding-bottom:16px;">
@@ -124,7 +124,7 @@ export function mutedCenter(text: string): string {
 
 /** "On behalf of" footer for org-scoped emails. */
 export function onBehalfFooter(churchName: string): string {
-  return `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> on behalf of ${churchName}`;
+  return `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${churchName}`;
 }
 
 /**

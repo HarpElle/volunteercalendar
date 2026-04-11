@@ -1,9 +1,15 @@
 "use client";
 
+import Link from "next/link";
+
 export function MobileHeader() {
   return (
     <header className="flex h-14 items-center border-b border-vc-border-light bg-white px-4 lg:hidden">
-      <div className="flex items-center gap-2">
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-2"
+        aria-label="VolunteerCal home"
+      >
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-vc-indigo">
           <svg
             className="h-3.5 w-3.5 text-white"
@@ -11,6 +17,7 @@ export function MobileHeader() {
             viewBox="0 0 24 24"
             strokeWidth={2}
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -22,7 +29,7 @@ export function MobileHeader() {
         <span className="text-base font-semibold text-vc-indigo">
           Volunteer<span className="text-vc-coral">Cal</span>
         </span>
-      </div>
+      </Link>
     </header>
   );
 }

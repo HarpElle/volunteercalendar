@@ -68,6 +68,7 @@ export default function MySchedulePage() {
   const [myVolunteerId, setMyVolunteerId] = useState<string>("");
   const [calendarFeeds, setCalendarFeeds] = useState<CalendarFeed[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
   const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
@@ -85,6 +86,8 @@ export default function MySchedulePage() {
   // Load schedule data (assignments + event signups)
   useEffect(() => {
     async function loadAll() {
+      setFetchError(false);
+      let loadedAnyOrg = false;
       const myAssignments: Assignment[] = [];
       const churchAssignments: Assignment[] = [];
       const serviceMap = new Map<string, Service>();
@@ -132,6 +135,7 @@ export default function MySchedulePage() {
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
           for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
           for (const e of evts as Event[]) eventMap.set(e.id, e);
+          loadedAnyOrg = true;
         } catch {
           // Skip orgs that fail to load
         }
@@ -169,6 +173,7 @@ export default function MySchedulePage() {
           for (const s of svcs as Service[]) serviceMap.set(s.id, s);
           for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
           for (const e of evts as Event[]) eventMap.set(e.id, e);
+          loadedAnyOrg = true;
         } catch {
           // silent
         }
@@ -206,6 +211,7 @@ export default function MySchedulePage() {
       setMyMinistryIds(ministryIds);
       setMyVolunteerId(volId);
       setCalendarFeeds(feeds);
+      if (!loadedAnyOrg && activeMembers.length > 0) setFetchError(true);
       setLoading(false);
     }
     if (user) loadAll();
@@ -405,6 +411,18 @@ export default function MySchedulePage() {
           </button>
         ))}
       </div>
+
+      {/* Fetch error banner */}
+      {fetchError && !loading && (
+        <div className="mb-4 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-center">
+          <p className="text-sm text-vc-text-secondary">
+            We had trouble loading your schedule data.{" "}
+            <button onClick={() => window.location.reload()} className="font-medium text-vc-coral hover:underline">
+              Refresh to try again
+            </button>
+          </p>
+        </div>
+      )}
 
       {/* Schedule list (Upcoming / Past tabs) */}
       {(activeTab === "upcoming" || activeTab === "past") && (

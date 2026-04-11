@@ -13,8 +13,8 @@ const painPoints = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
       </svg>
     ),
-    title: "Siloed tools cause double-books & burnout",
-    quote: "When each team uses a different tool, conflicts fall through the cracks. A volunteer gets scheduled for worship and outreach on the same morning — and nobody knows until Sunday.",
+    title: "Scattered tools lead to double-bookings",
+    quote: "When each team relies on a different tool, conflicts slip through the cracks. Someone ends up scheduled for worship and outreach on the same morning — and no one sees it until Sunday.",
   },
   {
     borderColor: "border-vc-sand/20",
@@ -26,8 +26,8 @@ const painPoints = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
       </svg>
     ),
-    title: "Manual rotations waste 5–10 hours weekly",
-    quote: "Copying spreadsheets, emailing people one by one, chasing down responses. The admin spends 5–10 hours a week on something a system should handle.",
+    title: "Manual rotations take 5–10 hours a week",
+    quote: "Copying spreadsheets, emailing one person at a time, following up on responses. Hours that could go toward your team are spent on tasks a clear system should handle.",
   },
   {
     borderColor: "border-vc-indigo/5",
@@ -39,8 +39,8 @@ const painPoints = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
       </svg>
     ),
-    title: "No-shows leave your team short-handed",
-    quote: "No-shows leave teams scrambling. Without tracking who confirmed, you don\u2019t know you\u2019re short-handed until it\u2019s too late.",
+    title: "Gaps appear with no warning",
+    quote: "Without a clear way to track confirmations, you don\u2019t know someone can\u2019t make it until the morning of. Better tools give your team time to adjust.",
   },
 ];
 
@@ -52,7 +52,7 @@ export function PainPoints() {
           <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-vc-coral">
             The Problem
           </p>
-          <h2 className="mt-3 text-center font-display text-4xl text-vc-indigo sm:text-5xl">
+          <h2 className="mt-3 text-center font-editorial text-4xl text-vc-indigo sm:text-5xl">
             Sound familiar?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-text-secondary">

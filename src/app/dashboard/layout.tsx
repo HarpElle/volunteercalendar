@@ -161,7 +161,7 @@ export default function DashboardLayout({
         <MobileHeader />
 
         {/* Page content — extra bottom padding on mobile for bottom nav */}
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
+        <main id="main-content" className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
           <PwaInstallBanner />
           <SmartCheckInBanner />
           {children}

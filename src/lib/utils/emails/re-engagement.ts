@@ -31,7 +31,7 @@ export function buildReEngagementEmail(data: ReEngagementData): {
   const html = wrapInLayout({
     headerText: "We Missed You",
     body,
-    footerHtml: `Sent by <span style="color:#2D2B55;">Volunteer</span><span style="color:#E87461;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
+    footerHtml: `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> \u00b7 Thoughtfully built by <span style="color:#9A9BB5;">HarpElle</span>`,
   });
 
   const text = `We Missed You
