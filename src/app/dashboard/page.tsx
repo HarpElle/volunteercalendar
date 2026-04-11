@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
@@ -45,17 +46,26 @@ export default function DashboardPage() {
     async function load() {
       setError(false);
       try {
+        // Only load active volunteers and recent assignments (last 90 days)
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
+
         const [peopleDocs, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
-          getChurchDocuments(churchId!, "people"),
+          getChurchDocuments(churchId!, "people",
+            where("is_volunteer", "==", true),
+            where("status", "==", "active"),
+          ),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "schedules"),
-          getChurchDocuments(churchId!, "assignments"),
+          getChurchDocuments(churchId!, "assignments",
+            where("service_date", ">=", cutoffDate),
+          ),
           getDoc(doc(db, "churches", churchId!)),
         ]);
 
         const volunteers: Volunteer[] = (peopleDocs as unknown as Person[])
-          .filter((d) => d.is_volunteer && d.status === "active")
           .map((d) => personToLegacyVolunteer(d));
         const ministries = mins as unknown as Ministry[];
         const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];

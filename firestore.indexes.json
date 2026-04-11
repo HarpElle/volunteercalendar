@@ -185,6 +185,22 @@
       ]
     },
     {
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "schedule_id", "order": "ASCENDING" },
+        { "fieldPath": "service_date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "short_links",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "church_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "feedback",
       "queryScope": "COLLECTION",
       "fields": [
@@ -209,5 +225,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "assignments",
+      "fieldPath": "confirmation_token",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

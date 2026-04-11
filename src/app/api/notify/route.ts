@@ -62,14 +62,15 @@ export async function POST(request: NextRequest) {
     }
     const churchName = (churchSnap.data()?.name as string) || "Church";
 
-    // Fetch all assignments for this schedule
+    // Fetch assignments for this schedule (filtered server-side)
     type DocRecord = Record<string, unknown> & { id: string };
-    const assignSnap = await adminDb.collection(`churches/${church_id}/assignments`).get();
-    const allAssignments: DocRecord[] = assignSnap.docs.map((d) => ({
+    const assignSnap = await adminDb.collection(`churches/${church_id}/assignments`)
+      .where("schedule_id", "==", schedule_id)
+      .get();
+    let assignments: DocRecord[] = assignSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
     } as DocRecord));
-    let assignments = allAssignments.filter((a) => a.schedule_id === schedule_id);
 
     // Apply optional filters for targeted re-invitations
     if (status_filter) {

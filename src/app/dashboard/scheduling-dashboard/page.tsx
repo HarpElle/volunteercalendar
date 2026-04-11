@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getEventSignupsBatch } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { Spinner } from "@/components/ui/spinner";
 import { SkeletonStats, SkeletonList } from "@/components/ui/skeleton";
@@ -49,11 +50,15 @@ export default function SchedulingDashboardPage() {
     }
     async function load() {
       try {
+        // Only load recent/upcoming assignments for performance
+        const today = new Date().toISOString().split("T")[0];
         const [svcDocs, evtDocs, schDocs, assignDocs, minDocs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "events"),
           getChurchDocuments(churchId!, "schedules"),
-          getChurchDocuments(churchId!, "assignments"),
+          getChurchDocuments(churchId!, "assignments",
+            where("service_date", ">=", today),
+          ),
           getChurchDocuments(churchId!, "ministries"),
           import("firebase/firestore").then(({ doc, getDoc }) =>
             getDoc(doc(db, "churches", churchId!)),

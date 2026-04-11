@@ -8,6 +8,7 @@ import {
   updateChurchDocument,
   removeChurchDocument,
 } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 import { generateDraftSchedule, computeTotalSlots } from "@/lib/services/scheduler";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -34,6 +35,75 @@ import type {
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+
+function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
+  schedule: Schedule;
+  services: Service[];
+  volunteers: Volunteer[];
+  ministries: Ministry[];
+}) {
+  const schedMinistryIds = schedule.ministry_ids || [];
+  const teamNames = schedMinistryIds.map((id) => ministries.find((m) => m.id === id)?.name).filter(Boolean) as string[];
+  const scopedServices = schedMinistryIds.length > 0
+    ? services.filter((s) => {
+        const ids = [s.ministry_id, ...(s.ministries?.map((m) => m.ministry_id) ?? [])];
+        return schedMinistryIds.some((id) => ids.includes(id));
+      })
+    : services;
+  const hasServices = scopedServices.length > 0;
+  const teamVolunteers = volunteers.filter((v) =>
+    v.ministry_ids?.some((id) => schedMinistryIds.includes(id))
+  );
+  const hasVolunteers = teamVolunteers.length > 0;
+
+  return (
+    <div className="rounded-xl border border-vc-border-light bg-white p-10 text-center">
+      <svg className="mx-auto h-10 w-10 text-vc-text-muted/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+      </svg>
+      <h3 className="mt-3 text-base font-semibold text-vc-indigo">No Assignments Generated</h3>
+
+      {!hasServices && (
+        <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
+          {teamNames.length > 0
+            ? <>No services include the <strong>{teamNames.join(", ")}</strong> team. Add this team&apos;s roles to a service first.</>
+            : "No services exist in the selected date range."}
+        </p>
+      )}
+      {hasServices && !hasVolunteers && (
+        <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
+          Services exist, but <strong>{teamNames.join(", ") || "the selected team"}</strong> has no volunteers assigned to it.
+        </p>
+      )}
+      {hasServices && hasVolunteers && (
+        <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
+          Volunteers and services exist, but no volunteers have the required role IDs for the service roles. Check that volunteers&apos; roles match the service role definitions.
+        </p>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        {!hasServices && (
+          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+            Configure Services &amp; Roles
+          </a>
+        )}
+        {hasServices && !hasVolunteers && (
+          <a href="/dashboard/people" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+            Add Volunteers to {teamNames[0] || "Team"}
+          </a>
+        )}
+        {hasServices && hasVolunteers && (
+          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+            Check Service Role Definitions
+          </a>
+        )}
+        <a href="/dashboard/org/teams" className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-white px-4 py-2.5 text-sm font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm">
+          Manage Teams
+        </a>
+      </div>
+    </div>
+  );
+}
 
 const VALID_TRANSITIONS: Record<string, ScheduleStatus[]> = {
   draft: ["in_review"],
@@ -79,7 +149,10 @@ export default function SchedulesPage() {
         const [scheds, svcs, peopleDocs, mins, hhs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "services"),
-          getChurchDocuments(churchId!, "people"),
+          getChurchDocuments(churchId!, "people",
+            where("is_volunteer", "==", true),
+            where("status", "==", "active"),
+          ),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "households").catch(() => []),
           getDoc(doc(db, "churches", churchId!)),
@@ -88,7 +161,6 @@ export default function SchedulesPage() {
         setServices(svcs as unknown as Service[]);
         setVolunteers(
           (peopleDocs as unknown as Person[])
-            .filter((d) => d.is_volunteer && d.status === "active")
             .map((d) => personToLegacyVolunteer(d)),
         );
         setMinistries(mins as unknown as Ministry[]);
@@ -944,29 +1016,12 @@ export default function SchedulesPage() {
 
           {/* Matrix or Empty State */}
           {activeAssignments.length === 0 ? (
-            <div className="rounded-xl border border-vc-border-light bg-white p-10 text-center">
-              <svg className="mx-auto h-10 w-10 text-vc-text-muted/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-              </svg>
-              <h3 className="mt-3 text-base font-semibold text-vc-indigo">No Assignments Generated</h3>
-              <p className="mt-1 text-sm text-vc-text-secondary max-w-md mx-auto">
-                The selected team(s) may have no volunteers assigned, or no services fall within the date range.
-              </p>
-              <div className="mt-5 flex items-center justify-center gap-3">
-                <a
-                  href="/dashboard/org/teams"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark"
-                >
-                  Add Volunteers to Teams
-                </a>
-                <a
-                  href="/dashboard/services-events"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-white px-4 py-2.5 text-sm font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm"
-                >
-                  Create Services
-                </a>
-              </div>
-            </div>
+            <ScheduleEmptyState
+              schedule={activeSchedule}
+              services={services}
+              volunteers={volunteers}
+              ministries={ministries}
+            />
           ) : (
             <ScheduleMatrix
               assignments={activeAssignments}

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import Link from "next/link";
 import { getChurchDocuments, getUserEventSignups } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
@@ -86,22 +87,32 @@ export default function MySchedulePage() {
       let ministryIds: string[] = [];
       let volId = "";
 
+      // Only load assignments from the last 30 days forward
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
+
       const activeMembers = memberships.filter((m) => m.status === "active");
       for (const m of activeMembers) {
         try {
           const [assigns, svcs, mins, evts, vols] = await Promise.all([
-            getChurchDocuments(m.church_id, "assignments") as Promise<unknown[]>,
+            getChurchDocuments(m.church_id, "assignments",
+              where("service_date", ">=", cutoffDate),
+            ) as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "events") as Promise<unknown[]>,
-            getChurchDocuments(m.church_id, "people") as Promise<unknown[]>,
+            getChurchDocuments(m.church_id, "people",
+              where("is_volunteer", "==", true),
+              where("status", "==", "active"),
+            ) as Promise<unknown[]>,
           ]);
 
           // Store all assignments for team view
           churchAssignments.push(...(assigns as Assignment[]));
 
           // Build volunteer name map from people collection
-          const people = (vols as unknown as Person[]).filter((p) => p.is_volunteer);
+          const people = vols as unknown as Person[];
           for (const p of people) {
             const v = personToLegacyVolunteer(p);
             volMap.set(v.id, v);
@@ -134,15 +145,20 @@ export default function MySchedulePage() {
       if (activeMembers.length === 0 && profile?.church_id) {
         try {
           const [assigns, svcs, mins, evts, vols] = await Promise.all([
-            getChurchDocuments(profile.church_id, "assignments") as Promise<unknown[]>,
+            getChurchDocuments(profile.church_id, "assignments",
+              where("service_date", ">=", cutoffDate),
+            ) as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "events") as Promise<unknown[]>,
-            getChurchDocuments(profile.church_id, "people") as Promise<unknown[]>,
+            getChurchDocuments(profile.church_id, "people",
+              where("is_volunteer", "==", true),
+              where("status", "==", "active"),
+            ) as Promise<unknown[]>,
           ]);
 
           churchAssignments.push(...(assigns as Assignment[]));
-          const fallbackPeople = (vols as unknown as Person[]).filter((p) => p.is_volunteer);
+          const fallbackPeople = vols as unknown as Person[];
           for (const p of fallbackPeople) {
             const v = personToLegacyVolunteer(p);
             volMap.set(v.id, v);

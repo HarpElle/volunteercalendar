@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, updateChurchDocument } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { isAdmin } from "@/lib/utils/permissions";
@@ -81,14 +82,16 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!churchId) return;
     Promise.all([
-      getChurchDocuments(churchId, "people"),
+      getChurchDocuments(churchId, "people",
+        where("is_volunteer", "==", true),
+        where("status", "==", "active"),
+      ),
       getChurchDocuments(churchId, "ministries"),
       getDoc(doc(db, "churches", churchId)),
     ])
       .then(([peopleDocs, mins, churchSnap]) => {
         setVolunteers(
           (peopleDocs as unknown as Person[])
-            .filter((p) => p.is_volunteer && p.status === "active")
             .map((p) => personToLegacyVolunteer(p)),
         );
         setMinistries(mins as unknown as Ministry[]);
