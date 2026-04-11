@@ -78,7 +78,7 @@ export async function GET(request: Request) {
       }
 
       // Fetch all volunteers
-      const volunteersSnap = await adminDb.collection(`churches/${churchId}/volunteers`).get();
+      const volunteersSnap = await adminDb.collection(`churches/${churchId}/people`).where("is_volunteer", "==", true).get();
 
       for (const volDoc of volunteersSnap.docs) {
         const volData = volDoc.data();

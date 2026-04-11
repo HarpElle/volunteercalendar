@@ -53,7 +53,8 @@ export async function POST(request: Request) {
     }
 
     // Get volunteer name
-    const volSnap = await churchRef.collection("volunteers").doc(assignment.volunteer_id).get();
+    const personId = (assignment.person_id || assignment.volunteer_id) as string;
+    const volSnap = await churchRef.collection("people").doc(personId).get();
     const requesterName = volSnap.exists ? (volSnap.data()?.name || "Unknown") : "Unknown";
 
     // Mark assignment as substitute_requested
@@ -112,8 +113,9 @@ export async function GET(request: Request) {
     }
     const swap = swapSnap.data() as SwapRequest;
 
-    // Get all active volunteers in the same ministry
-    const volSnap = await churchRef.collection("volunteers")
+    // Get all active volunteers (from people collection)
+    const volSnap = await churchRef.collection("people")
+      .where("is_volunteer", "==", true)
       .where("status", "==", "active")
       .get();
 
@@ -123,16 +125,20 @@ export async function GET(request: Request) {
       .where("status", "in", ["draft", "confirmed"])
       .get();
 
-    const bookedVolunteerIds = new Set(
-      assignSnap.docs.map((d) => d.data().volunteer_id),
-    );
+    const bookedVolunteerIds = new Set<string>();
+    assignSnap.docs.forEach((d) => {
+      const ad = d.data();
+      if (ad.person_id) bookedVolunteerIds.add(ad.person_id as string);
+      if (ad.volunteer_id) bookedVolunteerIds.add(ad.volunteer_id as string);
+    });
 
     // Filter eligible replacements
     const eligible: Array<{ id: string; name: string; email: string }> = [];
     for (const d of volSnap.docs) {
       const v = d.data() as Volunteer;
-      // Skip the requester
-      if (d.id === swap.requester_volunteer_id) continue;
+      const vData = d.data() as Record<string, unknown>;
+      // Skip the requester (match by person doc id or old volunteer_id)
+      if (d.id === swap.requester_volunteer_id || vData.volunteer_id === swap.requester_volunteer_id) continue;
       // Must be in the right ministry
       if (v.ministry_ids.length > 0 && !v.ministry_ids.includes(swap.ministry_id)) continue;
       // Must be qualified for the role
@@ -140,7 +146,9 @@ export async function GET(request: Request) {
       // Not already booked on that date
       if (bookedVolunteerIds.has(d.id)) continue;
       // Not blocked out
-      if (v.availability.blockout_dates.some((b) => {
+      const sp = (vData.scheduling_profile as Record<string, unknown>) || {};
+      const blockoutDates = (sp.blockout_dates as string[]) || [];
+      if (blockoutDates.some((b) => {
         if (b.includes("/")) {
           const [start, end] = b.split("/");
           return swap.service_date >= start && swap.service_date <= end;

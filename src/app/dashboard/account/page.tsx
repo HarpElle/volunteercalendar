@@ -25,7 +25,8 @@ import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, SchedulerNotificationPreferences } from "@/lib/types";
+import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, Person, SchedulerNotificationPreferences } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { SCHEDULER_NOTIFICATION_TYPES, DEFAULT_SCHEDULER_NOTIFICATION_PREFS } from "@/lib/constants";
 
 export default function AccountPage() {
@@ -108,12 +109,16 @@ export default function AccountPage() {
       try {
         const [feedDocs, volDocs, minDocs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "calendar_feeds"),
-          getChurchDocuments(churchId!, "volunteers"),
+          getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "ministries"),
           getDoc(doc(db, "churches", churchId!)),
         ]);
         setFeeds(feedDocs as unknown as CalendarFeed[]);
-        setVolunteers(volDocs as unknown as Volunteer[]);
+        setVolunteers(
+          (volDocs as unknown as Person[])
+            .filter((p) => p.is_volunteer)
+            .map((p) => personToLegacyVolunteer(p)),
+        );
         setMinistries(minDocs as unknown as Ministry[]);
         if (churchSnap.exists()) {
           setChurchTier(churchSnap.data().subscription_tier || "free");

@@ -74,29 +74,21 @@ export default function SchedulesPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [scheds, svcs, peopleOrVols, mins, hhs, churchSnap] = await Promise.all([
+        const [scheds, svcs, peopleDocs, mins, hhs, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "schedules"),
           getChurchDocuments(churchId!, "services"),
-          // Read from `people` collection (unified); fall back to `volunteers` if empty
-          getChurchDocuments(churchId!, "people").then((docs) =>
-            docs.length > 0 ? docs : getChurchDocuments(churchId!, "volunteers"),
-          ),
+          getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "households").catch(() => []),
           getDoc(doc(db, "churches", churchId!)),
         ]);
         setSchedules(scheds as unknown as Schedule[]);
         setServices(svcs as unknown as Service[]);
-        // Convert Person docs to legacy Volunteer shape if reading from people collection
-        const rawDocs = peopleOrVols as unknown as (Person | Volunteer)[];
-        const asVolunteers = rawDocs
-          .filter((d) => {
-            // Person docs have person_type; legacy Volunteer docs don't
-            if ("person_type" in d) return (d as Person).is_volunteer && (d as Person).status === "active";
-            return (d as Volunteer).status === "active";
-          })
-          .map((d) => ("person_type" in d ? personToLegacyVolunteer(d as Person) : (d as Volunteer)));
-        setVolunteers(asVolunteers);
+        setVolunteers(
+          (peopleDocs as unknown as Person[])
+            .filter((d) => d.is_volunteer && d.status === "active")
+            .map((d) => personToLegacyVolunteer(d)),
+        );
         setMinistries(mins as unknown as Ministry[]);
         setHouseholds(hhs as unknown as Household[]);
         if (churchSnap.exists()) {

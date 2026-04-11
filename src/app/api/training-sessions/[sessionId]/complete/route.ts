@@ -59,7 +59,7 @@ export async function POST(
       const nowIso = new Date().toISOString();
 
       for (const volId of attendee_ids) {
-        const volRef = adminDb.doc(`churches/${church_id}/volunteers/${volId}`);
+        const volRef = adminDb.doc(`churches/${church_id}/people/${volId}`);
         const volSnap = await volRef.get();
         if (!volSnap.exists) continue;
 

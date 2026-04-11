@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       if (entry.type === "event_signup" && data.church_id !== church_id) continue;
 
       const previousAttended = data.attended ?? null;
-      const volunteerId: string | null = data.volunteer_id || null;
+      const volunteerId: string | null = (data.person_id || data.volunteer_id) || null;
 
       batch.update(docRef, {
         attended: entry.attended,
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     // Apply no-show deltas to volunteer records
     for (const [volId, delta] of noShowDeltas) {
       if (delta === 0) continue;
-      const volRef = adminDb.doc(`churches/${church_id}/volunteers/${volId}`);
+      const volRef = adminDb.doc(`churches/${church_id}/people/${volId}`);
       batch.update(volRef, {
         "stats.no_show_count": FieldValue.increment(delta),
       });

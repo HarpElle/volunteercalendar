@@ -43,9 +43,8 @@ export default function DashboardPage() {
     if (!churchId) return;
     async function load() {
       try {
-        const [peopleDocs, vols, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
+        const [peopleDocs, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
           getChurchDocuments(churchId!, "people"),
-          getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "ministries"),
           getChurchDocuments(churchId!, "services"),
           getChurchDocuments(churchId!, "schedules"),
@@ -53,18 +52,9 @@ export default function DashboardPage() {
           getDoc(doc(db, "churches", churchId!)),
         ]);
 
-        // Prefer unified `people` collection when populated
-        let volunteers: Volunteer[];
-        if (peopleDocs.length > 0) {
-          volunteers = (peopleDocs as unknown as Record<string, unknown>[])
-            .filter((d) => d.is_volunteer === true && d.status === "active")
-            .map((d) => {
-              if ("person_type" in d) return personToLegacyVolunteer(d as unknown as Person);
-              return d as unknown as Volunteer;
-            });
-        } else {
-          volunteers = vols as unknown as Volunteer[];
-        }
+        const volunteers: Volunteer[] = (peopleDocs as unknown as Person[])
+          .filter((d) => d.is_volunteer && d.status === "active")
+          .map((d) => personToLegacyVolunteer(d));
         const ministries = mins as unknown as Ministry[];
         const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];
         const hasPrereqs = orgPrereqs.length > 0 || ministries.some((m) => m.prerequisites && m.prerequisites.length > 0);

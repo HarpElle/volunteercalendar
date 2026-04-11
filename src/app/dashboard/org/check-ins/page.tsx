@@ -14,6 +14,7 @@ import { doc, getDoc } from "firebase/firestore";
 import type { Church, Campus } from "@/lib/types";
 import { CheckinVolunteerSettings } from "@/components/settings/checkin-volunteer-settings";
 import { CheckinThresholdsSettings } from "@/components/settings/checkin-thresholds-settings";
+import { AccessDenied } from "@/components/ui/access-denied";
 
 type CheckInsTab = "volunteers" | "children";
 
@@ -79,7 +80,7 @@ function CheckInsContent() {
     load();
   }, [churchId]);
 
-  if (!isAdmin(activeMembership)) return null;
+  if (!isAdmin(activeMembership)) return <AccessDenied requiredRole="Admin" />;
 
   const currentTier = church?.subscription_tier || "free";
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
       }
       const data = snap.data()!;
-      volunteerId = data.volunteer_id as string;
+      volunteerId = (data.person_id || data.volunteer_id) as string;
       ministryId = data.ministry_id as string;
       roleName = data.role_title as string;
       serviceDate = data.service_date as string;
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       if (data.church_id !== church_id) {
         return NextResponse.json({ error: "Signup does not belong to this organization" }, { status: 403 });
       }
-      volunteerId = data.volunteer_id as string;
+      volunteerId = (data.person_id || data.volunteer_id) as string;
       roleName = data.role_title as string;
 
       if (volunteerId !== userVolunteerId) {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get volunteer name
-    const volSnap = await adminDb.doc(`churches/${church_id}/volunteers/${volunteerId}`).get();
+    const volSnap = await adminDb.doc(`churches/${church_id}/people/${volunteerId}`).get();
     const volunteerName = volSnap.exists ? (volSnap.data()!.name as string) || "Volunteer" : "Volunteer";
 
     // Get church name + tier

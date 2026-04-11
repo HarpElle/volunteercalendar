@@ -12,12 +12,14 @@ import { getOrgTerms } from "@/lib/utils/org-terms";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
   Volunteer,
+  Person,
   Ministry,
   OnboardingStep,
   VolunteerJourneyStep,
   JourneyStepStatus,
   OrgType,
 } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { StepTypeIcon } from "@/components/ui/step-type-icon";
 
 const STATUS_CONFIG: Record<JourneyStepStatus, { label: string; variant: "default" | "warning" | "success" }> = {
@@ -55,7 +57,7 @@ export default function MyJourneyPage() {
         const [churchSnap, minDocs, volDocs] = await Promise.all([
           getDoc(doc(db, "churches", churchId!)),
           getChurchDocuments(churchId!, "ministries"),
-          getChurchDocuments(churchId!, "volunteers"),
+          getChurchDocuments(churchId!, "people"),
         ]);
 
         if (churchSnap.exists()) {
@@ -68,7 +70,8 @@ export default function MyJourneyPage() {
         setMinistries(minDocs as unknown as Ministry[]);
 
         // Find the current user's volunteer record
-        const vols = volDocs as unknown as Volunteer[];
+        const people = (volDocs as unknown as Person[]).filter((p) => p.is_volunteer);
+        const vols = people.map((p) => personToLegacyVolunteer(p));
         const activeMemIds = memberships.filter((m) => m.status === "active").map((m) => m.id);
         const myVol =
           vols.find((v) => v.user_id === user!.uid) ||

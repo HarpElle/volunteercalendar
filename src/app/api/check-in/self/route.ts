@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     const volQuery = await adminDb
       .collection("churches")
       .doc(church_id)
-      .collection("volunteers")
+      .collection("people")
       .where("user_id", "==", userId)
       .where("status", "==", "active")
       .limit(1)
@@ -63,8 +63,10 @@ export async function POST(req: NextRequest) {
     if (volQuery.empty) {
       return NextResponse.json({ error: "No active volunteer record found" }, { status: 404 });
     }
-    const volunteerId = volQuery.docs[0].id;
-    const volunteerName = volQuery.docs[0].data().name;
+    const personDoc = volQuery.docs[0];
+    const volunteerId = personDoc.id;
+    const volunteerName = personDoc.data().name;
+    const legacyVolunteerId = (personDoc.data().volunteer_id as string) || null;
 
     // Load assignment
     const assignSnap = await adminDb
@@ -79,8 +81,9 @@ export async function POST(req: NextRequest) {
     }
     const assignment = assignSnap.data()!;
 
-    // Verify assignment belongs to this volunteer
-    if (assignment.volunteer_id !== volunteerId) {
+    // Verify assignment belongs to this volunteer (match by person_id or legacy volunteer_id)
+    const assignedTo = (assignment.person_id || assignment.volunteer_id) as string;
+    if (assignedTo !== volunteerId && assignedTo !== legacyVolunteerId) {
       return NextResponse.json({ error: "Assignment does not belong to this volunteer" }, { status: 403 });
     }
 

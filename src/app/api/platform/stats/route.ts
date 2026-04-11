@@ -133,37 +133,21 @@ export async function POST(req: NextRequest) {
         if (limits.rooms_enabled) featureAdoption.rooms_enabled++;
       }
 
-      // Count people/volunteers from subcollections
+      // Count volunteers from people collection
       const peopleSnap = await adminDb
         .collection("churches")
         .doc(churchDoc.id)
         .collection("people")
+        .where("is_volunteer", "==", true)
         .get();
 
-      if (peopleSnap.size > 0) {
-        totalVolunteers += peopleSnap.size;
-        for (const personDoc of peopleSnap.docs) {
-          const pData = personDoc.data();
-          const pCreated = (pData.created_at as string) || "";
-          if (pCreated >= d30) newPeople30d++;
-          if (pCreated >= d60) newPeople60d++;
-          if (pCreated >= d90) newPeople90d++;
-        }
-      } else {
-        // Fall back to volunteers subcollection
-        const volSnap = await adminDb
-          .collection("churches")
-          .doc(churchDoc.id)
-          .collection("volunteers")
-          .get();
-        totalVolunteers += volSnap.size;
-        for (const volDoc of volSnap.docs) {
-          const vData = volDoc.data();
-          const vCreated = (vData.created_at as string) || "";
-          if (vCreated >= d30) newPeople30d++;
-          if (vCreated >= d60) newPeople60d++;
-          if (vCreated >= d90) newPeople90d++;
-        }
+      totalVolunteers += peopleSnap.size;
+      for (const personDoc of peopleSnap.docs) {
+        const pData = personDoc.data();
+        const pCreated = (pData.created_at as string) || "";
+        if (pCreated >= d30) newPeople30d++;
+        if (pCreated >= d60) newPeople60d++;
+        if (pCreated >= d90) newPeople90d++;
       }
     }
 

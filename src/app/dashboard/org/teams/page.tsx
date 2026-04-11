@@ -11,6 +11,7 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import type { Ministry, Church } from "@/lib/types";
 import { TeamsSettings } from "@/components/settings/teams-settings";
+import { AccessDenied } from "@/components/ui/access-denied";
 
 export default function TeamsPage() {
   const { user, profile, activeMembership } = useAuth();
@@ -42,7 +43,7 @@ export default function TeamsPage() {
     load();
   }, [churchId]);
 
-  if (!isAdmin(activeMembership)) return null;
+  if (!isAdmin(activeMembership)) return <AccessDenied requiredRole="Admin" />;
 
   const currentTier = church?.subscription_tier || "free";
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const volSnap = await adminDb
       .collection("churches")
       .doc(churchId)
-      .collection("volunteers")
+      .collection("people")
       .where("user_id", "==", uid)
       .limit(1)
       .get();
@@ -43,8 +43,21 @@ export async function GET(req: NextRequest) {
     }
 
     const doc = volSnap.docs[0];
+    const data = doc.data();
+    const sp = (data.scheduling_profile || {}) as Record<string, unknown>;
     return NextResponse.json({
-      volunteer: { id: doc.id, ...doc.data() },
+      volunteer: {
+        id: doc.id,
+        ...data,
+        // Expose scheduling_profile fields under the legacy `availability` key
+        // so the client-side availability page continues to work without changes.
+        availability: {
+          blockout_dates: sp.blockout_dates ?? [],
+          recurring_unavailable: sp.recurring_unavailable ?? [],
+          preferred_frequency: sp.preferred_frequency ?? 4,
+          max_roles_per_month: sp.max_roles_per_month ?? 4,
+        },
+      },
     });
   } catch (error) {
     console.error("[GET /api/my-availability]", error);
@@ -104,7 +117,7 @@ export async function PATCH(req: NextRequest) {
     const volSnap = await adminDb
       .collection("churches")
       .doc(church_id)
-      .collection("volunteers")
+      .collection("people")
       .where("user_id", "==", uid)
       .limit(1)
       .get();
@@ -121,18 +134,18 @@ export async function PATCH(req: NextRequest) {
     // Build the update — only allow availability sub-fields
     const update: Record<string, unknown> = {};
     if (Array.isArray(availability.blockout_dates)) {
-      update["availability.blockout_dates"] = availability.blockout_dates;
+      update["scheduling_profile.blockout_dates"] = availability.blockout_dates;
     }
     if (Array.isArray(availability.recurring_unavailable)) {
-      update["availability.recurring_unavailable"] =
+      update["scheduling_profile.recurring_unavailable"] =
         availability.recurring_unavailable;
     }
     if (typeof availability.preferred_frequency === "number") {
-      update["availability.preferred_frequency"] =
+      update["scheduling_profile.preferred_frequency"] =
         availability.preferred_frequency;
     }
     if (typeof availability.max_roles_per_month === "number") {
-      update["availability.max_roles_per_month"] =
+      update["scheduling_profile.max_roles_per_month"] =
         availability.max_roles_per_month;
     }
 

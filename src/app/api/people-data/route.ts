@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
     // Fetch all data in parallel
     const [
       peopleSnap,
-      volsSnap,
       minsSnap,
       memsSnap,
       svcsSnap,
@@ -53,7 +52,6 @@ export async function GET(req: NextRequest) {
       queueSnap,
     ] = await Promise.all([
       churchRef.collection("people").get(),
-      churchRef.collection("volunteers").get(),
       churchRef.collection("ministries").get(),
       adminDb.collection("memberships").where("church_id", "==", churchId).get(),
       churchRef.collection("services").get(),
@@ -65,33 +63,29 @@ export async function GET(req: NextRequest) {
     type Doc = Record<string, unknown> & { id: string };
     const toDoc = (d: FirebaseFirestore.QueryDocumentSnapshot): Doc => ({ id: d.id, ...d.data() });
 
-    // Prefer unified `people` collection if populated; fall back to `volunteers`
-    const hasPeople = peopleSnap.size > 0;
-    const volunteers: Doc[] = hasPeople
-      ? peopleSnap.docs
-          .map(toDoc)
-          .filter((d) => d.is_volunteer === true)
-          .map((d) => ({
-            // Map Person fields to legacy Volunteer shape expected by the People page
-            ...d,
-            email: d.email ?? "",
-            household_id: Array.isArray(d.household_ids) ? (d.household_ids as string[])[0] ?? null : null,
-            availability: d.scheduling_profile ?? {
-              blockout_dates: [],
-              recurring_unavailable: [],
-              preferred_frequency: 4,
-              max_roles_per_month: 4,
-            },
-            reminder_preferences: { channels: ["email"] },
-            stats: d.stats ?? {
-              times_scheduled_last_90d: 0,
-              last_served_date: null,
-              decline_count: 0,
-              no_show_count: 0,
-            },
-            imported_from: d.imported_from ?? "manual",
-          }))
-      : volsSnap.docs.map(toDoc);
+    const volunteers: Doc[] = peopleSnap.docs
+      .map(toDoc)
+      .filter((d) => d.is_volunteer === true)
+      .map((d) => ({
+        // Map Person fields to legacy Volunteer shape expected by the People page
+        ...d,
+        email: d.email ?? "",
+        household_id: Array.isArray(d.household_ids) ? (d.household_ids as string[])[0] ?? null : null,
+        availability: d.scheduling_profile ?? {
+          blockout_dates: [],
+          recurring_unavailable: [],
+          preferred_frequency: 4,
+          max_roles_per_month: 4,
+        },
+        reminder_preferences: { channels: ["email"] },
+        stats: d.stats ?? {
+          times_scheduled_last_90d: 0,
+          last_served_date: null,
+          decline_count: 0,
+          no_show_count: 0,
+        },
+        imported_from: d.imported_from ?? "manual",
+      }));
     const ministries: Doc[] = minsSnap.docs.map(toDoc);
     const memberships: Doc[] = memsSnap.docs.map(toDoc);
     const services: Doc[] = svcsSnap.docs.map(toDoc);
@@ -152,81 +146,50 @@ export async function GET(req: NextRequest) {
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      // Write to `people` if unified collection is active, otherwise `volunteers`
-      const volData: Record<string, unknown> = hasPeople
-        ? {
-            church_id: churchId,
-            person_type: "adult",
-            first_name: firstName,
-            last_name: lastName,
-            preferred_name: null,
-            name: displayName,
-            search_name: displayName.toLowerCase(),
-            email: userData.email || null,
-            phone: userData.phone || null,
-            search_phones: userData.phone ? [(userData.phone as string).replace(/\D/g, "")] : [],
-            photo_url: null,
-            user_id: mem.user_id,
-            membership_id: mem.id,
-            status: "active",
-            is_volunteer: true,
-            ministry_ids: [],
-            role_ids: [],
-            campus_ids: [],
-            household_ids: [],
-            scheduling_profile: {
-              skills: [],
-              max_services_per_month: 8,
-              blockout_dates: [],
-              recurring_unavailable: [],
-              preferred_frequency: 2,
-              max_roles_per_month: 8,
-            },
-            child_profile: null,
-            stats: {
-              times_scheduled_last_90d: 0,
-              last_served_date: null,
-              decline_count: 0,
-              no_show_count: 0,
-            },
-            imported_from: null,
-            background_check: null,
-            role_constraints: null,
-            volunteer_journey: null,
-            qr_token: null,
-            created_at: now,
-            updated_at: now,
-          }
-        : {
-            church_id: churchId,
-            name: displayName,
-            email: userData.email || "",
-            phone: userData.phone || null,
-            user_id: mem.user_id,
-            membership_id: mem.id,
-            status: "active",
-            ministry_ids: [],
-            role_ids: [],
-            campus_ids: [],
-            household_id: null,
-            availability: {
-              blockout_dates: [],
-              recurring_unavailable: [],
-              preferred_frequency: 2,
-              max_roles_per_month: 8,
-            },
-            reminder_preferences: { channels: ["email"] },
-            stats: {
-              times_scheduled_last_90d: 0,
-              last_served_date: null,
-              decline_count: 0,
-              no_show_count: 0,
-            },
-            imported_from: null,
-            created_at: now,
-          };
-      const targetCollection = hasPeople ? "people" : "volunteers";
-      const newRef = await churchRef.collection(targetCollection).add(volData);
+      const volData: Record<string, unknown> = {
+        church_id: churchId,
+        person_type: "adult",
+        first_name: firstName,
+        last_name: lastName,
+        preferred_name: null,
+        name: displayName,
+        search_name: displayName.toLowerCase(),
+        email: userData.email || null,
+        phone: userData.phone || null,
+        search_phones: userData.phone ? [(userData.phone as string).replace(/\D/g, "")] : [],
+        photo_url: null,
+        user_id: mem.user_id,
+        membership_id: mem.id,
+        status: "active",
+        is_volunteer: true,
+        ministry_ids: [],
+        role_ids: [],
+        campus_ids: [],
+        household_ids: [],
+        scheduling_profile: {
+          skills: [],
+          max_services_per_month: 8,
+          blockout_dates: [],
+          recurring_unavailable: [],
+          preferred_frequency: 2,
+          max_roles_per_month: 8,
+        },
+        child_profile: null,
+        stats: {
+          times_scheduled_last_90d: 0,
+          last_served_date: null,
+          decline_count: 0,
+          no_show_count: 0,
+        },
+        imported_from: null,
+        background_check: null,
+        role_constraints: null,
+        volunteer_journey: null,
+        qr_token: null,
+        created_at: now,
+        updated_at: now,
+      };
+      const newRef = await churchRef.collection("people").add(volData);
       created.push({ ...volData, id: newRef.id });
       volsByEmail.add(memEmail);
       volsByUserId.add(mem.user_id as string);

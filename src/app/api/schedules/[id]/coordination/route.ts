@@ -57,7 +57,7 @@ export async function GET(
         .where("schedule_id", "==", scheduleId)
         .where("status", "in", ["draft", "confirmed"])
         .get(),
-      churchRef.collection("volunteers").get(),
+      churchRef.collection("people").get(),
     ]);
 
     if (!scheduleSnap.exists) {
@@ -71,13 +71,14 @@ export async function GET(
       volunteersMap.set(d.id, { id: d.id, ...d.data() } as Volunteer);
     });
 
-    // Group assignments by volunteer
+    // Group assignments by volunteer (prefer person_id over volunteer_id)
     const byVolunteer = new Map<string, Assignment[]>();
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
-      const existing = byVolunteer.get(assignment.volunteer_id) || [];
+      const key = (assignment.person_id || assignment.volunteer_id) as string;
+      const existing = byVolunteer.get(key) || [];
       existing.push(assignment);
-      byVolunteer.set(assignment.volunteer_id, existing);
+      byVolunteer.set(key, existing);
     }
 
     // Find volunteers assigned to 2+ different ministries

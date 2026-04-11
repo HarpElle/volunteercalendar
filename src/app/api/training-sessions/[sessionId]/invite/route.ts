@@ -60,7 +60,7 @@ export async function POST(
     const spotsRemaining = session.capacity > 0 ? session.capacity - acceptedCount : 999;
 
     // Find volunteers with a pending step matching this session's prerequisite
-    const volunteersSnap = await adminDb.collection(`churches/${church_id}/volunteers`).get();
+    const volunteersSnap = await adminDb.collection(`churches/${church_id}/people`).where("is_volunteer", "==", true).get();
     const stepId = session.prerequisite_step_id as string;
     const ministryId = session.ministry_id as string;
 

@@ -62,20 +62,14 @@ export async function GET(request: Request) {
     let assignments = assignSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
     // Fetch services, ministries, and people for event details
-    // Read from `people` collection (unified); fall back to `volunteers` if empty
-    const [servicesSnap, ministriesSnap, peopleSnap, volunteersSnap] = await Promise.all([
+    const [servicesSnap, ministriesSnap, peopleSnap] = await Promise.all([
       getDocs(collection(db, "churches", churchId, "services")),
       getDocs(collection(db, "churches", churchId, "ministries")),
       getDocs(collection(db, "churches", churchId, "people")),
-      getDocs(collection(db, "churches", churchId, "volunteers")),
     ]);
     const serviceMap = new Map(servicesSnap.docs.map((d) => [d.id, d.data()]));
     const ministryMap = new Map(ministriesSnap.docs.map((d) => [d.id, d.data()]));
-    // Merge people + volunteers maps (people take precedence for shared IDs)
-    const volunteerMap = new Map(volunteersSnap.docs.map((d) => [d.id, d.data()]));
-    for (const d of peopleSnap.docs) {
-      volunteerMap.set(d.id, d.data());
-    }
+    const volunteerMap = new Map(peopleSnap.docs.map((d) => [d.id, d.data()]));
 
     // Filter based on feed type
     let calendarName = `${churchName} - Volunteer Schedule`;

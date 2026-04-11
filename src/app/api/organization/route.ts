@@ -82,23 +82,33 @@ export async function POST(req: NextRequest) {
       updated_at: now,
     });
 
-    // Create volunteer record so owner appears on the scheduling roster
+    // Create person record so owner appears on the scheduling roster
     const userSnap = await adminDb.doc(`users/${userId}`).get();
     const userData = userSnap.data() || {};
-    const volRef = adminDb.collection(`churches/${churchId}/volunteers`).doc();
+    const ownerName = (userData.display_name || decoded.name || decoded.email || "Owner") as string;
+    const ownerEmail = (decoded.email || userData.email || "") as string;
+    const nameParts = ownerName.split(" ");
+    const volRef = adminDb.collection(`churches/${churchId}/people`).doc();
     await volRef.set({
       church_id: churchId,
-      name: userData.display_name || decoded.name || decoded.email || "Owner",
-      email: decoded.email || userData.email || "",
-      phone: userData.phone || null,
+      person_type: "adult",
+      name: ownerName,
+      first_name: nameParts[0] || "",
+      last_name: nameParts.slice(1).join(" ") || "",
+      search_name: ownerName.toLowerCase(),
+      email: ownerEmail,
+      phone: (userData.phone as string) || null,
+      search_phones: [],
+      photo_url: null,
       user_id: userId,
       membership_id: membershipId,
       status: "active",
+      is_volunteer: true,
       ministry_ids: [],
       role_ids: [],
       campus_ids: [],
-      household_id: null,
-      availability: {
+      household_ids: [],
+      scheduling_profile: {
         blockout_dates: [],
         recurring_unavailable: [],
         preferred_frequency: 2,
@@ -113,6 +123,7 @@ export async function POST(req: NextRequest) {
       },
       imported_from: null,
       created_at: now,
+      updated_at: now,
     });
 
     // Link membership to volunteer record

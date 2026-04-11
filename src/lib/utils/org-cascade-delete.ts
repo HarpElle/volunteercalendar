@@ -6,7 +6,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 
 const SUBCOLLECTIONS = [
-  "volunteers",
+  "people",
   "ministries",
   "services",
   "events",
@@ -16,6 +16,15 @@ const SUBCOLLECTIONS = [
   "integrations",
   "invite_queue",
   "import_logs",
+  "households",
+  "songs",
+  "calendar_feeds",
+  "rooms",
+  "room_reservations",
+  "swap_requests",
+  "short_links",
+  "check_in_codes",
+  "training_sessions",
 ];
 
 export interface CascadeDeleteResult {

@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   try {
     const [assignments, volunteers, services, ministries] = await Promise.all([
       getAll(churchId, "assignments"),
-      getAll(churchId, "volunteers"),
+      getAll(churchId, "people"),
       getAll(churchId, "services"),
       getAll(churchId, "ministries"),
     ]);
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
         "Status",
       ];
       const rows = schedAssignments.map((a) => {
-        const vol = volMap.get(a.volunteer_id as string);
+        const vol = volMap.get((a.person_id || a.volunteer_id) as string);
         const svc = svcMap.get(a.service_id as string);
         const min = minMap.get(a.ministry_id as string);
         return [

@@ -27,15 +27,8 @@ export async function GET(req: NextRequest) {
         const churchId = churchDoc.id;
         const churchRef = adminDb.collection("churches").doc(churchId);
 
-        // Determine collection: prefer `people`, fall back to `volunteers`
-        const peopleSample = await churchRef.collection("people").limit(1).get();
-        const useUnified = !peopleSample.empty;
-        const collectionName = useUnified ? "people" : "volunteers";
-
-        // Load volunteers/people
-        const volSnap = useUnified
-          ? await churchRef.collection("people").where("is_volunteer", "==", true).where("status", "==", "active").get()
-          : await churchRef.collection("volunteers").where("status", "==", "active").get();
+        // Load volunteers from people collection
+        const volSnap = await churchRef.collection("people").where("is_volunteer", "==", true).where("status", "==", "active").get();
 
         if (volSnap.empty) continue;
 
@@ -162,13 +155,7 @@ export async function GET(req: NextRequest) {
       for (const churchDoc of churchesSnap.docs) {
         try {
           const churchRef = adminDb.collection("churches").doc(churchDoc.id);
-          const peopleSample = await churchRef.collection("people").limit(1).get();
-          const useUnified = !peopleSample.empty;
-          const collName = useUnified ? "people" : "volunteers";
-
-          const snap = useUnified
-            ? await churchRef.collection("people").where("is_volunteer", "==", true).get()
-            : await churchRef.collection("volunteers").get();
+          const snap = await churchRef.collection("people").where("is_volunteer", "==", true).get();
 
           totalVolunteers += snap.size;
 

@@ -63,9 +63,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No assignments found" }, { status: 404 });
     }
 
-    // Fetch volunteers, services, ministries
+    // Fetch people (volunteers), services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
-      adminDb.collection(`churches/${church_id}/volunteers`).get(),
+      adminDb.collection(`churches/${church_id}/people`).where("is_volunteer", "==", true).get(),
       adminDb.collection(`churches/${church_id}/services`).get(),
       adminDb.collection(`churches/${church_id}/ministries`).get(),
     ]);
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     // Group assignments by volunteer to send one batched email per volunteer
     const byVolunteer = new Map<string, typeof assignments>();
     for (const a of assignments) {
-      const volId = a.volunteer_id as string;
+      const volId = (a.person_id || a.volunteer_id) as string;
       if (!byVolunteer.has(volId)) byVolunteer.set(volId, []);
       byVolunteer.get(volId)!.push(a);
     }

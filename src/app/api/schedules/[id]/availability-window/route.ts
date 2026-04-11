@@ -79,7 +79,8 @@ export async function POST(
 
     // Fetch all active volunteers
     const volSnap = await churchRef
-      .collection("volunteers")
+      .collection("people")
+      .where("is_volunteer", "==", true)
       .where("status", "==", "active")
       .get();
 

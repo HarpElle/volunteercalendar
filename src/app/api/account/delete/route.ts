@@ -140,13 +140,17 @@ export async function DELETE(req: NextRequest) {
 
         // Find teams affected
         const volunteerSnap = mData.volunteer_id
-          ? await adminDb.doc(`churches/${mData.church_id}/volunteers/${mData.volunteer_id}`).get()
+          ? await adminDb.doc(`churches/${mData.church_id}/people/${mData.volunteer_id}`).get()
           : null;
         const teamsAffected: string[] = [];
         const ministryIds: string[] = volunteerSnap?.data()?.ministry_ids || [];
-        for (const mid of ministryIds) {
-          const minSnap = await adminDb.doc(`churches/${mData.church_id}/ministries/${mid}`).get();
-          if (minSnap.exists) teamsAffected.push(minSnap.data()?.name || mid);
+        if (ministryIds.length > 0) {
+          const minSnaps = await Promise.all(
+            ministryIds.map((mid) => adminDb.doc(`churches/${mData.church_id}/ministries/${mid}`).get()),
+          );
+          for (const minSnap of minSnaps) {
+            if (minSnap.exists) teamsAffected.push(minSnap.data()?.name || minSnap.id);
+          }
         }
 
         // Notify admins of this org about the departure
@@ -158,14 +162,21 @@ export async function DELETE(req: NextRequest) {
 
         let schedulersNotified = 0;
 
-        for (const om of orgMembersSnap.docs) {
-          const omData = om.data();
-          if (omData.user_id === userId) continue;
+        // Batch fetch user profiles for all org members
+        const otherMembers = orgMembersSnap.docs.filter((om) => om.data().user_id !== userId);
+        const omUserSnaps = await Promise.all(
+          otherMembers.map((om) => adminDb.doc(`users/${om.data().user_id}`).get()),
+        );
+        const omUserMap = new Map(
+          omUserSnaps.filter((s) => s.exists).map((s) => [s.id, s.data()!]),
+        );
 
-          const omUserSnap = await adminDb.doc(`users/${omData.user_id}`).get();
-          const omEmail = omUserSnap.data()?.email;
+        for (const om of otherMembers) {
+          const omData = om.data();
+          const omUser = omUserMap.get(omData.user_id);
+          const omEmail = omUser?.email as string | undefined;
           if (!omEmail) continue;
-          const omName = omUserSnap.data()?.display_name || omEmail;
+          const omName = (omUser?.display_name as string) || omEmail;
 
           // Send vacancy alerts to schedulers (if there are future assignments)
           if ((omData.role === "scheduler" || omData.role === "admin" || omData.role === "owner") && vacancies.length > 0) {

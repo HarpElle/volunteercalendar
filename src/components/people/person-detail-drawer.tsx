@@ -98,6 +98,7 @@ export function PersonDetailDrawer({
   const [bgCheckStatus, setBgCheckStatus] = useState(volunteer.background_check?.status || "not_required");
   const [bgCheckExpiry, setBgCheckExpiry] = useState(volunteer.background_check?.expires_at || "");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // --- Role state ---
   const [selectedOrgRole, setSelectedOrgRole] = useState<OrgRole>(membership?.role || "volunteer");
@@ -179,11 +180,12 @@ export function PersonDetailDrawer({
         role_ids: selectedRoles,
         background_check: background_check || undefined,
       };
-      await updateChurchDocument(churchId, "volunteers", volunteer.id, updateData);
+      await updateChurchDocument(churchId, "people", volunteer.id, updateData);
       onVolunteerUpdated({ ...volunteer, ...updateData });
       setEditMode(false);
+      setSaveError(null);
     } catch {
-      // silent
+      setSaveError("Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -196,7 +198,7 @@ export function PersonDetailDrawer({
         ministry_ids: selectedMinistries,
         role_ids: selectedRoles,
       };
-      await updateChurchDocument(churchId, "volunteers", volunteer.id, updateData);
+      await updateChurchDocument(churchId, "people", volunteer.id, updateData);
       onVolunteerUpdated({ ...volunteer, ...updateData });
     } catch (err) {
       console.error("[PersonDetailDrawer] Save team changes failed:", err);
@@ -216,7 +218,7 @@ export function PersonDetailDrawer({
           ? new Date().toISOString()
           : volunteer.background_check?.checked_at || null,
       };
-      await updateChurchDocument(churchId, "volunteers", volunteer.id, { background_check });
+      await updateChurchDocument(churchId, "people", volunteer.id, { background_check });
       onVolunteerUpdated({ ...volunteer, background_check: background_check || undefined });
     } catch (err) {
       console.error("[PersonDetailDrawer] Save bg check failed:", err);
@@ -250,10 +252,10 @@ export function PersonDetailDrawer({
     }
 
     try {
-      await updateChurchDocument(churchId, "volunteers", volunteer.id, { volunteer_journey: journey });
+      await updateChurchDocument(churchId, "people", volunteer.id, { volunteer_journey: journey });
       onVolunteerUpdated({ ...volunteer, volunteer_journey: journey });
     } catch {
-      // silent
+      setSaveError("Failed to update journey status.");
     }
   }
 
@@ -352,7 +354,7 @@ export function PersonDetailDrawer({
       const form = new FormData();
       form.append("file", new File([blob], "photo.jpg", { type: blob.type || "image/jpeg" }));
       form.append("church_id", churchId);
-      const res = await fetch(`/api/volunteers/${volunteer.id}/photo`, {
+      const res = await fetch(`/api/people/${volunteer.id}/photo`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form,
@@ -441,6 +443,12 @@ export function PersonDetailDrawer({
     <>
     <Drawer open={open} onClose={onClose} title={volunteer.name} subtitle={volunteer.email || undefined}>
       <div className="space-y-6">
+        {saveError && (
+          <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <span>{saveError}</span>
+            <button onClick={() => setSaveError(null)} className="ml-2 text-xs font-medium hover:text-red-600">Dismiss</button>
+          </div>
+        )}
         {/* ================================================================
             Combined Hero — Avatar + Name + Contact + Edit
            ================================================================ */}

@@ -77,22 +77,18 @@ export function ServiceRoster({
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [assignData, minData, rawVolData] = await Promise.all([
+      const [assignData, minData, peopleDocs] = await Promise.all([
         getServiceAssignments(churchId, service.id, serviceDate),
         getChurchDocuments(churchId, "ministries"),
-        getChurchDocuments(churchId, "people").then((docs) =>
-          docs.length > 0 ? docs : getChurchDocuments(churchId, "volunteers"),
-        ),
+        getChurchDocuments(churchId, "people"),
       ]);
       // Exclude declined assignments from roster
       const active = assignData.filter((a) => a.status !== "declined");
       setAssignments(active);
       setMinistries(minData as unknown as Ministry[]);
 
-      // Build volunteer name lookup — handle both Person and Volunteer shapes
-      const vols = rawVolData.map((d) =>
-        "person_type" in d ? personToLegacyVolunteer(d as Person) : (d as unknown as Volunteer),
-      );
+      // Build volunteer name lookup from people collection
+      const vols = (peopleDocs as unknown as Person[]).map((d) => personToLegacyVolunteer(d));
       const nameMap = new Map<string, string>();
       for (const v of vols) {
         nameMap.set(v.id, v.name);

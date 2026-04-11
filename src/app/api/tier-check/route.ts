@@ -56,11 +56,10 @@ export async function POST(req: NextRequest) {
     }
     const tier = (churchSnap.data()!.subscription_tier || "free") as string;
 
-    // Count current documents
-    const countSnap = await adminDb
-      .collection(`churches/${church_id}/${resource}`)
-      .count()
-      .get();
+    // Count current documents (volunteers live in `people` collection with is_volunteer flag)
+    const countSnap = resource === "volunteers"
+      ? await adminDb.collection(`churches/${church_id}/people`).where("is_volunteer", "==", true).count().get()
+      : await adminDb.collection(`churches/${church_id}/${resource}`).count().get();
     const currentCount = countSnap.data().count;
 
     const result =

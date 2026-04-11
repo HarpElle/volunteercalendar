@@ -21,7 +21,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { church_id, hours = 48 } = body;
+    const { church_id, hours: rawHours = 48 } = body;
+    const hours = Math.min(Math.max(Number(rawHours) || 48, 1), 168); // 1h to 7d
 
     if (!church_id) {
       return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
 
     // Fetch volunteers, services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
-      adminDb.collection(`churches/${church_id}/volunteers`).get(),
+      adminDb.collection(`churches/${church_id}/people`).where("is_volunteer", "==", true).get(),
       adminDb.collection(`churches/${church_id}/services`).get(),
       adminDb.collection(`churches/${church_id}/ministries`).get(),
     ]);
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
     }
 
     for (const assignment of targetAssignments) {
-      const volunteer = volunteerMap.get(assignment.volunteer_id as string);
+      const volunteer = volunteerMap.get((assignment.person_id || assignment.volunteer_id) as string);
       if (!volunteer) {
         skipped++;
         continue;

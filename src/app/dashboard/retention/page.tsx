@@ -50,27 +50,15 @@ export default function RetentionDashboardPage() {
     }
     async function load() {
       try {
-        const [peopleDocs, volDocs, assignDocs, minDocs] = await Promise.all([
+        const [peopleDocs, assignDocs, minDocs] = await Promise.all([
           getChurchDocuments(churchId!, "people"),
-          getChurchDocuments(churchId!, "volunteers"),
           getChurchDocuments(churchId!, "assignments"),
           getChurchDocuments(churchId!, "ministries"),
         ]);
 
-        // Prefer people collection if populated
-        let vols: Volunteer[];
-        if (peopleDocs.length > 0) {
-          vols = (peopleDocs as unknown as Record<string, unknown>[])
-            .filter((d) => d.is_volunteer === true && d.status === "active")
-            .map((d) => {
-              if ("person_type" in d) {
-                return personToLegacyVolunteer(d as unknown as Person);
-              }
-              return d as unknown as Volunteer;
-            });
-        } else {
-          vols = (volDocs as unknown as Volunteer[]).filter((v) => v.status === "active");
-        }
+        const vols: Volunteer[] = (peopleDocs as unknown as Person[])
+          .filter((d) => d.is_volunteer && d.status === "active")
+          .map((d) => personToLegacyVolunteer(d));
 
         const assigns = assignDocs as unknown as Assignment[];
         const mins = minDocs as unknown as Ministry[];

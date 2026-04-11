@@ -274,51 +274,61 @@ export async function POST(req: NextRequest) {
 
       for (const person of people) {
         try {
-          // Check if volunteer with this email already exists
+          const importedFrom = provider === "planning_center" ? "planning_center" : provider === "breeze" ? "breeze" : "rock";
+          // Check if person with this email already exists
           const existing = await adminDb
-            .collection(`churches/${church_id}/volunteers`)
+            .collection(`churches/${church_id}/people`)
             .where("email", "==", person.email)
             .limit(1)
             .get();
 
           if (!existing.empty) {
-            // Update existing volunteer with external data
+            // Update existing person with external data
             const docRef = existing.docs[0].ref;
             batch.update(docRef, {
               phone: person.phone || existing.docs[0].data().phone || null,
-              imported_from: provider === "planning_center" ? "planning_center" : provider === "breeze" ? "breeze" : "rock",
+              imported_from: importedFrom,
             });
           } else {
-            // Create new volunteer
+            // Create new person record
+            const nameParts = (person.name as string).split(" ");
             const volRef = adminDb
-              .collection(`churches/${church_id}/volunteers`)
+              .collection(`churches/${church_id}/people`)
               .doc();
             batch.set(volRef, {
               church_id,
+              person_type: "adult",
               name: person.name,
+              first_name: nameParts[0] || "",
+              last_name: nameParts.slice(1).join(" ") || "",
+              search_name: (person.name as string).toLowerCase(),
               email: person.email,
               phone: person.phone,
+              search_phones: [],
+              photo_url: null,
               user_id: null,
               membership_id: null,
               status: "active",
+              is_volunteer: true,
               ministry_ids: [],
               role_ids: [],
-              household_id: null,
-              availability: {
+              campus_ids: [],
+              household_ids: [],
+              scheduling_profile: {
                 blockout_dates: [],
                 recurring_unavailable: [],
                 preferred_frequency: 2,
                 max_roles_per_month: 8,
               },
-              reminder_preferences: { channels: ["email"] },
               stats: {
                 times_scheduled_last_90d: 0,
                 last_served_date: null,
                 decline_count: 0,
                 no_show_count: 0,
               },
-              imported_from: provider === "planning_center" ? "planning_center" : provider === "breeze" ? "breeze" : "rock",
+              imported_from: importedFrom,
               created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
             });
           }
           imported++;

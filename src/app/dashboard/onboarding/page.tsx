@@ -9,12 +9,14 @@ import { isAdmin } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import type {
   Volunteer,
+  Person,
   Ministry,
   VolunteerJourneyStep,
   JourneyStepStatus,
   OnboardingStep,
   OrgType,
 } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
@@ -79,13 +81,15 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!churchId) return;
     Promise.all([
-      getChurchDocuments(churchId, "volunteers"),
+      getChurchDocuments(churchId, "people"),
       getChurchDocuments(churchId, "ministries"),
       getDoc(doc(db, "churches", churchId)),
     ])
-      .then(([vols, mins, churchSnap]) => {
+      .then(([peopleDocs, mins, churchSnap]) => {
         setVolunteers(
-          (vols as unknown as Volunteer[]).filter((v) => v.status === "active"),
+          (peopleDocs as unknown as Person[])
+            .filter((p) => p.is_volunteer && p.status === "active")
+            .map((p) => personToLegacyVolunteer(p)),
         );
         setMinistries(mins as unknown as Ministry[]);
         if (churchSnap.exists()) {
@@ -169,7 +173,7 @@ export default function OnboardingPage() {
     }
 
     try {
-      await updateChurchDocument(churchId, "volunteers", volunteerId, {
+      await updateChurchDocument(churchId, "people", volunteerId, {
         volunteer_journey: journey,
       });
       setVolunteers((prev) =>

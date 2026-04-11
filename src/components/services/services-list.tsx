@@ -98,22 +98,15 @@ export function ServicesList({
     if (!churchId) return;
     Promise.all([
       getChurchDocuments(churchId, "services"),
-      // Read from `people` (unified); fall back to `volunteers` if empty
-      getChurchDocuments(churchId, "people").then((docs) =>
-        docs.length > 0 ? docs : getChurchDocuments(churchId!, "volunteers"),
-      ),
+      getChurchDocuments(churchId, "people"),
       getChurchDocuments(churchId, "campuses"),
     ])
-      .then(([svcs, peopleOrVols, camps]) => {
+      .then(([svcs, peopleDocs, camps]) => {
         setServices(svcs as unknown as Service[]);
-        const rawDocs = peopleOrVols as unknown as (Person | Volunteer)[];
         setVolunteers(
-          rawDocs
-            .filter((d) => {
-              if ("person_type" in d) return (d as Person).is_volunteer && (d as Person).status === "active";
-              return (d as Volunteer).status === "active";
-            })
-            .map((d) => ("person_type" in d ? personToLegacyVolunteer(d as Person) : (d as Volunteer))),
+          (peopleDocs as unknown as Person[])
+            .filter((d) => d.is_volunteer && d.status === "active")
+            .map((d) => personToLegacyVolunteer(d)),
         );
         setCampuses((camps as unknown as { id: string; name: string }[]).map((c) => ({ id: c.id, name: c.name })));
       })

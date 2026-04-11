@@ -102,7 +102,7 @@ export function VolunteerEditModal({
         background_check: background_check || undefined,
         role_constraints: roleConstraints,
       };
-      await updateChurchDocument(churchId, "volunteers", volunteer.id, updateData);
+      await updateChurchDocument(churchId, "people", volunteer.id, updateData);
       onUpdated({ ...volunteer, ...updateData });
       onClose();
     } catch {

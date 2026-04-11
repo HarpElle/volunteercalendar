@@ -46,14 +46,15 @@ export async function POST(req: NextRequest) {
       if (!mem.volunteer_id || !mem.church_id) continue;
 
       const volRef = adminDb.doc(
-        `churches/${mem.church_id}/volunteers/${mem.volunteer_id}`,
+        `churches/${mem.church_id}/people/${mem.volunteer_id}`,
       );
       const volSnap = await volRef.get();
       if (!volSnap.exists) continue;
 
       const existing = volSnap.data()!;
+      const sp = (existing.scheduling_profile as Record<string, unknown>) || {};
 
-      // Merge profile data into volunteer, preserving volunteer-specific fields
+      // Merge profile data into person doc, preserving scheduling-specific fields
       const fullName = profile.display_name || existing.name;
       const { first_name, last_name } = parseName(fullName);
       await volRef.update({
@@ -62,13 +63,11 @@ export async function POST(req: NextRequest) {
         last_name,
         email: profile.email || existing.email,
         phone: profile.phone ?? existing.phone,
-        availability: {
-          blockout_dates: profile.global_availability?.blockout_dates ?? existing.availability?.blockout_dates ?? [],
-          recurring_unavailable: profile.global_availability?.recurring_unavailable ?? existing.availability?.recurring_unavailable ?? [],
-          // Preserve volunteer-specific scheduling preferences
-          preferred_frequency: existing.availability?.preferred_frequency ?? 2,
-          max_roles_per_month: existing.availability?.max_roles_per_month ?? 8,
-        },
+        "scheduling_profile.blockout_dates": profile.global_availability?.blockout_dates ?? sp.blockout_dates ?? [],
+        "scheduling_profile.recurring_unavailable": profile.global_availability?.recurring_unavailable ?? sp.recurring_unavailable ?? [],
+        // Preserve volunteer-specific scheduling preferences
+        "scheduling_profile.preferred_frequency": sp.preferred_frequency ?? 2,
+        "scheduling_profile.max_roles_per_month": sp.max_roles_per_month ?? 8,
       });
 
       synced++;

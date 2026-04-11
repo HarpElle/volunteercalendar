@@ -12,7 +12,8 @@ import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import { CantMakeItModal } from "@/components/scheduling/cant-make-it-modal";
-import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, CalendarFeed, ReminderChannel } from "@/lib/types";
+import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, Person, CalendarFeed, ReminderChannel } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -101,18 +102,22 @@ export default function MySchedulePage() {
             getChurchDocuments(m.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(m.church_id, "events") as Promise<unknown[]>,
-            getChurchDocuments(m.church_id, "volunteers") as Promise<unknown[]>,
+            getChurchDocuments(m.church_id, "people") as Promise<unknown[]>,
           ]);
 
           // Store all assignments for team view
           churchAssignments.push(...(assigns as Assignment[]));
 
-          // Build volunteer name map
-          for (const v of vols as Volunteer[]) volMap.set(v.id, v);
+          // Build volunteer name map from people collection
+          const people = (vols as unknown as Person[]).filter((p) => p.is_volunteer);
+          for (const p of people) {
+            const v = personToLegacyVolunteer(p);
+            volMap.set(v.id, v);
+          }
 
           if (m.volunteer_id) {
             const myFiltered = (assigns as Assignment[]).filter(
-              (a) => a.volunteer_id === m.volunteer_id,
+              (a) => (a.person_id || a.volunteer_id) === m.volunteer_id,
             );
             myAssignments.push(...myFiltered);
 
@@ -140,18 +145,22 @@ export default function MySchedulePage() {
             getChurchDocuments(profile.church_id, "services") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "ministries") as Promise<unknown[]>,
             getChurchDocuments(profile.church_id, "events") as Promise<unknown[]>,
-            getChurchDocuments(profile.church_id, "volunteers") as Promise<unknown[]>,
+            getChurchDocuments(profile.church_id, "people") as Promise<unknown[]>,
           ]);
 
           churchAssignments.push(...(assigns as Assignment[]));
-          for (const v of vols as Volunteer[]) volMap.set(v.id, v);
+          const fallbackPeople = (vols as unknown as Person[]).filter((p) => p.is_volunteer);
+          for (const p of fallbackPeople) {
+            const v = personToLegacyVolunteer(p);
+            volMap.set(v.id, v);
+          }
 
-          const myVol = (vols as Volunteer[]).find(
+          const myVol = fallbackPeople.find(
             (v) => v.user_id === user?.uid,
           );
           if (myVol) {
             const myFiltered = (assigns as Assignment[]).filter(
-              (a) => a.volunteer_id === myVol.id,
+              (a) => (a.person_id || a.volunteer_id) === myVol.id,
             );
             myAssignments.push(...myFiltered);
             ministryIds = myVol.ministry_ids || [];

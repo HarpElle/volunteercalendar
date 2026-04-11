@@ -109,8 +109,9 @@ export function ScheduleMatrix({
   const byVolunteer = useMemo(() => {
     const groups: Record<string, Assignment[]> = {};
     for (const a of filteredAssignments) {
-      if (!groups[a.volunteer_id]) groups[a.volunteer_id] = [];
-      groups[a.volunteer_id].push(a);
+      const key = a.person_id || a.volunteer_id;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(a);
     }
     return Object.entries(groups)
       .map(([volId, assigns]) => ({
@@ -328,7 +329,7 @@ export function ScheduleMatrix({
                               {!isCollapsed && (
                         <div className="flex flex-wrap gap-2">
                           {mAssignments.map((a) => {
-                            const vol = volunteerMap.get(a.volunteer_id);
+                            const vol = volunteerMap.get(a.person_id || a.volunteer_id);
                             const isReassigningThis = reassigning === a.id;
 
                             if (isReassigningThis) {

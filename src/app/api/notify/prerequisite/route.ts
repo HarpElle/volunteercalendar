@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    // Fetch church + volunteer
+    // Fetch church + volunteer (person)
     const [churchSnap, volunteerSnap] = await Promise.all([
       adminDb.doc(`churches/${church_id}`).get(),
-      adminDb.doc(`churches/${church_id}/volunteers/${volunteer_id}`).get(),
+      adminDb.doc(`churches/${church_id}/people/${volunteer_id}`).get(),
     ]);
 
     if (!churchSnap.exists || !volunteerSnap.exists) {

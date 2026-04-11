@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const volQuery = await adminDb
       .collection("churches")
       .doc(church_id)
-      .collection("volunteers")
+      .collection("people")
       .where("user_id", "==", userId)
       .where("status", "==", "active")
       .limit(1)
@@ -63,18 +63,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No active volunteer record found" }, { status: 404 });
     }
 
-    const volunteerId = volQuery.docs[0].id;
+    const personDoc = volQuery.docs[0];
+    const volunteerId = personDoc.id;
+    const legacyVolunteerId = (personDoc.data().volunteer_id as string) || null;
 
-    // Find an assignment for this volunteer on this service date
-    const assignQuery = await adminDb
+    // Find an assignment for this volunteer on this service date (match by person_id or legacy volunteer_id)
+    let assignQuery = await adminDb
       .collection("churches")
       .doc(church_id)
       .collection("assignments")
-      .where("volunteer_id", "==", volunteerId)
+      .where("person_id", "==", volunteerId)
       .where("service_id", "==", service_id)
       .where("service_date", "==", service_date)
       .limit(1)
       .get();
+
+    if (assignQuery.empty && legacyVolunteerId) {
+      assignQuery = await adminDb
+        .collection("churches")
+        .doc(church_id)
+        .collection("assignments")
+        .where("volunteer_id", "==", legacyVolunteerId)
+        .where("service_id", "==", service_id)
+        .where("service_date", "==", service_date)
+        .limit(1)
+        .get();
+    }
 
     if (assignQuery.empty) {
       return NextResponse.json(
@@ -95,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      volunteer_name: volQuery.docs[0].data().name,
+      volunteer_name: personDoc.data().name,
       service_date,
       checked_in_at: now,
     });

@@ -74,29 +74,39 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // Check if volunteer with this email already exists in the roster
+        // Check if person with this email already exists in the roster
         const existingVolSnap = await adminDb
-          .collection(`churches/${church_id}/volunteers`)
+          .collection(`churches/${church_id}/people`)
           .where("email", "==", email)
           .limit(1)
           .get();
 
         let volunteerId: string;
         if (existingVolSnap.empty) {
-          // Create volunteer record
-          const volRef = adminDb.collection(`churches/${church_id}/volunteers`).doc();
+          // Create person record
+          const personName = (name || email) as string;
+          const nameParts = personName.split(" ");
+          const volRef = adminDb.collection(`churches/${church_id}/people`).doc();
           await volRef.set({
             church_id,
-            name: name || email,
+            person_type: "adult",
+            name: personName,
+            first_name: nameParts[0] || "",
+            last_name: nameParts.slice(1).join(" ") || "",
+            search_name: personName.toLowerCase(),
             email,
             phone: item.phone || null,
+            search_phones: [],
+            photo_url: null,
             user_id: null,
             membership_id: null,
             status: "active",
+            is_volunteer: true,
             ministry_ids: ministry_ids || [],
             role_ids: [],
-            household_id: null,
-            availability: {
+            campus_ids: [],
+            household_ids: [],
+            scheduling_profile: {
               blockout_dates: [],
               recurring_unavailable: [],
               preferred_frequency: 2,
@@ -111,6 +121,7 @@ export async function POST(req: NextRequest) {
             },
             imported_from: item.source_provider || item.source || null,
             created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           });
           volunteerId = volRef.id;
         } else {

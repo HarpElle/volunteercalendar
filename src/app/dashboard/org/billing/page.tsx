@@ -9,8 +9,9 @@ import { isOwner } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
-import type { Church, Ministry, Volunteer } from "@/lib/types";
+import type { Church, Ministry, Person } from "@/lib/types";
 import { BillingSettings } from "@/components/settings/billing-settings";
+import { AccessDenied } from "@/components/ui/access-denied";
 
 export default function BillingPage() {
   return (
@@ -48,14 +49,14 @@ function BillingContent() {
       try {
         const [churchSnap, volDocs, eventDocs, minDocs] = await Promise.all([
           getDoc(doc(db, "churches", churchId!)),
-          getChurchDocuments(churchId!, "volunteers"),
+          getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "events"),
           getChurchDocuments(churchId!, "ministries"),
         ]);
         if (churchSnap.exists()) {
           setChurch({ id: churchSnap.id, ...churchSnap.data() } as unknown as Church);
         }
-        setVolunteerCount((volDocs as unknown as Volunteer[]).length);
+        setVolunteerCount((volDocs as unknown as Person[]).filter((p) => p.is_volunteer).length);
         setMinistriesCount((minDocs as unknown as Ministry[]).length);
         const events = eventDocs as unknown as { id: string; status?: string }[];
         setActiveEventCount(
@@ -70,7 +71,7 @@ function BillingContent() {
     load();
   }, [churchId]);
 
-  if (!isOwner(activeMembership) && !isPlatformSuperadmin) return null;
+  if (!isOwner(activeMembership) && !isPlatformSuperadmin) return <AccessDenied requiredRole="Owner" />;
 
   const currentTier = church?.subscription_tier || "free";
   const orgType = church?.org_type || "church";

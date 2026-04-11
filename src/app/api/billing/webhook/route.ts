@@ -48,7 +48,7 @@ async function sendDowngradeEmail(churchId: string, oldTier: string, newTier: st
       await adminDb.collection(`churches/${churchId}/ministries`).count().get()
     ).data().count;
     const volunteersCount = (
-      await adminDb.collection(`churches/${churchId}/volunteers`).count().get()
+      await adminDb.collection(`churches/${churchId}/people`).where("is_volunteer", "==", true).count().get()
     ).data().count;
     const roomsSnap = await adminDb
       .collection(`churches/${churchId}/rooms`)

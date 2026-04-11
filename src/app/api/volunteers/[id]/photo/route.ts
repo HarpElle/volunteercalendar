@@ -64,7 +64,7 @@ export async function POST(
     }
 
     // Verify volunteer belongs to this church
-    const volDoc = await adminDb.doc(`churches/${churchId}/volunteers/${volunteerId}`).get();
+    const volDoc = await adminDb.doc(`churches/${churchId}/people/${volunteerId}`).get();
     if (!volDoc.exists) {
       return NextResponse.json({ error: "Volunteer not found" }, { status: 404 });
     }
@@ -102,7 +102,7 @@ export async function POST(
     }
 
     // Update volunteer doc
-    await adminDb.doc(`churches/${churchId}/volunteers/${volunteerId}`).update({
+    await adminDb.doc(`churches/${churchId}/people/${volunteerId}`).update({
       photo_url: downloadUrl,
     });
 
@@ -154,7 +154,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const volDoc = await adminDb.doc(`churches/${churchId}/volunteers/${volunteerId}`).get();
+    const volDoc = await adminDb.doc(`churches/${churchId}/people/${volunteerId}`).get();
     if (!volDoc.exists) {
       return NextResponse.json({ error: "Volunteer not found" }, { status: 404 });
     }
@@ -168,7 +168,7 @@ export async function DELETE(
       }
     }
 
-    await adminDb.doc(`churches/${churchId}/volunteers/${volunteerId}`).update({
+    await adminDb.doc(`churches/${churchId}/people/${volunteerId}`).update({
       photo_url: null,
     });
 

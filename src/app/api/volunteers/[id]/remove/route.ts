@@ -48,7 +48,7 @@ export async function DELETE(
 
     const { id: volunteerId } = await params;
     const volRef = adminDb.doc(
-      `churches/${church_id}/volunteers/${volunteerId}`,
+      `churches/${church_id}/people/${volunteerId}`,
     );
     const volSnap = await volRef.get();
     if (!volSnap.exists) {

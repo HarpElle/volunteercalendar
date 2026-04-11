@@ -20,6 +20,7 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import type { Church, Campus, FacilityGroup, FacilityGroupMember } from "@/lib/types";
 import { CampusesSettings } from "@/components/settings/campuses-settings";
+import { AccessDenied } from "@/components/ui/access-denied";
 
 export default function CampusesPage() {
   return (
@@ -59,7 +60,7 @@ function CampusesContent() {
     load();
   }, [churchId]);
 
-  if (!isAdmin(activeMembership)) return null;
+  if (!isAdmin(activeMembership)) return <AccessDenied requiredRole="Admin" />;
 
   const currentTier = church?.subscription_tier || "free";
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;

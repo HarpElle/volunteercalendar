@@ -39,6 +39,7 @@ import { TabBar } from "@/components/ui/tab-bar";
 import { FilterBar } from "@/components/people/filter-bar";
 import type {
   Volunteer,
+  Person,
   Ministry,
   Membership,
   Household,
@@ -48,6 +49,7 @@ import type {
   InviteQueueItem,
   OnboardingStep,
 } from "@/lib/types";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { TIER_LIMITS } from "@/lib/constants";
 import { OverLimitBanner } from "@/components/ui/over-limit-banner";
 
@@ -103,6 +105,9 @@ function PeopleContent() {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [householdModalOpen, setHouseholdModalOpen] = useState(false);
   const [editingHousehold, setEditingHousehold] = useState<Household | undefined>();
+
+  // Error toast state
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Add People panel
   const [addMode, setAddMode] = useState<null | "individual" | "csv" | "chms">(null);
@@ -336,25 +341,33 @@ function PeopleContent() {
           }
 
           const now = new Date().toISOString();
+          const displayName = (memUser?.data()?.display_name || memEmail || "Member") as string;
+          const nameParts = displayName.split(" ");
           const volData = {
             church_id: churchId,
-            name: memUser?.data()?.display_name || memEmail || "Member",
-            email: memUser?.data()?.email || "",
+            person_type: "adult",
+            name: displayName,
+            first_name: nameParts[0] || "",
+            last_name: nameParts.slice(1).join(" ") || "",
+            search_name: displayName.toLowerCase(),
+            email: memUser?.data()?.email || null,
             phone: memUser?.data()?.phone || null,
+            search_phones: [] as string[],
+            photo_url: null,
             user_id: m.user_id,
             membership_id: m.id,
             status: "active" as const,
+            is_volunteer: true,
             ministry_ids: [] as string[],
             role_ids: [] as string[],
             campus_ids: [] as string[],
-            household_id: null,
-            availability: {
+            household_ids: [] as string[],
+            scheduling_profile: {
               blockout_dates: [] as string[],
               recurring_unavailable: [] as string[],
               preferred_frequency: 2,
               max_roles_per_month: 8,
             },
-            reminder_preferences: { channels: ["email" as const] },
             stats: {
               times_scheduled_last_90d: 0,
               last_served_date: null,
@@ -363,8 +376,9 @@ function PeopleContent() {
             },
             imported_from: null,
             created_at: now,
+            updated_at: now,
           };
-          const newRef = await addChurchDocument(churchId, "volunteers", volData);
+          const newRef = await addChurchDocument(churchId, "people", volData);
           setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Volunteer]);
         }
       } catch (err) {
@@ -415,10 +429,10 @@ function PeopleContent() {
   async function handleDeleteVolunteer(id: string) {
     if (!churchId) return;
     try {
-      await removeChurchDocument(churchId, "volunteers", id);
+      await removeChurchDocument(churchId, "people", id);
       setVolunteers((prev) => prev.filter((v) => v.id !== id));
     } catch {
-      // silent
+      setActionError("Failed to delete volunteer. Please try again.");
     }
   }
 
@@ -429,7 +443,7 @@ function PeopleContent() {
     if (!confirm(`Archive ${vol.name}? They'll be removed from all teams and excluded from future scheduling and event invitations. They can still see the organization. You can restore them later.`)) return;
     try {
       const token = await getAuth().currentUser?.getIdToken();
-      const res = await fetch(`/api/volunteers/${id}/archive`, {
+      const res = await fetch(`/api/people/${id}/archive`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ church_id: churchId, action: "archive" }),
@@ -438,9 +452,11 @@ function PeopleContent() {
         setVolunteers((prev) =>
           prev.map((v) => v.id === id ? { ...v, status: "archived" as const, ministry_ids: [], role_ids: [] } : v),
         );
+      } else {
+        setActionError("Failed to archive volunteer.");
       }
     } catch {
-      // silent
+      setActionError("Failed to archive volunteer. Please try again.");
     }
   }
 
@@ -448,7 +464,7 @@ function PeopleContent() {
     if (!churchId) return;
     try {
       const token = await getAuth().currentUser?.getIdToken();
-      const res = await fetch(`/api/volunteers/${id}/archive`, {
+      const res = await fetch(`/api/people/${id}/archive`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ church_id: churchId, action: "restore" }),
@@ -457,9 +473,11 @@ function PeopleContent() {
         setVolunteers((prev) =>
           prev.map((v) => v.id === id ? { ...v, status: "active" as const } : v),
         );
+      } else {
+        setActionError("Failed to restore volunteer.");
       }
     } catch {
-      // silent
+      setActionError("Failed to restore volunteer. Please try again.");
     }
   }
 
@@ -470,16 +488,18 @@ function PeopleContent() {
     if (!confirm(`Remove ${vol.name} from this organization? They will lose all access and won't be able to see the organization unless re-invited. This cannot be undone.`)) return;
     try {
       const token = await getAuth().currentUser?.getIdToken();
-      const res = await fetch(`/api/volunteers/${id}/remove`, {
+      const res = await fetch(`/api/people/${id}/remove`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ church_id: churchId }),
       });
       if (res.ok) {
         setVolunteers((prev) => prev.filter((v) => v.id !== id));
+      } else {
+        setActionError("Failed to remove volunteer from organization.");
       }
     } catch {
-      // silent
+      setActionError("Failed to remove volunteer. Please try again.");
     }
   }
 
@@ -502,6 +522,14 @@ function PeopleContent() {
 
   return (
     <div>
+      {/* Error toast */}
+      {actionError && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="ml-2 font-medium hover:text-red-600">Dismiss</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -588,8 +616,12 @@ function PeopleContent() {
           onRefresh={() => {
             loadQueueItems();
             if (churchId) {
-              getChurchDocuments(churchId, "volunteers").then((vols) =>
-                setVolunteers(vols as unknown as Volunteer[]),
+              getChurchDocuments(churchId, "people").then((docs) =>
+                setVolunteers(
+                  (docs as unknown as Person[])
+                    .filter((p) => p.is_volunteer)
+                    .map((p) => personToLegacyVolunteer(p)),
+                ),
               );
             }
           }}

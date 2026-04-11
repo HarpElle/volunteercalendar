@@ -7,7 +7,9 @@
 
 import { adminDb } from "@/lib/firebase/admin";
 import { findBestVolunteer } from "@/lib/services/scheduler";
+import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import type {
+  Person,
   Volunteer,
   Service,
   ServiceRole,
@@ -50,7 +52,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
   // Fetch service, all active volunteers, households, ministries, church doc, and existing assignments in parallel
   const [serviceSnap, volSnap, householdSnap, ministrySnap, churchSnap, assignSnap] = await Promise.all([
     churchRef.collection("services").doc(serviceId).get(),
-    churchRef.collection("volunteers").where("status", "==", "active").get(),
+    churchRef.collection("people").where("is_volunteer", "==", true).where("status", "==", "active").get(),
     churchRef.collection("households").get(),
     churchRef.collection("ministries").get(),
     churchRef.get(),
@@ -64,7 +66,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
 
   const service = { id: serviceSnap.id, ...serviceSnap.data()! } as Service;
   const volunteers: Volunteer[] = volSnap.docs
-    .map((d) => ({ id: d.id, ...d.data() } as Volunteer))
+    .map((d) => personToLegacyVolunteer({ id: d.id, ...d.data() } as Person))
     .filter((v) => v.id !== declinedVolunteerId);
   const households: Household[] = householdSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Household));
   const ministries: Ministry[] = ministrySnap.docs.map((d) => ({ id: d.id, ...d.data() } as Ministry));
@@ -135,6 +137,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     service_id: serviceId,
     event_id: null,
     service_date: serviceDate,
+    person_id: bestVolunteer.id,
     volunteer_id: bestVolunteer.id,
     role_id: roleId,
     role_title: roleTitle,

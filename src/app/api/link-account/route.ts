@@ -90,29 +90,44 @@ export async function POST(req: NextRequest) {
       const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
       if (!churchSnap.exists) continue;
 
-      // Check if volunteer with this email already exists in the church
+      // Check if person with this email already exists in the church
       const existingVolSnap = await adminDb
-        .collection(`churches/${churchId}/volunteers`)
+        .collection(`churches/${churchId}/people`)
         .where("email", "==", email)
         .limit(1)
         .get();
 
       let volunteerId: string;
       if (existingVolSnap.empty) {
-        // Create volunteer record with profile data
-        const volRef = adminDb.collection(`churches/${churchId}/volunteers`).doc();
+        // Create person record with profile data
+        const nameParts = (volunteerName as string).split(" ");
+        const volRef = adminDb.collection(`churches/${churchId}/people`).doc();
+        const sp = (volunteerAvailability as Record<string, unknown>) || {};
         await volRef.set({
           church_id: churchId,
+          person_type: "adult",
           name: volunteerName,
+          first_name: nameParts[0] || "",
+          last_name: nameParts.slice(1).join(" ") || "",
+          search_name: (volunteerName as string).toLowerCase(),
           email,
           phone: volunteerPhone,
+          search_phones: [],
+          photo_url: null,
           user_id: uid,
           membership_id: membershipId,
           status: "active",
+          is_volunteer: true,
           ministry_ids: [],
           role_ids: [],
-          household_id: null,
-          availability: volunteerAvailability,
+          campus_ids: [],
+          household_ids: [],
+          scheduling_profile: {
+            blockout_dates: sp.blockout_dates ?? [],
+            recurring_unavailable: sp.recurring_unavailable ?? [],
+            preferred_frequency: sp.preferred_frequency ?? 2,
+            max_roles_per_month: sp.max_roles_per_month ?? 8,
+          },
           reminder_preferences: { channels: ["email"] },
           stats: {
             times_scheduled_last_90d: 0,
@@ -122,6 +137,7 @@ export async function POST(req: NextRequest) {
           },
           imported_from: null,
           created_at: now,
+          updated_at: now,
         });
         volunteerId = volRef.id;
       } else {

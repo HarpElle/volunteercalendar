@@ -84,21 +84,18 @@ export async function POST(
       .get();
 
     // Generate confirmation tokens and send emails
-    // Try people collection first (unified model), fall back to volunteers
-    const peopleSnap = await churchRef.collection("people").get();
-    const [volSnap, serviceSnap] = await Promise.all([
-      peopleSnap.empty ? churchRef.collection("volunteers").get() : Promise.resolve(peopleSnap),
+    const [peopleSnap, serviceSnap] = await Promise.all([
+      churchRef.collection("people").get(),
       churchRef.collection("services").get(),
     ]);
 
     const volunteersMap = new Map<string, Volunteer>();
-    volSnap.docs.forEach((d) => {
+    // Index by person doc ID and by any stored legacy volunteer_id
+    peopleSnap.docs.forEach((d) => {
       const data = d.data();
-      // Person docs have person_type; Volunteer docs don't
-      const vol = "person_type" in data
-        ? { id: d.id, name: data.name, email: data.email, ...data } as unknown as Volunteer
-        : { id: d.id, ...data } as Volunteer;
+      const vol = { id: d.id, name: data.name, email: data.email, ...data } as unknown as Volunteer;
       volunteersMap.set(d.id, vol);
+      if (data.volunteer_id) volunteersMap.set(data.volunteer_id as string, vol);
     });
 
     const servicesMap = new Map<string, Service>();
@@ -108,6 +105,7 @@ export async function POST(
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://volunteercal.org";
     let emailsSent = 0;
+    let emailsFailed = 0;
     const batch = adminDb.batch();
 
     for (const doc of assignSnap.docs) {
@@ -132,15 +130,24 @@ export async function POST(
         confirmUrl: `${baseUrl}/api/confirm?token=${confirmToken}`,
       });
 
-      // Send email (fire and forget batch)
-      resend.emails.send({
-        from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-        to: volunteer.email,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-      });
-      emailsSent++;
+      try {
+        const result = await resend.emails.send({
+          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+          to: volunteer.email,
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+        });
+        if (result.error) {
+          console.error("[publish] Resend error:", result.error, "to:", volunteer.email);
+          emailsFailed++;
+        } else {
+          emailsSent++;
+        }
+      } catch (err) {
+        console.error("[publish] Email send threw:", err, "to:", volunteer.email);
+        emailsFailed++;
+      }
     }
 
     await batch.commit();
@@ -149,6 +156,7 @@ export async function POST(
       success: true,
       published_at: now,
       emails_sent: emailsSent,
+      emails_failed: emailsFailed,
       total_assignments: assignSnap.docs.length,
       unapproved_teams: hasUnapprovedTeams ? unapproved : [],
     });
