@@ -67,6 +67,7 @@ export default function SchedulesPage() {
   const [activeStats, setActiveStats] = useState<ScheduleStats | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [notifyResult, setNotifyResult] = useState<string | null>(null);
+  const [sendingNotify, setSendingNotify] = useState(false);
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
 
@@ -311,9 +312,10 @@ export default function SchedulesPage() {
       if (newStatus === "published") {
         setNotifyResult(null);
         try {
+          const token = user ? await user.getIdToken() : "";
           const res = await fetch("/api/notify", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               church_id: churchId,
               schedule_id: activeScheduleId,
@@ -402,6 +404,33 @@ export default function SchedulesPage() {
       setActiveAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
     } catch {
       setMutationError("Failed to unassign volunteer. Please try again.");
+    }
+  }
+
+  async function handleResendNotifications() {
+    if (!churchId || !activeScheduleId || !user) return;
+    setSendingNotify(true);
+    setNotifyResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId, schedule_id: activeScheduleId }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setNotifyResult(
+          `Resent to ${result.sent} volunteer${result.sent !== 1 ? "s" : ""}` +
+          (result.skipped ? ` (${result.skipped} skipped — no email on file)` : "")
+        );
+      } else {
+        setNotifyResult(result.error || "Failed to resend notifications");
+      }
+    } catch {
+      setNotifyResult("Could not resend notifications — try again");
+    } finally {
+      setSendingNotify(false);
     }
   }
 
@@ -762,6 +791,28 @@ export default function SchedulesPage() {
                       Volunteers can confirm or decline via their personal confirmation link.
                       Confirmation links: <code className="bg-vc-bg-warm px-1 rounded">/confirm/[token]</code>
                     </p>
+                    <button
+                      onClick={handleResendNotifications}
+                      disabled={sendingNotify}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-vc-sage/40 bg-white px-3 py-1.5 text-xs font-medium text-vc-sage hover:bg-vc-sage/5 disabled:opacity-50 transition-colors"
+                    >
+                      {sendingNotify ? (
+                        <>
+                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          Sending…
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                          </svg>
+                          Resend Notifications
+                        </>
+                      )}
+                    </button>
                   </div>
                 );
               })()}
