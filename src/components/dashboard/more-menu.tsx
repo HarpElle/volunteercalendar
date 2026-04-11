@@ -237,6 +237,30 @@ export function MoreMenu({
 
         {/* Standard items */}
         <Link
+          href="/dashboard/my-schedule"
+          onClick={onClose}
+          className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary active:bg-vc-sand/20"
+        >
+          <Icon
+            d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-1.5h.008v.008H12v-.008Z"
+            className="h-5 w-5 text-vc-text-muted"
+          />
+          My Schedule
+        </Link>
+
+        <Link
+          href="/dashboard/account"
+          onClick={onClose}
+          className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary active:bg-vc-sand/20"
+        >
+          <Icon
+            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+            className="h-5 w-5 text-vc-text-muted"
+          />
+          Account
+        </Link>
+
+        <Link
           href="/dashboard/inbox"
           onClick={onClose}
           className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary active:bg-vc-sand/20"
