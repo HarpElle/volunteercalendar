@@ -38,8 +38,10 @@ export function CalendarFeedCta({
   const activeFeed = choice === "personal" ? personalFeed : teamFeed;
 
   const feedUrl = activeFeed
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar?token=${activeFeed.secret_token}&type=${activeFeed.type}`
+    ? `${typeof window !== "undefined" ? window.location.origin.replace(/^http:\/\//, "https://") : "https://volunteercal.com"}/api/calendar?token=${activeFeed.secret_token}&type=${activeFeed.type}`
     : null;
+
+  const webcalUrl = feedUrl ? feedUrl.replace(/^https:\/\//, "webcal://") : null;
 
   async function createFeed() {
     setCreating(true);
@@ -128,7 +130,7 @@ export function CalendarFeedCta({
       </p>
 
       {/* Feed URL or create button */}
-      {activeFeed && feedUrl ? (
+      {activeFeed && feedUrl && webcalUrl ? (
         <div>
           <div className="flex items-center gap-2">
             <input
@@ -139,14 +141,22 @@ export function CalendarFeedCta({
             />
             <button
               onClick={copyUrl}
-              className="shrink-0 rounded-lg bg-vc-coral px-3 py-2 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+              className="shrink-0 rounded-lg border border-vc-border px-3 py-2 text-xs font-medium text-vc-text-secondary hover:border-vc-coral hover:text-vc-coral transition-colors"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
-          <p className="mt-2 text-[11px] text-vc-text-muted">
-            Add this URL to Google Calendar (Other calendars &rarr; From URL) or Outlook (Subscribe from web).
-          </p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-[11px] text-vc-text-muted">
+              Google Calendar / Outlook: paste the URL above.
+            </p>
+            <a
+              href={webcalUrl}
+              className="shrink-0 rounded-lg bg-vc-coral px-3 py-1.5 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+            >
+              Subscribe
+            </a>
+          </div>
         </div>
       ) : (
         <button

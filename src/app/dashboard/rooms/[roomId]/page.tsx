@@ -134,7 +134,7 @@ export default function RoomDetailPage() {
 
   function copyIcalUrl() {
     if (!room?.calendar_token) return;
-    const url = `${window.location.origin}/api/calendar/room/${roomId}/${room.calendar_token}`;
+    const url = `${window.location.origin.replace(/^http:\/\//, "https://")}/api/calendar/room/${roomId}/${room.calendar_token}`;
     navigator.clipboard.writeText(url);
     setCopiedIcal(true);
     setTimeout(() => setCopiedIcal(false), 2000);

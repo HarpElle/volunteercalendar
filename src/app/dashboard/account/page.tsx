@@ -358,7 +358,9 @@ export default function AccountPage() {
   }
 
   function getFeedUrl(feed: CalendarFeed): string {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const base = typeof window !== "undefined"
+      ? window.location.origin.replace(/^http:\/\//, "https://")
+      : "https://volunteercal.com";
     return `${base}/api/calendar?token=${feed.secret_token}&type=${feed.type}`;
   }
 
@@ -822,6 +824,12 @@ export default function AccountPage() {
                         >
                           {copied === feed.id ? "Copied!" : "Copy"}
                         </button>
+                        <a
+                          href={url.replace(/^https:\/\//, "webcal://")}
+                          className="shrink-0 rounded-lg bg-vc-coral px-2.5 py-1 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+                        >
+                          Subscribe
+                        </a>
                       </div>
                     </div>
                     <button
@@ -835,7 +843,7 @@ export default function AccountPage() {
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-vc-text-muted">
-                    Add this URL to Google Calendar (Other calendars &rarr; From URL) or Outlook (Add calendar &rarr; Subscribe from web).
+                    Subscribe opens Apple Calendar directly. For Google Calendar or Outlook, paste the copied URL.
                   </p>
                 </div>
               );
