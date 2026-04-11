@@ -25,6 +25,21 @@ import { getFirestore } from "firebase-admin/firestore";
 import * as fs from "fs";
 import * as path from "path";
 
+// Load .env.local so the script works without manually exporting env vars first
+const envPath = path.join(process.cwd(), ".env.local");
+if (fs.existsSync(envPath)) {
+  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, "");
+    if (!(key in process.env)) process.env[key] = val;
+  }
+}
+
 // ─── CLI Args ──────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
