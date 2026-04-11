@@ -8,7 +8,7 @@ const faqs = [
   {
     question: "Is VolunteerCal only for churches?",
     answer:
-      "Churches are our primary focus, but VolunteerCal works for any organization that coordinates volunteers across multiple teams — nonprofits, community groups, service organizations, and more. The scheduling logic is the same whether you're coordinating a worship team or a food pantry crew.",
+      "Churches are our primary focus, but VolunteerCal works for any organization that coordinates volunteers across multiple teams: nonprofits, community groups, service organizations, and more. The scheduling logic is the same whether you're coordinating a worship team or a food pantry crew.",
   },
   {
     question: "What if we already use Planning Center, Breeze, or Rock RMS?",
@@ -18,7 +18,7 @@ const faqs = [
   {
     question: "Is there really a free plan?",
     answer:
-      "Yes — the Free plan is yours forever. It includes up to 20 volunteers, 2 teams with 3 roles per service, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
+      "Yes. The Free plan is yours to keep. It includes up to 20 volunteers, 2 teams with 3 roles per service, and core scheduling features like auto-draft, calendar feeds, and email reminders. No credit card required, no trial period.",
   },
   {
     question: "How does auto-draft scheduling work?",
@@ -28,17 +28,17 @@ const faqs = [
   {
     question: "Can volunteers see only their own schedule?",
     answer:
-      "By default, volunteers see a clean personal view — their upcoming assignments, confirm or decline options, shift swap requests, and a personal calendar feed. But they can also view the full schedule for any team they belong to, so they always have context on who else is serving alongside them.",
+      "By default, volunteers see a clean personal view with their upcoming assignments, confirm or decline options, shift swap requests, and a personal calendar feed. They can also view the full schedule for any team they belong to, so they know who else is serving alongside them.",
   },
   {
     question: "Does it work on phones?",
     answer:
-      "Absolutely. VolunteerCal is built mobile-first and can be installed as an app on any device — iPhone, Android, tablet, or desktop. Volunteers get a native app experience without downloading anything from an app store.",
+      "Yes. VolunteerCal is built mobile-first and can be installed as an app on any device: iPhone, Android, tablet, or desktop. Volunteers get a native app experience without downloading anything from an app store.",
   },
   {
     question: "What happens when a volunteer can't make it?",
     answer:
-      "Volunteers can decline an assignment or request a shift swap directly from their schedule. The system finds eligible replacements based on availability and qualifications. A replacement accepts, the scheduler approves, and the swap is done — no group texts required.",
+      "Volunteers can decline an assignment or request a shift swap directly from their schedule. The system finds eligible replacements based on availability and qualifications. A replacement accepts, the scheduler approves, and the swap is done. No group texts required.",
   },
   {
     question: "How is my data protected?",

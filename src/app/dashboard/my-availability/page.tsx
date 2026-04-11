@@ -278,7 +278,7 @@ export default function MyAvailabilityPage() {
           Unavailable Dates
         </h2>
         <p className="mb-4 text-sm text-vc-text-secondary">
-          Specific dates you can't serve — vacations, trips, family events.
+          Specific dates you can't serve: vacations, trips, family events.
         </p>
 
         {/* Add new */}

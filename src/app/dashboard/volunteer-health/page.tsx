@@ -282,7 +282,7 @@ export default function VolunteerHealthPage() {
                       </div>
                     </div>
                     <a
-                      href={`mailto:${h.volunteer.email ?? ""}?subject=Checking in — VolunteerCal`}
+                      href={`mailto:${h.volunteer.email ?? ""}?subject=Checking in with you - VolunteerCal`}
                       className="flex h-9 w-9 items-center justify-center rounded-lg text-vc-text-muted hover:bg-vc-coral/10 hover:text-vc-coral transition-colors"
                       aria-label={`Email ${h.volunteer.name}`}
                       title={`Email ${h.volunteer.name}`}

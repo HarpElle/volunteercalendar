@@ -417,7 +417,7 @@ export default function SchedulingDashboardPage() {
           <div className="border-b border-vc-border-light px-5 py-3">
             <h2 className="font-semibold text-vc-indigo">Take Attendance</h2>
             <p className="mt-0.5 text-xs text-vc-text-muted">
-              Recent services — click to view roster or mark attendance.
+              Click a service date to view the roster or mark attendance.
             </p>
           </div>
           <div className="divide-y divide-vc-border-light">

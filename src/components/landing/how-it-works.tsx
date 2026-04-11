@@ -31,7 +31,7 @@ const steps = [
     number: "04",
     title: "Confirm",
     description:
-      "Volunteers receive one clear notification with their assignment. They confirm or decline directly \u2014 no email threads, no phone tag. On service day, smart check-in prompts them when it\u2019s time. Calendar feeds sync automatically.",
+      "Volunteers receive one clear notification with their assignment. They confirm or decline from their phone. No email threads, no phone tag. On service day, smart check-in prompts them when it's time. Calendar feeds sync automatically.",
     accent: "vc-indigo",
     accentBg: "bg-vc-indigo",
   },
@@ -54,7 +54,7 @@ export function HowItWorks() {
             Four steps to a better schedule
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-center text-lg text-vc-indigo-muted/80">
-            From setup to published schedule — no spreadsheets, no back-and-forth emails.
+            Setup to published schedule. No spreadsheets, no back-and-forth emails.
           </p>
         </AnimateIn>
 
