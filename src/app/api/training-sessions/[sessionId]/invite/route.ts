@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildTrainingSessionInviteEmail } from "@/lib/utils/emails/training-session-invite";
 import type { VolunteerJourneyStep, TrainingSessionRsvp } from "@/lib/types";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -64,9 +65,7 @@ export async function POST(
     const stepId = session.prerequisite_step_id as string;
     const ministryId = session.ministry_id as string;
 
-    const origin = req.headers.get("origin")
-      || req.headers.get("referer")?.replace(/\/[^/]*$/, "")
-      || "https://volunteercal.com";
+    const origin = getBaseUrl(req);
 
     let sent = 0;
     let skipped = 0;

@@ -106,6 +106,12 @@ export async function POST(
       photo_url: downloadUrl,
     });
 
+    // Sync photo to linked user account (best-effort)
+    const personUserId = volDoc.data()?.user_id as string | null;
+    if (personUserId) {
+      adminDb.doc(`users/${personUserId}`).update({ photo_url: downloadUrl }).catch(() => {});
+    }
+
     return NextResponse.json({ photo_url: downloadUrl });
   } catch (err) {
     console.error("[API /volunteers/[id]/photo] Error:", err);
@@ -171,6 +177,12 @@ export async function DELETE(
     await adminDb.doc(`churches/${churchId}/people/${volunteerId}`).update({
       photo_url: null,
     });
+
+    // Sync photo removal to linked user account (best-effort)
+    const personUserId = volDoc.data()?.user_id as string | null;
+    if (personUserId) {
+      adminDb.doc(`users/${personUserId}`).update({ photo_url: null }).catch(() => {});
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

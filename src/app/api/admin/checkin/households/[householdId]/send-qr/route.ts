@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { sendSms } from "@/lib/services/sms";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 /**
  * POST /api/admin/checkin/households/[householdId]/send-qr
@@ -66,7 +67,7 @@ export async function POST(
       );
     }
 
-    const origin = req.headers.get("origin") || req.nextUrl.origin;
+    const origin = getBaseUrl(req);
     const kioskUrl = `${origin}/checkin?church_id=${church_id}&token=${household.qr_token}`;
 
     await sendSms({

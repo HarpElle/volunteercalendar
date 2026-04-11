@@ -177,6 +177,12 @@ export default function SchedulesPage() {
       setActiveConflicts(result.conflicts);
       setActiveStats(result.stats);
       setShowCreate(false);
+
+      if (savedAssignments.length === 0) {
+        setMutationError(
+          "No assignments could be generated — the selected team(s) may have no volunteers assigned, or no services fall within the selected date range."
+        );
+      }
     } catch {
       setMutationError("Failed to generate schedule. Please try again.");
     } finally {
@@ -430,6 +436,38 @@ export default function SchedulesPage() {
       }
     } catch {
       setNotifyResult("Could not resend notifications — try again");
+    } finally {
+      setSendingNotify(false);
+    }
+  }
+
+  async function handleTargetedReminder(statusFilter: "draft" | "declined") {
+    if (!churchId || !activeScheduleId || !user) return;
+    setSendingNotify(true);
+    setNotifyResult(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          schedule_id: activeScheduleId,
+          status_filter: statusFilter,
+        }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        const label = statusFilter === "draft" ? "unanswered" : "declined";
+        setNotifyResult(
+          `Reminder sent to ${result.sent} ${label} volunteer${result.sent !== 1 ? "s" : ""}` +
+          (result.skipped ? ` (${result.skipped} skipped)` : "")
+        );
+      } else {
+        setNotifyResult(result.error || "Failed to send targeted reminders");
+      }
+    } catch {
+      setNotifyResult("Could not send reminders — try again");
     } finally {
       setSendingNotify(false);
     }
@@ -810,10 +848,28 @@ export default function SchedulesPage() {
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                           </svg>
-                          Resend Notifications
+                          Resend All
                         </>
                       )}
                     </button>
+                    {pending > 0 && (
+                      <button
+                        onClick={() => handleTargetedReminder("draft")}
+                        disabled={sendingNotify}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-vc-warning/40 bg-white px-3 py-1.5 text-xs font-medium text-vc-warning hover:bg-vc-sand/10 disabled:opacity-50 transition-colors"
+                      >
+                        Nudge {pending} Unanswered
+                      </button>
+                    )}
+                    {declined > 0 && (
+                      <button
+                        onClick={() => handleTargetedReminder("declined")}
+                        disabled={sendingNotify}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-vc-danger/40 bg-white px-3 py-1.5 text-xs font-medium text-vc-danger hover:bg-vc-danger/5 disabled:opacity-50 transition-colors"
+                      >
+                        Re-invite {declined} Declined
+                      </button>
+                    )}
                   </div>
                 );
               })()}
@@ -886,16 +942,42 @@ export default function SchedulesPage() {
             </div>
           )}
 
-          {/* Matrix */}
-          <ScheduleMatrix
-            assignments={activeAssignments}
-            services={services}
-            volunteers={volunteers}
-            ministries={ministries}
-            schedule={activeSchedule}
-            onReassign={activeSchedule.status === "draft" ? handleReassign : undefined}
-            onUnassign={activeSchedule.status === "draft" ? handleUnassign : undefined}
-          />
+          {/* Matrix or Empty State */}
+          {activeAssignments.length === 0 ? (
+            <div className="rounded-xl border border-vc-border-light bg-white p-10 text-center">
+              <svg className="mx-auto h-10 w-10 text-vc-text-muted/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+              <h3 className="mt-3 text-base font-semibold text-vc-indigo">No Assignments Generated</h3>
+              <p className="mt-1 text-sm text-vc-text-secondary max-w-md mx-auto">
+                The selected team(s) may have no volunteers assigned, or no services fall within the date range.
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                <a
+                  href="/dashboard/org/teams"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark"
+                >
+                  Add Volunteers to Teams
+                </a>
+                <a
+                  href="/dashboard/services-events"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-white px-4 py-2.5 text-sm font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm"
+                >
+                  Create Services
+                </a>
+              </div>
+            </div>
+          ) : (
+            <ScheduleMatrix
+              assignments={activeAssignments}
+              services={services}
+              volunteers={volunteers}
+              ministries={ministries}
+              schedule={activeSchedule}
+              onReassign={activeSchedule.status === "draft" ? handleReassign : undefined}
+              onUnassign={activeSchedule.status === "draft" ? handleUnassign : undefined}
+            />
+          )}
         </div>
       )}
 

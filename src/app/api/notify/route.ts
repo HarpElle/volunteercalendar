@@ -6,6 +6,7 @@ import {
   type BatchAssignment,
 } from "@/lib/utils/emails/batch-confirmation";
 import { resolveUserId, createUserNotificationBatch } from "@/lib/services/user-notifications";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -20,7 +21,18 @@ export async function POST(request: NextRequest) {
     const userId = decoded.uid;
 
     const body = await request.json();
-    const { church_id, schedule_id } = body;
+    const { church_id, schedule_id, status_filter, date_filter, volunteer_filter, role_filter } = body as {
+      church_id: string;
+      schedule_id: string;
+      /** Only notify assignments with this status (e.g. "draft" for unanswered, "declined") */
+      status_filter?: string;
+      /** Only notify assignments for this service date (ISO string) */
+      date_filter?: string;
+      /** Only notify these specific volunteer IDs */
+      volunteer_filter?: string[];
+      /** Only notify assignments for these role IDs */
+      role_filter?: string[];
+    };
 
     if (!church_id || !schedule_id) {
       return NextResponse.json(
@@ -57,10 +69,26 @@ export async function POST(request: NextRequest) {
       id: d.id,
       ...d.data(),
     } as DocRecord));
-    const assignments = allAssignments.filter((a) => a.schedule_id === schedule_id);
+    let assignments = allAssignments.filter((a) => a.schedule_id === schedule_id);
+
+    // Apply optional filters for targeted re-invitations
+    if (status_filter) {
+      assignments = assignments.filter((a) => a.status === status_filter);
+    }
+    if (date_filter) {
+      assignments = assignments.filter((a) => a.service_date === date_filter);
+    }
+    if (volunteer_filter && volunteer_filter.length > 0) {
+      const volSet = new Set(volunteer_filter);
+      assignments = assignments.filter((a) => volSet.has(a.person_id as string) || volSet.has(a.volunteer_id as string));
+    }
+    if (role_filter && role_filter.length > 0) {
+      const roleSet = new Set(role_filter);
+      assignments = assignments.filter((a) => roleSet.has(a.role_id as string));
+    }
 
     if (assignments.length === 0) {
-      return NextResponse.json({ error: "No assignments found" }, { status: 404 });
+      return NextResponse.json({ error: "No assignments found matching filters" }, { status: 404 });
     }
 
     // Fetch people (volunteers), services, ministries
@@ -81,9 +109,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Determine base URL for confirmation links
-    const origin = request.headers.get("origin")
-      || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
-      || "https://volunteercal.com";
+    const origin = getBaseUrl(request);
 
     // Group assignments by volunteer to send one batched email per volunteer
     const byVolunteer = new Map<string, typeof assignments>();

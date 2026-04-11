@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { buildInviteEmail } from "@/lib/utils/email-templates";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -113,7 +114,7 @@ export async function POST(request: Request) {
       });
 
       // Build accept URL
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com";
+      const baseUrl = getBaseUrl(request);
       const acceptUrl = `${baseUrl}/invites/${membershipId}`;
 
       // Send invite email
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
       });
 
       // Send invite email with registration link
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com";
+      const baseUrl = getBaseUrl(request);
       const acceptUrl = `${baseUrl}/register?redirect=/join/${churchId}&email=${encodeURIComponent(email)}`;
 
       if (process.env.RESEND_API_KEY) {

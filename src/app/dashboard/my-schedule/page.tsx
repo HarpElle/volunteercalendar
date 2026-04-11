@@ -3,16 +3,15 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
-import { getChurchDocuments, getUserEventSignups, updateDocument } from "@/lib/firebase/firestore";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { getChurchDocuments, getUserEventSignups } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { SkeletonList } from "@/components/ui/skeleton";
-import { REMINDER_CHANNELS } from "@/lib/constants";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import { CantMakeItModal } from "@/components/scheduling/cant-make-it-modal";
-import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, Person, CalendarFeed, ReminderChannel } from "@/lib/types";
+import type { Assignment, Service, Ministry, Event, EventSignup, Volunteer, Person, CalendarFeed } from "@/lib/types";
 import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 function formatDate(iso: string): string {
@@ -33,8 +32,6 @@ function formatTime(time: string | null | undefined): string {
   return `${display}:${m} ${ampm}`;
 }
 
-const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
 /** A unified item that can be either a scheduler assignment or an event signup. */
 interface ScheduleItem {
   id: string;
@@ -50,7 +47,7 @@ interface ScheduleItem {
   isTrainee?: boolean;
 }
 
-type TabKey = "upcoming" | "past" | "availability" | "team";
+type TabKey = "upcoming" | "past" | "team";
 
 export default function MySchedulePage() {
   const { user, profile, activeMembership, memberships } = useAuth();
@@ -72,14 +69,6 @@ export default function MySchedulePage() {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
   const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
-
-  // Availability state
-  const [blockoutDates, setBlockoutDates] = useState<string[]>([]);
-  const [newBlockout, setNewBlockout] = useState("");
-  const [recurringUnavailable, setRecurringUnavailable] = useState<string[]>([]);
-  const [reminderChannels, setReminderChannels] = useState<ReminderChannel[]>(["email"]);
-  const [availabilitySaving, setAvailabilitySaving] = useState(false);
-  const [availabilitySaved, setAvailabilitySaved] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -217,20 +206,6 @@ export default function MySchedulePage() {
     if (user) loadAll();
   }, [user, profile, memberships]);
 
-  // Load availability data
-  useEffect(() => {
-    if (profile?.global_availability) {
-      setBlockoutDates(profile.global_availability.blockout_dates || []);
-      setRecurringUnavailable(profile.global_availability.recurring_unavailable || []);
-    }
-  }, [profile]);
-
-  useEffect(() => {
-    if (activeMembership?.reminder_preferences?.channels?.length) {
-      setReminderChannels(activeMembership.reminder_preferences.channels);
-    }
-  }, [activeMembership]);
-
   // --- Build unified schedule items ---
 
   const scheduleItems: ScheduleItem[] = [];
@@ -298,74 +273,6 @@ export default function MySchedulePage() {
         })
     : [];
 
-  // --- Availability handlers ---
-
-  function addBlockout() {
-    if (!newBlockout || blockoutDates.includes(newBlockout)) return;
-    setBlockoutDates((prev) => [...prev, newBlockout].sort());
-    setNewBlockout("");
-    setAvailabilitySaved(false);
-  }
-
-  function removeBlockout(date: string) {
-    setBlockoutDates((prev) => prev.filter((d) => d !== date));
-    setAvailabilitySaved(false);
-  }
-
-  function toggleDay(dayIndex: string) {
-    setRecurringUnavailable((prev) =>
-      prev.includes(dayIndex) ? prev.filter((d) => d !== dayIndex) : [...prev, dayIndex],
-    );
-    setAvailabilitySaved(false);
-  }
-
-  function toggleReminderChannel(channel: ReminderChannel) {
-    setReminderChannels((prev) => {
-      if (channel === "none") return ["none"];
-      const without = prev.filter((c) => c !== "none");
-      if (without.includes(channel)) {
-        const result = without.filter((c) => c !== channel);
-        return result.length === 0 ? ["none"] : result;
-      }
-      return [...without, channel];
-    });
-    setAvailabilitySaved(false);
-  }
-
-  async function handleAvailabilitySave() {
-    if (!user) return;
-    setAvailabilitySaving(true);
-    try {
-      await updateDocument("users", user.uid, {
-        global_availability: {
-          blockout_dates: blockoutDates,
-          recurring_unavailable: recurringUnavailable,
-        },
-      });
-      if (activeMembership?.id) {
-        await updateDocument("memberships", activeMembership.id, {
-          reminder_preferences: { channels: reminderChannels },
-          updated_at: new Date().toISOString(),
-        });
-      }
-      // Sync availability to linked volunteer records across all orgs
-      user.getIdToken().then((token) =>
-        fetch("/api/account/sync-profile", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {}),
-      );
-      setAvailabilitySaved(true);
-    } catch {
-      // silent
-    } finally {
-      setAvailabilitySaving(false);
-    }
-  }
-
-  const futureBlockouts = blockoutDates.filter((d) => d >= today);
-  const pastBlockouts = blockoutDates.filter((d) => d < today);
-
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -374,7 +281,7 @@ export default function MySchedulePage() {
           <div className="mt-2 h-5 w-72 rounded-lg bg-vc-bg-cream animate-shimmer" />
         </div>
         <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-9 flex-1 rounded-lg bg-vc-bg-cream animate-shimmer" />
           ))}
         </div>
@@ -398,7 +305,6 @@ export default function MySchedulePage() {
           { key: "upcoming" as const, label: "Upcoming" },
           { key: "past" as const, label: "Past" },
           { key: "team" as const, label: "Team" },
-          { key: "availability" as const, label: "Availability" },
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -564,187 +470,25 @@ export default function MySchedulePage() {
         />
       )}
 
-      {/* Availability tab */}
-      {activeTab === "availability" && (
-        <>
-          {/* Recurring unavailable days */}
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-            <h2 className="text-lg font-semibold text-vc-indigo mb-1">Weekly Availability</h2>
-            <p className="text-sm text-vc-text-muted mb-4">
-              Mark days you&apos;re generally <strong>not available</strong>. Schedulers won&apos;t invite you on these days.
-            </p>
-            <div className="grid grid-cols-7 gap-2">
-              {DAYS_OF_WEEK.map((day, i) => {
-                const dayStr = String(i);
-                const isUnavailable = recurringUnavailable.includes(dayStr);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => toggleDay(dayStr)}
-                    className={`min-h-[44px] rounded-xl border px-2 py-3 text-center text-xs font-medium transition-all ${
-                      isUnavailable
-                        ? "border-vc-danger/30 bg-vc-danger/5 text-vc-danger"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-sage/50 hover:bg-vc-sage/5"
-                    }`}
-                  >
-                    <span className="block sm:hidden">{day.slice(0, 2)}</span>
-                    <span className="hidden sm:block">{day.slice(0, 3)}</span>
-                    <span className="mt-1 block text-[10px]">
-                      {isUnavailable ? "Off" : "Available"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {/* Availability CTA */}
+      <Link
+        href="/dashboard/my-availability"
+        className="mt-6 flex items-center gap-3 rounded-xl border border-vc-border-light bg-vc-bg-warm p-4 transition-colors hover:border-vc-coral/30 hover:bg-vc-coral/5"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-vc-coral/10 text-vc-coral">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-vc-indigo">My Availability</p>
+          <p className="text-xs text-vc-text-muted">Manage blockout dates, weekly availability, and scheduling preferences</p>
+        </div>
+        <svg className="ml-auto h-4 w-4 shrink-0 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+        </svg>
+      </Link>
 
-          {/* Blockout dates */}
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-            <h2 className="text-lg font-semibold text-vc-indigo mb-1">Blockout Dates</h2>
-            <p className="text-sm text-vc-text-muted mb-4">
-              Specific dates you can&apos;t serve (vacations, travel, etc.). Shared across all your organizations.
-            </p>
-
-            <div className="flex gap-2 mb-4">
-              <input
-                type="date"
-                min={today}
-                value={newBlockout}
-                onChange={(e) => setNewBlockout(e.target.value)}
-                className="flex-1 rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
-              />
-              <button
-                onClick={addBlockout}
-                disabled={!newBlockout}
-                className="rounded-lg bg-vc-coral px-4 py-2 text-sm font-medium text-white hover:bg-vc-coral-dark transition-colors disabled:opacity-50"
-              >
-                Add
-              </button>
-            </div>
-
-            {futureBlockouts.length === 0 ? (
-              <p className="text-sm text-vc-text-muted italic">No upcoming blockout dates.</p>
-            ) : (
-              <div className="space-y-1">
-                {futureBlockouts.map((date) => {
-                  const d = new Date(date + "T00:00:00");
-                  return (
-                    <div key={date} className="flex items-center justify-between rounded-lg bg-vc-bg-warm px-3 py-2">
-                      <span className="text-sm text-vc-indigo">
-                        {d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                      </span>
-                      <button
-                        onClick={() => removeBlockout(date)}
-                        className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {pastBlockouts.length > 0 && (
-              <div className="mt-3">
-                <button
-                  onClick={() => setBlockoutDates((prev) => prev.filter((d) => d >= today))}
-                  className="text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
-                >
-                  Clear {pastBlockouts.length} past blockout{pastBlockouts.length !== 1 ? "s" : ""}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Reminder preferences */}
-          <div className="mb-6 rounded-xl border border-vc-border-light bg-white p-6">
-            <h2 className="text-lg font-semibold text-vc-indigo mb-1">Reminder Preferences</h2>
-            <p className="text-sm text-vc-text-muted mb-4">
-              Choose how you&apos;d like to be reminded about upcoming assignments.
-            </p>
-            <div className="space-y-2">
-              {REMINDER_CHANNELS.map((opt) => {
-                const isActive = reminderChannels.includes(opt.value);
-                const isNone = opt.value === "none";
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => toggleReminderChannel(opt.value)}
-                    className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                      isActive
-                        ? isNone
-                          ? "border-vc-text-muted/30 bg-vc-bg-warm text-vc-text-secondary"
-                          : "border-vc-coral/30 bg-vc-coral/5 text-vc-indigo"
-                        : "border-vc-border text-vc-text-secondary hover:border-vc-border-light hover:bg-vc-bg-warm"
-                    }`}
-                  >
-                    <div className={`flex h-5 w-5 items-center justify-center rounded-md border ${
-                      isActive
-                        ? isNone
-                          ? "border-vc-text-muted bg-vc-text-muted text-white"
-                          : "border-vc-coral bg-vc-coral text-white"
-                        : "border-vc-border"
-                    }`}>
-                      {isActive && (
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <span className="font-medium">{opt.label}</span>
-                      {opt.value === "email" && (
-                        <span className="ml-1.5 text-xs text-vc-text-muted">48hr + 24hr before</span>
-                      )}
-                      {opt.value === "sms" && (
-                        <span className="ml-1.5 text-xs text-vc-text-muted">24hr before (requires phone number)</span>
-                      )}
-                      {opt.value === "calendar" && (
-                        <span className="ml-1.5 text-xs text-vc-text-muted">via iCal feed events</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {reminderChannels.includes("sms") && (
-              <div className="mt-3 rounded-lg border border-vc-border-light bg-vc-bg-warm px-4 py-3">
-                <p className="text-xs text-vc-text-muted leading-relaxed">
-                  By enabling text message reminders, you agree to receive SMS from VolunteerCal
-                  related to your volunteer schedule. Msg frequency varies based on your scheduling
-                  activity. Msg &amp; data rates may apply. Reply STOP to any message to opt out, or
-                  HELP for assistance. See our{" "}
-                  <a href="/privacy" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
-                    Privacy Policy
-                  </a>{" "}
-                  and{" "}
-                  <a href="/terms" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
-                    Terms of Service
-                  </a>.
-                </p>
-                {!profile?.phone && (
-                  <p className="mt-2 text-xs text-vc-sand-dark">
-                    To receive SMS reminders, add your phone number in Account Settings.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Save */}
-          <div className="flex items-center gap-3">
-            <Button onClick={handleAvailabilitySave} loading={availabilitySaving}>
-              Save Preferences
-            </Button>
-            {availabilitySaved && (
-              <span className="text-sm text-vc-sage font-medium">Saved!</span>
-            )}
-          </div>
-        </>
-      )}
       {/* Can't Make It modal */}
       {cantMakeItItem && (
         <CantMakeItModal

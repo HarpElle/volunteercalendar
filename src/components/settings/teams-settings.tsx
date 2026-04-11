@@ -207,7 +207,7 @@ export function TeamsSettings({
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {ministries.map((m) => (
+            {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
               <div
                 key={m.id}
                 role="button"

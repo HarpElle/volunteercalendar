@@ -556,7 +556,7 @@ export function PersonDetailDrawer({
               <div className="mb-3">
                 <label className="mb-1.5 block text-sm font-medium text-vc-text">Teams</label>
                 <div className="flex flex-wrap gap-2">
-                  {ministries.map((m) => (
+                  {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
                     <button
                       key={m.id}
                       type="button"

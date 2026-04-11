@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isPlatformAdmin } from "@/lib/utils/platform-admin";
 import { sendEmail } from "@/lib/services/email";
 import type { FeedbackItem } from "@/lib/types";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ export async function PATCH(req: NextRequest) {
                     <blockquote style="border-left:3px solid #ccc;padding-left:12px;margin:12px 0;">
                       ${platform_response}
                     </blockquote>
-                    <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com"}/dashboard/admin/feedback">View in Dashboard</a></p>
+                    <p><a href="${getBaseUrl(req)}/dashboard/admin/feedback">View in Dashboard</a></p>
                   `,
                   text: `Product Team Response\n\nRegarding: ${title}\n\n${platform_response}`,
                 });

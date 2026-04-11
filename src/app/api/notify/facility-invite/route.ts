@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       .where("status", "==", "active")
       .get();
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://volunteercal.org";
+    const baseUrl = getBaseUrl(req);
     let sentCount = 0;
 
     for (const memberDoc of targetMembersSnap.docs) {

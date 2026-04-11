@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildEventInviteEmail } from "@/lib/utils/email-templates";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       : "An admin";
 
     // Build signup URL
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com";
+    const baseUrl = getBaseUrl(req);
     const signupUrl = `${baseUrl}/events/${church_id}/${event_id}/signup`;
 
     // Format date and time for the email

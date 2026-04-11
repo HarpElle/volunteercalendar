@@ -10,6 +10,7 @@ import { SkeletonStats, SkeletonList } from "@/components/ui/skeleton";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { ServiceDateTile, groupAssignmentsByServiceDate } from "@/components/scheduling/service-date-tile";
 import type { Service, Event, Schedule, Assignment, Ministry, EventSignup } from "@/lib/types";
 
 function formatDate(iso: string): string {
@@ -312,7 +313,7 @@ export default function SchedulingDashboardPage() {
         {showAdminSection && activeSchedules.length > 0 && (
           <section className="rounded-xl border border-vc-border-light bg-white overflow-hidden">
             <div className="border-b border-vc-border-light px-5 py-3 flex items-center justify-between">
-              <h2 className="font-semibold text-vc-indigo">Active Schedules</h2>
+              <h2 className="font-semibold text-vc-indigo">Pending Invites</h2>
               <Link
                 href="/dashboard/schedules"
                 className="text-xs text-vc-coral hover:underline"
@@ -321,28 +322,89 @@ export default function SchedulingDashboardPage() {
               </Link>
             </div>
             <div className="divide-y divide-vc-border-light">
-              {activeSchedules.map((sch) => (
-                <Link
-                  key={sch.id}
-                  href={`/dashboard/schedules/${sch.id}`}
-                  className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-vc-bg-warm/50"
-                >
-                  <p className="text-sm font-medium text-vc-indigo">
-                    {formatDate(sch.date_range_start)} – {formatDate(sch.date_range_end)}
-                  </p>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
-                    sch.status === "published"
-                      ? "bg-vc-sage/15 text-vc-sage"
-                      : "bg-vc-bg-cream text-vc-text-muted"
-                  }`}>
-                    {sch.status}
-                  </span>
-                </Link>
-              ))}
+              {activeSchedules.map((sch) => {
+                const schAssignments = assignments.filter((a) => a.schedule_id === sch.id);
+                const confirmed = schAssignments.filter((a) => a.status === "confirmed").length;
+                const awaiting = schAssignments.filter((a) => a.status === "draft").length;
+                const declined = schAssignments.filter((a) => a.status === "declined").length;
+                return (
+                  <Link
+                    key={sch.id}
+                    href={`/dashboard/schedules/${sch.id}`}
+                    className="block px-5 py-3 transition-colors hover:bg-vc-bg-warm/50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-vc-indigo">
+                        {formatDate(sch.date_range_start)} – {formatDate(sch.date_range_end)}
+                      </p>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+                        sch.status === "published"
+                          ? "bg-vc-sage/15 text-vc-sage"
+                          : "bg-vc-bg-cream text-vc-text-muted"
+                      }`}>
+                        {sch.status}
+                      </span>
+                    </div>
+                    {schAssignments.length > 0 && (
+                      <div className="mt-1 flex gap-3 text-xs text-vc-text-muted">
+                        {confirmed > 0 && <span className="text-vc-sage">{confirmed} confirmed</span>}
+                        {awaiting > 0 && <span className="text-vc-sand-dark">{awaiting} awaiting</span>}
+                        {declined > 0 && <span className="text-vc-danger">{declined} declined</span>}
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           </section>
         )}
       </div>
+
+      {/* Upcoming Service Dates — per-date fill status for published schedules */}
+      {(() => {
+        const publishedIds = new Set(
+          schedules.filter((s) => s.status === "published").map((s) => s.id),
+        );
+        const upcomingAssignments = assignments.filter(
+          (a) => a.schedule_id && publishedIds.has(a.schedule_id) && a.service_date >= today,
+        );
+        const groups = groupAssignmentsByServiceDate(upcomingAssignments, services);
+        if (groups.length === 0) return null;
+        const ministryMap = new Map(ministries.map((m) => [m.id, m]));
+        return (
+          <section className="mb-8">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-vc-indigo">Upcoming Service Dates</h2>
+                <p className="mt-0.5 text-xs text-vc-text-muted">
+                  Click a date to view the roster and manage assignments.
+                </p>
+              </div>
+              <Link
+                href="/dashboard/schedules"
+                className="text-xs text-vc-coral hover:underline"
+              >
+                View all
+              </Link>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.slice(0, 9).map((group) => (
+                <ServiceDateTile
+                  key={`${group.service.id}-${group.date}`}
+                  group={group}
+                  ministryMap={ministryMap}
+                  onClick={() => setRosterService({ service: group.service, date: group.date })}
+                />
+              ))}
+            </div>
+            {groups.length > 9 && (
+              <p className="mt-3 text-center text-xs text-vc-text-muted">
+                +{groups.length - 9} more upcoming dates
+              </p>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Recent Service Dates — for attendance tracking */}
       {recentServiceDates.length > 0 && (

@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
 import { buildAvailabilityWindowEmail } from "@/lib/utils/emails";
 import type { Volunteer, Schedule } from "@/lib/types";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -88,7 +89,7 @@ export async function POST(
       (d) => ({ id: d.id, ...d.data() } as Volunteer),
     );
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://volunteercal.org";
+    const baseUrl = getBaseUrl(req);
     const coveragePeriod = `${schedule.date_range_start} to ${schedule.date_range_end}`;
 
     // Send emails in batches

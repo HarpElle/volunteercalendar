@@ -234,7 +234,7 @@ export function ScheduleMatrix({
           className="rounded-lg border border-vc-border bg-white px-3 py-1.5 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
         >
           <option value="all">All Ministries</option>
-          {ministries.map((m) => (
+          {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>

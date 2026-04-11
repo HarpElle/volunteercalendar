@@ -598,7 +598,7 @@ export function EventList({
                   Select which ministries this event spans. Leave empty for org-wide.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {ministries.map((m) => (
+                  {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
                     <button
                       key={m.id}
                       type="button"

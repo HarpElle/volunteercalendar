@@ -79,7 +79,7 @@ function ExpandableSection({
       </button>
       <div
         className={`overflow-hidden transition-all duration-200 ${
-          expanded ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
+          expanded ? "max-h-64 opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         <div className="pb-1 pl-8">{children}</div>
@@ -161,6 +161,22 @@ export function MoreMenu({
             >
               Households
             </Link>
+            <Link
+              href="/dashboard/checkin/reports"
+              onClick={onClose}
+              className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
+            >
+              Reports
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/dashboard/checkin/import"
+                onClick={onClose}
+                className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
+              >
+                Import
+              </Link>
+            )}
           </ExpandableSection>
         )}
 
@@ -182,6 +198,13 @@ export function MoreMenu({
               className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
             >
               Songs
+            </Link>
+            <Link
+              href="/dashboard/worship/reports"
+              onClick={onClose}
+              className="block px-5 py-2.5 text-sm text-vc-text-secondary active:bg-vc-sand/20"
+            >
+              Reports
             </Link>
           </ExpandableSection>
         )}
@@ -228,18 +251,6 @@ export function MoreMenu({
             )}
           </span>
           Inbox
-        </Link>
-
-        <Link
-          href="/dashboard/reminders"
-          onClick={onClose}
-          className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-secondary active:bg-vc-sand/20"
-        >
-          <Icon
-            d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38a1.125 1.125 0 0 1-1.54-.413l-.34-.59a9.867 9.867 0 0 1-.985-2.783m2.91-9.09a9.868 9.868 0 0 1 .985-2.783l.34-.59a1.125 1.125 0 0 1 1.54-.413l.657.38c.524.3.71.96.463 1.51a9.866 9.866 0 0 0-.985 2.783m-2.91 9.09h2.91"
-            className="h-5 w-5 text-vc-text-muted"
-          />
-          Send Reminders
         </Link>
 
         {isAdmin && (

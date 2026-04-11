@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface HelpSection {
@@ -178,7 +178,7 @@ const featureGuides: HelpSection[] = [
         </dl>
         <p className="mt-3">
           Calendar feeds update automatically when schedules change. Volunteers
-          can find their feed URL on the My Schedule page.
+          can find their feed URL on the Account page.
         </p>
       </>
     ),
@@ -313,8 +313,8 @@ const featureGuides: HelpSection[] = [
               Volunteer&apos;s View (My Journey)
             </dt>
             <dd className="mt-1">
-              <p>Volunteers see their personal progress at Account
-                Settings &rarr; My Journey. The page shows prerequisites
+              <p>Volunteers see their personal progress on the My Journey
+                page in the sidebar. The page shows prerequisites
                 grouped by organization-wide and per-team, with status badges
                 (Not Started, In Progress, Complete, Waived) and completion
                 dates. An &ldquo;all clear&rdquo; state displays when
@@ -566,7 +566,7 @@ const featureGuides: HelpSection[] = [
           and how.
         </p>
         <p className="mt-3">
-          Go to Account Settings &rarr; Scheduler Notifications to configure:
+          Go to your Account page &rarr; Scheduler Notifications to configure:
         </p>
         <dl className="mt-3 space-y-3">
           <div>
@@ -1208,14 +1208,14 @@ const featureGuides: HelpSection[] = [
             <dd className="mt-1">
               Subscribe to a room&apos;s calendar feed from Google Calendar,
               Outlook, or Apple Calendar. The feed updates automatically when
-              reservations change. Find feed URLs in Settings &rarr; Rooms.
+              reservations change. Find feed URLs in Campuses (under Organization).
             </dd>
           </div>
         </dl>
         <p className="mt-3">
           Room scheduling starts at the Starter tier (5 rooms). Growth and
           above unlock recurring reservations, public calendars, and more rooms.
-          Configure rooms in Settings &rarr; Rooms.
+          Configure rooms in Campuses (under Organization in the sidebar).
         </p>
       </>
     ),
@@ -1233,7 +1233,7 @@ const featureGuides: HelpSection[] = [
             <dt className="font-medium text-vc-text">Setting Up a Device</dt>
             <dd className="mt-1">
               <ol className="mt-2 list-decimal space-y-1.5 pl-6">
-                <li>Go to Settings &rarr; Rooms and select the room you want
+                <li>Go to Campuses (under Organization) and select the room you want
                   to display.</li>
                 <li>Copy the room&apos;s display URL. It follows the pattern:
                   <strong> /display/room/[roomId]?token=[calendar_token]&amp;church_id=[your_church_id]</strong></li>
@@ -1324,9 +1324,10 @@ const featureGuides: HelpSection[] = [
           <div>
             <dt className="font-medium text-vc-text">Setting Unavailable Dates</dt>
             <dd className="mt-1">
-              Open the Dates tab (mobile) or My Availability page (desktop).
-              Click &ldquo;Add Dates&rdquo; to select a start and end date.
-              Optionally add a reason (e.g., &ldquo;Family vacation&rdquo;).
+              Open the My Availability page from the sidebar or bottom
+              navigation. Add specific blockout dates for vacations or
+              other commitments, and mark recurring days you&apos;re
+              generally unavailable.
             </dd>
           </div>
           <div>
@@ -1404,7 +1405,7 @@ const featureGuides: HelpSection[] = [
           <div>
             <dt className="font-medium text-vc-text">Creating a Facility Group</dt>
             <dd className="mt-1">
-              Go to Settings &rarr; Rooms and scroll to the Shared Facility
+              Go to Campuses (under Organization) and scroll to the Shared Facility
               section. Enter a name for the facility group (e.g., &ldquo;Main
               Campus&rdquo;) and click Create. Your organization is
               automatically added as the first member.
@@ -1495,9 +1496,124 @@ function AccordionItem({ id, title, content, isOpen, onToggle }: {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Categorized feature guides
+// ---------------------------------------------------------------------------
+
+interface HelpCategory {
+  label: string;
+  guides: HelpSection[];
+}
+
+const featureCategories: HelpCategory[] = [
+  {
+    label: "Scheduling",
+    guides: featureGuides.filter((g) =>
+      [
+        "How Auto-Scheduling Works",
+        "Workflow Modes",
+        "Availability Campaigns",
+        "Multi-Stage Approval",
+        "Household Scheduling",
+        "Shift Swaps",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "People & Teams",
+    guides: featureGuides.filter((g) =>
+      [
+        "Understanding Volunteer Health",
+        "Archive, Restore, and Remove Volunteers",
+        "Scheduler Notification Preferences",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Onboarding",
+    guides: featureGuides.filter((g) =>
+      [
+        "Onboarding Pipeline",
+        "Training Sessions",
+        "Trainee & Shadow Assignments",
+        "Prerequisite Notifications",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Notifications & Calendar",
+    guides: featureGuides.filter((g) =>
+      [
+        "Absence Alerts",
+        "Calendar Feeds",
+        "Check-In Methods",
+        "Installing VolunteerCal as an App",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Worship",
+    guides: featureGuides.filter((g) =>
+      [
+        "Song Library & Service Plans",
+        "SongSelect Import & Chord Charts",
+        "Stage Sync",
+        "Song Usage Reports",
+        "ProPresenter Export",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Children's Check-In",
+    guides: featureGuides.filter((g) =>
+      [
+        "Children's Check-In",
+        "Label Printing Setup",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Rooms & Facilities",
+    guides: featureGuides.filter((g) =>
+      [
+        "Room & Resource Scheduling",
+        "Room Display Setup",
+        "Shared Facility Scheduling",
+      ].includes(g.title),
+    ),
+  },
+  {
+    label: "Your Account",
+    guides: featureGuides.filter((g) =>
+      [
+        "Your Availability",
+        "Managing Multiple Organizations",
+      ].includes(g.title),
+    ),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function HelpPage() {
   const [openGettingStarted, setOpenGettingStarted] = useState<number | null>(null);
-  const [openGuide, setOpenGuide] = useState<number | null>(null);
+  const [openCategory, setOpenCategory] = useState<Record<string, number | null>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const allGuides = useMemo(
+    () => [...gettingStarted, ...featureGuides],
+    [],
+  );
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase();
+    return allGuides.filter((g) => g.title.toLowerCase().includes(q));
+  }, [searchQuery, allGuides]);
+
+  const [openSearch, setOpenSearch] = useState<number | null>(null);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -1508,39 +1624,112 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* Getting Started */}
-      <section className="mb-8">
-        <h2 className="mb-4 font-display text-xl text-vc-indigo">Getting Started</h2>
-        <div className="rounded-xl border border-vc-border-light bg-white px-5">
-          {gettingStarted.map((item, i) => (
-            <AccordionItem
-              key={i}
-              id={`gs-${i}`}
-              title={item.title}
-              content={item.content}
-              isOpen={openGettingStarted === i}
-              onToggle={() => setOpenGettingStarted(openGettingStarted === i ? null : i)}
+      {/* Search */}
+      <div className="mb-8">
+        <div className="relative">
+          <svg
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-vc-text-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
             />
-          ))}
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setOpenSearch(null);
+            }}
+            placeholder="Search guides..."
+            className="w-full rounded-xl border border-vc-border-light bg-white py-3 pl-10 pr-4 text-sm text-vc-indigo placeholder:text-vc-text-muted/60 focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(""); setOpenSearch(null); }}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-vc-text-muted hover:text-vc-indigo transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
-      </section>
+      </div>
 
-      {/* Feature Guides */}
-      <section className="mb-8">
-        <h2 className="mb-4 font-display text-xl text-vc-indigo">Feature Guides</h2>
-        <div className="rounded-xl border border-vc-border-light bg-white px-5">
-          {featureGuides.map((item, i) => (
-            <AccordionItem
-              key={i}
-              id={`fg-${i}`}
-              title={item.title}
-              content={item.content}
-              isOpen={openGuide === i}
-              onToggle={() => setOpenGuide(openGuide === i ? null : i)}
-            />
+      {/* Search results */}
+      {searchResults !== null ? (
+        <section className="mb-8">
+          <h2 className="mb-4 font-display text-xl text-vc-indigo">
+            {searchResults.length === 0
+              ? "No results found"
+              : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
+          </h2>
+          {searchResults.length > 0 && (
+            <div className="rounded-xl border border-vc-border-light bg-white px-5">
+              {searchResults.map((item, i) => (
+                <AccordionItem
+                  key={item.title}
+                  id={`sr-${i}`}
+                  title={item.title}
+                  content={item.content}
+                  isOpen={openSearch === i}
+                  onToggle={() => setOpenSearch(openSearch === i ? null : i)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
+          {/* Getting Started */}
+          <section className="mb-8">
+            <h2 className="mb-4 font-display text-xl text-vc-indigo">Getting Started</h2>
+            <div className="rounded-xl border border-vc-border-light bg-white px-5">
+              {gettingStarted.map((item, i) => (
+                <AccordionItem
+                  key={i}
+                  id={`gs-${i}`}
+                  title={item.title}
+                  content={item.content}
+                  isOpen={openGettingStarted === i}
+                  onToggle={() => setOpenGettingStarted(openGettingStarted === i ? null : i)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* Feature Guide Categories */}
+          {featureCategories.map((cat) => (
+            <section key={cat.label} className="mb-8">
+              <h2 className="mb-4 font-display text-xl text-vc-indigo">{cat.label}</h2>
+              <div className="rounded-xl border border-vc-border-light bg-white px-5">
+                {cat.guides.map((item, i) => (
+                  <AccordionItem
+                    key={item.title}
+                    id={`${cat.label.replace(/\s+/g, "-").toLowerCase()}-${i}`}
+                    title={item.title}
+                    content={item.content}
+                    isOpen={openCategory[cat.label] === i}
+                    onToggle={() =>
+                      setOpenCategory((prev) => ({
+                        ...prev,
+                        [cat.label]: prev[cat.label] === i ? null : i,
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            </section>
           ))}
-        </div>
-      </section>
+        </>
+      )}
 
       {/* Contact */}
       <section className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-6">

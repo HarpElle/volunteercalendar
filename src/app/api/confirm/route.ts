@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { autoReschedule } from "@/lib/services/auto-reschedule";
 import { buildConfirmationEmail } from "@/lib/utils/email-templates";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 export async function GET(request: Request) {
   const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
@@ -130,9 +131,7 @@ export async function POST(request: Request) {
             ]);
 
             const churchName = churchSnap.exists ? (churchSnap.data()?.name as string) || "Church" : "Church";
-            const origin = request.headers.get("origin")
-              || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
-              || "https://volunteercal.com";
+            const origin = getBaseUrl(request);
 
             const { subject, html, text } = buildConfirmationEmail({
               volunteerName: result.newVolunteerName || "Volunteer",

@@ -73,6 +73,9 @@ export async function POST(req: NextRequest) {
     // Update user profile (merge in case doc was created without photo_url field)
     await adminDb.doc(`users/${uid}`).set({ photo_url: downloadUrl }, { merge: true });
 
+    // Sync photo to all linked Person records (best-effort)
+    syncPhotoToPersonRecords(uid, downloadUrl);
+
     return NextResponse.json({ photo_url: downloadUrl });
   } catch (err) {
     console.error("[API /account/photo] Error:", err);
@@ -106,11 +109,35 @@ export async function DELETE(req: NextRequest) {
 
     await adminDb.doc(`users/${uid}`).set({ photo_url: null }, { merge: true });
 
+    // Sync photo removal to all linked Person records (best-effort)
+    syncPhotoToPersonRecords(uid, null);
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[API /account/photo DELETE] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+}
+
+/** Fire-and-forget: sync photo_url to all Person records linked via memberships */
+function syncPhotoToPersonRecords(uid: string, photoUrl: string | null) {
+  adminDb
+    .collection("memberships")
+    .where("user_id", "==", uid)
+    .where("status", "==", "active")
+    .get()
+    .then((snap) => {
+      for (const doc of snap.docs) {
+        const { church_id, volunteer_id } = doc.data();
+        if (volunteer_id && church_id) {
+          adminDb
+            .doc(`churches/${church_id}/people/${volunteer_id}`)
+            .update({ photo_url: photoUrl })
+            .catch(() => {});
+        }
+      }
+    })
+    .catch(() => {});
 }
 
 function extractStoragePath(url: string, bucketName: string): string | null {

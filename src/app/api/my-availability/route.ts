@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
           recurring_unavailable: sp.recurring_unavailable ?? [],
           preferred_frequency: sp.preferred_frequency ?? 4,
           max_roles_per_month: sp.max_roles_per_month ?? 4,
+          preferred_weeks: sp.preferred_weeks ?? [],
         },
       },
     });
@@ -93,6 +94,7 @@ export async function PATCH(req: NextRequest) {
         recurring_unavailable?: string[];
         preferred_frequency?: number;
         max_roles_per_month?: number;
+        preferred_weeks?: number[];
       };
     };
 
@@ -148,12 +150,30 @@ export async function PATCH(req: NextRequest) {
       update["scheduling_profile.max_roles_per_month"] =
         availability.max_roles_per_month;
     }
+    if (Array.isArray(availability.preferred_weeks)) {
+      update["scheduling_profile.preferred_weeks"] =
+        availability.preferred_weeks;
+    }
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: "No valid fields" }, { status: 400 });
     }
 
     await volRef.update(update);
+
+    // Also sync blockout dates and recurring unavailable to the global user profile
+    const globalUpdate: Record<string, unknown> = {};
+    if (Array.isArray(availability.blockout_dates)) {
+      globalUpdate["global_availability.blockout_dates"] =
+        availability.blockout_dates;
+    }
+    if (Array.isArray(availability.recurring_unavailable)) {
+      globalUpdate["global_availability.recurring_unavailable"] =
+        availability.recurring_unavailable;
+    }
+    if (Object.keys(globalUpdate).length > 0) {
+      await adminDb.doc(`users/${uid}`).update(globalUpdate);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

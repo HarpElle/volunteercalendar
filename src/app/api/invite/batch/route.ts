@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildInviteEmail } from "@/lib/utils/email-templates";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     const inviterSnap = await adminDb.doc(`users/${inviterUid}`).get();
     const inviterName = inviterSnap.data()?.display_name || "An admin";
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com";
+    const baseUrl = getBaseUrl(req);
     let sent = 0;
     let failed = 0;
     const errors: string[] = [];

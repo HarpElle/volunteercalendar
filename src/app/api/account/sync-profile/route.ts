@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
         last_name,
         email: profile.email || existing.email,
         phone: profile.phone ?? existing.phone,
+        ...(profile.photo_url !== undefined ? { photo_url: profile.photo_url } : {}),
         "scheduling_profile.blockout_dates": profile.global_availability?.blockout_dates ?? sp.blockout_dates ?? [],
         "scheduling_profile.recurring_unavailable": profile.global_availability?.recurring_unavailable ?? sp.recurring_unavailable ?? [],
         // Preserve volunteer-specific scheduling preferences

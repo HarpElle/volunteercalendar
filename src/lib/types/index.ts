@@ -438,6 +438,7 @@ export interface VolunteerAvailability {
   recurring_unavailable: string[];
   preferred_frequency: number;
   max_roles_per_month: number;
+  preferred_weeks?: number[];
 }
 
 export interface VolunteerStats {
@@ -1489,6 +1490,8 @@ export interface SchedulingProfile {
   preferred_frequency: number;
   /** Carried from existing VolunteerAvailability */
   max_roles_per_month: number;
+  /** Week-of-month preferences: [1, 3] = prefers 1st and 3rd weeks */
+  preferred_weeks?: number[];
 }
 
 /** Child-specific data embedded on a Person document (children only). */

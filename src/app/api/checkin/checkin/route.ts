@@ -4,6 +4,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
+import { getBaseUrl } from "@/lib/utils/base-url";
 import type {
   CheckInSession,
   LabelJob,
@@ -274,7 +275,7 @@ export async function POST(req: NextRequest) {
 
       // On first SMS, append vCard download link so guardian can save the contact
       if (isFirstSms) {
-        const origin = req.headers.get("origin") || req.nextUrl.origin;
+        const origin = getBaseUrl(req);
         smsBody += ` Save this contact: ${origin}/api/checkin/vcard?church_id=${church_id}`;
       }
 

@@ -135,7 +135,7 @@ export function VolunteerEditModal({
               {getMinistryName("__label__") === "__label__" ? "Teams" : "Ministries"}
             </label>
             <div className="flex flex-wrap gap-2">
-              {ministries.map((m) => (
+              {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
                 <button
                   key={m.id}
                   type="button"

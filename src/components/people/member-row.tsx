@@ -204,7 +204,7 @@ export function MemberRow({
           </label>
           {!scopeAll && (
             <div className="space-y-2 mb-3">
-              {ministries.map((m) => (
+              {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (
                 <label key={m.id} className="flex items-center gap-2">
                   <input
                     type="checkbox"

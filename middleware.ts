@@ -13,7 +13,6 @@ const REDIRECTS: Record<string, string> = {
   "/dashboard/billing": "/dashboard/settings?tab=billing",
   "/dashboard/services": "/dashboard/services-events",
   "/dashboard/events": "/dashboard/services-events?tab=events",
-  "/dashboard/my-availability": "/dashboard/my-schedule?tab=availability",
 };
 
 export function middleware(request: NextRequest) {
@@ -41,6 +40,5 @@ export const config = {
     "/dashboard/billing",
     "/dashboard/services",
     "/dashboard/events",
-    "/dashboard/my-availability",
   ],
 };

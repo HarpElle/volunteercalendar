@@ -6,6 +6,7 @@ import { sendSms } from "@/lib/services/sms";
 import { safeCompare } from "@/lib/utils/safe-compare";
 import type { NotificationType, NotificationChannel } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -109,9 +110,7 @@ export async function POST(request: Request) {
       minSnap.docs.map((d) => [d.id, d.data() as Record<string, unknown>]),
     );
 
-    const origin = request.headers.get("origin")
-      || request.headers.get("referer")?.replace(/\/[^/]*$/, "")
-      || "https://volunteercal.com";
+    const origin = getBaseUrl(request);
 
     let sentEmail = 0;
     let sentSms = 0;

@@ -6,6 +6,7 @@ import { buildEligibleNotifyEmail } from "@/lib/utils/emails/prerequisite-eligib
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -81,9 +82,7 @@ export async function POST(req: NextRequest) {
     const completedCount = ministrySteps.filter((s) => s.status === "completed" || s.status === "waived").length;
     const totalCount = prerequisites.length;
 
-    const origin = req.headers.get("origin")
-      || req.headers.get("referer")?.replace(/\/[^/]*$/, "")
-      || "https://volunteercal.com";
+    const origin = getBaseUrl(req);
     const dashboardUrl = `${origin}/dashboard/my-journey`;
 
     const results: string[] = [];

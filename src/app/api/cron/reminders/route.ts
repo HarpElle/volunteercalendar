@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { safeCompare } from "@/lib/utils/safe-compare";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 /**
  * GET /api/cron/reminders?hours=48
@@ -35,9 +36,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, message: "No churches found", results: [] });
     }
 
-    const origin = request.headers.get("origin")
-      || request.headers.get("x-forwarded-proto") + "://" + request.headers.get("x-forwarded-host")
-      || "https://volunteercal.com";
+    const origin = getBaseUrl(request);
 
     const results: { church_id: string; church_name: string; sent_email: number; sent_sms: number; skipped: number; error?: string }[] = [];
 

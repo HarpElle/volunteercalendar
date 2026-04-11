@@ -41,6 +41,7 @@ export default function MyAvailabilityPage() {
   );
   const [preferredFrequency, setPreferredFrequency] = useState(1);
   const [maxRolesPerMonth, setMaxRolesPerMonth] = useState(0);
+  const [preferredWeeks, setPreferredWeeks] = useState<number[]>([]);
 
   // New blockout date input
   const [newBlockoutDate, setNewBlockoutDate] = useState("");
@@ -69,6 +70,7 @@ export default function MyAvailabilityPage() {
           setRecurringUnavailable(a?.recurring_unavailable || []);
           setPreferredFrequency(a?.preferred_frequency ?? 1);
           setMaxRolesPerMonth(a?.max_roles_per_month ?? 0);
+          setPreferredWeeks(a?.preferred_weeks ?? []);
         }
       } catch {
         // silent
@@ -103,6 +105,7 @@ export default function MyAvailabilityPage() {
             recurring_unavailable: recurringUnavailable,
             preferred_frequency: preferredFrequency,
             max_roles_per_month: maxRolesPerMonth,
+            preferred_weeks: preferredWeeks,
           } satisfies VolunteerAvailability,
         }),
       });
@@ -110,6 +113,13 @@ export default function MyAvailabilityPage() {
         setSaved(true);
         if (savedTimeout.current) clearTimeout(savedTimeout.current);
         savedTimeout.current = setTimeout(() => setSaved(false), 3000);
+        // Sync availability to global user profile across all orgs
+        user.getIdToken().then((t) =>
+          fetch("/api/account/sync-profile", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${t}` },
+          }).catch(() => {}),
+        );
       }
     } catch {
       // silent
@@ -123,6 +133,7 @@ export default function MyAvailabilityPage() {
     recurringUnavailable,
     preferredFrequency,
     maxRolesPerMonth,
+    preferredWeeks,
   ]);
 
   // ---- Blockout helpers ----
@@ -220,6 +231,41 @@ export default function MyAvailabilityPage() {
                 }`}
               >
                 {day}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Preferred Weeks */}
+      <section className="mb-6 rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Preferred Weeks to Serve
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Select which weeks of the month you prefer to serve. Leave empty if you have no preference.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3, 4, 5].map((week) => {
+            const active = preferredWeeks.includes(week);
+            const labels = ["1st", "2nd", "3rd", "4th", "5th"];
+            return (
+              <button
+                key={week}
+                onClick={() =>
+                  setPreferredWeeks((prev) =>
+                    prev.includes(week)
+                      ? prev.filter((w) => w !== week)
+                      : [...prev, week].sort(),
+                  )
+                }
+                className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-vc-sage text-white"
+                    : "bg-vc-sand/20 text-vc-text-secondary hover:bg-vc-sand/35"
+                }`}
+              >
+                {labels[week - 1]} week
               </button>
             );
           })}

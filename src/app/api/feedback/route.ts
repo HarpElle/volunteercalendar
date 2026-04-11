@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { sendEmail, orgFrom } from "@/lib/services/email";
 import type { FeedbackItem, FeedbackStatus, FeedbackPriority, FeedbackDisposition } from "@/lib/types";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 /**
  * GET /api/feedback?church_id=...&scope=mine|all&status=...&category=...
@@ -219,7 +220,7 @@ export async function POST(req: NextRequest) {
                   <p><strong>Category:</strong> ${category} | <strong>Priority:</strong> ${feedbackData.priority}</p>
                   <p><strong>From:</strong> ${feedbackData.submitted_by_name} (${feedbackData.submitted_by_role})</p>
                   <p>${description.slice(0, 500)}${description.length > 500 ? "..." : ""}</p>
-                  <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com"}/dashboard/admin/feedback">Open Triage Dashboard</a></p>
+                  <p><a href="${getBaseUrl(req)}/dashboard/admin/feedback">Open Triage Dashboard</a></p>
                 `,
                 text: `${title}\nCategory: ${category} | Priority: ${feedbackData.priority}\nFrom: ${feedbackData.submitted_by_name}\n\n${description.slice(0, 500)}`,
               });
@@ -417,7 +418,7 @@ export async function PATCH(req: NextRequest) {
             <h2>${existingData.title}</h2>
             ${hasNewResponse ? `<p><strong>Admin response:</strong></p><p>${updates.admin_response}</p>` : ""}
             ${isResolved ? `<p>This item has been marked as <strong>${newStatus === "resolved" ? "resolved" : "won't do"}</strong>.</p>` : ""}
-            <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://volunteercal.com"}/dashboard/feedback">View your feedback</a></p>
+            <p><a href="${getBaseUrl(req)}/dashboard/feedback">View your feedback</a></p>
           `,
           text: `${existingData.title}\n${hasNewResponse ? `Admin response: ${updates.admin_response}\n` : ""}${isResolved ? `Status: ${newStatus}\n` : ""}`,
         }).catch(() => {});

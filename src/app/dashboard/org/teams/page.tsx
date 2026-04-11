@@ -33,7 +33,9 @@ export default function TeamsPage() {
         if (churchSnap.exists()) {
           setChurch({ id: churchSnap.id, ...churchSnap.data() } as unknown as Church);
         }
-        setMinistries(minDocs as unknown as Ministry[]);
+        setMinistries(
+          (minDocs as unknown as Ministry[]).sort((a, b) => a.name.localeCompare(b.name)),
+        );
       } catch {
         // silent
       } finally {
