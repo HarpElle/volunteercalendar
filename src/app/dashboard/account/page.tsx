@@ -814,22 +814,24 @@ export default function AccountPage() {
                         </span>
                         <span className="font-medium text-vc-indigo">{getFeedLabel(feed)}</span>
                       </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <code className="block min-w-0 flex-1 truncate rounded bg-vc-bg-warm px-2 py-1 text-xs text-vc-text-muted">
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <code className="block min-w-0 w-full truncate rounded bg-vc-bg-warm px-2 py-1.5 text-xs text-vc-text-muted sm:flex-1">
                           {url}
                         </code>
-                        <button
-                          onClick={() => handleCopy(feed.id, url)}
-                          className="shrink-0 rounded-lg border border-vc-border px-2.5 py-1 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-coral hover:text-vc-coral"
-                        >
-                          {copied === feed.id ? "Copied!" : "Copy"}
-                        </button>
-                        <a
-                          href={url.replace(/^https:\/\//, "webcal://")}
-                          className="shrink-0 rounded-lg bg-vc-coral px-2.5 py-1 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
-                        >
-                          Subscribe
-                        </a>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            onClick={() => handleCopy(feed.id, url)}
+                            className="flex-1 sm:flex-none rounded-lg border border-vc-border px-2.5 py-1 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-coral hover:text-vc-coral"
+                          >
+                            {copied === feed.id ? "Copied!" : "Copy"}
+                          </button>
+                          <a
+                            href={url.replace(/^https:\/\//, "webcal://")}
+                            className="flex-1 sm:flex-none text-center rounded-lg bg-vc-coral px-2.5 py-1 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+                          >
+                            Subscribe
+                          </a>
+                        </div>
                       </div>
                     </div>
                     <button

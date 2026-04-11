@@ -132,11 +132,11 @@ export function CalendarFeedCta({
       {/* Feed URL or create button */}
       {activeFeed && feedUrl && webcalUrl ? (
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               readOnly
               value={feedUrl}
-              className="flex-1 rounded-lg border border-vc-border bg-vc-bg-warm px-3 py-2 text-xs text-vc-text-secondary"
+              className="w-full rounded-lg border border-vc-border bg-vc-bg-warm px-3 py-2 text-xs text-vc-text-secondary sm:flex-1"
               onFocus={(e) => e.target.select()}
             />
             <button
@@ -146,13 +146,13 @@ export function CalendarFeedCta({
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
-          <div className="mt-2 flex items-center justify-between">
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] text-vc-text-muted">
               Google Calendar / Outlook: paste the URL above.
             </p>
             <a
               href={webcalUrl}
-              className="shrink-0 rounded-lg bg-vc-coral px-3 py-1.5 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+              className="self-start sm:self-auto shrink-0 rounded-lg bg-vc-coral px-3 py-1.5 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
             >
               Subscribe
             </a>
