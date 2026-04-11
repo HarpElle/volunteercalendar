@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { isAdmin } from "@/lib/utils/permissions";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import type {
-  Volunteer,
   Person,
   Ministry,
   VolunteerJourneyStep,
@@ -17,7 +16,6 @@ import type {
   OnboardingStep,
   OrgType,
 } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
@@ -63,7 +61,7 @@ export default function OnboardingPage() {
   const churchId = activeMembership?.church_id || profile?.church_id;
   const canManage = isAdmin(activeMembership);
 
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [orgType, setOrgType] = useState<OrgType>("church");
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
@@ -91,8 +89,7 @@ export default function OnboardingPage() {
     ])
       .then(([peopleDocs, mins, churchSnap]) => {
         setVolunteers(
-          (peopleDocs as unknown as Person[])
-            .map((p) => personToLegacyVolunteer(p)),
+          (peopleDocs as unknown as Person[]),
         );
         setMinistries(mins as unknown as Ministry[]);
         if (churchSnap.exists()) {
@@ -123,7 +120,7 @@ export default function OnboardingPage() {
     const ministryVols = volunteers.filter(
       (v) => v.ministry_ids.includes(ministry.id),
     );
-    const stages: Record<PipelineStage, Volunteer[]> = {
+    const stages: Record<PipelineStage, Person[]> = {
       not_started: [],
       in_progress: [],
       cleared: [],
@@ -555,7 +552,7 @@ export default function OnboardingPage() {
                               orgPrereqs,
                             );
                             const cfg = STAGE_CONFIG[stage];
-                            const journey = vol.volunteer_journey || [];
+                            const journey: VolunteerJourneyStep[] = vol.volunteer_journey || [];
                             const completedCount = allPrereqs.filter((p) => {
                               const step = journey.find(
                                 (j) =>
@@ -590,7 +587,7 @@ export default function OnboardingPage() {
                                       {vol.name}
                                     </p>
                                     <p className="text-xs text-vc-text-muted">
-                                      {vol.email}
+                                      {vol.email ?? ""}
                                     </p>
                                   </button>
                                   {isExpanded && canManage && (

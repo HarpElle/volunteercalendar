@@ -13,8 +13,7 @@ import { canScheduleMinistry } from "@/lib/utils/permissions";
 import { useAuth } from "@/lib/context/auth-context";
 import { printRoster } from "@/lib/utils/print-roster";
 import { normalizeAttendance } from "@/lib/types";
-import type { Service, Assignment, Ministry, Volunteer, Person, Membership, AttendanceStatus } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+import type { Service, Assignment, Ministry, Person, Membership, AttendanceStatus } from "@/lib/types";
 import { AttendanceToggle } from "@/components/scheduling/attendance-toggle";
 
 interface ServiceRosterProps {
@@ -88,10 +87,10 @@ export function ServiceRoster({
       setMinistries(minData as unknown as Ministry[]);
 
       // Build volunteer name lookup from people collection
-      const vols = (peopleDocs as unknown as Person[]).map((d) => personToLegacyVolunteer(d));
+      const people = peopleDocs as unknown as Person[];
       const nameMap = new Map<string, string>();
-      for (const v of vols) {
-        nameMap.set(v.id, v.name);
+      for (const p of people) {
+        nameMap.set(p.id, p.name);
       }
       setVolunteerNames(nameMap);
 

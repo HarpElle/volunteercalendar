@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Volunteer, Household } from "@/lib/types";
+import type { Person, Household } from "@/lib/types";
 
 interface HouseholdFormModalProps {
   open: boolean;
@@ -19,7 +19,7 @@ interface HouseholdFormModalProps {
     };
     notes: string | null;
   }) => void;
-  volunteers: Volunteer[];
+  volunteers: Person[];
   existingHousehold?: Household;
 }
 

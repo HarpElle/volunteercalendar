@@ -17,7 +17,7 @@ import { getOrgEligibility } from "@/lib/utils/eligibility";
 import type { PermissionFlag } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
-  Volunteer,
+  Person,
   Membership,
   Ministry,
   OnboardingStep,
@@ -49,7 +49,7 @@ const JOURNEY_STATUS_OPTIONS: { value: JourneyStepStatus; label: string }[] = [
 interface PersonDetailDrawerProps {
   open: boolean;
   onClose: () => void;
-  volunteer: Volunteer;
+  volunteer: Person;
   membership: Membership | null;
   churchId: string;
   ministries: Ministry[];
@@ -58,7 +58,7 @@ interface PersonDetailDrawerProps {
   canManage: boolean;
   getMinistryName: (id: string) => string;
   getMinistryColor: (id: string) => string;
-  onVolunteerUpdated: (v: Volunteer) => void;
+  onVolunteerUpdated: (v: Person) => void;
   onRoleChanged: (m: Membership, role: OrgRole, scope?: string[]) => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -178,7 +178,7 @@ export function PersonDetailDrawer({
         phone: phone ? normalizePhone(phone) : null,
         ministry_ids: selectedMinistries,
         role_ids: selectedRoles,
-        background_check: background_check || undefined,
+        background_check: background_check || null,
       };
       await updateChurchDocument(churchId, "people", volunteer.id, updateData);
       onVolunteerUpdated({ ...volunteer, ...updateData });
@@ -219,7 +219,7 @@ export function PersonDetailDrawer({
           : volunteer.background_check?.checked_at || null,
       };
       await updateChurchDocument(churchId, "people", volunteer.id, { background_check });
-      onVolunteerUpdated({ ...volunteer, background_check: background_check || undefined });
+      onVolunteerUpdated({ ...volunteer, background_check: background_check || null });
     } catch (err) {
       console.error("[PersonDetailDrawer] Save bg check failed:", err);
     } finally {
@@ -475,7 +475,7 @@ export function PersonDetailDrawer({
             {editMode ? (
               <div className="min-w-0 flex-1 space-y-2.5">
                 <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-                <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input label="Email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} />
                 <Input
                   label="Phone"
                   type="tel"

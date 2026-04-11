@@ -5,7 +5,7 @@
  * No Firestore access — callers pass in the data they've already loaded.
  */
 
-import type { Assignment, Volunteer } from "@/lib/types";
+import type { Assignment, Person } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────���───────────────────────
 
@@ -76,7 +76,7 @@ export interface RetentionSummary {
  * 3+ consecutive weeks → yellow, 4+ → red.
  */
 export function calculateBurnoutRisks(
-  volunteers: Volunteer[],
+  volunteers: Person[],
   assignments: Assignment[],
 ): BurnoutRisk[] {
   const now = new Date();
@@ -89,7 +89,7 @@ export function calculateBurnoutRisks(
     const volId = vol.id;
     const volAssignments = assignments.filter(
       (a) =>
-        (a.person_id === volId || a.volunteer_id === volId) &&
+        a.person_id === volId &&
         a.status !== "declined" &&
         a.service_date >= windowStart.toISOString().split("T")[0],
     );
@@ -130,7 +130,7 @@ export function calculateBurnoutRisks(
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const last90 = assignments.filter(
       (a) =>
-        (a.person_id === volId || a.volunteer_id === volId) &&
+        a.person_id === volId &&
         a.status !== "declined" &&
         a.service_date >= ninetyDaysAgo.toISOString().split("T")[0],
     ).length;
@@ -144,7 +144,7 @@ export function calculateBurnoutRisks(
         volunteerName: vol.name,
         level,
         consecutiveWeeks: maxConsecutive,
-        maxPerMonth: vol.availability?.max_roles_per_month || 4,
+        maxPerMonth: vol.scheduling_profile?.max_roles_per_month ?? 4,
         actualLast90d: last90,
       });
     }
@@ -164,7 +164,7 @@ export function calculateBurnoutRisks(
  * to weekly slots needed.
  */
 export function calculateBenchDepth(
-  volunteers: Volunteer[],
+  volunteers: Person[],
   assignments: Assignment[],
   ministries: { id: string; name: string }[],
 ): BenchDepth[] {
@@ -197,7 +197,7 @@ export function calculateBenchDepth(
   for (const [ministryId, roles] of rolesByMinistry) {
     // Count qualified volunteers (those assigned to this ministry)
     const qualifiedVols = volunteers.filter(
-      (v) => v.ministry_ids?.includes(ministryId) && v.status === "active",
+      (v) => v.ministry_ids.includes(ministryId) && v.status === "active",
     );
 
     for (const [roleTitle, totalAssignments] of roles) {
@@ -230,7 +230,7 @@ export function calculateBenchDepth(
  * Serving frequency per volunteer in the last 90 days.
  */
 export function calculateServingFrequency(
-  volunteers: Volunteer[],
+  volunteers: Person[],
   assignments: Assignment[],
 ): ServingFrequency[] {
   const now = new Date();
@@ -241,12 +241,12 @@ export function calculateServingFrequency(
   return volunteers.map((vol) => {
     const count = assignments.filter(
       (a) =>
-        (a.person_id === vol.id || a.volunteer_id === vol.id) &&
+        a.person_id === vol.id &&
         a.status !== "declined" &&
         a.service_date >= cutoff,
     ).length;
 
-    const preferred = vol.availability?.preferred_frequency || 2;
+    const preferred = vol.scheduling_profile?.preferred_frequency ?? 2;
     // Over 3 months, preferred * 3 would be the expected maximum
     const isOvercommitted = count > preferred * 3;
 
@@ -303,7 +303,7 @@ export function calculateDeclineRates(
 /**
  * Count volunteers added in the last 30/60/90 days.
  */
-export function calculateGrowth(volunteers: Volunteer[]): GrowthMetrics {
+export function calculateGrowth(volunteers: Person[]): GrowthMetrics {
   const now = Date.now();
   const day = 1000 * 60 * 60 * 24;
 
@@ -330,7 +330,7 @@ export function calculateGrowth(volunteers: Volunteer[]): GrowthMetrics {
  * 1.0 = perfectly fair, 0 = highly uneven.
  */
 export function calculateFairnessScore(
-  volunteers: Volunteer[],
+  volunteers: Person[],
   assignments: Assignment[],
 ): number {
   if (volunteers.length === 0) return 1;
@@ -345,7 +345,7 @@ export function calculateFairnessScore(
 
   for (const a of assignments) {
     if (a.service_date < cutoff || a.status === "declined") continue;
-    const vid = a.person_id || a.volunteer_id;
+    const vid = a.person_id;
     if (counts.has(vid)) {
       counts.set(vid, (counts.get(vid) || 0) + 1);
     }
@@ -368,7 +368,7 @@ export function calculateFairnessScore(
  * Quick summary for the main dashboard card.
  */
 export function calculateRetentionSummary(
-  volunteers: Volunteer[],
+  volunteers: Person[],
   assignments: Assignment[],
   ministries: { id: string; name: string }[],
 ): RetentionSummary {
@@ -381,15 +381,17 @@ export function calculateRetentionSummary(
   let inactiveCount = 0;
 
   for (const v of active) {
-    const { stats, availability } = v;
-    if (stats.no_show_count >= 2 || stats.decline_count >= 3) {
+    const stats = v.stats;
+    const preferredFrequency = v.scheduling_profile?.preferred_frequency ?? 4;
+    if (stats && (stats.no_show_count >= 2 || stats.decline_count >= 3)) {
       atRiskCount++;
     } else if (
-      availability.preferred_frequency > 0 &&
-      stats.times_scheduled_last_90d > availability.preferred_frequency * 3
+      stats &&
+      preferredFrequency > 0 &&
+      stats.times_scheduled_last_90d > preferredFrequency * 3
     ) {
       atRiskCount++;
-    } else if (stats.last_served_date) {
+    } else if (stats?.last_served_date) {
       const daysSince = Math.floor(
         (Date.now() - new Date(stats.last_served_date).getTime()) / (1000 * 60 * 60 * 24),
       );

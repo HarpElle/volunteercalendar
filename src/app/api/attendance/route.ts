@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       if (entry.type === "event_signup" && data.church_id !== church_id) continue;
 
       const previousAttended = data.attended ?? null;
-      const volunteerId: string | null = (data.person_id || data.volunteer_id) || null;
+      const volunteerId: string | null = (data.person_id as string) || null;
 
       batch.update(docRef, {
         attended: entry.attended,

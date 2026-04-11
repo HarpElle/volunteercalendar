@@ -139,7 +139,7 @@ export async function POST(request: Request) {
     }
 
     for (const assignment of targetAssignments) {
-      const volunteer = volunteerMap.get((assignment.person_id || assignment.volunteer_id) as string);
+      const volunteer = volunteerMap.get(assignment.person_id as string);
       if (!volunteer) {
         skipped++;
         continue;

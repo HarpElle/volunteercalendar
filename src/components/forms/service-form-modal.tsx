@@ -9,7 +9,7 @@ import type {
   ServiceRole,
   RecurrencePattern,
   Ministry,
-  Volunteer,
+  Person,
   EditScope,
   ServiceChangeRecord,
 } from "@/lib/types";
@@ -89,7 +89,7 @@ interface ServiceFormModalProps {
   initialValues?: ServiceFormValues;
   isEditing: boolean;
   ministries: Ministry[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   campuses: { id: string; name: string }[];
   tierLimits: { roles_per_service: number };
 }

@@ -8,8 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import type { Volunteer, Assignment, Ministry, Person } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+import type { Assignment, Ministry, Person } from "@/lib/types";
 import {
   calculateBurnoutRisks,
   calculateBenchDepth,
@@ -31,7 +30,7 @@ export default function RetentionDashboardPage() {
   const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [loading, setLoading] = useState(true);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
 
@@ -56,9 +55,8 @@ export default function RetentionDashboardPage() {
           getChurchDocuments(churchId!, "ministries"),
         ]);
 
-        const vols: Volunteer[] = (peopleDocs as unknown as Person[])
-          .filter((d) => d.is_volunteer && d.status === "active")
-          .map((d) => personToLegacyVolunteer(d));
+        const vols: Person[] = (peopleDocs as unknown as Person[])
+          .filter((d) => d.is_volunteer && d.status === "active");
 
         const assigns = assignDocs as unknown as Assignment[];
         const mins = minDocs as unknown as Ministry[];

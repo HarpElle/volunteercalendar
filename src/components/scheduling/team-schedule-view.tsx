@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Assignment, Service, Ministry, Volunteer, Membership } from "@/lib/types";
+import type { Assignment, Service, Ministry, Person, Membership } from "@/lib/types";
 import { canScheduleMinistry } from "@/lib/utils/permissions";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import Link from "next/link";
@@ -12,7 +12,7 @@ interface TeamScheduleViewProps {
   allAssignments: Assignment[];
   services: Map<string, Service>;
   ministries: Map<string, Ministry>;
-  volunteers: Map<string, Volunteer>;
+  volunteers: Map<string, Person>;
   activeMembership: Membership | null;
   churchId?: string;
   onAssignmentRemoved?: (assignmentId: string) => void;

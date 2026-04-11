@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
 import { buildAvailabilityWindowEmail } from "@/lib/utils/emails";
-import type { Volunteer, Schedule } from "@/lib/types";
+import type { Person, Schedule } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -85,8 +85,8 @@ export async function POST(
       .where("status", "==", "active")
       .get();
 
-    const volunteers: Volunteer[] = volSnap.docs.map(
-      (d) => ({ id: d.id, ...d.data() } as Volunteer),
+    const volunteers: Person[] = volSnap.docs.map(
+      (d) => ({ id: d.id, ...d.data() } as Person),
     );
 
     const baseUrl = getBaseUrl(req);
@@ -112,7 +112,7 @@ export async function POST(
 
             await resend.emails.send({
               from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-              to: v.email,
+              to: v.email!,
               subject: email.subject,
               html: email.html,
               text: email.text,

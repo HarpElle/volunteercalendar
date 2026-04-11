@@ -81,8 +81,8 @@ export async function POST(req: NextRequest) {
     }
     const assignment = assignSnap.data()!;
 
-    // Verify assignment belongs to this volunteer (match by person_id or legacy volunteer_id)
-    const assignedTo = (assignment.person_id || assignment.volunteer_id) as string;
+    // Verify assignment belongs to this volunteer
+    const assignedTo = assignment.person_id as string;
     if (assignedTo !== volunteerId && assignedTo !== legacyVolunteerId) {
       return NextResponse.json({ error: "Assignment does not belong to this volunteer" }, { status: 403 });
     }

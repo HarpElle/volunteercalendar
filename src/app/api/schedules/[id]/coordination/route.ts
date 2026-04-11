@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import type { Schedule, Assignment, Volunteer } from "@/lib/types";
+import type { Schedule, Assignment, Person } from "@/lib/types";
 
 interface SharedVolunteer {
   volunteer_id: string;
@@ -66,16 +66,16 @@ export async function GET(
 
     const _schedule = { id: scheduleSnap.id, ...scheduleSnap.data()! } as Schedule;
 
-    const volunteersMap = new Map<string, Volunteer>();
+    const volunteersMap = new Map<string, Person>();
     volSnap.docs.forEach((d) => {
-      volunteersMap.set(d.id, { id: d.id, ...d.data() } as Volunteer);
+      volunteersMap.set(d.id, { id: d.id, ...d.data() } as Person);
     });
 
-    // Group assignments by volunteer (prefer person_id over volunteer_id)
+    // Group assignments by volunteer
     const byVolunteer = new Map<string, Assignment[]>();
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
-      const key = (assignment.person_id || assignment.volunteer_id) as string;
+      const key = assignment.person_id as string;
       const existing = byVolunteer.get(key) || [];
       existing.push(assignment);
       byVolunteer.set(key, existing);

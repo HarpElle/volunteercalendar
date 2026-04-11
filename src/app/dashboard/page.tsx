@@ -8,10 +8,9 @@ import { where } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
-import type { Schedule, Assignment, Service, Volunteer, Ministry, Person } from "@/lib/types";
+import type { Schedule, Assignment, Service, Ministry, Person } from "@/lib/types";
 import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
 import { isAdmin } from "@/lib/utils/permissions";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { calculateRetentionSummary, type RetentionSummary } from "@/lib/services/retention-analytics";
 
 interface DashboardStats {
@@ -65,8 +64,8 @@ export default function DashboardPage() {
           getDoc(doc(db, "churches", churchId!)),
         ]);
 
-        const volunteers: Volunteer[] = (peopleDocs as unknown as Person[])
-          .map((d) => personToLegacyVolunteer(d));
+        const volunteers: Person[] = (peopleDocs as unknown as Person[])
+          .filter((d) => d.is_volunteer);
         const ministries = mins as unknown as Ministry[];
         const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];
         const hasPrereqs = orgPrereqs.length > 0 || ministries.some((m) => m.prerequisites && m.prerequisites.length > 0);
@@ -105,7 +104,7 @@ export default function DashboardPage() {
         // Volunteer equity — count assignments per volunteer
         const volCounts = new Map<string, number>();
         for (const a of activeAssignments) {
-          const vid = a.person_id || a.volunteer_id;
+          const vid = a.person_id;
           volCounts.set(vid, (volCounts.get(vid) || 0) + 1);
         }
         const topVolunteers = Array.from(volCounts.entries())
@@ -116,7 +115,7 @@ export default function DashboardPage() {
             count,
           }));
 
-        const scheduledVolIds = new Set(activeAssignments.map((a) => a.person_id || a.volunteer_id));
+        const scheduledVolIds = new Set(activeAssignments.map((a) => a.person_id));
         const unscheduledVolunteers = volunteers.filter((v) => !scheduledVolIds.has(v.id)).length;
 
         // Upcoming services (next 14 days)

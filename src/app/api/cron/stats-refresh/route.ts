@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
         for (const a of assignments) {
           const data = a as Record<string, unknown>;
-          const personId = (data.person_id || data.volunteer_id) as string;
+          const personId = data.person_id as string;
           const serviceDate = data.service_date as string;
           const status = data.status as string;
 

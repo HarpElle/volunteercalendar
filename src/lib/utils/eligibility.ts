@@ -1,4 +1,4 @@
-import type { Volunteer, Ministry, OnboardingStep } from "@/lib/types";
+import type { Person, Ministry, OnboardingStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 
 export type EligibilityStage = "cleared" | "in_progress" | "not_started";
@@ -34,7 +34,7 @@ export function getApplicablePrereqs(
  * Optional `context` filters prereqs by scope (teams/events).
  */
 export function getOrgEligibility(
-  volunteer: Volunteer,
+  volunteer: Person,
   orgPrereqs: OnboardingStep[],
   context?: "teams" | "events",
 ): OrgEligibility {
@@ -68,7 +68,7 @@ export function getOrgEligibility(
  * Extracted from onboarding/page.tsx getVolunteerStage().
  */
 export function getVolunteerStage(
-  volunteer: Volunteer,
+  volunteer: Person,
   ministry: Ministry,
   orgPrereqs: OnboardingStep[],
   context?: "teams" | "events",

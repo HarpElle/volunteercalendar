@@ -228,8 +228,7 @@ export async function getPersonById(
 // ─── Assignment Queries ────────────────────────────────────────────────────
 
 /**
- * Get assignments for a person.
- * Tries person_id first (new), falls back to volunteer_id (legacy).
+ * Get assignments for a person by person_id.
  */
 export async function getAssignmentsForPerson(
   churchId: string,

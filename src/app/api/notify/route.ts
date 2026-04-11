@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
     if (volunteer_filter && volunteer_filter.length > 0) {
       const volSet = new Set(volunteer_filter);
-      assignments = assignments.filter((a) => volSet.has(a.person_id as string) || volSet.has(a.volunteer_id as string));
+      assignments = assignments.filter((a) => volSet.has(a.person_id as string));
     }
     if (role_filter && role_filter.length > 0) {
       const roleSet = new Set(role_filter);
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     // Group assignments by volunteer to send one batched email per volunteer
     const byVolunteer = new Map<string, typeof assignments>();
     for (const a of assignments) {
-      const volId = (a.person_id || a.volunteer_id) as string;
+      const volId = a.person_id as string;
       if (!byVolunteer.has(volId)) byVolunteer.set(volId, []);
       byVolunteer.get(volId)!.push(a);
     }

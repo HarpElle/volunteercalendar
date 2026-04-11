@@ -44,21 +44,8 @@ export async function GET(req: NextRequest) {
 
     const doc = volSnap.docs[0];
     const data = doc.data();
-    const sp = (data.scheduling_profile || {}) as Record<string, unknown>;
     return NextResponse.json({
-      volunteer: {
-        id: doc.id,
-        ...data,
-        // Expose scheduling_profile fields under the legacy `availability` key
-        // so the client-side availability page continues to work without changes.
-        availability: {
-          blockout_dates: sp.blockout_dates ?? [],
-          recurring_unavailable: sp.recurring_unavailable ?? [],
-          preferred_frequency: sp.preferred_frequency ?? 4,
-          max_roles_per_month: sp.max_roles_per_month ?? 4,
-          preferred_weeks: sp.preferred_weeks ?? [],
-        },
-      },
+      volunteer: { id: doc.id, ...data },
     });
   } catch (error) {
     console.error("[GET /api/my-availability]", error);

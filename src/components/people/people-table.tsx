@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataList, DataListRow, DataListCell } from "@/components/ui/data-list";
 import { parseName } from "@/lib/utils/name";
 import { getOrgEligibility, type OrgEligibility } from "@/lib/utils/eligibility";
-import type { Volunteer, Membership, OnboardingStep, OrgRole } from "@/lib/types";
+import type { Person, Membership, OnboardingStep, OrgRole } from "@/lib/types";
 
 const ROLE_LABELS: Record<OrgRole, string> = {
   owner: "Owner",
@@ -30,7 +30,7 @@ const ELIGIBILITY_LABELS: Record<OrgEligibility, { color: string; dotColor: stri
 };
 
 interface PersonRow {
-  volunteer: Volunteer;
+  volunteer: Person;
   membership: Membership | null;
 }
 
@@ -39,12 +39,12 @@ interface PeopleTableProps {
   orgPrereqs: OnboardingStep[];
   getMinistryName: (id: string) => string;
   getMinistryColor: (id: string) => string;
-  onSelectPerson: (v: Volunteer, m: Membership | null) => void;
+  onSelectPerson: (v: Person, m: Membership | null) => void;
 }
 
 type SortField = "first" | "last";
 
-function getVolunteerNames(v: Volunteer) {
+function getVolunteerNames(v: Person) {
   if (v.first_name !== undefined && v.last_name !== undefined) {
     return { first: v.first_name, last: v.last_name };
   }

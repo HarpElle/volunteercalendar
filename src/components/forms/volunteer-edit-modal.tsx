@@ -6,18 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { normalizePhone, formatPhone } from "@/lib/utils/phone";
 import { updateChurchDocument, removeChurchDocument } from "@/lib/firebase/firestore";
-import type { Volunteer, Ministry } from "@/lib/types";
+import type { Person, Ministry } from "@/lib/types";
 
 interface VolunteerEditModalProps {
   open: boolean;
   onClose: () => void;
-  volunteer: Volunteer;
+  volunteer: Person;
   churchId: string;
   ministries: Ministry[];
   availableRoles: { role_id: string; title: string; ministry_id: string }[];
   getMinistryName: (id: string) => string;
   getMinistryColor: (id: string) => string;
-  onUpdated: (v: Volunteer) => void;
+  onUpdated: (v: Person) => void;
   onDelete: () => void;
 }
 
@@ -34,7 +34,7 @@ export function VolunteerEditModal({
   onDelete,
 }: VolunteerEditModalProps) {
   const [name, setName] = useState(volunteer.name);
-  const [email, setEmail] = useState(volunteer.email);
+  const [email, setEmail] = useState(volunteer.email || "");
   const [phone, setPhone] = useState(volunteer.phone || "");
   const [selectedMinistries, setSelectedMinistries] = useState<string[]>(volunteer.ministry_ids);
   const [selectedRoles, setSelectedRoles] = useState<string[]>(volunteer.role_ids);
@@ -51,7 +51,7 @@ export function VolunteerEditModal({
   useEffect(() => {
     if (open) {
       setName(volunteer.name);
-      setEmail(volunteer.email);
+      setEmail(volunteer.email || "");
       setPhone(volunteer.phone || "");
       setSelectedMinistries(volunteer.ministry_ids);
       setSelectedRoles(volunteer.role_ids);
@@ -95,12 +95,12 @@ export function VolunteerEditModal({
         : undefined;
       const updateData = {
         name,
-        email,
+        email: email || null,
         phone: phone ? normalizePhone(phone) : null,
         ministry_ids: selectedMinistries,
         role_ids: selectedRoles,
-        background_check: background_check || undefined,
-        role_constraints: roleConstraints,
+        background_check: background_check || null,
+        role_constraints: roleConstraints || null,
       };
       await updateChurchDocument(churchId, "people", volunteer.id, updateData);
       onUpdated({ ...volunteer, ...updateData });

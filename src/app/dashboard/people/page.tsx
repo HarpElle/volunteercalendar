@@ -38,7 +38,6 @@ import { ShortLinkCreator } from "@/components/ui/short-link-creator";
 import { TabBar } from "@/components/ui/tab-bar";
 import { FilterBar } from "@/components/people/filter-bar";
 import type {
-  Volunteer,
   Person,
   Ministry,
   Membership,
@@ -49,7 +48,6 @@ import type {
   InviteQueueItem,
   OnboardingStep,
 } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { TIER_LIMITS } from "@/lib/constants";
 import { OverLimitBanner } from "@/components/ui/over-limit-banner";
 
@@ -79,7 +77,7 @@ function PeopleContent() {
   const [tab, setTab] = useState<"roster" | "invites" | "families">(initialTab);
 
   // Data
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -96,7 +94,7 @@ function PeopleContent() {
   const [filterEligibility, setFilterEligibility] = useState<"all" | "cleared" | "pending">("all");
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [sidebarMinistry, setSidebarMinistry] = useState<string | null>(null);
-  const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Volunteer; membership: Membership | null } | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Person; membership: Membership | null } | null>(null);
   const [copied, setCopied] = useState(false);
   const [joinShortLinkUrl, setJoinShortLinkUrl] = useState<string | null>(null);
   const [showShortLinkCreator, setShowShortLinkCreator] = useState(false);
@@ -138,7 +136,7 @@ function PeopleContent() {
           throw new Error(body.error || `API returned ${res.status}`);
         }
         const data = await res.json();
-        setVolunteers(data.volunteers as Volunteer[]);
+        setVolunteers(data.volunteers as Person[]);
         setMinistries(data.ministries as Ministry[]);
         setServices(data.services as Service[]);
         setHouseholds(data.households as Household[]);
@@ -263,7 +261,7 @@ function PeopleContent() {
       const q = searchQuery.toLowerCase();
       const digits = q.replace(/\D/g, "");
       const nameMatch = v.name.toLowerCase().includes(q);
-      const emailMatch = v.email.toLowerCase().includes(q);
+      const emailMatch = (v.email ?? "").toLowerCase().includes(q);
       const phoneMatch = digits.length > 0 && v.phone?.replace(/\D/g, "").includes(digits);
       if (!nameMatch && !emailMatch && !phoneMatch) return false;
     }
@@ -379,7 +377,7 @@ function PeopleContent() {
             updated_at: now,
           };
           const newRef = await addChurchDocument(churchId, "people", volData);
-          setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Volunteer]);
+          setVolunteers((prev) => [...prev, { ...volData, id: newRef.id } as unknown as Person]);
         }
       } catch (err) {
         console.error("Failed to create volunteer record on approval:", err);
@@ -619,8 +617,7 @@ function PeopleContent() {
               getChurchDocuments(churchId, "people").then((docs) =>
                 setVolunteers(
                   (docs as unknown as Person[])
-                    .filter((p) => p.is_volunteer)
-                    .map((p) => personToLegacyVolunteer(p)),
+                    .filter((p) => p.is_volunteer),
                 ),
               );
             }

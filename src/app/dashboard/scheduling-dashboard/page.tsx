@@ -173,7 +173,7 @@ export default function SchedulingDashboardPage() {
   const confirmedSignups = activeSignups.filter((s) => s.status === "confirmed");
   const confirmedUpcomingCount = confirmedAssignments.length + confirmedSignups.length;
 
-  const volunteerIdSet = new Set(assignments.map((a) => a.person_id ?? a.volunteer_id));
+  const volunteerIdSet = new Set(assignments.map((a) => a.person_id));
   for (const s of activeSignups) volunteerIdSet.add(s.volunteer_id);
   const totalVolunteersActive = volunteerIdSet.size;
 

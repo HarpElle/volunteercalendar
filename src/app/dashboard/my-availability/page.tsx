@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
-import type { Volunteer, VolunteerAvailability } from "@/lib/types";
+import type { Person } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,7 +29,7 @@ export default function MyAvailabilityPage() {
   const { user, profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
 
-  const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const [volunteer, setVolunteer] = useState<Person | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -62,15 +62,15 @@ export default function MyAvailabilityPage() {
         );
         if (!res.ok) throw new Error("Failed to load");
         const json = await res.json();
-        const vol = json.volunteer as Volunteer | null;
+        const vol = json.volunteer as Person | null;
         if (!cancelled && vol) {
           setVolunteer(vol);
-          const a = vol.availability;
-          setBlockoutDates(a?.blockout_dates || []);
-          setRecurringUnavailable(a?.recurring_unavailable || []);
-          setPreferredFrequency(a?.preferred_frequency ?? 1);
-          setMaxRolesPerMonth(a?.max_roles_per_month ?? 0);
-          setPreferredWeeks(a?.preferred_weeks ?? []);
+          const sp = vol.scheduling_profile;
+          setBlockoutDates(sp?.blockout_dates || []);
+          setRecurringUnavailable(sp?.recurring_unavailable || []);
+          setPreferredFrequency(sp?.preferred_frequency ?? 1);
+          setMaxRolesPerMonth(sp?.max_roles_per_month ?? 0);
+          setPreferredWeeks(sp?.preferred_weeks ?? []);
         }
       } catch {
         // silent
@@ -106,7 +106,7 @@ export default function MyAvailabilityPage() {
             preferred_frequency: preferredFrequency,
             max_roles_per_month: maxRolesPerMonth,
             preferred_weeks: preferredWeeks,
-          } satisfies VolunteerAvailability,
+          },
         }),
       });
       if (res.ok) {

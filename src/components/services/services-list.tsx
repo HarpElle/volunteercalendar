@@ -18,10 +18,8 @@ import type {
   Service,
   ServiceRole,
   Ministry,
-  Volunteer,
   Person,
 } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -80,7 +78,7 @@ export function ServicesList({
   loading: ministriesLoading,
 }: ServicesListProps) {
   const [services, setServices] = useState<Service[]>([]);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -105,8 +103,7 @@ export function ServicesList({
         setServices(svcs as unknown as Service[]);
         setVolunteers(
           (peopleDocs as unknown as Person[])
-            .filter((d) => d.is_volunteer && d.status === "active")
-            .map((d) => personToLegacyVolunteer(d)),
+            .filter((d) => d.is_volunteer && d.status === "active"),
         );
         setCampuses((camps as unknown as { id: string; name: string }[]).map((c) => ({ id: c.id, name: c.name })));
       })

@@ -18,7 +18,8 @@ import {
   getUserProfile,
   onAuthChange,
 } from "@/lib/firebase/auth";
-import { getUserMemberships, createMembership, getDocument } from "@/lib/firebase/firestore";
+import { getUserMemberships, createMembership, getDocument, getChurchDocuments } from "@/lib/firebase/firestore";
+import { where } from "firebase/firestore";
 
 // --- State ---
 
@@ -168,6 +169,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (churchId && memberships.length === 0) {
             const church = await getDocument("churches", churchId);
             if (church) {
+              // Find this user's person record to link volunteer_id
+              let personId: string | null = null;
+              try {
+                const people = await getChurchDocuments(churchId, "people",
+                  where("user_id", "==", user.uid),
+                ) as { id: string }[];
+                if (people.length > 0) personId = people[0].id;
+              } catch { /* skip — person may not exist yet */ }
+
               const now = new Date().toISOString();
               await createMembership({
                 user_id: user.uid,
@@ -176,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ministry_scope: [],
                 status: "active",
                 invited_by: null,
-                volunteer_id: null,
+                volunteer_id: personId,
                 reminder_preferences: { channels: ["email"] },
                 created_at: now,
                 updated_at: now,

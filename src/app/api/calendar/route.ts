@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     if (feedType === "personal") {
       assignments = assignments.filter((a) => {
         const data = a as Record<string, unknown>;
-        return (data.person_id ?? data.volunteer_id) === targetId;
+        return data.person_id === targetId;
       });
       const vol = volunteerMap.get(targetId);
       calendarName = `${(vol as Record<string, unknown>)?.name || "My"} Schedule - ${churchName}`;
@@ -140,8 +140,8 @@ export async function GET(request: Request) {
         for (const a of groupAssignments) {
           const data = a as Record<string, unknown>;
           const roleTitle = (data.role_title as string) || "Unknown Role";
-          const personOrVolId = (data.person_id ?? data.volunteer_id) as string;
-          const volName = ((volunteerMap.get(personOrVolId) as Record<string, unknown>)?.name as string) || "Unknown";
+          const personId = data.person_id as string;
+          const volName = ((volunteerMap.get(personId) as Record<string, unknown>)?.name as string) || "Unknown";
           if (!roleMap.has(roleTitle)) roleMap.set(roleTitle, []);
           roleMap.get(roleTitle)!.push(volName);
         }

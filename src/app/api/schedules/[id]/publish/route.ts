@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
-import type { Schedule, Assignment, Volunteer, Service } from "@/lib/types";
+import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -90,11 +90,11 @@ export async function POST(
       churchRef.collection("services").get(),
     ]);
 
-    const volunteersMap = new Map<string, Volunteer>();
+    const volunteersMap = new Map<string, Person>();
     // Index by person doc ID and by any stored legacy volunteer_id
     peopleSnap.docs.forEach((d) => {
       const data = d.data();
-      const vol = { id: d.id, name: data.name, email: data.email, ...data } as unknown as Volunteer;
+      const vol = { id: d.id, name: data.name, email: data.email, ...data } as unknown as Person;
       volunteersMap.set(d.id, vol);
       if (data.volunteer_id) volunteersMap.set(data.volunteer_id as string, vol);
     });
@@ -111,7 +111,7 @@ export async function POST(
 
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
-      const volunteer = volunteersMap.get(assignment.person_id || assignment.volunteer_id);
+      const volunteer = volunteersMap.get(assignment.person_id);
       const service = assignment.service_id ? servicesMap.get(assignment.service_id) : null;
 
       if (!volunteer?.email) continue;
@@ -134,7 +134,7 @@ export async function POST(
       try {
         const result = await resend.emails.send({
           from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-          to: volunteer.email,
+          to: volunteer.email!,
           subject: email.subject,
           html: email.html,
           text: email.text,

@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const churchId = data.church_id as string;
 
     const [volSnap, svcSnap, minSnap, churchSnap] = await Promise.all([
-      adminDb.doc(`churches/${churchId}/people/${(data.person_id || data.volunteer_id) as string}`).get(),
+      adminDb.doc(`churches/${churchId}/people/${data.person_id as string}`).get(),
       adminDb.doc(`churches/${churchId}/services/${data.service_id}`).get(),
       adminDb.doc(`churches/${churchId}/ministries/${data.ministry_id}`).get(),
       adminDb.doc(`churches/${churchId}`).get(),

@@ -21,7 +21,6 @@ import type {
   Schedule,
   ScheduleStatus,
   Service,
-  Volunteer,
   Person,
   Ministry,
   Household,
@@ -34,12 +33,11 @@ import type {
 } from "@/lib/types";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 
 function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
   schedule: Schedule;
   services: Service[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   ministries: Ministry[];
 }) {
   const schedMinistryIds = schedule.ministry_ids || [];
@@ -119,7 +117,7 @@ export default function SchedulesPage() {
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [households, setHouseholds] = useState<Household[]>([]);
   const [orgPrerequisites, setOrgPrerequisites] = useState<OnboardingStep[]>([]);
@@ -159,10 +157,7 @@ export default function SchedulesPage() {
         ]);
         setSchedules(scheds as unknown as Schedule[]);
         setServices(svcs as unknown as Service[]);
-        setVolunteers(
-          (peopleDocs as unknown as Person[])
-            .map((d) => personToLegacyVolunteer(d)),
-        );
+        setVolunteers(peopleDocs as unknown as Person[]);
         setMinistries(mins as unknown as Ministry[]);
         setHouseholds(hhs as unknown as Household[]);
         if (churchSnap.exists()) {

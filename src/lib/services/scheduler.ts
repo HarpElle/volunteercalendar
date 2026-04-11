@@ -7,7 +7,7 @@
  */
 
 import type {
-  Volunteer,
+  Person,
   Service,
   ServiceRole,
   Household,
@@ -121,8 +121,9 @@ export interface VolunteerAssignmentCount {
   };
 }
 
-function isBlockedOut(volunteer: Volunteer, date: string): boolean {
-  return volunteer.availability.blockout_dates.some((blockout) => {
+function isBlockedOut(volunteer: Person, date: string): boolean {
+  const blockoutDates = volunteer.scheduling_profile?.blockout_dates ?? [];
+  return blockoutDates.some((blockout) => {
     // Support single dates or ranges ("2026-04-01" or "2026-04-01/2026-04-07")
     if (blockout.includes("/")) {
       const [rangeStart, rangeEnd] = blockout.split("/");
@@ -132,9 +133,10 @@ function isBlockedOut(volunteer: Volunteer, date: string): boolean {
   });
 }
 
-function isRecurringUnavailable(volunteer: Volunteer, dayOfWeek: number): boolean {
+function isRecurringUnavailable(volunteer: Person, dayOfWeek: number): boolean {
   const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  return volunteer.availability.recurring_unavailable.some(
+  const recurringUnavailable = volunteer.scheduling_profile?.recurring_unavailable ?? [];
+  return recurringUnavailable.some(
     (u) => u.toLowerCase() === dayNames[dayOfWeek]
   );
 }
@@ -144,24 +146,25 @@ function getMonthKey(date: string): string {
 }
 
 function isOverFrequencyCap(
-  volunteer: Volunteer,
+  volunteer: Person,
   date: string,
   counts: VolunteerAssignmentCount,
 ): boolean {
   const monthKey = getMonthKey(date);
   const monthCount = counts[volunteer.id]?.byMonth[monthKey] || 0;
-  return monthCount >= volunteer.availability.max_roles_per_month;
+  return monthCount >= (volunteer.scheduling_profile?.max_roles_per_month ?? 4);
 }
 
 function hasHouseholdConflict(
-  volunteer: Volunteer,
+  volunteer: Person,
   date: string,
   serviceId: string,
   households: Household[],
   assignments: DraftAssignment[],
 ): boolean {
-  if (!volunteer.household_id) return false;
-  const household = households.find((h) => h.id === volunteer.household_id);
+  const householdId = volunteer.household_ids[0] ?? null;
+  if (!householdId) return false;
+  const household = households.find((h) => h.id === householdId);
   if (!household) return false;
 
   const { never_same_service, never_same_time } = household.constraints;
@@ -191,14 +194,15 @@ function hasHouseholdConflict(
  * together (soft preference).
  */
 function getHouseholdPreferenceBonus(
-  volunteer: Volunteer,
+  volunteer: Person,
   date: string,
   serviceId: string,
   households: Household[],
   assignments: DraftAssignment[],
 ): number {
-  if (!volunteer.household_id) return 0;
-  const household = households.find((h) => h.id === volunteer.household_id);
+  const householdId = volunteer.household_ids[0] ?? null;
+  if (!householdId) return 0;
+  const household = households.find((h) => h.id === householdId);
   if (!household || !household.constraints.prefer_same_service) return 0;
 
   const otherMembers = household.volunteer_ids.filter((id) => id !== volunteer.id);
@@ -212,23 +216,22 @@ function getHouseholdPreferenceBonus(
   return hasFamilyOnSameService ? 0.5 : 0;
 }
 
-function canServeInMinistry(volunteer: Volunteer, ministryId: string): boolean {
+function canServeInMinistry(volunteer: Person, ministryId: string): boolean {
   // If volunteer has no ministry assignments, they can serve anywhere (flexible)
   return volunteer.ministry_ids.length === 0 || volunteer.ministry_ids.includes(ministryId);
 }
 
-function canServeInRole(volunteer: Volunteer, roleId: string): boolean {
+function canServeInRole(volunteer: Person, roleId: string): boolean {
   // If volunteer has no specific role_ids, they can fill any role in their ministry
   return volunteer.role_ids.length === 0 || volunteer.role_ids.includes(roleId);
 }
 
-function canServeAtCampus(volunteer: Volunteer, service: Service): boolean {
+function canServeAtCampus(volunteer: Person, service: Service): boolean {
   // If service has no campus (org-wide), anyone can serve
   if (!service.campus_id) return true;
   // If volunteer has no campus preference, they can serve anywhere
-  const campusIds = volunteer.campus_ids;
-  if (!campusIds || campusIds.length === 0) return true;
-  return campusIds.includes(service.campus_id);
+  if (volunteer.campus_ids.length === 0) return true;
+  return volunteer.campus_ids.includes(service.campus_id);
 }
 
 /**
@@ -237,7 +240,7 @@ function canServeAtCampus(volunteer: Volunteer, service: Service): boolean {
  * they can only be assigned Vocals if also assigned Guitar or Keys in the same service/date.
  */
 function isConditionalRoleSatisfied(
-  volunteer: Volunteer,
+  volunteer: Person,
   roleId: string,
   serviceId: string,
   date: string,
@@ -266,7 +269,7 @@ function isConditionalRoleSatisfied(
  * (scope "all", "teams", or "specific_roles" matching the assigned role).
  */
 function hasCompletedPrerequisites(
-  volunteer: Volunteer,
+  volunteer: Person,
   ministryId: string,
   ministries?: Ministry[],
   orgPrerequisites?: OnboardingStep[],
@@ -310,11 +313,11 @@ function hasCompletedPrerequisites(
 }
 
 /** Whether a volunteer allows multi-role assignments in the same service */
-function allowsMultiRole(volunteer: Volunteer): boolean {
+function allowsMultiRole(volunteer: Person): boolean {
   return volunteer.role_constraints?.allow_multi_role === true;
 }
 
-function hasValidBackgroundCheck(volunteer: Volunteer, ministryId: string, ministries?: Ministry[]): boolean {
+function hasValidBackgroundCheck(volunteer: Person, ministryId: string, ministries?: Ministry[]): boolean {
   if (!ministries) return true;
   const ministry = ministries.find((m) => m.id === ministryId);
   if (!ministry?.requires_background_check) return true;
@@ -351,7 +354,7 @@ export function generateDraftSchedule(
   scheduleId: string,
   churchId: string,
   services: Service[],
-  volunteers: Volunteer[],
+  volunteers: Person[],
   households: Household[],
   startDate: string,
   endDate: string,
@@ -468,13 +471,13 @@ export function findBestVolunteer(
   ministryId: string,
   role: ServiceRole,
   date: string,
-  volunteers: Volunteer[],
+  volunteers: Person[],
   households: Household[],
   currentAssignments: DraftAssignment[],
   counts: VolunteerAssignmentCount,
   ministries?: Ministry[],
   orgPrerequisites?: OnboardingStep[],
-): Volunteer | null {
+): Person | null {
   // --- Pinned volunteer: try them first ---
   if (role.pinned_volunteer_id) {
     const pinned = volunteers.find((v) => v.id === role.pinned_volunteer_id);
@@ -502,7 +505,7 @@ export function findBestVolunteer(
     const bonusB = getHouseholdPreferenceBonus(b, date, service.id, households, currentAssignments);
     if (bonusA !== bonusB) return bonusB - bonusA; // Higher bonus = preferred
     // Tertiary: prefer those with higher preferred_frequency (want to serve more)
-    return b.availability.preferred_frequency - a.availability.preferred_frequency;
+    return (b.scheduling_profile?.preferred_frequency ?? 4) - (a.scheduling_profile?.preferred_frequency ?? 4);
   });
 
   return eligible[0];
@@ -510,12 +513,12 @@ export function findBestVolunteer(
 
 /** Check all eligibility constraints for a volunteer + role + date */
 function isEligible(
-  v: Volunteer,
+  v: Person,
   service: Service,
   ministryId: string,
   role: ServiceRole,
   date: string,
-  _volunteers: Volunteer[],
+  _volunteers: Person[],
   households: Household[],
   currentAssignments: DraftAssignment[],
   counts: VolunteerAssignmentCount,
@@ -566,7 +569,7 @@ function isEligible(
 
 function detectConflicts(
   assignments: DraftAssignment[],
-  volunteers: Volunteer[],
+  volunteers: Person[],
   households: Household[],
   counts: VolunteerAssignmentCount,
   conflicts: ScheduleConflict[],
@@ -580,13 +583,14 @@ function detectConflicts(
     // Over-frequency check
     const monthKey = getMonthKey(a.service_date);
     const monthCount = counts[vol.id]?.byMonth[monthKey] || 0;
-    if (monthCount > vol.availability.max_roles_per_month) {
+    const maxRoles = vol.scheduling_profile?.max_roles_per_month ?? 4;
+    if (monthCount > maxRoles) {
       conflicts.push({
         type: "overbooked",
         service_id: a.service_id || "",
         service_date: a.service_date,
         volunteer_id: vol.id,
-        message: `${vol.name} is scheduled ${monthCount}× in ${monthKey} (max: ${vol.availability.max_roles_per_month})`,
+        message: `${vol.name} is scheduled ${monthCount}× in ${monthKey} (max: ${maxRoles})`,
       });
     }
   }
@@ -594,7 +598,7 @@ function detectConflicts(
 
 function improveFairness(
   assignments: DraftAssignment[],
-  volunteers: Volunteer[],
+  volunteers: Person[],
   households: Household[],
   counts: VolunteerAssignmentCount,
   maxIterations: number,
@@ -634,7 +638,7 @@ function improveFairness(
 
 function trySwap(
   assignments: DraftAssignment[],
-  volunteers: Volunteer[],
+  volunteers: Person[],
   households: Household[],
   counts: VolunteerAssignmentCount,
   fromId: string,

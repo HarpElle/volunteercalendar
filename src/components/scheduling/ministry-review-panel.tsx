@@ -7,7 +7,7 @@ import type {
   Ministry,
   Schedule,
   Service,
-  Volunteer,
+  Person,
   ApprovalStatus,
 } from "@/lib/types";
 
@@ -16,7 +16,7 @@ interface MinistryReviewPanelProps {
   assignments: Assignment[];
   ministries: Ministry[];
   services: Service[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   onApprove: (ministryId: string, notes?: string) => void;
   onReject: (ministryId: string, notes?: string) => void;
   loading?: boolean;

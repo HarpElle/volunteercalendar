@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
-  Volunteer,
   Person,
   Ministry,
   OnboardingStep,
@@ -19,7 +18,6 @@ import type {
   JourneyStepStatus,
   OrgType,
 } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import { StepTypeIcon } from "@/components/ui/step-type-icon";
 
 const STATUS_CONFIG: Record<JourneyStepStatus, { label: string; variant: "default" | "warning" | "success" }> = {
@@ -44,7 +42,7 @@ export default function MyJourneyPage() {
   const [orgType, setOrgType] = useState<OrgType>("church");
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
-  const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const [volunteer, setVolunteer] = useState<Person | null>(null);
 
   useEffect(() => {
     if (!churchId || !user) {
@@ -71,11 +69,10 @@ export default function MyJourneyPage() {
 
         // Find the current user's volunteer record
         const people = (volDocs as unknown as Person[]).filter((p) => p.is_volunteer);
-        const vols = people.map((p) => personToLegacyVolunteer(p));
         const activeMemIds = memberships.filter((m) => m.status === "active").map((m) => m.id);
         const myVol =
-          vols.find((v) => v.user_id === user!.uid) ||
-          vols.find((v) => v.membership_id && activeMemIds.includes(v.membership_id)) ||
+          people.find((v) => v.user_id === user!.uid) ||
+          people.find((v) => v.membership_id && activeMemIds.includes(v.membership_id)) ||
           null;
         setVolunteer(myVol);
       } catch {

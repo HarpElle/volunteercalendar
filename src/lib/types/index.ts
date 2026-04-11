@@ -431,16 +431,6 @@ export type ImportSource =
   | "self_signup"
   | "invite";
 
-export type VolunteerStatus = "active" | "inactive" | "pending" | "archived";
-
-export interface VolunteerAvailability {
-  blockout_dates: string[];
-  recurring_unavailable: string[];
-  preferred_frequency: number;
-  max_roles_per_month: number;
-  preferred_weeks?: number[];
-}
-
 export interface VolunteerStats {
   times_scheduled_last_90d: number;
   last_served_date: string | null;
@@ -454,52 +444,6 @@ export interface ConditionalRole {
   role_id: string;
   /** Must also be assigned one of these roles in the same service (e.g., [Guitar, Keys]) */
   requires_any: string[];
-}
-
-export interface Volunteer {
-  id: string;
-  church_id: string;
-  name: string;
-  /** Parsed first name (derived from name) */
-  first_name?: string;
-  /** Parsed last name (derived from name) */
-  last_name?: string;
-  email: string;
-  phone: string | null;
-  user_id: string | null;
-  /** Link to the membership doc for logged-in volunteers */
-  membership_id: string | null;
-  status: VolunteerStatus;
-  ministry_ids: string[];
-  role_ids: string[];
-  /** Campus IDs this volunteer can serve at. Empty = all campuses. */
-  campus_ids?: string[];
-  household_id: string | null;
-  /** Profile photo URL (Firebase Storage path) */
-  photo_url?: string | null;
-  availability: VolunteerAvailability;
-  reminder_preferences: {
-    channels: ReminderChannel[];
-  };
-  stats: VolunteerStats;
-  imported_from: ImportSource;
-  /** Background check status for ministries that require clearance */
-  background_check?: {
-    status: "cleared" | "pending" | "expired" | "not_required";
-    expires_at?: string | null;
-    provider?: string | null;
-    checked_at?: string | null;
-  };
-  /** Advanced role constraints for worship/music teams */
-  role_constraints?: {
-    /** Roles this volunteer can only fill if also assigned a companion role */
-    conditional_roles?: ConditionalRole[];
-    /** Allow this volunteer to fill multiple role slots in the same service */
-    allow_multi_role?: boolean;
-  };
-  /** Onboarding journey steps completed/pending for this volunteer */
-  volunteer_journey?: VolunteerJourneyStep[];
-  created_at: string;
 }
 
 // --- Households ---
@@ -627,7 +571,7 @@ export interface Assignment {
   service_date: string;
   volunteer_id: string;
   /** Unified Person ID. During migration, falls back to volunteer_id. */
-  person_id?: string;
+  person_id: string;
   role_id: string;
   role_title: string;
   ministry_id: string;
@@ -1605,37 +1549,6 @@ export interface UnifiedHousehold {
   imported_from: "breeze" | "pco" | "generic" | "manual" | null;
   created_at: string;
   updated_at: string;
-}
-
-// ─── Scheduling Algorithm Adapter ──────────────────────────────────────────
-// Memory-only type — the scheduler consumes this, not raw Person docs.
-// Built from Person via personToSchedulable() in the compat layer.
-
-export interface SchedulableVolunteer {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  user_id: string | null;
-  membership_id: string | null;
-  status: PersonStatus;
-  ministry_ids: string[];
-  role_ids: string[];
-  campus_ids: string[];
-  /** Primary household for constraint checking */
-  household_id: string | null;
-  photo_url: string | null;
-  availability: {
-    blockout_dates: string[];
-    recurring_unavailable: string[];
-    preferred_frequency: number;
-    max_roles_per_month: number;
-  };
-  stats: VolunteerStats;
-  background_check: Person["background_check"];
-  role_constraints: Person["role_constraints"];
-  volunteer_journey: VolunteerJourneyStep[] | null;
-  imported_from: ImportSource | null;
 }
 
 // ─── Feature Flags ─────────────────────────────────────────────────────────

@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, type DragEvent } from "react";
-import type { Assignment, Service, Volunteer, Ministry, Schedule } from "@/lib/types";
+import type { Assignment, Service, Person, Ministry, Schedule } from "@/lib/types";
 import { getServiceMinistryIds } from "@/lib/utils/service-helpers";
 
 interface ScheduleMatrixProps {
   assignments: Assignment[];
   services: Service[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   ministries: Ministry[];
   schedule: Schedule;
   onReassign?: (assignmentId: string, newVolunteerId: string) => void;
@@ -109,7 +109,7 @@ export function ScheduleMatrix({
   const byVolunteer = useMemo(() => {
     const groups: Record<string, Assignment[]> = {};
     for (const a of filteredAssignments) {
-      const key = a.person_id || a.volunteer_id;
+      const key = a.person_id;
       if (!groups[key]) groups[key] = [];
       groups[key].push(a);
     }
@@ -149,34 +149,35 @@ export function ScheduleMatrix({
    * Check if a volunteer is unavailable on a given date.
    * Returns a reason string if unavailable, or null if available.
    */
-  function getUnavailableReason(vol: Volunteer, dateStr: string): string | null {
-    const avail = vol.availability;
-    if (!avail) return null;
+  function getUnavailableReason(vol: Person, dateStr: string): string | null {
+    const sp = vol.scheduling_profile;
+    if (!sp) return null;
 
     // Blockout date match
-    if (avail.blockout_dates?.includes(dateStr)) {
+    if (sp.blockout_dates?.includes(dateStr)) {
       return "Blocked out";
     }
 
     // Recurring unavailable day match (e.g. "Sunday")
-    if (avail.recurring_unavailable?.length) {
+    if (sp.recurring_unavailable?.length) {
       const d = new Date(dateStr + "T12:00:00");
       const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
-      if (avail.recurring_unavailable.includes(dayName)) {
+      if (sp.recurring_unavailable.includes(dayName)) {
         return `Unavailable ${dayName}s`;
       }
     }
 
     // Max roles per month check
-    if (avail.max_roles_per_month > 0) {
+    const maxRoles = sp.max_roles_per_month ?? 4;
+    if (maxRoles > 0) {
       const monthPrefix = dateStr.slice(0, 7); // "YYYY-MM"
       const monthCount = assignments.filter(
         (a) =>
           a.volunteer_id === vol.id &&
           a.service_date.startsWith(monthPrefix),
       ).length;
-      if (monthCount >= avail.max_roles_per_month) {
-        return `At limit (${avail.max_roles_per_month}/mo)`;
+      if (monthCount >= maxRoles) {
+        return `At limit (${maxRoles}/mo)`;
       }
     }
 
@@ -329,7 +330,7 @@ export function ScheduleMatrix({
                               {!isCollapsed && (
                         <div className="flex flex-wrap gap-2">
                           {mAssignments.map((a) => {
-                            const vol = volunteerMap.get(a.person_id || a.volunteer_id);
+                            const vol = volunteerMap.get(a.person_id);
                             const isReassigningThis = reassigning === a.id;
 
                             if (isReassigningThis) {
@@ -558,10 +559,10 @@ function CompareView({
 }: {
   assignments: Assignment[];
   services: Service[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   ministries: Ministry[];
   schedule: Schedule;
-  getUnavailableReason: (vol: Volunteer, dateStr: string) => string | null;
+  getUnavailableReason: (vol: Person, dateStr: string) => string | null;
 }) {
   // Get unique dates in the schedule
   const dates = useMemo(() => {

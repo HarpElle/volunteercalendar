@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import type { Ministry, Volunteer } from "@/lib/types";
+import type { Ministry, Person } from "@/lib/types";
 
 interface TeamSidebarProps {
   ministries: Ministry[];
-  volunteers: Volunteer[];
+  volunteers: Person[];
   selectedMinistryId: string | null;
   onSelectMinistry: (id: string | null) => void;
 }

@@ -7,21 +7,21 @@ import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import type { Volunteer, Assignment, Person } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+import type { Assignment, Person } from "@/lib/types";
 
 // --- Helpers ---
 
 type HealthCategory = "at_risk" | "declining" | "inactive" | "no_show" | "healthy";
 
 interface VolunteerHealth {
-  volunteer: Volunteer;
+  volunteer: Person;
   category: HealthCategory;
   detail: string;
 }
 
-function classifyHealth(v: Volunteer, recentAssignments: Assignment[]): VolunteerHealth {
-  const { stats, availability } = v;
+function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHealth {
+  const stats = v.stats ?? { times_scheduled_last_90d: 0, last_served_date: null, decline_count: 0, no_show_count: 0 };
+  const scheduling = v.scheduling_profile;
 
   // No-show pattern: 2+ no-shows
   if (stats.no_show_count >= 2) {
@@ -45,14 +45,15 @@ function classifyHealth(v: Volunteer, recentAssignments: Assignment[]): Voluntee
   }
 
   // At-risk: scheduled more than preferred frequency
+  const preferredFreq = scheduling?.preferred_frequency ?? 0;
   if (
-    availability.preferred_frequency > 0 &&
-    stats.times_scheduled_last_90d > availability.preferred_frequency * 3 // 3 months at preferred rate
+    preferredFreq > 0 &&
+    stats.times_scheduled_last_90d > preferredFreq * 3 // 3 months at preferred rate
   ) {
     return {
       volunteer: v,
       category: "at_risk",
-      detail: `Scheduled ${stats.times_scheduled_last_90d}× in 90d (prefers ${availability.preferred_frequency}/mo)`,
+      detail: `Scheduled ${stats.times_scheduled_last_90d}× in 90d (prefers ${preferredFreq}/mo)`,
     };
   }
 
@@ -107,7 +108,7 @@ export default function VolunteerHealthPage() {
   const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [loading, setLoading] = useState(true);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   useEffect(() => {
@@ -119,9 +120,8 @@ export default function VolunteerHealthPage() {
           getChurchDocuments(churchId!, "assignments"),
         ]);
 
-        const vols: Volunteer[] = (peopleDocs as unknown as Person[])
-          .filter((d) => d.is_volunteer && d.status === "active")
-          .map((d) => personToLegacyVolunteer(d));
+        const vols: Person[] = (peopleDocs as unknown as Person[])
+          .filter((d) => d.is_volunteer && d.status === "active");
         setVolunteers(vols);
         setAssignments(assignDocs as unknown as Assignment[]);
       } catch {
@@ -266,23 +266,23 @@ export default function VolunteerHealthPage() {
                 <div key={h.volunteer.id} className="flex flex-col gap-2 px-5 py-3 hover:bg-vc-bg-warm transition-colors sm:flex-row sm:items-center sm:justify-between sm:gap-0">
                   <div className="min-w-0">
                     <p className="font-medium text-vc-indigo truncate">{h.volunteer.name}</p>
-                    <p className="text-sm text-vc-text-muted truncate">{h.volunteer.email}</p>
+                    <p className="text-sm text-vc-text-muted truncate">{h.volunteer.email ?? ""}</p>
                   </div>
                   <div className="ml-4 flex items-center gap-3 flex-shrink-0">
                     <div className="text-right">
                       <p className="text-sm text-vc-text-secondary">{h.detail}</p>
                       <div className="mt-0.5 flex items-center gap-2 text-xs text-vc-text-muted">
-                        <span>Scheduled: {h.volunteer.stats.times_scheduled_last_90d}×</span>
-                        {h.volunteer.stats.decline_count > 0 && (
-                          <span>Declined: {h.volunteer.stats.decline_count}</span>
+                        <span>Scheduled: {h.volunteer.stats?.times_scheduled_last_90d ?? 0}×</span>
+                        {(h.volunteer.stats?.decline_count ?? 0) > 0 && (
+                          <span>Declined: {h.volunteer.stats?.decline_count}</span>
                         )}
-                        {h.volunteer.stats.no_show_count > 0 && (
-                          <span>No-shows: {h.volunteer.stats.no_show_count}</span>
+                        {(h.volunteer.stats?.no_show_count ?? 0) > 0 && (
+                          <span>No-shows: {h.volunteer.stats?.no_show_count}</span>
                         )}
                       </div>
                     </div>
                     <a
-                      href={`mailto:${h.volunteer.email}?subject=Checking in — VolunteerCal`}
+                      href={`mailto:${h.volunteer.email ?? ""}?subject=Checking in — VolunteerCal`}
                       className="flex h-9 w-9 items-center justify-center rounded-lg text-vc-text-muted hover:bg-vc-coral/10 hover:text-vc-coral transition-colors"
                       aria-label={`Email ${h.volunteer.name}`}
                       title={`Email ${h.volunteer.name}`}

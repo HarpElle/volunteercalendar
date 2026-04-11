@@ -7,10 +7,8 @@
 
 import { adminDb } from "@/lib/firebase/admin";
 import { findBestVolunteer } from "@/lib/services/scheduler";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
 import type {
   Person,
-  Volunteer,
   Service,
   ServiceRole,
   Household,
@@ -65,9 +63,9 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
   if (!serviceSnap.exists) return { replaced: false };
 
   const service = { id: serviceSnap.id, ...serviceSnap.data()! } as Service;
-  const volunteers: Volunteer[] = volSnap.docs
-    .map((d) => personToLegacyVolunteer({ id: d.id, ...d.data() } as Person))
-    .filter((v) => v.id !== declinedVolunteerId);
+  const persons: Person[] = volSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Person))
+    .filter((p) => p.id !== declinedVolunteerId);
   const households: Household[] = householdSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Household));
   const ministries: Ministry[] = ministrySnap.docs.map((d) => ({ id: d.id, ...d.data() } as Ministry));
   const orgPrerequisites: OnboardingStep[] = churchSnap.exists ? (churchSnap.data()?.org_prerequisites || []) : [];
@@ -94,8 +92,8 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
 
   // Build assignment counts for fairness scoring
   const counts: VolunteerAssignmentCount = {};
-  for (const v of volunteers) {
-    counts[v.id] = { total: 0, byDate: {}, byMonth: {} };
+  for (const p of persons) {
+    counts[p.id] = { total: 0, byDate: {}, byMonth: {} };
   }
   for (const a of existingAssignments) {
     if (!counts[a.volunteer_id]) continue;
@@ -119,7 +117,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     ministryId,
     role,
     serviceDate,
-    volunteers,
+    persons,
     households,
     existingAssignments,
     counts,
@@ -159,7 +157,7 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     replaced: true,
     newVolunteerId: bestVolunteer.id,
     newVolunteerName: bestVolunteer.name,
-    newVolunteerEmail: bestVolunteer.email,
+    newVolunteerEmail: bestVolunteer.email ?? "",
     newAssignmentId: ref.id,
     confirmationToken: token,
   };

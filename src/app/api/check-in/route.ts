@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const volunteerId = personDoc.id;
     const legacyVolunteerId = (personDoc.data().volunteer_id as string) || null;
 
-    // Find an assignment for this volunteer on this service date (match by person_id or legacy volunteer_id)
+    // Find an assignment for this volunteer on this service date
     let assignQuery = await adminDb
       .collection("churches")
       .doc(church_id)

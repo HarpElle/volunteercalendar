@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase/admin";
-import type { SwapRequest, Volunteer, Assignment } from "@/lib/types";
+import type { SwapRequest, Person, Assignment } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 
 // POST — Create a swap request
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     }
 
     // Get volunteer name
-    const personId = (assignment.person_id || assignment.volunteer_id) as string;
+    const personId = assignment.person_id as string;
     const volSnap = await churchRef.collection("people").doc(personId).get();
     const requesterName = volSnap.exists ? (volSnap.data()?.name || "Unknown") : "Unknown";
 
@@ -135,7 +135,7 @@ export async function GET(request: Request) {
     // Filter eligible replacements
     const eligible: Array<{ id: string; name: string; email: string }> = [];
     for (const d of volSnap.docs) {
-      const v = d.data() as Volunteer;
+      const v = d.data() as Person;
       const vData = d.data() as Record<string, unknown>;
       // Skip the requester (match by person doc id or old volunteer_id)
       if (d.id === swap.requester_volunteer_id || vData.volunteer_id === swap.requester_volunteer_id) continue;
@@ -156,7 +156,7 @@ export async function GET(request: Request) {
         return b === swap.service_date;
       })) continue;
 
-      eligible.push({ id: d.id, name: v.name, email: v.email });
+      eligible.push({ id: d.id, name: v.name, email: v.email ?? "" });
     }
 
     return NextResponse.json({ eligible, swap: { ...swap, id: swapSnap.id } });

@@ -25,8 +25,7 @@ import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import type { CalendarFeed, CalendarFeedType, Ministry, Volunteer, Person, SchedulerNotificationPreferences } from "@/lib/types";
-import { personToLegacyVolunteer } from "@/lib/compat/volunteer-compat";
+import type { CalendarFeed, CalendarFeedType, Ministry, Person, SchedulerNotificationPreferences } from "@/lib/types";
 import { SCHEDULER_NOTIFICATION_TYPES, DEFAULT_SCHEDULER_NOTIFICATION_PREFS } from "@/lib/constants";
 
 export default function AccountPage() {
@@ -40,7 +39,7 @@ export default function AccountPage() {
 
   // Calendar feeds state
   const [feeds, setFeeds] = useState<CalendarFeed[]>([]);
-  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -116,8 +115,7 @@ export default function AccountPage() {
         setFeeds(feedDocs as unknown as CalendarFeed[]);
         setVolunteers(
           (volDocs as unknown as Person[])
-            .filter((p) => p.is_volunteer)
-            .map((p) => personToLegacyVolunteer(p)),
+            .filter((p) => p.is_volunteer),
         );
         setMinistries(minDocs as unknown as Ministry[]);
         if (churchSnap.exists()) {

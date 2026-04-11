@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WORKFLOW_MODES } from "@/lib/constants";
-import type { WorkflowMode, Ministry, Volunteer } from "@/lib/types";
+import type { WorkflowMode, Ministry, Person } from "@/lib/types";
 
 export interface CreateScheduleOptions {
   startDate: string;
@@ -22,7 +22,7 @@ interface CreateScheduleModalProps {
   onGenerate: (options: CreateScheduleOptions) => Promise<void>;
   generating: boolean;
   serviceCount: number;
-  volunteers: Volunteer[];
+  volunteers: Person[];
   ministries: Ministry[];
 }
 

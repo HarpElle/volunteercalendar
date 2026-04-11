@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
       }
       const data = snap.data()!;
-      volunteerId = (data.person_id || data.volunteer_id) as string;
+      volunteerId = data.person_id as string;
       ministryId = data.ministry_id as string;
       roleName = data.role_title as string;
       serviceDate = data.service_date as string;
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       if (data.church_id !== church_id) {
         return NextResponse.json({ error: "Signup does not belong to this organization" }, { status: 403 });
       }
-      volunteerId = (data.person_id || data.volunteer_id) as string;
+      volunteerId = data.person_id as string;
       roleName = data.role_title as string;
 
       if (volunteerId !== userVolunteerId) {

@@ -1,8 +1,8 @@
-import type { Volunteer, Household } from "@/lib/types";
+import type { Person, Household } from "@/lib/types";
 
 interface HouseholdCardProps {
   household: Household;
-  volunteers: Volunteer[];
+  volunteers: Person[];
   onEdit: () => void;
   onDelete: () => void;
 }
