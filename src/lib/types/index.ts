@@ -605,6 +605,7 @@ export interface CalendarFeed {
   target_id: string;
   secret_token: string;
   created_at: string;
+  label?: string;
 }
 
 // --- Short Links ---

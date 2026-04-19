@@ -85,6 +85,10 @@ export default function AccountPage() {
   const [schedNotifSaving, setSchedNotifSaving] = useState(false);
   const [schedNotifSuccess, setSchedNotifSuccess] = useState("");
 
+  // App integration feeds state
+  const [creatingIntegration, setCreatingIntegration] = useState(false);
+  const [copiedIntegration, setCopiedIntegration] = useState<string | null>(null);
+
   // Delete account state
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -320,6 +324,46 @@ export default function AccountPage() {
       setDeleteError((err as Error).message || "Failed to delete account.");
       setDeleting(false);
     }
+  }
+
+  // --- App integration feed helpers ---
+
+  function getIntegrationFeeds(): CalendarFeed[] {
+    return feeds.filter((f) => f.label === "app_integration");
+  }
+
+  function getIntegrationUrl(feed: CalendarFeed): string {
+    const base = typeof window !== "undefined"
+      ? window.location.origin.replace(/^http:\/\//, "https://")
+      : "https://volunteercal.com";
+    return `${base}/api/volunteers?token=${feed.secret_token}`;
+  }
+
+  async function handleCreateIntegrationFeed() {
+    if (!churchId) return;
+    setCreatingIntegration(true);
+    try {
+      const feedData: Omit<CalendarFeed, "id"> = {
+        church_id: churchId,
+        type: "org",
+        target_id: churchId,
+        secret_token: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        label: "app_integration",
+      };
+      const ref = await addChurchDocument(churchId, "calendar_feeds", feedData);
+      setFeeds((prev) => [{ id: ref.id, ...feedData }, ...prev]);
+    } catch {
+      // silent
+    } finally {
+      setCreatingIntegration(false);
+    }
+  }
+
+  function handleCopyIntegration(feedId: string, url: string) {
+    navigator.clipboard.writeText(url);
+    setCopiedIntegration(feedId);
+    setTimeout(() => setCopiedIntegration(null), 2000);
   }
 
   // --- Calendar feed handlers ---
@@ -790,7 +834,7 @@ export default function AccountPage() {
         {/* Feed list */}
         {loading ? (
           <div className="py-8 flex justify-center"><Spinner /></div>
-        ) : feeds.length === 0 && !showCreate ? (
+        ) : feeds.filter((f) => f.label !== "app_integration").length === 0 && !showCreate ? (
           <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
             <svg className="mx-auto mb-3 h-8 w-8 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
@@ -802,7 +846,7 @@ export default function AccountPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {feeds.map((feed) => {
+            {feeds.filter((f) => f.label !== "app_integration").map((feed) => {
               const url = getFeedUrl(feed);
               return (
                 <div key={feed.id} className="rounded-xl border border-vc-border-light bg-white p-4">
@@ -853,6 +897,82 @@ export default function AccountPage() {
           </div>
         )}
       </section>
+
+      {/* App Integrations Section — admin only */}
+      {userIsAdmin && (
+        <section className="mb-10">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-vc-indigo">App Integrations</h2>
+              <p className="text-sm text-vc-text-muted">
+                Generate a JSON API URL to connect third-party apps and dashboards to your volunteer schedule data.
+              </p>
+            </div>
+            {!creatingIntegration && (
+              <Button size="sm" onClick={handleCreateIntegrationFeed} loading={creatingIntegration}>
+                Generate Integration URL
+              </Button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="py-8 flex justify-center"><Spinner /></div>
+          ) : getIntegrationFeeds().length === 0 ? (
+            <div className="rounded-xl border border-dashed border-vc-border bg-white p-8 text-center">
+              <svg className="mx-auto mb-3 h-8 w-8 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+              </svg>
+              <p className="text-vc-text-secondary">No integration URLs yet.</p>
+              <p className="mt-1 text-sm text-vc-text-muted">
+                Generate a URL to connect apps that need structured volunteer roster data.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {getIntegrationFeeds().map((feed) => {
+                const url = getIntegrationUrl(feed);
+                return (
+                  <div key={feed.id} className="rounded-xl border border-vc-border-light bg-white p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex rounded-full bg-vc-sage/10 px-2 py-0.5 text-xs font-medium text-vc-sage">
+                            JSON API
+                          </span>
+                          <span className="font-medium text-vc-indigo">Volunteer Schedule API</span>
+                        </div>
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <code className="block min-w-0 w-full truncate rounded bg-vc-bg-warm px-2 py-1.5 text-xs text-vc-text-muted sm:flex-1">
+                            {url}
+                          </code>
+                          <button
+                            onClick={() => handleCopyIntegration(feed.id, url)}
+                            className="shrink-0 rounded-lg border border-vc-border px-2.5 py-1 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-coral hover:text-vc-coral"
+                          >
+                            {copiedIntegration === feed.id ? "Copied!" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="mt-2 text-xs text-vc-text-muted">
+                          Append <code className="rounded bg-vc-bg-warm px-1 py-0.5">?date=YYYY-MM-DD</code> to request a specific date. Omit to get the next upcoming service.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteFeed(feed.id)}
+                        className="shrink-0 text-vc-text-muted hover:text-vc-danger transition-colors"
+                        title="Revoke integration URL"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Scheduler Notification Preferences — visible to scheduler+ roles */}
       {(userIsScheduler || userIsAdmin) && (
