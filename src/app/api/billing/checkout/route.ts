@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
   }
   const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
   const userId = decoded.uid;
+  const userEmail = decoded.email ?? null;
 
   try {
     const { church_id, tier } = await req.json();
@@ -58,10 +59,19 @@ export async function POST(req: NextRequest) {
     const churchData = churchSnap.data()!;
     let customerId = churchData.stripe_customer_id as string | null;
 
-    // Create Stripe customer if needed
+    // Create Stripe customer if needed.
+    // Pre-populate email + name so receipts go to the right person and the
+    // Stripe dashboard shows the church's name on the Customer record.
     if (!customerId) {
       const customer = await stripe.customers.create({
-        metadata: { church_id, church_name: churchData.name as string },
+        email: userEmail ?? undefined,
+        name: (churchData.name as string) || undefined,
+        metadata: {
+          church_id,
+          church_name: (churchData.name as string) ?? "",
+          user_id: userId,
+          user_email: userEmail ?? "",
+        },
       });
       customerId = customer.id;
       await churchRef.update({ stripe_customer_id: customerId });

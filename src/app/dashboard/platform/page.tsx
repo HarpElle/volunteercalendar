@@ -5,11 +5,42 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import type { PlatformStats } from "@/lib/types";
+import type {
+  OrgRiskSignals,
+  RecentActivity,
+  RecentActivityRow,
+} from "@/lib/types/platform";
+
+const RISK_BADGE_LABEL: Record<keyof OrgRiskSignals, string> = {
+  dormant_14d: "dormant 14d",
+  dormant_30d: "dormant 30d",
+  dormant_60d: "dormant 60d",
+  free_tier_paid_feature_attempted: "free + paid feature",
+  payment_failed: "payment failed",
+  subscription_past_due: "past due",
+  abandoned_signup: "abandoned signup",
+};
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 export default function PlatformOverviewPage() {
   const { user } = useAuth();
   const [isPlatformAdmin, setIsPlatformAdmin] = useState<boolean | null>(null);
   const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [recent, setRecent] = useState<RecentActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -29,11 +60,12 @@ export default function PlatformOverviewPage() {
           return;
         }
 
-        // Load stats
+        // Load stats + recent activity (single endpoint)
         const statsRes = await fetch("/api/platform/stats", { headers });
         if (statsRes.ok) {
           const statsData = await statsRes.json();
           setStats(statsData.stats);
+          setRecent(statsData.recent_activity);
         }
       } catch (err) {
         console.error("[Platform Overview] Load failed:", err);
@@ -56,6 +88,14 @@ export default function PlatformOverviewPage() {
       if (res.ok) {
         const data = await res.json();
         setStats(data.stats);
+      }
+      // Also refresh the recent_activity rollup the GET writes alongside
+      const refreshed = await fetch("/api/platform/stats", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (refreshed.ok) {
+        const data = await refreshed.json();
+        setRecent(data.recent_activity);
       }
     } catch (err) {
       console.error("[Platform] Refresh failed:", err);
@@ -216,6 +256,56 @@ export default function PlatformOverviewPage() {
             </div>
           </div>
 
+          {/* Recent Activity */}
+          {recent && (
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <ActivityCard
+                title="Most active orgs (last 7 days)"
+                rows={recent.most_active}
+                emptyText="No recent activity yet."
+              />
+              <ActivityCard
+                title="Dormant orgs (>14 days)"
+                rows={recent.dormant}
+                emptyText="No dormant orgs."
+                tone="warning"
+              />
+            </div>
+          )}
+
+          {/* At-Risk Callouts */}
+          {recent && recent.at_risk.length > 0 && (
+            <div className="mt-4 rounded-xl border border-vc-coral/30 bg-vc-coral/5 p-5">
+              <h2 className="mb-3 font-semibold text-vc-coral">At-risk orgs</h2>
+              <div className="space-y-2">
+                {recent.at_risk.map((row) => (
+                  <Link
+                    key={row.id}
+                    href={`/dashboard/platform/orgs/${row.id}`}
+                    className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm transition-colors hover:bg-vc-bg-warm"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-vc-indigo">{row.name}</p>
+                      <p className="text-xs text-vc-text-muted">
+                        {row.tier} &middot; {row.signal}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {row.risk_badges.map((b) => (
+                        <span
+                          key={b}
+                          className="rounded-full bg-vc-coral/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-vc-coral"
+                        >
+                          {RISK_BADGE_LABEL[b] ?? b}
+                        </span>
+                      ))}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Quick Links */}
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Link
@@ -272,6 +362,52 @@ function StatCard({
       >
         {value.toLocaleString()}
       </p>
+    </div>
+  );
+}
+
+function ActivityCard({
+  title,
+  rows,
+  emptyText,
+  tone,
+}: {
+  title: string;
+  rows: RecentActivityRow[];
+  emptyText: string;
+  tone?: "warning";
+}) {
+  const titleColor = tone === "warning" ? "text-vc-warning" : "text-vc-indigo";
+  return (
+    <div className="rounded-xl border border-vc-border-light bg-white p-5">
+      <h2 className={`mb-3 font-semibold ${titleColor}`}>{title}</h2>
+      {rows.length === 0 ? (
+        <p className="text-sm text-vc-text-muted">{emptyText}</p>
+      ) : (
+        <ul className="divide-y divide-vc-border-light">
+          {rows.map((row) => (
+            <li key={row.id} className="py-2">
+              <Link
+                href={`/dashboard/platform/orgs/${row.id}`}
+                className="block rounded-lg px-2 py-1 transition-colors hover:bg-vc-bg-warm"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-medium text-vc-indigo truncate">
+                    {row.name}
+                  </p>
+                  <span className="shrink-0 text-xs text-vc-text-muted">
+                    {formatRelative(row.last_active_at)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-vc-text-secondary">
+                  <span className="capitalize">{row.tier}</span>
+                  {row.signal ? <> &middot; {row.signal}</> : null}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

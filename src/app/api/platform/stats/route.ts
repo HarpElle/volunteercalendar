@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isPlatformAdmin } from "@/lib/utils/platform-admin";
 import { TIER_LIMITS } from "@/lib/constants";
+import { buildOrgSnapshot, buildRecentActivity } from "@/lib/server/org-snapshot";
 import type { SubscriptionTier } from "@/lib/types";
+import type { OrgSnapshot } from "@/lib/types/platform";
 
 interface PlatformStats {
   total_orgs: number;
@@ -47,10 +49,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const statsDoc = await adminDb.doc("platform/stats").get();
+    const [statsDoc, recentDoc] = await Promise.all([
+      adminDb.doc("platform/stats").get(),
+      adminDb.doc("platform/recent_activity").get(),
+    ]);
     const stats = statsDoc.exists ? (statsDoc.data() as PlatformStats) : null;
+    const recent_activity = recentDoc.exists ? recentDoc.data() : null;
 
-    return NextResponse.json({ stats });
+    return NextResponse.json({ stats, recent_activity });
   } catch (error) {
     console.error("[GET /api/platform/stats]", error);
     return NextResponse.json(
@@ -189,10 +195,42 @@ export async function POST(req: NextRequest) {
       computed_at: now.toISOString(),
     };
 
-    // Persist to Firestore
+    // Persist aggregate stats
     await adminDb.doc("platform/stats").set(stats);
 
-    return NextResponse.json({ stats });
+    // ─── Per-org snapshots + recent activity rollup ──────────────────────────
+    // Build snapshots for every church. Run with concurrency cap so we don't
+    // blast Firestore on a recompute.
+    const snapshots: OrgSnapshot[] = [];
+    const churchIds = churchesSnap.docs.map((d) => d.id);
+    const concurrency = 5;
+    for (let i = 0; i < churchIds.length; i += concurrency) {
+      const batch = churchIds.slice(i, i + concurrency);
+      const results = await Promise.all(
+        batch.map((id) =>
+          buildOrgSnapshot(id, false).catch((err) => {
+            console.error(`[platform/stats] snapshot failed for ${id}`, err);
+            return null;
+          }),
+        ),
+      );
+      for (const s of results) {
+        if (s) snapshots.push(s);
+      }
+    }
+
+    // Persist each snapshot under platform/orgs/{churchId}
+    const writer = adminDb.bulkWriter();
+    for (const s of snapshots) {
+      writer.set(adminDb.doc(`platform_orgs/${s.id}`), s);
+    }
+    await writer.close();
+
+    // Persist the rollup
+    const recentActivity = buildRecentActivity(snapshots);
+    await adminDb.doc("platform/recent_activity").set(recentActivity);
+
+    return NextResponse.json({ stats, snapshots_written: snapshots.length });
   } catch (error) {
     console.error("[POST /api/platform/stats]", error);
     return NextResponse.json(

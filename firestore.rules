@@ -70,9 +70,9 @@ service cloud.firestore {
     }
 
     // ─── Waitlist ───
+    // No client writes; routed through /api/waitlist with reCAPTCHA (Track A.3).
     match /waitlist/{docId} {
-      allow create: if true;
-      allow read, update, delete: if false;
+      allow read, write: if false;
     }
 
     // ─── User Profiles ───
@@ -150,31 +150,238 @@ service cloud.firestore {
       // Only owner can delete a church
       allow delete: if isOrgOwner(churchId);
 
-      // ─── Invite queue (admin-only writes) ───
+      // ─── Invite queue (admin-only) ───
       match /invite_queue/{docId} {
         allow read: if isActiveMember(churchId);
         allow write: if isOrgAdmin(churchId);
       }
 
-      // ─── Church subcollections ───
-      match /{subcollection}/{docId} {
-        // Active members can read all subcollection data
-        allow read: if isActiveMember(churchId);
+      // ════════════════════════════════════════════════════════════════
+      // Volunteer-readable, scheduler+ writable (operational data)
+      // ════════════════════════════════════════════════════════════════
 
-        // Schedulers, admins, and owners can write
-        allow write: if isSchedulerOrAbove(churchId);
-      }
-
-      // ─── Nested subcollections (schedules/{id}/assignments/{id}) ───
-      match /{subcollection}/{docId}/{nestedSub}/{nestedDocId} {
+      match /people/{docId} {
         allow read: if isActiveMember(churchId);
         allow write: if isSchedulerOrAbove(churchId);
       }
+
+      match /ministries/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /services/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /schedules/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+
+        // Nested assignments under a schedule (collection group queries elsewhere)
+        match /assignments/{assignmentId} {
+          allow read: if isActiveMember(churchId);
+          allow write: if isSchedulerOrAbove(churchId);
+        }
+      }
+
+      match /assignments/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /events/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /service_plans/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+
+        match /arrangements/{arrId} {
+          allow read: if isActiveMember(churchId);
+          allow write: if isSchedulerOrAbove(churchId);
+        }
+      }
+
+      match /songs/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /song_usage/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /swap_requests/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isActiveMember(churchId);
+      }
+
+      match /campuses/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /calendar_feeds/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /prerequisites/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /ministry_templates/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /training_sessions/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      // ════════════════════════════════════════════════════════════════
+      // Admin-only operational data
+      // ════════════════════════════════════════════════════════════════
+
+      match /rooms/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      match /roomSettings/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      match /reservations/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isSchedulerOrAbove(churchId);
+      }
+
+      match /reservation_requests/{docId} {
+        allow read: if isActiveMember(churchId);
+        allow write: if isActiveMember(churchId);
+      }
+
+      match /import_logs/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if false; // Admin SDK only
+      }
+
+      match /integrations/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      match /sent_notifications/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if false; // Admin SDK only
+      }
+
+      match /pending_invites/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      match /activity/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if false; // Admin SDK only
+      }
+
+      // ════════════════════════════════════════════════════════════════
+      // Children's check-in data — Admin SDK only via /api/checkin/*
+      // ════════════════════════════════════════════════════════════════
+
+      match /children/{docId} {
+        allow read, write: if false;
+      }
+
+      match /households/{docId} {
+        allow read, write: if false;
+      }
+
+      match /checkin_households/{docId} {
+        allow read, write: if false;
+      }
+
+      match /checkInSessions/{docId} {
+        allow read, write: if false;
+      }
+
+      match /checkinAlerts/{docId} {
+        allow read, write: if false;
+      }
+
+      match /check_in_codes/{docId} {
+        allow read, write: if false;
+      }
+
+      // Settings + rooms config: org-admin readable for setup screens.
+      match /checkinSettings/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      match /checkinRooms/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if isOrgAdmin(churchId);
+      }
+
+      // ════════════════════════════════════════════════════════════════
+      // Sensitive — Admin SDK only (track B + track F land here)
+      // ════════════════════════════════════════════════════════════════
+
+      match /audit_logs/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if false; // Admin SDK only
+      }
+
+      match /kiosk_tokens/{docId} {
+        allow read, write: if false; // Admin SDK only
+      }
+
+      match /notification_outbox/{docId} {
+        allow read, write: if false; // Admin SDK only
+      }
+
+      match /pending_visitor_registrations/{docId} {
+        allow read, write: if false; // Admin SDK only
+      }
+
+      match /feedback/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow create: if isActiveMember(churchId);
+        allow update, delete: if false;
+      }
+
+      match /billing/{docId} {
+        allow read: if isOrgOwner(churchId);
+        allow write: if false; // Admin SDK only via Stripe webhook
+      }
+
+      match /cron_runs/{docId} {
+        allow read: if isOrgAdmin(churchId);
+        allow write: if false; // Admin SDK only
+      }
+
+      // No catch-all wildcard. Any new subcollection MUST be added explicitly above
+      // (deliberate default-deny). If you add a new feature and Firestore is denying
+      // a read/write you expected, add the rule here.
     }
 
     // ─── Facility Groups ───
+    // KNOWN ISSUE: client-list query reads all groups, then filters on members
+    // subcollection. Tightening this requires denormalizing group membership
+    // into the user's church doc (track A.3). Until then, kept at auth-only
+    // read to not break the existing management UI.
     match /facility_groups/{groupId} {
-      // Any authenticated user can read groups (app filters by membership)
       allow read: if request.auth != null;
 
       // Org admins can create a facility group
@@ -190,6 +397,7 @@ service cloud.firestore {
 
       // ─── Facility Group Members ───
       match /members/{memberId} {
+        // Auth-only read until track A.3 narrows this.
         allow read: if request.auth != null;
 
         // Admins of the inviting org can add members
@@ -206,15 +414,52 @@ service cloud.firestore {
       }
     }
 
-    // ─── Stage Sync Live (public read — token IS the auth) ───
+    // ─── Stage Sync Live (token IS the auth) ───
+    // The doc ID is a high-entropy token, so reads are intentionally public
+    // for the stage display page. Server proxy via /api/stage/* lands in
+    // track A.3. Until then, keep behavior unchanged.
     match /stage_sync_live/{token} {
       allow read: if true;
       allow write: if false; // Admin SDK only
     }
 
-    // ─── Stage Sync Token Mapping (Admin SDK only) ───
     match /stage_sync_tokens/{token} {
       allow read, write: if false; // Admin SDK only
     }
+
+    // ─── Short Links ───
+    match /short_links/{linkId} {
+      // Resolution happens server-side; admins can list/manage their own.
+      allow read: if request.auth != null
+        && isOrgAdmin(resource.data.church_id);
+      allow write: if request.auth != null
+        && isOrgAdmin(request.resource.data.church_id);
+    }
+
+    // ─── Push Tokens (FCM device tokens) ───
+    match /push_tokens/{tokenId} {
+      allow read, write: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.user_id == request.auth.uid;
+    }
+
+    // ─── Stripe processed events (idempotency cache; Admin SDK only) ───
+    match /stripe_processed_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    // ─── Platform admin data (Admin SDK only) ───
+    // platform/stats and platform/recent_activity are aggregate docs;
+    // platform_orgs/{churchId} are per-org snapshots. All accessed via
+    // server-only routes that verify isPlatformAdmin().
+    match /platform/{docId} {
+      allow read, write: if false;
+    }
+    match /platform_orgs/{churchId} {
+      allow read, write: if false;
+    }
+
+    // No global wildcard. Any new top-level collection requires an explicit rule.
   }
 }

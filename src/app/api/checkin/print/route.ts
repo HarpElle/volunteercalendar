@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import type {
   CheckInSession,
@@ -11,10 +12,14 @@ import type {
 
 /**
  * POST /api/checkin/print
- * Unauthenticated kiosk endpoint — reprints labels for existing sessions.
+ * Kiosk endpoint — reprints labels for existing sessions.
  * Does NOT create new sessions or generate new security codes.
+ * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function POST(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "print");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -32,6 +37,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
+    if (churchMismatch) return churchMismatch;
 
     const churchRef = adminDb.collection("churches").doc(church_id);
 

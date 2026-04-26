@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { SHORT_CODE_RE, generateShortCode, resolveShortCode } from "@/lib/utils/short-code";
 import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
 
 /**
  * GET /api/checkin/services?church_id=...
- * Public endpoint — returns today's active service times for a church.
+ * Kiosk endpoint — returns today's active service times for a church.
  * Accepts a full church_id OR a 6-char setup code (short_code).
- * If only one service matches today, the kiosk can auto-select it.
+ * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function GET(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "services");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -41,6 +45,10 @@ export async function GET(req: NextRequest) {
         { status: 404 },
       );
     }
+
+    // Bind: kiosk's church_id must match the resolved one.
+    const churchMismatch = assertKioskChurchMatch(kiosk, churchId);
+    if (churchMismatch) return churchMismatch;
 
     const churchData = churchSnap.data()!;
     const churchName = churchData.name as string;

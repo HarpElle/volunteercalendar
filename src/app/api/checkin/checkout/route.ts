@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { sendSms } from "@/lib/services/sms";
 import { timingSafeEqual } from "crypto";
 import type { CheckInSession, CheckInAlert } from "@/lib/types";
 
 /**
  * POST /api/checkin/checkout
- * Unauthenticated kiosk/volunteer endpoint — verifies security code and checks out children.
+ * Kiosk endpoint — verifies security code and checks out children.
+ * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  *
  * Two modes:
  *   1. Session-specific:  { church_id, session_id, security_code }
@@ -15,6 +17,9 @@ import type { CheckInSession, CheckInAlert } from "@/lib/types";
  *      → Finds ALL active sessions with matching code today and checks them all out.
  */
 export async function POST(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "checkout");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -34,6 +39,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
+    if (churchMismatch) return churchMismatch;
 
     const churchRef = adminDb.collection("churches").doc(church_id);
     const now = new Date();

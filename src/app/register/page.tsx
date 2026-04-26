@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
+import { auth } from "@/lib/firebase/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
@@ -55,12 +56,22 @@ function RegisterForm() {
     setSubmitting(true);
     try {
       await signUp(email, password, name, phone ? normalizePhone(phone) : undefined);
-      // Fire-and-forget welcome email (skip admin setup guide if joining via link)
-      fetch("/api/welcome", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, redirect: redirectTo || undefined }),
-      }).catch(() => {});
+      // Fire-and-forget welcome email (skip admin setup guide if joining via link).
+      // Authenticated: send Firebase ID token so the server can verify
+      // the destination email matches the freshly-registered user.
+      auth.currentUser
+        ?.getIdToken()
+        .then((token) =>
+          fetch("/api/welcome", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ name, email, redirect: redirectTo || undefined }),
+          }),
+        )
+        .catch(() => {});
       pendingRedirect.current = true;
       setSubmitting(false);
     } catch {

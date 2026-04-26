@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import type { PrinterConfig, PrinterType, PrintMethod, PrinterConnectionType, BrotherLabelSize, ZebraLabelSize, DymoLabelSize } from "@/lib/types";
 
 type LabelSize = BrotherLabelSize | ZebraLabelSize | DymoLabelSize;
@@ -13,8 +14,12 @@ const VALID_CONNECTION_TYPES: PrinterConnectionType[] = ["bluetooth", "wifi"];
  * POST /api/checkin/printer-config
  * Saves printer configuration for a church's kiosk.
  * Called from the kiosk printer setup wizard.
+ * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function POST(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "print");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -41,6 +46,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
+    if (churchMismatch) return churchMismatch;
 
     if (!VALID_PRINTER_TYPES.includes(printer.printer_type as PrinterType)) {
       return NextResponse.json(

@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { randomBytes } from "crypto";
 import type { CheckInHousehold, Child } from "@/lib/types";
 
 /**
  * POST /api/checkin/register
- * Unauthenticated kiosk endpoint — first-time visitor registration.
+ * Kiosk endpoint — first-time visitor registration.
  * Creates a CheckInHousehold and Child documents.
+ * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  * Tighter rate limit (10 req/min) to prevent abuse.
+ *
+ * NOTE (Track B): this endpoint will move to a "pending visitor registration"
+ * workflow where new families land in a quarantine collection and must be
+ * promoted by an authorized operator before becoming durable household/child
+ * records.
  */
 export async function POST(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "register");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -50,6 +60,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
+    if (churchMismatch) return churchMismatch;
 
     // Validate church exists
     const churchRef = adminDb.collection("churches").doc(church_id);

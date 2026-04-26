@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
 /**
  * POST /api/checkin/lookup
- * Unauthenticated kiosk endpoint — looks up a family by QR token, phone last 4, or full phone.
+ * Kiosk endpoint — looks up a family by QR token, phone last 4, or full phone.
+ *
+ * Requires a valid X-Kiosk-Token header (see src/lib/server/authz.ts). Track B
+ * replaces the bootstrap token with per-station tokens in `kiosk_tokens`.
  *
  * Reads from the unified `people` collection when available, falling back to
  * the legacy `checkin_households` + `children` collections for backward compat.
  */
 export async function POST(req: NextRequest) {
+  const kiosk = requireKioskToken(req, "lookup");
+  if (kiosk instanceof NextResponse) return kiosk;
+
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
   if (limited) return limited;
 
@@ -18,12 +25,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { church_id, qr_token, phone_last4, phone_full } = body;
 
-    if (!church_id) {
-      return NextResponse.json(
-        { error: "Missing church_id" },
-        { status: 400 },
-      );
-    }
+    const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
+    if (churchMismatch) return churchMismatch;
 
     const churchRef = adminDb.collection("churches").doc(church_id);
 
