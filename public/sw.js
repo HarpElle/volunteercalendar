@@ -1,13 +1,26 @@
 /**
  * VolunteerCal Service Worker
  *
- * Handles: offline caching, FCM background push notifications.
+ * Handles: offline static-asset caching, FCM background push notifications.
+ *
+ * Auth-aware caching policy:
+ *   - DO NOT pre-cache or cache navigation responses for authenticated routes
+ *     (/dashboard, /account, /admin, etc.). Caching them causes stale shells
+ *     after logout, org switch, or permission change — especially on shared
+ *     devices like kiosks.
+ *   - Static assets only (/_next/static/*, /icons/*, *.svg, *.png) are cached.
+ *   - On logout, the app clears all caches via clearVolunteerCalCaches().
  */
 
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = "volunteercal-v1";
-const STATIC_ASSETS = ["/", "/dashboard", "/offline"];
+// Bumped from v1 → v2 in track A.6 to invalidate old caches that contained
+// /dashboard navigation responses on existing installs.
+const CACHE_NAME = "volunteercal-v2";
+
+// Only the truly public, low-sensitivity entry points are pre-cached.
+// /dashboard intentionally excluded — see header comment.
+const STATIC_ASSETS = ["/", "/offline"];
 
 // Install — pre-cache static shell
 self.addEventListener("install", (event) => {
@@ -17,7 +30,7 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate — clean old caches (including any v1 caches with stale dashboard)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -31,30 +44,59 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch — network-first with cache fallback for navigation
+/**
+ * Routes that are private/authenticated. Navigation responses for these are
+ * never cached. If the network fails, we serve the offline page instead of
+ * a stale authenticated shell.
+ */
+const PRIVATE_PATH_PREFIXES = [
+  "/dashboard",
+  "/account",
+  "/admin",
+  "/checkin",
+  "/api",
+  "/join",
+  "/confirm",
+  "/calendar",
+  "/s/", // short-link redirects must always hit the network
+];
+
+function isPrivatePath(pathname) {
+  return PRIVATE_PATH_PREFIXES.some((p) =>
+    p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
+// Fetch — strict policy:
+//   - Authenticated/private navigation: network only, fall back to /offline
+//   - Public navigation (/, marketing pages): network first, fall back to cached
+//   - Static assets: cache first
 self.addEventListener("fetch", (event) => {
-  // Only handle same-origin GET requests
   if (event.request.method !== "GET") return;
   if (!event.request.url.startsWith(self.location.origin)) return;
 
-  // For navigation requests, try network first, then cache, then offline page
+  const url = new URL(event.request.url);
+
   if (event.request.mode === "navigate") {
+    if (isPrivatePath(url.pathname)) {
+      // Authenticated route — never cache, never serve cached.
+      event.respondWith(
+        fetch(event.request).catch(() => caches.match("/offline")),
+      );
+      return;
+    }
+    // Public route — network first, cache as fallback for the public shell.
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // Cache successful navigations
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() =>
-          caches.match(event.request).then((cached) => cached || caches.match("/offline")),
-        ),
+      fetch(event.request).catch(() =>
+        caches
+          .match(event.request)
+          .then((cached) => cached || caches.match("/offline")),
+      ),
     );
     return;
   }
 
-  // For other assets, try cache first, then network
+  // Static assets — cache first
   if (
     event.request.url.includes("/_next/static/") ||
     event.request.url.includes("/icons/") ||
@@ -76,7 +118,6 @@ self.addEventListener("fetch", (event) => {
 });
 
 // FCM Background Push Notifications
-// Firebase Messaging uses this to show notifications when the app is in the background
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -110,15 +151,22 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
-        // If app is already open, focus it
         for (const client of clients) {
           if (client.url.includes(self.location.origin) && "focus" in client) {
             client.navigate(url);
             return client.focus();
           }
         }
-        // Otherwise open a new window
         return self.clients.openWindow(url);
       }),
   );
+});
+
+// Allow the page to ask the SW to clear all caches (called on logout).
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CLEAR_CACHES") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
+    );
+  }
 });

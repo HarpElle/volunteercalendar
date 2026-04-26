@@ -272,6 +272,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await fbSignOut();
       // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
+
+      // Clear service worker caches so a future sign-in (or shared device user)
+      // never sees a stale authenticated shell. Fire-and-forget; do not block
+      // the logout path on cache errors.
+      if (typeof window !== "undefined") {
+        try {
+          if ("caches" in window) {
+            const keys = await window.caches.keys();
+            await Promise.all(keys.map((k) => window.caches.delete(k)));
+          }
+          if (
+            "serviceWorker" in navigator &&
+            navigator.serviceWorker.controller
+          ) {
+            navigator.serviceWorker.controller.postMessage({
+              type: "CLEAR_CACHES",
+            });
+          }
+        } catch {
+          // Best-effort. Logout itself succeeded.
+        }
+      }
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;
