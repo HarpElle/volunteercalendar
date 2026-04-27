@@ -47,9 +47,29 @@ Recommended action: **no proactive comms required**. The hardening sprint's user
 
 ---
 
-## 🧪 Testing matrix — ready now
+## 🧪 Testing — ready now
 
-Each row is a feature that's deployed and ready for your church to exercise. Use this as a checklist; report findings back so we can fix issues quickly.
+**Detailed per-capability testing docs** live at:
+
+- [`jason-functionality-testing-INDEX.md`](jason-functionality-testing-INDEX.md) — start here
+- [`jason-functionality-testing-onboarding.md`](jason-functionality-testing-onboarding.md)
+- [`jason-functionality-testing-schedules.md`](jason-functionality-testing-schedules.md)
+- [`jason-functionality-testing-childrens-checkin.md`](jason-functionality-testing-childrens-checkin.md)
+- [`jason-functionality-testing-room-scheduling.md`](jason-functionality-testing-room-scheduling.md)
+- [`jason-functionality-testing-room-signage.md`](jason-functionality-testing-room-signage.md)
+- [`jason-functionality-testing-billing.md`](jason-functionality-testing-billing.md)
+- [`jason-functionality-testing-activity-audit.md`](jason-functionality-testing-activity-audit.md)
+- [`jason-functionality-testing-org-administration.md`](jason-functionality-testing-org-administration.md)
+- [`jason-functionality-testing-worship.md`](jason-functionality-testing-worship.md)
+- [`jason-functionality-testing-calendar-feeds.md`](jason-functionality-testing-calendar-feeds.md)
+
+Each doc has prerequisites, numbered test scenarios, expected results, verification points (in app + Firestore + Stripe + audit log), and known failure modes. Walk them when you have time.
+
+The shorter inline testing matrix below is a summary; the per-capability docs are the source of truth.
+
+---
+
+### Quick-reference testing matrix
 
 ### Onboarding
 - [ ] **Volunteer self-signup via join link** — owner or admin generates a join link from `Settings → Teams`, volunteer signs up, status flips from `pending_org_approval` → `active` after admin approves. Verify activity surfaces in `Activity` page.
