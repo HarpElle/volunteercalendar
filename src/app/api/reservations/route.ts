@@ -53,6 +53,36 @@ async function findConflicts(
 }
 
 /**
+ * Track E.2: same overlap check, but inside a Firestore transaction.
+ * The query is performed on a transaction handle so the conflict check and
+ * the new reservation write are atomic with respect to other concurrent
+ * bookings of the same room+date.
+ */
+async function findConflictsInTransaction(
+  tx: FirebaseFirestore.Transaction,
+  churchId: string,
+  roomId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+): Promise<string[]> {
+  const query = adminDb
+    .collection(`churches/${churchId}/reservations`)
+    .where("room_id", "==", roomId)
+    .where("date", "==", date);
+  const snap = await tx.get(query);
+  const conflicts: string[] = [];
+  for (const doc of snap.docs) {
+    const r = doc.data();
+    if (r.status === "cancelled" || r.status === "denied") continue;
+    if (startTime < r.end_time && r.start_time < endTime) {
+      conflicts.push(doc.id);
+    }
+  }
+  return conflicts;
+}
+
+/**
  * GET /api/reservations?church_id=...&room_id=...&date_from=...&date_to=...&status=...&ministry_id=...
  */
 export async function GET(req: NextRequest) {
@@ -189,64 +219,70 @@ export async function POST(req: NextRequest) {
       membership.display_name || body.requested_by_name || "Unknown";
     const groupId = isRecurring ? randomBytes(8).toString("hex") : undefined;
 
-    // For single reservations
+    // Single reservations — wrapped in a Firestore transaction so the conflict
+    // check + write are atomic. Eliminates the race where two concurrent
+    // bookings can both pass conflict-check and both succeed (Track E.2).
     if (!isRecurring) {
-      const conflicts = await findConflicts(
-        church_id,
-        room_id,
-        date,
-        start_time,
-        end_time,
-      );
-      const hasConflict = conflicts.length > 0;
-      const status =
-        hasConflict || requireApproval ? "pending_approval" : "confirmed";
-
       const docRef = adminDb
         .collection(`churches/${church_id}/reservations`)
         .doc();
-      const reservation: Reservation = {
-        id: docRef.id,
-        church_id,
-        room_id,
-        title: title.trim(),
-        description: body.description?.trim() || "",
-        ministry_id: body.ministry_id || null,
-        requested_by: userId,
-        requested_by_name: requesterName,
-        date,
-        start_time,
-        end_time,
-        status,
-        equipment_requested: body.equipment_requested || [],
-        teams_needed: body.teams_needed || [],
-        attendee_count: body.attendee_count || null,
-        setup_notes: body.setup_notes?.trim() || "",
-        is_recurring: false,
-        conflict_with_ids: conflicts,
-        created_at: now,
-        updated_at: now,
-      };
+      const requestRef = adminDb
+        .collection(`churches/${church_id}/reservation_requests`)
+        .doc();
 
-      await docRef.set(reservation);
-
-      // Create request doc if pending
-      if (status === "pending_approval" && hasConflict) {
-        const requestRef = adminDb
-          .collection(`churches/${church_id}/reservation_requests`)
-          .doc();
-        await requestRef.set({
-          id: requestRef.id,
+      const result = await adminDb.runTransaction(async (tx) => {
+        const conflicts = await findConflictsInTransaction(
+          tx,
           church_id,
-          new_reservation_id: docRef.id,
-          conflicting_reservation_ids: conflicts,
-          status: "pending",
+          room_id,
+          date,
+          start_time,
+          end_time,
+        );
+        const hasConflict = conflicts.length > 0;
+        const status =
+          hasConflict || requireApproval ? "pending_approval" : "confirmed";
+
+        const reservation: Reservation = {
+          id: docRef.id,
+          church_id,
+          room_id,
+          title: title.trim(),
+          description: body.description?.trim() || "",
+          ministry_id: body.ministry_id || null,
+          requested_by: userId,
+          requested_by_name: requesterName,
+          date,
+          start_time,
+          end_time,
+          status,
+          equipment_requested: body.equipment_requested || [],
+          teams_needed: body.teams_needed || [],
+          attendee_count: body.attendee_count || null,
+          setup_notes: body.setup_notes?.trim() || "",
+          is_recurring: false,
+          conflict_with_ids: conflicts,
           created_at: now,
-        });
-      }
+          updated_at: now,
+        };
+        tx.set(docRef, reservation);
+
+        if (status === "pending_approval" && hasConflict) {
+          tx.set(requestRef, {
+            id: requestRef.id,
+            church_id,
+            new_reservation_id: docRef.id,
+            conflicting_reservation_ids: conflicts,
+            status: "pending",
+            created_at: now,
+          });
+        }
+
+        return { reservation, hasConflict };
+      });
 
       return NextResponse.json(
-        { reservation, has_conflict: hasConflict },
+        { reservation: result.reservation, has_conflict: result.hasConflict },
         { status: 201 },
       );
     }

@@ -93,6 +93,24 @@ export async function POST(request: Request) {
       });
     }
 
+    // Track E.4: claim the work BEFORE dispatching, so a concurrent cron
+    // invocation (or a retry after timeout) can't re-send the same reminders.
+    // At-most-once semantics: if an email/SMS fails to send after the claim,
+    // we don't retry it, but we also don't risk duplicate sends. That's the
+    // right tradeoff for reminder-style notifications.
+    const claimBatch = adminDb.batch();
+    const claimTimestamp = new Date().toISOString();
+    for (const assignment of targetAssignments) {
+      const existingSent = (assignment.reminder_sent_at as string[]) || [];
+      claimBatch.update(
+        adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`),
+        {
+          reminder_sent_at: [...existingSent, `${reminderType}:${claimTimestamp}`],
+        },
+      );
+    }
+    await claimBatch.commit();
+
     // Fetch volunteers, services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
       adminDb.collection(`churches/${church_id}/people`).where("is_volunteer", "==", true).get(),
@@ -260,17 +278,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Batch-update all assignments to mark reminders as sent
-    const batch = adminDb.batch();
-    const batchTimestamp = new Date().toISOString();
-    for (const assignment of targetAssignments) {
-      const existingSent = (assignment.reminder_sent_at as string[]) || [];
-      const ref = adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`);
-      batch.update(ref, {
-        reminder_sent_at: [...existingSent, `${reminderType}:${batchTimestamp}`],
-      });
-    }
-    await batch.commit();
+    // (E.4) Marks were written upfront via claimBatch so dispatch is safely
+    // idempotent against concurrent cron runs.
 
     return NextResponse.json({
       success: true,
