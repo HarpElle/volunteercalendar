@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { audit, userActor } from "@/lib/server/audit";
 import { createStation, listStationsForChurch } from "@/lib/server/kiosk";
 
 async function requireOrgAdmin(
@@ -93,6 +94,15 @@ export async function POST(req: NextRequest) {
       church_id,
       name: name.trim(),
       created_by_uid: auth.uid,
+    });
+    void audit({
+      church_id,
+      actor: userActor(auth.uid),
+      action: "kiosk.station_create",
+      target_type: "kiosk_station",
+      target_id: station.id,
+      metadata: { name: station.name },
+      outcome: "ok",
     });
     return NextResponse.json({
       station,

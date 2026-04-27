@@ -36,8 +36,9 @@ interface HouseholdResult {
     preferred_name?: string;
     grade?: string;
     has_alerts: boolean;
-    allergies?: string;
-    medical_notes?: string;
+    // Track B.4: medical data no longer returned by /lookup. Fetched
+    // just-in-time from /api/checkin/child-alerts when an operator selects
+    // an alerted child.
     photo_url?: string;
     room_name: string;
     pre_checked_in: boolean;
@@ -302,21 +303,57 @@ function CheckInKioskInner() {
     setScreen("select");
   };
 
-  const handleChildrenSelected = (ids: string[]) => {
+  // Fetched just-in-time when an operator selects children with alerts.
+  // Lookup no longer returns medical fields (Track B.4 hygiene); we fetch
+  // them only for the children the operator has actually committed to.
+  const [alertDetails, setAlertDetails] = useState<
+    Record<string, { allergies?: string; medical_notes?: string }>
+  >({});
+
+  const handleChildrenSelected = async (ids: string[]) => {
     onActivity();
     setSelectedChildIds(ids);
 
-    // Check if any selected children have alerts
     const selectedChildren =
       household?.children.filter((c) => ids.includes(c.id)) || [];
-    const hasAlerts = selectedChildren.some((c) => c.has_alerts);
+    const alertedChildIds = selectedChildren
+      .filter((c) => c.has_alerts)
+      .map((c) => c.id);
 
-    if (hasAlerts) {
-      setScreen("confirm");
-    } else {
-      // No alerts — skip to check-in
+    if (alertedChildIds.length === 0) {
       doCheckIn(ids);
+      return;
     }
+
+    // Fetch medical detail for the alerted children only. Audit-logged
+    // server-side as kiosk.medical_data_revealed.
+    try {
+      const res = await kioskFetch("/api/checkin/child-alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId, child_ids: alertedChildIds }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          children: { id: string; allergies?: string; medical_notes?: string }[];
+        };
+        const map: Record<
+          string,
+          { allergies?: string; medical_notes?: string }
+        > = {};
+        for (const c of data.children) {
+          map[c.id] = {
+            allergies: c.allergies,
+            medical_notes: c.medical_notes,
+          };
+        }
+        setAlertDetails(map);
+      }
+    } catch {
+      // Don't block the flow on alert-fetch failure; AllergyConfirm will
+      // render the names with no detail and operator can decide.
+    }
+    setScreen("confirm");
   };
 
   const handleAllergyConfirmed = () => {
@@ -524,8 +561,8 @@ function CheckInKioskInner() {
             .map((c) => ({
               id: c.id,
               name: c.preferred_name || c.first_name,
-              allergies: c.allergies,
-              medical_notes: c.medical_notes,
+              allergies: alertDetails[c.id]?.allergies,
+              medical_notes: alertDetails[c.id]?.medical_notes,
             }))}
           totalChildren={selectedChildIds.length}
           onConfirm={handleAllergyConfirmed}

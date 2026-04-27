@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { audit, kioskActor } from "@/lib/server/audit";
 import { randomBytes } from "crypto";
 import type { CheckInHousehold, Child } from "@/lib/types";
 
@@ -83,6 +84,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Track B.5 (lite): duplicate detection. If a household with this exact
+    // primary phone already exists, return that household instead of creating
+    // a new one. Prevents accidental DB pollution from operators retrying.
+    const dupSnap = await churchRef
+      .collection("checkin_households")
+      .where("primary_guardian_phone", "==", normalizedPhone)
+      .limit(1)
+      .get();
+    if (!dupSnap.empty) {
+      const existing = dupSnap.docs[0].data() as CheckInHousehold;
+      void audit({
+        church_id,
+        actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+        action: "kiosk.register_visitor",
+        target_type: "checkin_household",
+        target_id: existing.id,
+        metadata: { outcome_detail: "duplicate_phone_match" },
+        outcome: "ok",
+      });
+      return NextResponse.json({
+        household_id: existing.id,
+        qr_token: existing.qr_token,
+        children: [],
+        duplicate: true,
+      });
+    }
+
     const now = new Date().toISOString();
     const qrToken = randomBytes(16).toString("hex");
 
@@ -141,6 +169,21 @@ export async function POST(req: NextRequest) {
         last_name: childData.last_name,
       });
     }
+
+    void audit({
+      church_id,
+      actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+      action: "kiosk.register_visitor",
+      target_type: "checkin_household",
+      target_id: householdId,
+      metadata: {
+        children_count: createdChildren.length,
+        any_alerts: createdChildren.length > 0
+          ? children.some((c) => c.allergies || c.medical_notes)
+          : false,
+      },
+      outcome: "ok",
+    });
 
     return NextResponse.json({
       household_id: householdId,

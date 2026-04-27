@@ -144,6 +144,11 @@ async function handleUnifiedLookup(
         },
         children: children.map((c) => {
           const cp = c.child_profile;
+          // Track B.4: do NOT include allergies / medical_notes in lookup
+          // responses. Lookup is the kiosk's "find this family" call and is
+          // the most rate-vulnerable surface. Reveal sensitive details only
+          // after the operator selects a specific child via /checkin
+          // (which audits the access via kiosk.medical_data_revealed).
           return {
             id: c.id,
             first_name: c.first_name,
@@ -153,7 +158,9 @@ async function handleUnifiedLookup(
             photo_url: c.photo_url || cp?.photo_url,
             default_room_id: cp?.default_room_id,
             has_alerts: cp?.has_alerts || false,
-            ...(cp?.has_alerts ? { allergies: cp?.allergies, medical_notes: cp?.medical_notes } : {}),
+            // allergies + medical_notes intentionally omitted; clients use
+            // has_alerts as the boolean indicator and request details from
+            // /checkin once the operator has confirmed the child.
             room_name: cp?.default_room_id ? roomNames[cp.default_room_id] || null : null,
             pre_checked_in: preCheckedChildIds.includes(c.id),
           };
@@ -232,9 +239,8 @@ async function handleLegacyLookup(
           photo_url: data.photo_url,
           default_room_id: data.default_room_id,
           has_alerts: data.has_alerts,
-          ...(data.has_alerts
-            ? { allergies: data.allergies, medical_notes: data.medical_notes }
-            : {}),
+          // Track B.4: allergies + medical_notes intentionally not returned.
+          // Fetch via /api/checkin/child-alerts after operator selects.
         };
       });
 

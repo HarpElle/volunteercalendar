@@ -5,6 +5,7 @@ import type Stripe from "stripe";
 import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
 import { buildDowngradeNotificationEmail } from "@/lib/utils/emails/downgrade-notification";
 import { isDowngrade, computeLostFeatures, computeOverLimitItems } from "@/lib/utils/tier-enforcement";
+import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { Resend } from "resend";
 
 const VALID_TIERS = ["free", "starter", "growth", "pro", "enterprise"];
@@ -160,6 +161,16 @@ export async function POST(req: NextRequest) {
           stripe_customer_id: session.customer as string,
         });
 
+        void audit({
+          church_id: churchId,
+          actor: SYSTEM_ACTOR,
+          action: "billing.subscription_created",
+          target_type: "stripe_subscription",
+          target_id: typeof session.subscription === "string" ? session.subscription : null,
+          metadata: { tier, stripe_event_id: event.id },
+          outcome: "ok",
+        });
+
         // Send purchase thank-you email (fire-and-forget)
         if (process.env.RESEND_API_KEY && session.customer_email) {
           const resend = new Resend(process.env.RESEND_API_KEY);
@@ -213,6 +224,23 @@ export async function POST(req: NextRequest) {
             : {}),
         });
 
+        if (currentTier !== newTier) {
+          void audit({
+            church_id: churchId,
+            actor: SYSTEM_ACTOR,
+            action: "billing.subscription_updated",
+            target_type: "stripe_subscription",
+            target_id: subscription.id,
+            metadata: {
+              from_tier: currentTier,
+              to_tier: newTier,
+              status: subscription.status,
+              stripe_event_id: event.id,
+            },
+            outcome: "ok",
+          });
+        }
+
         // Send downgrade notification email if applicable
         if (isDowngrade(currentTier, newTier)) {
           sendDowngradeEmail(churchId, currentTier, newTier).catch(() => {});
@@ -242,6 +270,19 @@ export async function POST(req: NextRequest) {
           ...(deletedCurrentTier !== "free"
             ? { previous_tier: deletedCurrentTier, tier_changed_at: new Date().toISOString() }
             : {}),
+        });
+
+        void audit({
+          church_id: churchId,
+          actor: SYSTEM_ACTOR,
+          action: "billing.subscription_canceled",
+          target_type: "stripe_subscription",
+          target_id: subscription.id,
+          metadata: {
+            from_tier: deletedCurrentTier,
+            stripe_event_id: event.id,
+          },
+          outcome: "ok",
         });
 
         // Send downgrade notification if they were on a paid plan

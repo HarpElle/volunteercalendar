@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { audit, userActor } from "@/lib/server/audit";
 import { reissueActivationCode, revokeStation } from "@/lib/server/kiosk";
 
 async function requireOrgAdmin(
@@ -83,6 +84,14 @@ export async function POST(
       church_id,
       created_by_uid: auth.uid,
     });
+    void audit({
+      church_id,
+      actor: userActor(auth.uid),
+      action: "kiosk.station_reissue_code",
+      target_type: "kiosk_station",
+      target_id: id,
+      outcome: "ok",
+    });
     return NextResponse.json({
       activation_code: code,
       activation_expires_at: activation.expires_at,
@@ -119,6 +128,15 @@ export async function DELETE(
     if (!station) {
       return NextResponse.json({ error: "Station not found" }, { status: 404 });
     }
+    void audit({
+      church_id: churchId,
+      actor: userActor(auth.uid),
+      action: "kiosk.station_revoke",
+      target_type: "kiosk_station",
+      target_id: id,
+      metadata: { name: station.name },
+      outcome: "ok",
+    });
     return NextResponse.json({ station });
   } catch (err) {
     console.error("[DELETE /api/admin/kiosk/stations/:id]", err);

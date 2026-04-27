@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { audit, kioskActor } from "@/lib/server/audit";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
@@ -298,6 +299,21 @@ export async function POST(req: NextRequest) {
           .catch(() => {});
       }
     }
+
+    void audit({
+      church_id,
+      actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+      action: "kiosk.checkin",
+      target_type: "checkin_session_batch",
+      target_id: household_id,
+      metadata: {
+        service_date,
+        ...(service_id ? { service_id } : {}),
+        children_count: sessions.length,
+        had_alerts: anyAlerts,
+      },
+      outcome: "ok",
+    });
 
     return NextResponse.json({
       sessions: sessions.map((s) => ({
