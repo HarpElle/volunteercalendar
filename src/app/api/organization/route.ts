@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
 import { buildOrgDeletedEmail, buildOrgDeletedMembersEmail } from "@/lib/utils/email-templates";
 import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
+import { audit, userActor } from "@/lib/server/audit";
 import { generateShortCode } from "@/lib/utils/short-code";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -235,6 +236,23 @@ export async function DELETE(req: NextRequest) {
         .get();
       memberOtherOrgs.set(m.uid, !otherMems.empty);
     }
+
+    // Audit BEFORE cascade so we capture the org name + member count before
+    // they're gone. The audit log itself survives the cascade (separate
+    // top-level collection).
+    void audit({
+      church_id,
+      actor: userActor(userId),
+      action: "org.delete",
+      target_type: "church",
+      target_id: church_id,
+      metadata: {
+        name: churchSnap.data()?.name as string | undefined,
+        active_members: memberNotifyList.length + 1, // +1 for owner
+        had_subscription: !!stripeSubscriptionId,
+      },
+      outcome: "ok",
+    });
 
     // Cascade-delete all org data (subcollections, memberships, signups, etc.)
     await cascadeDeleteOrg(adminDb, church_id);

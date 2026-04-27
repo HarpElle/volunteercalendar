@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { Resend } from "resend";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
+import { audit, userActor } from "@/lib/server/audit";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 
@@ -152,6 +153,20 @@ export async function POST(
     }
 
     await batch.commit();
+
+    void audit({
+      church_id,
+      actor: userActor(userId),
+      action: "schedule.publish",
+      target_type: "schedule",
+      target_id: scheduleId,
+      metadata: {
+        emails_sent: emailsSent,
+        emails_failed: emailsFailed,
+        assignments: assignSnap.docs.length,
+      },
+      outcome: emailsFailed > 0 ? "failed" : "ok",
+    });
 
     return NextResponse.json({
       success: true,
