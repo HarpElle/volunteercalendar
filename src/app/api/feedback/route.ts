@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   try {
     // For scope=mine, use only where() (no orderBy) to avoid composite index requirement.
     // We sort in JS instead — feedback volume per user is small.
-    let query: FirebaseFirestore.Query = scope === "mine"
+    const query: FirebaseFirestore.Query = scope === "mine"
       ? feedbackRef.where("submitted_by_user_id", "==", caller.uid)
       : feedbackRef.orderBy("created_at", "desc");
 
