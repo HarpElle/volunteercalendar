@@ -279,9 +279,16 @@ function ActivationCodeModal({
   activation: ActivationToShow;
   onClose: () => void;
 }) {
-  const minutesLeft = Math.max(
-    0,
-    Math.floor((new Date(activation.expiresAt).getTime() - Date.now()) / 60000),
+  // Snapshot the minutes-left at mount so the value doesn't drift while the
+  // modal is open. Acceptable UX since the modal is meant to be closed
+  // shortly after the operator types the code into the kiosk.
+  const [minutesLeft] = useState(() =>
+    Math.max(
+      0,
+      Math.floor(
+        (new Date(activation.expiresAt).getTime() - Date.now()) / 60000,
+      ),
+    ),
   );
 
   return (

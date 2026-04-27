@@ -12,7 +12,7 @@
  *   - On logout, the app clears all caches via clearVolunteerCalCaches().
  */
 
-/* eslint-disable no-restricted-globals */
+ 
 
 // Bumped from v1 → v2 in track A.6 to invalidate old caches that contained
 // /dashboard navigation responses on existing installs.

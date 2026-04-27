@@ -187,11 +187,15 @@ export function StageSyncConductor({
         {currentItem?.key && (
           <p className="mt-3 text-xl text-white/60">Key: {currentItem.key}</p>
         )}
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- chart_data comes from resolved API response */}
-        {(currentItem as any)?.chart_data ? (
+        {(currentItem as { chart_data?: unknown })?.chart_data ? (
           <div className="mt-4 w-full max-w-xl overflow-y-auto rounded-lg" style={{ maxHeight: "40vh" }}>
             <ChordChartRenderer
-              chartData={(currentItem as any).chart_data}
+              // chart_data is loosely typed from the API response; the
+              // ChordChartRenderer validates structurally at use time.
+              chartData={
+                (currentItem as { chart_data?: Parameters<typeof ChordChartRenderer>[0]["chartData"] })
+                  .chart_data!
+              }
               stageSyncMode
               fontScale={0.7}
               chordHighlight

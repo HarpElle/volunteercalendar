@@ -17,7 +17,7 @@ interface ChildData {
 
 interface ChildSelectionProps {
   guardianName: string;
-  children: ChildData[];
+  childList: ChildData[];
   onConfirm: (selectedIds: string[]) => void;
   onBack: () => void;
   onActivity: () => void;
@@ -29,13 +29,13 @@ interface ChildSelectionProps {
  */
 export function ChildSelection({
   guardianName,
-  children,
+  childList,
   onConfirm,
   onBack,
   onActivity,
 }: ChildSelectionProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    new Set(children.map((c) => c.id)),
+    new Set(childList.map((c) => c.id)),
   );
 
   const handleToggle = (id: string) => {
@@ -53,10 +53,10 @@ export function ChildSelection({
 
   const handleSelectAll = () => {
     onActivity();
-    if (selectedIds.size === children.length) {
+    if (selectedIds.size === childList.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(children.map((c) => c.id)));
+      setSelectedIds(new Set(childList.map((c) => c.id)));
     }
   };
 
@@ -71,20 +71,20 @@ export function ChildSelection({
       </div>
 
       {/* Select all toggle */}
-      {children.length > 1 && (
+      {childList.length > 1 && (
         <button
           type="button"
           onClick={handleSelectAll}
           className="self-center text-sm text-vc-coral font-medium mb-4 underline"
         >
-          {selectedIds.size === children.length ? "Deselect All" : "Select All"}
+          {selectedIds.size === childList.length ? "Deselect All" : "Select All"}
         </button>
       )}
 
       {/* Child cards */}
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-wrap gap-4 justify-center">
-          {children.map((child) => (
+          {childList.map((child) => (
             <ChildCard
               key={child.id}
               id={child.id}

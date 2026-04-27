@@ -162,7 +162,7 @@ export async function buildOrgSnapshot(
   }
 
   // ── Owner identity ────────────────────────────────────────────────────────
-  let owner: OrgOwner = {
+  const owner: OrgOwner = {
     uid: null,
     email: null,
     display_name: null,

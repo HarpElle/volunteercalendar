@@ -542,7 +542,7 @@ function CheckInKioskInner() {
       {screen === "select" && household && (
         <ChildSelection
           guardianName={formatGuardianWelcome(household.household, lookupMethodRef.current)}
-          children={household.children}
+          childList={household.children}
           onConfirm={handleChildrenSelected}
           onBack={() => {
             setScreen("lookup");

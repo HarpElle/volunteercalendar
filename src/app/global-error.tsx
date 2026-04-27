@@ -65,6 +65,9 @@ export default function GlobalError({
               Reference: {error.digest}
             </p>
           )}
+          {/* Plain anchor here intentionally — global-error.tsx renders */}
+          {/* outside of the App Router tree so next/link is unavailable.  */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
             href="/"
             style={{

@@ -201,6 +201,18 @@ export default function DashboardPage() {
     loadPending();
   }, [churchId, user, activeMembership]);
 
+  // Hooks must run before any early returns. Setup-guide state lives here so
+  // the no-org early return below doesn't violate rules-of-hooks.
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("vc_setup_guide_dismissed") === "true";
+  });
+  const [guideCollapsed, setGuideCollapsed] = useState(false);
+  const dismissGuide = useCallback(() => {
+    setGuideDismissed(true);
+    localStorage.setItem("vc_setup_guide_dismissed", "true");
+  }, []);
+
   if (!hasOrg) {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
@@ -237,14 +249,6 @@ export default function DashboardPage() {
 
   const hasData = stats && (stats.volunteers > 0 || stats.ministries > 0);
 
-  // Setup guide — persistent until all steps done or dismissed
-  const [guideDismissed, setGuideDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("vc_setup_guide_dismissed") === "true";
-  });
-  const [guideCollapsed, setGuideCollapsed] = useState(false);
-
-
   const setupSteps = stats ? [
     { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
     { step: "Create a team", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/organization", done: (stats.ministries ?? 0) > 0 },
@@ -259,11 +263,6 @@ export default function DashboardPage() {
   const completedSteps = setupSteps.filter((s) => s.done).length;
   const allDone = requiredSteps.length > 0 && requiredSteps.every((s) => s.done);
   const showGuide = stats && !guideDismissed && !allDone;
-
-  const dismissGuide = useCallback(() => {
-    setGuideDismissed(true);
-    localStorage.setItem("vc_setup_guide_dismissed", "true");
-  }, []);
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + "T12:00:00");

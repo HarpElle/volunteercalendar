@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel previous runs of the same workflow on the same branch when a new
+# commit lands — we only care about the latest state.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + lint + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint (errors fail the build; warnings allowed)
+        run: npm run lint
+
+      - name: Production build
+        # Build with no Sentry source-map upload to keep CI fast and avoid
+        # needing the auth token in CI env.
+        env:
+          SENTRY_AUTH_TOKEN: ""
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-placeholder
+        run: npm run build
