@@ -55,7 +55,7 @@ jobs:
           STRIPE_SECRET_KEY: sk_test_ci_placeholder_not_a_real_key
           STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
-          RESEND_API_KEY: ""
+          RESEND_API_KEY: re_ci_placeholder_not_a_real_key
           TWILIO_ACCOUNT_SID: ""
           TWILIO_AUTH_TOKEN: ""
           TWILIO_PHONE_NUMBER: ""
