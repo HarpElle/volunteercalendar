@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
     let totalUpdated = 0;
     const errors: string[] = [];
 
-    for (const churchDoc of churchesSnap.docs) {
+    // Track E.3: process churches in concurrent batches of 5 instead of
+    // sequentially. At 100 churches × ~2s each, sequential = 200s (over the
+    // Vercel timeout). Concurrent = ~40s with the same per-church cost.
+    const CONCURRENCY = 5;
+    async function processChurch(churchDoc: FirebaseFirestore.QueryDocumentSnapshot) {
       try {
         const churchId = churchDoc.id;
         const churchRef = adminDb.collection("churches").doc(churchId);
@@ -29,7 +33,7 @@ export async function GET(req: NextRequest) {
         // Load volunteers from people collection
         const volSnap = await churchRef.collection("people").where("is_volunteer", "==", true).where("status", "==", "active").get();
 
-        if (volSnap.empty) continue;
+        if (volSnap.empty) return;
 
         // Load all assignments
         const assignSnap = await churchRef.collection("assignments").get();
@@ -110,6 +114,13 @@ export async function GET(req: NextRequest) {
         errors.push(`${churchDoc.id}: ${msg}`);
         console.error(`[stats-refresh] Error for church ${churchDoc.id}:`, err);
       }
+    }
+
+    // Concurrent processing: chunk by CONCURRENCY, await each chunk before
+    // starting the next. Bounded parallelism = no thundering-herd on Firestore.
+    for (let i = 0; i < churchesSnap.docs.length; i += CONCURRENCY) {
+      const chunk = churchesSnap.docs.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(processChurch));
     }
 
     // ── Platform Stats Aggregation ───────────────────────────────────────
