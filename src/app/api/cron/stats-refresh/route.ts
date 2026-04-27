@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { safeCompare } from "@/lib/utils/safe-compare";
+import { requireCronSecret } from "@/lib/server/authz";
 import { TIER_LIMITS } from "@/lib/constants";
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
+
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/stats-refresh
  *
  * Recalculates volunteer stats (times_scheduled_last_90d, last_served_date)
  * from assignment data for every church. Runs daily via Vercel cron.
- * Auth: CRON_SECRET header.
  */
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  if (!secret || !safeCompare(secret, process.env.CRON_SECRET || "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const blocked = requireCronSecret(req);
+  if (blocked) return blocked;
 
   try {
     const churchesSnap = await adminDb.collection("churches").get();

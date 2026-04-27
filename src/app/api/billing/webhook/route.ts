@@ -109,6 +109,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // Idempotency: Stripe retries webhook deliveries with the same event.id.
+  // Record processed events and short-circuit duplicates so e.g. a tier upgrade
+  // never gets applied twice. Doc id = event.id; rules deny client access.
+  // We use a transaction-style "create if not exists" to atomically claim the
+  // event before doing any side-effect work.
+  const dedupeRef = adminDb.doc(`stripe_processed_events/${event.id}`);
+  try {
+    await dedupeRef.create({
+      type: event.type,
+      received_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Firestore throws ALREADY_EXISTS on duplicate create — that's our signal
+    // that we've already processed this event.
+    const code = (err as { code?: number | string })?.code;
+    if (code === 6 /* ALREADY_EXISTS */ || code === "already-exists") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    // Other errors — log and proceed; we'd rather double-process once than
+    // drop an event due to an unrelated Firestore hiccup.
+    console.error("Webhook idempotency check failed:", err);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {

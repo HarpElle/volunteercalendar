@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { safeCompare } from "@/lib/utils/safe-compare";
+import { requireCronSecret } from "@/lib/server/authz";
+
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/notification-cleanup
  *
  * Deletes expired user notifications (expires_at < now).
- * Runs weekly via Vercel cron. Auth: CRON_SECRET header.
+ * Runs weekly via Vercel cron.
  */
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  if (!secret || !safeCompare(secret, process.env.CRON_SECRET || "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const blocked = requireCronSecret(req);
+  if (blocked) return blocked;
 
   try {
     const now = new Date().toISOString();

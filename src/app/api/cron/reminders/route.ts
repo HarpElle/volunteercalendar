@@ -1,25 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { safeCompare } from "@/lib/utils/safe-compare";
+import { requireCronSecret } from "@/lib/server/authz";
 import { getBaseUrl } from "@/lib/utils/base-url";
+
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/reminders?hours=48
  *
  * Called by Vercel Cron daily. Iterates all churches and triggers
  * the reminder API for each one.
- *
- * Auth: Vercel sets the Authorization header automatically for cron jobs,
- * but we also verify CRON_SECRET as a fallback.
  */
-export async function GET(request: Request) {
-  // Verify this is a legitimate cron call
-  const authHeader = request.headers.get("authorization");
-  const isVercelCron = safeCompare(authHeader, `Bearer ${process.env.CRON_SECRET}`);
-
-  if (!isVercelCron) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(request: NextRequest) {
+  const blocked = requireCronSecret(request);
+  if (blocked) return blocked;
 
   const { searchParams } = new URL(request.url);
   const hours = parseInt(searchParams.get("hours") || "48", 10);

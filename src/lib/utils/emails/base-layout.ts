@@ -1,3 +1,5 @@
+import { escapeHtml } from "./escape";
+
 /**
  * Shared HTML email layout for VolunteerCal.
  *
@@ -124,7 +126,7 @@ export function mutedCenter(text: string): string {
 
 /** "On behalf of" footer for org-scoped emails. */
 export function onBehalfFooter(churchName: string): string {
-  return `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${churchName}`;
+  return `Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${escapeHtml(churchName)}`;
 }
 
 /**

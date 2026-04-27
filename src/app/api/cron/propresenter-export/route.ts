@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
+import { requireCronSecret } from "@/lib/server/authz";
 import type { ServicePlan, Song } from "@/lib/types";
+
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/propresenter-export
  * Daily cron job that emails ProPresenter exports to tech/media leads
  * 24 hours before each published service plan.
  *
- * Secured by Vercel CRON_SECRET header.
+ * Auth: requireCronSecret (fails closed if CRON_SECRET env unset).
  */
 export async function GET(req: NextRequest) {
-  // Verify cron secret
-  const authHeader = req.headers.get("Authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const blocked = requireCronSecret(req);
+  if (blocked) return blocked;
 
   const results: {
     church_id: string;

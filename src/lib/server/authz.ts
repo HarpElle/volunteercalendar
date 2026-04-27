@@ -104,6 +104,33 @@ export async function requireKioskToken(
   return NextResponse.json({ error: "Invalid kiosk token" }, { status: 401 });
 }
 
+// ─── Cron secret (Track D.6) ────────────────────────────────────────────────
+
+/**
+ * Verify a Vercel cron / internal scheduled request's authorization. Fails
+ * closed: if `CRON_SECRET` env var is unset, every cron route 503s. If the
+ * presented header is missing or doesn't match, 401. Constant-time compare.
+ *
+ * Use at the top of every route under /api/cron/*.
+ */
+export function requireCronSecret(req: NextRequest): NextResponse | null {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) {
+    return NextResponse.json(
+      { error: "Cron not configured (CRON_SECRET env var missing)" },
+      { status: 503 },
+    );
+  }
+  const presented =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return null;
+}
+
 /**
  * Enforce that the request's church_id matches the kiosk's bound church_id.
  * In bootstrap mode without an env-bound church, falls back to trusting the

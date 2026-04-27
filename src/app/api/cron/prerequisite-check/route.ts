@@ -1,12 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { safeCompare } from "@/lib/utils/safe-compare";
+import { requireCronSecret } from "@/lib/server/authz";
 import { Resend } from "resend";
 import { buildExpiryWarningEmail } from "@/lib/utils/emails/prerequisite-expiry-warning";
 import { buildPrerequisiteNudgeEmail } from "@/lib/utils/emails/prerequisite-nudge";
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+
+export const maxDuration = 300;
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -21,14 +23,10 @@ const STALLED_DAYS = 30;
  * Daily cron job. For each church:
  *   1. Finds volunteer journey steps with approaching expiry → sends warning email
  *   2. Finds volunteers with stalled in_progress status → sends nudge email
- *
- * Auth: CRON_SECRET Bearer token (Vercel Cron)
  */
-export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!safeCompare(authHeader, `Bearer ${process.env.CRON_SECRET}`)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(request: NextRequest) {
+  const blocked = requireCronSecret(request);
+  if (blocked) return blocked;
 
   try {
     const churchesSnap = await adminDb.collection("churches").get();

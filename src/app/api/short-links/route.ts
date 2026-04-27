@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { validateTargetUrl } from "@/lib/utils/short-link-target";
 
 /** Slugs reserved by the app's own routes. */
 const RESERVED_SLUGS = new Set([
@@ -83,6 +84,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate target URL — relative app paths or trusted-domain URLs only.
+    const normalizedTarget = validateTargetUrl(String(target_url));
+    if (!normalizedTarget.ok) {
+      return NextResponse.json(
+        { error: normalizedTarget.error },
+        { status: 400 },
+      );
+    }
+
     // Validate slug format
     const normalizedSlug = slug.toLowerCase().trim();
     if (!SLUG_REGEX.test(normalizedSlug)) {
@@ -156,7 +166,8 @@ export async function POST(req: NextRequest) {
     const docRef = await adminDb.collection("short_links").add({
       church_id,
       slug: normalizedSlug,
-      target_url,
+      target_url: normalizedTarget.value,
+      target_kind: normalizedTarget.kind, // "relative" | "volunteercal" | "allowlist"
       label,
       created_by: userId,
       created_at: now,
