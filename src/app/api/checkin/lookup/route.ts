@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
@@ -18,7 +18,15 @@ export async function POST(req: NextRequest) {
   const kiosk = await requireKioskToken(req, "lookup");
   if (kiosk instanceof NextResponse) return kiosk;
 
-  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  // Track D.5: distributed rate limit, keyed on the kiosk station id when
+  // available so an attacker can't spread their volume across a million IPs.
+  // Falls back to in-memory limiter if Upstash isn't configured.
+  const limited = await rateLimitDistributed(req, {
+    prefix: "kiosk-lookup",
+    limit: 20,
+    windowSeconds: 60,
+    extraKey: kiosk.station_id ?? undefined,
+  });
   if (limited) return limited;
 
   try {

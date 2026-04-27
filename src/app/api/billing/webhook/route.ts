@@ -291,6 +291,164 @@ export async function POST(req: NextRequest) {
         }
         break;
       }
+
+      // ─── Track C.6 — payment failure tracking ────────────────────────────
+      // We don't auto-downgrade immediately on a single failed payment.
+      // Stripe Smart Retries handles the retries; we just mark the church
+      // so admins (and a future dunning cron) can act. Auto-downgrade after
+      // a 7-day grace lands as a follow-up.
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        // The relation to the subscription may live on the invoice for older
+        // API versions or via the parent.subscription_details link on newer
+        // ones. We try both shapes.
+        const sub =
+          (invoice as unknown as { subscription?: string }).subscription ??
+          (invoice as unknown as { parent?: { subscription_details?: { subscription?: string } } })
+            .parent?.subscription_details?.subscription ?? null;
+
+        let churchId: string | null = null;
+        if (sub && typeof sub === "string") {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(sub);
+            churchId = (subscription.metadata?.church_id as string) ?? null;
+          } catch {
+            // ignore; fall through with null
+          }
+        }
+        if (!churchId) {
+          console.warn(
+            "Webhook: invoice.payment_failed without resolvable church_id",
+          );
+          break;
+        }
+
+        const now = new Date().toISOString();
+        await adminDb.doc(`churches/${churchId}`).update({
+          payment_failed_at: now,
+          payment_failed_invoice_id: invoice.id,
+          payment_failed_amount_cents: invoice.amount_due ?? null,
+        });
+
+        void audit({
+          church_id: churchId,
+          actor: SYSTEM_ACTOR,
+          action: "billing.invoice_failed",
+          target_type: "stripe_invoice",
+          target_id: invoice.id ?? null,
+          metadata: {
+            amount_cents: invoice.amount_due ?? null,
+            attempt_count: invoice.attempt_count ?? null,
+            stripe_event_id: event.id,
+          },
+          outcome: "failed",
+        });
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const sub =
+          (invoice as unknown as { subscription?: string }).subscription ??
+          (invoice as unknown as { parent?: { subscription_details?: { subscription?: string } } })
+            .parent?.subscription_details?.subscription ?? null;
+
+        let churchId: string | null = null;
+        if (sub && typeof sub === "string") {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(sub);
+            churchId = (subscription.metadata?.church_id as string) ?? null;
+          } catch {
+            // ignore
+          }
+        }
+        if (!churchId) break;
+
+        // Clear any prior payment_failed flags — a successful payment
+        // resolves the dunning state.
+        const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+        if (churchSnap.exists && churchSnap.data()?.payment_failed_at) {
+          await adminDb.doc(`churches/${churchId}`).update({
+            payment_failed_at: null,
+            payment_failed_invoice_id: null,
+            payment_failed_amount_cents: null,
+          });
+        }
+        void audit({
+          church_id: churchId,
+          actor: SYSTEM_ACTOR,
+          action: "billing.invoice_paid",
+          target_type: "stripe_invoice",
+          target_id: invoice.id ?? null,
+          metadata: {
+            amount_cents: invoice.amount_paid ?? null,
+            stripe_event_id: event.id,
+          },
+          outcome: "ok",
+        });
+        break;
+      }
+
+      // ─── Track C.10 — dispute notification ──────────────────────────────
+      // We don't auto-cancel anything; humans decide. We mark the church
+      // for review, audit-log the dispute, and notify the platform admin.
+      case "charge.dispute.created": {
+        const dispute = event.data.object as Stripe.Dispute;
+        const charge = dispute.charge;
+        const chargeId =
+          typeof charge === "string" ? charge : charge?.id ?? null;
+
+        let churchId: string | null = null;
+        try {
+          if (chargeId) {
+            const ch = await stripe.charges.retrieve(chargeId, {
+              expand: ["customer"],
+            });
+            const customer = ch.customer as Stripe.Customer | string | null;
+            const customerId =
+              typeof customer === "string" ? customer : customer?.id ?? null;
+            if (customerId) {
+              // Look up church by stripe_customer_id
+              const churchSnap = await adminDb
+                .collection("churches")
+                .where("stripe_customer_id", "==", customerId)
+                .limit(1)
+                .get();
+              if (!churchSnap.empty) {
+                churchId = churchSnap.docs[0].id;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Dispute lookup failed:", e);
+        }
+
+        const now = new Date().toISOString();
+        if (churchId) {
+          await adminDb.doc(`churches/${churchId}`).update({
+            dispute_pending_at: now,
+            dispute_id: dispute.id,
+            dispute_reason: dispute.reason ?? null,
+            dispute_amount_cents: dispute.amount ?? null,
+          });
+        }
+        void audit({
+          church_id: churchId,
+          actor: SYSTEM_ACTOR,
+          action: "billing.dispute_created",
+          target_type: "stripe_dispute",
+          target_id: dispute.id,
+          metadata: {
+            charge_id: chargeId,
+            amount_cents: dispute.amount,
+            reason: dispute.reason,
+            status: dispute.status,
+            stripe_event_id: event.id,
+          },
+          outcome: "ok",
+        });
+        break;
+      }
     }
   } catch (err) {
     console.error("Webhook handler error:", err);

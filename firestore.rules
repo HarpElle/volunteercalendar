@@ -414,10 +414,20 @@ service cloud.firestore {
       }
     }
 
-    // ─── Stage Sync Live (token IS the auth) ───
-    // The doc ID is a high-entropy token, so reads are intentionally public
-    // for the stage display page. Server proxy via /api/stage/* lands in
-    // track A.3. Until then, keep behavior unchanged.
+    // ─── Stage Sync Live (capability URL pattern) ───
+    //
+    // The doc ID IS the auth credential — a high-entropy token only known
+    // to clients holding the capability URL. Firestore enforces that this
+    // rule applies to single-doc reads (`get`), NOT collection list/query
+    // operations, so an unauthorized caller cannot enumerate the collection.
+    // This is the standard capability-URL pattern (same shape Google Docs
+    // uses for "anyone with the link can view").
+    //
+    // SAFETY CONTRACT: documents in stage_sync_live MUST contain only
+    // information intended for projection on a public stage display
+    // (current lyrics line, song title, scripture reference). Never store
+    // PII, member lists, full song catalogs, or anything sensitive in this
+    // collection. Server-side writers (`/api/stage/*`) enforce this.
     match /stage_sync_live/{token} {
       allow read: if true;
       allow write: if false; // Admin SDK only

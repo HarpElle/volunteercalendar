@@ -11,13 +11,18 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { ActivationError, consumeActivation } from "@/lib/server/kiosk";
 
 export async function POST(req: NextRequest) {
-  // Generous limit; activation should be infrequent. Tighter than nothing
-  // because an attacker could brute-force 8-hex-char codes.
-  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  // Distributed rate limit (Track D.5). 8-char hex code = 16M keyspace, so
+  // a brute-force at 30/min would still take ~10 years on average — but the
+  // distributed limit ensures a regional fan-out attack can't bypass.
+  const limited = await rateLimitDistributed(req, {
+    prefix: "kiosk-activate",
+    limit: 30,
+    windowSeconds: 60,
+  });
   if (limited) return limited;
 
   let body: { code?: string; device_fingerprint?: string };
