@@ -96,23 +96,28 @@ export function detailCard(innerHtml: string): string {
 </table>`;
 }
 
-/** Detail row inside a detail card. */
+/** Detail row inside a detail card. Escapes label + value + extra (E.6). */
 export function detailRow(label: string, value: string, extra?: string): string {
   return `<tr>
   <td style="padding-bottom:12px;">
-    <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">${label}</span><br>
-    <span style="font-size:15px;font-weight:600;color:#2D3047;">${value}</span>${extra ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${extra}</span>` : ""}
+    <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">${escapeHtml(label)}</span><br>
+    <span style="font-size:15px;font-weight:600;color:#2D3047;">${escapeHtml(value)}</span>${extra ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${escapeHtml(extra)}</span>` : ""}
   </td>
 </tr>`;
 }
 
-/** Centered CTA button. */
+/**
+ * Centered CTA button. Escapes the label (visible text). The href is NOT
+ * escaped — it must already be a validated URL the caller built. URLs that
+ * include user-controlled fragments (tokens, IDs) should already be
+ * URL-encoded by the caller, not HTML-escaped.
+ */
 export function ctaButton(href: string, label: string, color = "#E07A5F"): string {
   return `<table width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td align="center" style="padding-bottom:16px;">
       <a href="${href}" style="display:inline-block;background-color:${color};color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:-0.2px;">
-        ${label}
+        ${escapeHtml(label)}
       </a>
     </td>
   </tr>

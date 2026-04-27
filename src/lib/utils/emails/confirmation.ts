@@ -10,6 +10,7 @@ import {
   onBehalfFooter,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ConfirmationEmailData {
   volunteerName: string;
@@ -32,7 +33,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
   const subject = `You're scheduled to serve \u2014 ${formattedDate}`;
 
   const body = `<p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#4A4A6A;">
-                Hi <strong ${BOLD}>${data.volunteerName}</strong>,
+                Hi <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong>,
                 you've been scheduled to serve. Please confirm your availability below.
               </p>
 
@@ -44,7 +45,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
                       <tr>
   <td>
     <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-    <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.roleTitle}</span>
+    <span style="font-size:15px;font-weight:600;color:#2D3047;">${escapeHtml(data.roleTitle)}</span>
   </td>
 </tr>
                     </table>`)}
