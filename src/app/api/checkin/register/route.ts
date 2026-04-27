@@ -18,7 +18,7 @@ import type { CheckInHousehold, Child } from "@/lib/types";
  * records.
  */
 export async function POST(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "register");
+  const kiosk = await requireKioskToken(req, "register");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });

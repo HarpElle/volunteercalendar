@@ -12,7 +12,7 @@ import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
  * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function GET(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "services");
+  const kiosk = await requireKioskToken(req, "services");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });

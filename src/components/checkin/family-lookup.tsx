@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { kioskFetch } from "@/lib/kiosk-client";
 import { NumericKeypad } from "./numeric-keypad";
 
 interface HouseholdResult {
@@ -75,7 +76,7 @@ export function FamilyLookup({
     onActivity();
 
     try {
-      const res = await fetch("/api/checkin/lookup", {
+      const res = await kioskFetch("/api/checkin/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ church_id: churchId, ...params }),

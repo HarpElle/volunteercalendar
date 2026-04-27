@@ -1704,3 +1704,75 @@ export interface PlatformStats {
   };
   computed_at: string;
 }
+
+// --- Kiosk Stations & Tokens (Track B) ---
+// Firestore: top-level collections, Admin-SDK only (no client access).
+// All three live at the platform level so the same kiosk concepts could
+// later support orgs sharing kiosks at a shared facility.
+
+export type KioskScope =
+  | "lookup"
+  | "checkin"
+  | "checkout"
+  | "register"
+  | "print"
+  | "services"
+  | "room";
+
+export type KioskStationStatus = "active" | "revoked";
+
+/** A registered kiosk device. Doc ID = stable station_id. */
+export interface KioskStation {
+  id: string;
+  church_id: string;
+  /** Operator-friendly label, e.g. "Lobby Kiosk" or "Children's Wing iPad". */
+  name: string;
+  status: KioskStationStatus;
+  created_at: string;
+  created_by_uid: string;
+  revoked_at?: string | null;
+  revoked_by_uid?: string | null;
+  last_used_at?: string | null;
+  /** Active token doc id; null if station has never been activated or has been revoked. */
+  active_token_id?: string | null;
+}
+
+/**
+ * One-time activation code. Doc ID = the code itself (uppercase 8-char hex).
+ * Operator types this on the kiosk to enroll the device. TTL ~10 minutes.
+ */
+export interface KioskActivation {
+  /** Doc ID — the human-typed activation code. */
+  code: string;
+  station_id: string;
+  church_id: string;
+  /** ISO timestamp; reject if past. */
+  expires_at: string;
+  /** Set when the kiosk POSTs to /api/kiosk/activate; ensures one-time use. */
+  consumed_at?: string | null;
+  /** Optional device fingerprint captured at activation, for visibility. */
+  consumed_by_device?: string | null;
+  created_at: string;
+  created_by_uid: string;
+}
+
+/**
+ * Long-lived kiosk credential. Doc ID = the public token_id. Secret half is
+ * NOT stored — only its SHA-256 hash. The full credential the kiosk presents
+ * is `${id}.${secret}` in the X-Kiosk-Token header.
+ */
+export interface KioskToken {
+  /** Doc ID — public part of the credential. */
+  id: string;
+  /** SHA-256 of the secret half, hex-encoded. */
+  token_hash: string;
+  station_id: string;
+  church_id: string;
+  scope: KioskScope[];
+  created_at: string;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  /** Null for non-expiring tokens (kiosks usually want long-lived). */
+  expires_at?: string | null;
+  device_fingerprint?: string | null;
+}

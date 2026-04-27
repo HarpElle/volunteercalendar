@@ -17,7 +17,7 @@ const VALID_CONNECTION_TYPES: PrinterConnectionType[] = ["bluetooth", "wifi"];
  * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function POST(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "print");
+  const kiosk = await requireKioskToken(req, "print");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });

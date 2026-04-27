@@ -1,8 +1,14 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useWakeLock } from "@/lib/hooks/use-wake-lock";
+import {
+  getStoredKioskChurchId,
+  getStoredKioskStationId,
+  getStoredKioskToken,
+  kioskFetch,
+} from "@/lib/kiosk-client";
 import { FamilyLookup } from "@/components/checkin/family-lookup";
 import { ChildSelection } from "@/components/checkin/child-selection";
 import { AllergyConfirm } from "@/components/checkin/allergy-confirm";
@@ -119,30 +125,46 @@ export default function CheckInKiosk() {
 }
 
 function CheckInKioskInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlChurchId = searchParams.get("church_id") || "";
   const urlStationId = searchParams.get("station") || "";
 
   // In the Capacitor kiosk app, there's no church_id in the URL.
-  // Resolve from localStorage (saved during kiosk setup).
+  // Resolve from localStorage (set on activation — see /kiosk page).
   const [storedChurchId, setStoredChurchId] = useState("");
+  const [storedStationId, setStoredStationId] = useState("");
   const [kioskName, setKioskName] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [hasPrinterConfig, setHasPrinterConfig] = useState(false);
 
   useEffect(() => {
-    if (!urlChurchId) {
-      const saved = localStorage.getItem("vc_kiosk_church_id");
-      if (saved) setStoredChurchId(saved);
+    // Track B: an activated kiosk has a token in localStorage. If there's
+    // no token AND no URL church_id (i.e. preview mode), bounce to /kiosk
+    // for activation. This is the only way a non-activated device can
+    // hit the live check-in routes — the API itself will 401 anyway.
+    const token = getStoredKioskToken();
+    const boundChurchId = getStoredKioskChurchId();
+    const boundStationId = getStoredKioskStationId();
+
+    if (!urlChurchId && !token) {
+      router.replace("/kiosk");
+      return;
     }
+    if (boundChurchId) setStoredChurchId(boundChurchId);
+    if (boundStationId) setStoredStationId(boundStationId);
+
     const savedName = localStorage.getItem("vc_kiosk_name");
     if (savedName) setKioskName(savedName);
     setHasPrinterConfig(!!localStorage.getItem("vc_kiosk_printer"));
-  }, [urlChurchId]);
+  }, [urlChurchId, router]);
 
   const churchId = urlChurchId || storedChurchId;
-  // Station ID: URL param → kiosk name → undefined (falls back to first active printer)
-  const stationId = urlStationId || (kioskName ? kioskName.toLowerCase().replace(/\s+/g, "-") : undefined);
+  // Station ID: explicit station_id from activation → URL param → kiosk name → undefined.
+  const stationId =
+    storedStationId ||
+    urlStationId ||
+    (kioskName ? kioskName.toLowerCase().replace(/\s+/g, "-") : undefined);
 
   // Keep screen awake for kiosk use
   useWakeLock();
@@ -182,7 +204,7 @@ function CheckInKioskInner() {
     if (!churchId) return;
     const fetchServices = async () => {
       try {
-        const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
+        const res = await kioskFetch(`/api/checkin/services?church_id=${churchId}`);
         if (res.ok) {
           const data = await res.json();
           const svcList = data.services as ServiceOption[];
@@ -250,7 +272,7 @@ function CheckInKioskInner() {
       lookupMethodRef.current = "qr";
       const doLookup = async () => {
         try {
-          const res = await fetch("/api/checkin/lookup", {
+          const res = await kioskFetch("/api/checkin/lookup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ church_id: churchId, qr_token: token }),
@@ -306,7 +328,7 @@ function CheckInKioskInner() {
     setError("");
 
     try {
-      const res = await fetch("/api/checkin/checkin", {
+      const res = await kioskFetch("/api/checkin/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -348,7 +370,7 @@ function CheckInKioskInner() {
     // After registration, look up the new household so we can transition
     // to child selection with full data (room assignments, etc.)
     try {
-      const res = await fetch("/api/checkin/lookup", {
+      const res = await kioskFetch("/api/checkin/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ church_id: churchId, qr_token: result.qr_token }),
@@ -724,7 +746,7 @@ function KioskSetup({ onComplete }: { onComplete: (churchId: string, kioskName: 
     setValidating(true);
     setError("");
     try {
-      const res = await fetch(`/api/checkin/services?church_id=${churchId}`);
+      const res = await kioskFetch(`/api/checkin/services?church_id=${churchId}`);
       if (!res.ok) {
         setError("Church not found. Check the code and try again.");
         setValidating(false);

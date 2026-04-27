@@ -15,7 +15,7 @@ import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/ty
  * the legacy `checkin_households` + `children` collections for backward compat.
  */
 export async function POST(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "lookup");
+  const kiosk = await requireKioskToken(req, "lookup");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });

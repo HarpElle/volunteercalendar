@@ -17,7 +17,7 @@ import type { CheckInSession, CheckInAlert } from "@/lib/types";
  *      → Finds ALL active sessions with matching code today and checks them all out.
  */
 export async function POST(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "checkout");
+  const kiosk = await requireKioskToken(req, "checkout");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });

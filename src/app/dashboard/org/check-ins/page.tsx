@@ -14,13 +14,15 @@ import { doc, getDoc } from "firebase/firestore";
 import type { Church, Campus } from "@/lib/types";
 import { CheckinVolunteerSettings } from "@/components/settings/checkin-volunteer-settings";
 import { CheckinThresholdsSettings } from "@/components/settings/checkin-thresholds-settings";
+import { KioskStationsSettings } from "@/components/settings/kiosk-stations-settings";
 import { AccessDenied } from "@/components/ui/access-denied";
 
-type CheckInsTab = "volunteers" | "children";
+type CheckInsTab = "volunteers" | "children" | "stations";
 
 const TABS: Array<{ key: CheckInsTab; label: string }> = [
   { key: "volunteers", label: "Volunteers" },
   { key: "children", label: "Children" },
+  { key: "stations", label: "Stations" },
 ];
 
 export default function CheckInsPage() {
@@ -41,7 +43,12 @@ function CheckInsContent() {
   const [loading, setLoading] = useState(true);
 
   const rawTab = searchParams.get("tab");
-  const initialTab: CheckInsTab = rawTab === "children" ? "children" : "volunteers";
+  const initialTab: CheckInsTab =
+    rawTab === "children"
+      ? "children"
+      : rawTab === "stations"
+        ? "stations"
+        : "volunteers";
   const [activeTab, setActiveTab] = useState<CheckInsTab>(initialTab);
 
   // Volunteer check-in settings state
@@ -175,6 +182,10 @@ function CheckInsContent() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "stations" && churchId && (
+        <KioskStationsSettings churchId={churchId} />
       )}
     </div>
   );

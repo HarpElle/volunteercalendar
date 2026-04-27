@@ -449,6 +449,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ─── Kiosk Stations + Activation Codes + Tokens (Track B; Admin SDK only) ───
+    // All kiosk identity lives server-side. Activation codes are short-lived
+    // and consumed via /api/kiosk/activate. The /api/admin/kiosk/* routes
+    // verify org-admin role before any read/write.
+    match /kiosk_stations/{stationId} {
+      allow read, write: if false;
+    }
+    match /kiosk_activations/{code} {
+      allow read, write: if false;
+    }
+    match /kiosk_tokens/{tokenId} {
+      allow read, write: if false;
+    }
+
     // ─── Platform admin data (Admin SDK only) ───
     // platform/stats and platform/recent_activity are aggregate docs;
     // platform_orgs/{churchId} are per-org snapshots. All accessed via

@@ -4,68 +4,55 @@
  * This module is the single source of truth for who-can-do-what on every
  * non-public API route. Routes call one of the `require*` helpers and either
  * receive the authorized principal or a NextResponse to return immediately.
- *
- * Migration status:
- *   - requireKioskToken: STUB — uses a single shared bootstrap token from env
- *     (KIOSK_BOOTSTRAP_TOKEN). Track B replaces this with per-station tokens
- *     in the `kiosk_tokens` Firestore collection.
- *   - Other helpers (requireUser, requireMembership, requireCronSecret,
- *     requirePlatformAdmin, requireStripeWebhook) land in track D.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { verifyKioskToken } from "@/lib/server/kiosk";
+import type { KioskScope } from "@/lib/types";
 
-// ─── Kiosk token (Track B placeholder) ──────────────────────────────────────
-
-export type KioskScope =
-  | "lookup"
-  | "checkin"
-  | "checkout"
-  | "register"
-  | "print"
-  | "services"
-  | "room";
+// ─── Kiosk token ────────────────────────────────────────────────────────────
 
 export interface KioskPrincipal {
-  /** Bootstrap mode uses a single shared token; per-station tokens come in track B. */
-  mode: "bootstrap" | "station";
-  /** Bound church_id; clients MUST NOT supply their own. */
+  /** "station" = real per-device token; "bootstrap" = legacy env-var fallback. */
+  mode: "station" | "bootstrap";
+  /** Bound church_id; clients MUST NOT supply their own. Null in bootstrap mode if env-bound church not set. */
   church_id: string | null;
-  /** Optional station id (track B). */
   station_id: string | null;
-  /** Allowed actions. Bootstrap mode grants all scopes for backward compat. */
   scope: KioskScope[];
 }
+
+const ALL_SCOPES: KioskScope[] = [
+  "lookup",
+  "checkin",
+  "checkout",
+  "register",
+  "print",
+  "services",
+  "room",
+];
 
 /**
  * Verify a kiosk request. Returns the principal on success, or a NextResponse
  * to short-circuit on failure.
  *
- * Today (track A): rejects unless `X-Kiosk-Token` matches
- * `process.env.KIOSK_BOOTSTRAP_TOKEN`. If the env var is unset, ALL kiosk
- * routes 401 — the safe default.
+ * Resolution order:
+ *   1. `X-Kiosk-Token` header in `${tokenId}.${secret}` form — looked up in
+ *      Firestore against `kiosk_tokens` (Track B real station auth).
+ *   2. `X-Kiosk-Token` matches `KIOSK_BOOTSTRAP_TOKEN` env — emergency
+ *      fallback, useful during migrations or as an admin override.
+ *   3. Otherwise — 401.
  *
- * The bootstrap token's church_id binding comes from
- * `process.env.KIOSK_BOOTSTRAP_CHURCH_ID`. Set this on Vercel alongside the
- * token. If unset, the principal's church_id is null and routes must reject
- * any request that requires a bound church.
+ * If neither real tokens nor a bootstrap secret are configured (i.e. no
+ * stations enrolled and `KIOSK_BOOTSTRAP_TOKEN` unset), every kiosk request
+ * 401s. That is the intended safe-by-default state — nothing is open until
+ * an admin explicitly enrolls a station.
  */
-export function requireKioskToken(
+export async function requireKioskToken(
   req: NextRequest,
-  _scope: KioskScope, // currently unused; track B enforces per-scope
-): KioskPrincipal | NextResponse {
+  scope: KioskScope,
+): Promise<KioskPrincipal | NextResponse> {
   const presented = req.headers.get("x-kiosk-token");
-  const expected = process.env.KIOSK_BOOTSTRAP_TOKEN;
-
-  if (!expected) {
-    // Fail closed: if the env var is unset, kiosk routes are disabled.
-    return NextResponse.json(
-      { error: "Kiosk endpoints disabled (KIOSK_BOOTSTRAP_TOKEN not configured)" },
-      { status: 503 },
-    );
-  }
-
   if (!presented) {
     return NextResponse.json(
       { error: "Missing kiosk token. Send X-Kiosk-Token header." },
@@ -73,37 +60,55 @@ export function requireKioskToken(
     );
   }
 
-  // Constant-time comparison
-  const a = Buffer.from(presented);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  // 1. Real station token (Track B): contains a "." separator.
+  if (presented.includes(".") && presented.startsWith("kt_")) {
+    const verified = await verifyKioskToken(presented);
+    if (verified && verified.station.church_id) {
+      // Default scope set is broad; reserved for future per-token narrowing.
+      const principal: KioskPrincipal = {
+        mode: "station",
+        church_id: verified.station.church_id,
+        station_id: verified.station.id,
+        scope: ALL_SCOPES,
+      };
+      if (!principal.scope.includes(scope)) {
+        return NextResponse.json(
+          { error: `Token does not authorize ${scope}` },
+          { status: 403 },
+        );
+      }
+      return principal;
+    }
+    // Token format looked right but didn't verify — fall through to 401.
     return NextResponse.json(
       { error: "Invalid kiosk token" },
       { status: 401 },
     );
   }
 
-  return {
-    mode: "bootstrap",
-    church_id: process.env.KIOSK_BOOTSTRAP_CHURCH_ID ?? null,
-    station_id: null,
-    scope: [
-      "lookup",
-      "checkin",
-      "checkout",
-      "register",
-      "print",
-      "services",
-      "room",
-    ],
-  };
+  // 2. Bootstrap fallback (legacy / emergency).
+  const bootstrap = process.env.KIOSK_BOOTSTRAP_TOKEN;
+  if (bootstrap) {
+    const a = Buffer.from(presented);
+    const b = Buffer.from(bootstrap);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      return {
+        mode: "bootstrap",
+        church_id: process.env.KIOSK_BOOTSTRAP_CHURCH_ID ?? null,
+        station_id: null,
+        scope: ALL_SCOPES,
+      };
+    }
+  }
+
+  return NextResponse.json({ error: "Invalid kiosk token" }, { status: 401 });
 }
 
 /**
- * Convenience: enforce that the request's church_id (from body/query) matches
- * the kiosk's bound church_id. In bootstrap mode where the env-bound church
- * is not set, this falls back to trusting the client (the legacy behavior),
- * but logs a warning. Track B removes the fallback.
+ * Enforce that the request's church_id matches the kiosk's bound church_id.
+ * In bootstrap mode without an env-bound church, falls back to trusting the
+ * client (with a server-log warning). With a real station token, the kiosk's
+ * bound church is authoritative.
  */
 export function assertKioskChurchMatch(
   principal: KioskPrincipal,
@@ -119,10 +124,9 @@ export function assertKioskChurchMatch(
     );
   }
   if (!principal.church_id) {
-    // Bootstrap mode without bound church — log + allow. Track B removes this.
     console.warn(
       "[authz] Kiosk request used unbound bootstrap token; trusting client church_id. " +
-        "Set KIOSK_BOOTSTRAP_CHURCH_ID in production.",
+        "Set KIOSK_BOOTSTRAP_CHURCH_ID or migrate to a real station token.",
     );
   }
   return null;

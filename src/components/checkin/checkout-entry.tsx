@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { kioskFetch } from "@/lib/kiosk-client";
 
 interface CheckoutEntryProps {
   churchId: string;
@@ -68,7 +69,7 @@ export function CheckoutEntry({
     onActivity();
 
     try {
-      const res = await fetch("/api/checkin/checkout", {
+      const res = await kioskFetch("/api/checkin/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

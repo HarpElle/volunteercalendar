@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { kioskFetch } from "@/lib/kiosk-client";
 
 interface ChildInput {
   first_name: string;
@@ -97,7 +98,7 @@ export function VisitorRegistration({
     setError("");
 
     try {
-      const res = await fetch("/api/checkin/register", {
+      const res = await kioskFetch("/api/checkin/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

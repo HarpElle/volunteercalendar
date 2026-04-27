@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { kioskFetch } from "@/lib/kiosk-client";
 import {
   discoverPrinters,
   printLabels,
@@ -57,7 +58,7 @@ export function PrinterSetupWizard({
           : "zebra_zd";
 
     try {
-      const res = await fetch("/api/checkin/printer-config", {
+      const res = await kioskFetch("/api/checkin/printer-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

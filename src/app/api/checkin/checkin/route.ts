@@ -19,7 +19,7 @@ import type {
  * Requires X-Kiosk-Token header (see src/lib/server/authz.ts).
  */
 export async function POST(req: NextRequest) {
-  const kiosk = requireKioskToken(req, "checkin");
+  const kiosk = await requireKioskToken(req, "checkin");
   if (kiosk instanceof NextResponse) return kiosk;
 
   const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
