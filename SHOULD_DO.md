@@ -41,6 +41,19 @@ The CSP header currently sends violation reports without blocking anything. Watc
 
 A GitHub Actions workflow at `.github/workflows/ci.yml` runs on every PR + push to main: tsc + lint + production build. If a future commit breaks any of those, the PR will block. Tell me and we fix it.
 
+### D-2. Consider upgrading Vercel to Pro tier (~$20/mo)
+
+You're on **Hobby tier**, which limits crons to **once per day max**. Discovered when a deploy was rejected for a `*/2 * * * *` (every-2-min) cron schedule.
+
+**What Pro unlocks** that the launch sprint depends on or would benefit from:
+- **Sub-daily crons** — `outbox-drain` is currently daily-only, meaning a Resend outage during schedule publish leaves emails queued for up to 24 hours. With Pro you can run it every 2 minutes (the architecture is already coded for this; just one schedule change in `vercel.json`).
+- **300s function timeout** (vs 60s on Hobby) — `stats-refresh` and `propresenter-export` cron jobs already declare `maxDuration = 300` but Hobby caps them at 60s. At ≥10 churches the stats cron will start timing out without Pro.
+- **Higher build minutes / bandwidth** — at scale, Hobby quotas become a real constraint.
+
+**Current mitigation** (shipped as part of the CI fix): publish handler uses **inline Resend send with outbox-on-failure fallback**. So in the happy path emails arrive immediately; in the sad path (Resend outage) they're retried from the outbox at the next daily drain. Acceptable for now, suboptimal at scale.
+
+When you upgrade, change `vercel.json` outbox-drain schedule back to `"*/2 * * * *"` and the system goes near-realtime.
+
 ### E. Two unknown free-tier churches — comms decision
 
 Recommended action: **no proactive comms required**. The hardening sprint's user-facing changes don't break functionality they're using. Optional touchpoint: a casual welcome email after the testing matrix below is green.

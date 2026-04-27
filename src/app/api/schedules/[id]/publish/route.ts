@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { Resend } from "resend";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
 import { audit, userActor } from "@/lib/server/audit";
 import { enqueueOutboxEntry } from "@/lib/server/outbox";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * POST /api/schedules/{id}/publish
@@ -104,14 +107,32 @@ export async function POST(
     });
 
     const baseUrl = getBaseUrl(req);
-    let enqueued = 0;
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    let enqueuedRetries = 0;
     const batch = adminDb.batch();
 
-    // Track E.1: enqueue per-volunteer confirmation emails into the
-    // notification_outbox in the SAME batch as the assignment confirm-token
-    // updates. The drain cron sends them. Effect: publish always succeeds
-    // even if Resend is degraded; emails get delivered as soon as Resend
-    // recovers; nothing is silently dropped.
+    // Hybrid email strategy:
+    //   1. Try sending the confirmation email inline via Resend.
+    //   2. On send failure, enqueue to notification_outbox for the daily
+    //      drain cron to retry.
+    //
+    // Why hybrid: Vercel Hobby tier limits crons to daily, so a pure-outbox
+    // path would mean confirmation emails arrive up to 24h after publish —
+    // unacceptable UX. Inline-with-outbox-fallback keeps publish snappy in
+    // the happy path and resilient to Resend outages without making the
+    // user wait. After upgrading to Pro tier we can switch the schedule to
+    // every-2-minutes for near-realtime drain.
+    type PendingEmail = {
+      assignmentDocRef: FirebaseFirestore.DocumentReference;
+      volunteerEmail: string;
+      from: string;
+      subject: string;
+      html: string;
+      text: string;
+    };
+    const pendingEmails: PendingEmail[] = [];
+
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
       const volunteer = volunteersMap.get(assignment.person_id);
@@ -133,23 +154,95 @@ export async function POST(
         confirmUrl: `${baseUrl}/confirm/${confirmToken}`,
       });
 
-      enqueueOutboxEntry(batch, {
-        church_id,
-        kind: "email",
-        origin: "schedule.publish",
-        source_ref: `schedules/${scheduleId}/assignments/${doc.id}`,
-        payload: {
-          to: volunteer.email!,
-          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-          subject: email.subject,
-          html: email.html,
-          text: email.text,
-        },
+      pendingEmails.push({
+        assignmentDocRef: doc.ref,
+        volunteerEmail: volunteer.email!,
+        from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
       });
-      enqueued++;
     }
 
+    // Commit confirm-token updates first so the email links work even if
+    // sends fail and retry from the outbox later.
     await batch.commit();
+
+    // Inline send pass — best effort, with outbox enqueue on failure.
+    if (process.env.RESEND_API_KEY) {
+      for (const p of pendingEmails) {
+        try {
+          const result = await resend.emails.send({
+            from: p.from,
+            to: [p.volunteerEmail],
+            subject: p.subject,
+            html: p.html,
+            text: p.text,
+          });
+          if (result.error) {
+            console.error("[publish] Resend error:", result.error);
+            emailsFailed++;
+            const fallbackBatch = adminDb.batch();
+            enqueueOutboxEntry(fallbackBatch, {
+              church_id,
+              kind: "email",
+              origin: "schedule.publish.retry",
+              source_ref: p.assignmentDocRef.path,
+              payload: {
+                to: p.volunteerEmail,
+                from: p.from,
+                subject: p.subject,
+                html: p.html,
+                text: p.text,
+              },
+            });
+            await fallbackBatch.commit();
+            enqueuedRetries++;
+          } else {
+            emailsSent++;
+          }
+        } catch (err) {
+          console.error("[publish] Email send threw:", err);
+          emailsFailed++;
+          const fallbackBatch = adminDb.batch();
+          enqueueOutboxEntry(fallbackBatch, {
+            church_id,
+            kind: "email",
+            origin: "schedule.publish.retry",
+            source_ref: p.assignmentDocRef.path,
+            payload: {
+              to: p.volunteerEmail,
+              from: p.from,
+              subject: p.subject,
+              html: p.html,
+              text: p.text,
+            },
+          });
+          await fallbackBatch.commit();
+          enqueuedRetries++;
+        }
+      }
+    } else {
+      // No Resend key — enqueue all to outbox.
+      for (const p of pendingEmails) {
+        const fallbackBatch = adminDb.batch();
+        enqueueOutboxEntry(fallbackBatch, {
+          church_id,
+          kind: "email",
+          origin: "schedule.publish",
+          source_ref: p.assignmentDocRef.path,
+          payload: {
+            to: p.volunteerEmail,
+            from: p.from,
+            subject: p.subject,
+            html: p.html,
+            text: p.text,
+          },
+        });
+        await fallbackBatch.commit();
+        enqueuedRetries++;
+      }
+    }
 
     void audit({
       church_id,
@@ -158,16 +251,20 @@ export async function POST(
       target_type: "schedule",
       target_id: scheduleId,
       metadata: {
-        emails_enqueued: enqueued,
+        emails_sent: emailsSent,
+        emails_failed: emailsFailed,
+        emails_enqueued_for_retry: enqueuedRetries,
         assignments: assignSnap.docs.length,
       },
-      outcome: "ok",
+      outcome: emailsFailed > 0 ? "failed" : "ok",
     });
 
     return NextResponse.json({
       success: true,
       published_at: now,
-      emails_enqueued: enqueued,
+      emails_sent: emailsSent,
+      emails_failed: emailsFailed,
+      emails_enqueued_for_retry: enqueuedRetries,
       total_assignments: assignSnap.docs.length,
       unapproved_teams: hasUnapprovedTeams ? unapproved : [],
     });
