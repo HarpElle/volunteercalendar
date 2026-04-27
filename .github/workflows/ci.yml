@@ -36,6 +36,21 @@ jobs:
       - name: Lint (errors fail the build; warnings allowed)
         run: npm run lint
 
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Set up Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Firestore rules tests (emulator)
+        run: npm run test:rules
+
       - name: Production build
         # Provide stub env vars so SDK constructors that init at module-load
         # don't crash during page-data collection. None of these placeholder
