@@ -24,6 +24,13 @@ interface CreateScheduleModalProps {
   serviceCount: number;
   volunteers: Person[];
   ministries: Ministry[];
+  /**
+   * Whether the org's tier unlocks all workflow modes. Free tier only allows
+   * "centralized"; Starter+ unlocks Team-First / Hybrid / Self-Service. When
+   * false, the non-centralized cards render as disabled with an upgrade hint.
+   * Defaults to `false` (conservative) when not provided.
+   */
+  workflowModesAll?: boolean;
 }
 
 function defaultStartDate() {
@@ -54,6 +61,7 @@ export function CreateScheduleModal({
   serviceCount,
   volunteers,
   ministries,
+  workflowModesAll = false,
 }: CreateScheduleModalProps) {
   const [step, setStep] = useState(0);
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("centralized");
@@ -143,24 +151,51 @@ export function CreateScheduleModal({
               How should scheduling work for this period?
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              {WORKFLOW_MODES.map((mode) => (
-                <button
-                  key={mode.value}
-                  type="button"
-                  onClick={() => setWorkflowMode(mode.value)}
-                  className={`rounded-xl border p-4 text-left transition-all ${
-                    workflowMode === mode.value
-                      ? "border-vc-coral bg-vc-coral/5 ring-1 ring-vc-coral/20"
-                      : "border-vc-border-light bg-white hover:border-vc-coral/40"
-                  }`}
-                >
-                  <span className="text-sm font-semibold text-vc-indigo">{mode.label}</span>
-                  <p className="mt-1 text-xs text-vc-text-muted leading-relaxed">
-                    {mode.description}
-                  </p>
-                </button>
-              ))}
+              {WORKFLOW_MODES.map((mode) => {
+                // Codex QA 2026-05-15: Free tier only supports "centralized";
+                // paid modes must be disabled with a clear upgrade hint
+                // instead of looking selectable.
+                const isPaidGated = !workflowModesAll && mode.value !== "centralized";
+                const isSelected = workflowMode === mode.value;
+                return (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    disabled={isPaidGated}
+                    onClick={() => !isPaidGated && setWorkflowMode(mode.value)}
+                    className={`rounded-xl border p-4 text-left transition-all relative ${
+                      isPaidGated
+                        ? "border-vc-border-light bg-vc-bg-warm/50 cursor-not-allowed opacity-70"
+                        : isSelected
+                          ? "border-vc-coral bg-vc-coral/5 ring-1 ring-vc-coral/20"
+                          : "border-vc-border-light bg-white hover:border-vc-coral/40"
+                    }`}
+                    aria-disabled={isPaidGated}
+                    title={isPaidGated ? "Requires Starter or higher" : undefined}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold text-vc-indigo">{mode.label}</span>
+                      {isPaidGated && (
+                        <span className="shrink-0 rounded-full bg-vc-sand/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-vc-sand-dark">
+                          Starter+
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-vc-text-muted leading-relaxed">
+                      {mode.description}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
+            {!workflowModesAll && (
+              <p className="text-xs text-vc-text-muted">
+                Team-First, Hybrid, and Self-Service unlock on the Starter plan and above.{" "}
+                <a href="/dashboard/org/billing" className="text-vc-coral hover:underline">
+                  See plans
+                </a>
+              </p>
+            )}
             <div className="flex justify-end pt-2">
               <Button type="button" onClick={() => setStep(1)}>
                 Next

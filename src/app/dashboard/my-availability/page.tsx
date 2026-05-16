@@ -42,6 +42,8 @@ export default function MyAvailabilityPage() {
   const [preferredFrequency, setPreferredFrequency] = useState(1);
   const [maxRolesPerMonth, setMaxRolesPerMonth] = useState(0);
   const [preferredWeeks, setPreferredWeeks] = useState<number[]>([]);
+  // Free-text notes for schedulers — added per Codex QA wishlist (Layer 9.2).
+  const [notes, setNotes] = useState("");
 
   // New blockout date input
   const [newBlockoutDate, setNewBlockoutDate] = useState("");
@@ -71,6 +73,7 @@ export default function MyAvailabilityPage() {
           setPreferredFrequency(sp?.preferred_frequency ?? 1);
           setMaxRolesPerMonth(sp?.max_roles_per_month ?? 0);
           setPreferredWeeks(sp?.preferred_weeks ?? []);
+          setNotes(sp?.notes ?? "");
         }
       } catch {
         // silent
@@ -106,6 +109,7 @@ export default function MyAvailabilityPage() {
             preferred_frequency: preferredFrequency,
             max_roles_per_month: maxRolesPerMonth,
             preferred_weeks: preferredWeeks,
+            notes: notes.trim() || undefined,
           },
         }),
       });
@@ -134,6 +138,7 @@ export default function MyAvailabilityPage() {
     preferredFrequency,
     maxRolesPerMonth,
     preferredWeeks,
+    notes,
   ]);
 
   // ---- Blockout helpers ----
@@ -270,6 +275,29 @@ export default function MyAvailabilityPage() {
             );
           })}
         </div>
+      </section>
+
+      {/* Notes for schedulers */}
+      <section className="mb-6 rounded-xl border border-vc-border-light bg-vc-bg-warm p-5">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Notes for Your Scheduler
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Anything else the scheduler should know? Examples: &ldquo;prefer
+          morning services,&rdquo; &ldquo;needs childcare,&rdquo; &ldquo;happy
+          to fill last-minute gaps.&rdquo; Optional.
+        </p>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          maxLength={500}
+          placeholder="e.g. Prefer morning services"
+          className="w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 resize-y min-h-[80px]"
+        />
+        <p className="mt-1 text-right text-xs text-vc-text-muted">
+          {notes.length}/500
+        </p>
       </section>
 
       {/* Blockout Dates */}

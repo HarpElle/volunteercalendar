@@ -186,8 +186,16 @@ service cloud.firestore {
         }
       }
 
+      // ─── Assignments ───
+      // SECURITY (Codex QA 2026-05-15): volunteers cannot read draft/in_review/
+      // approved assignments — only published. Schedulers and above keep full
+      // read access for review/edit. The `get()` here costs one extra read per
+      // query; acceptable for typical volunteer list sizes. See plan
+      // i-want-you-to-iterative-spring.md Layer 1.
       match /assignments/{docId} {
-        allow read: if isActiveMember(churchId);
+        allow read: if isSchedulerOrAbove(churchId)
+                    || (isActiveMember(churchId)
+                        && get(/databases/$(database)/documents/churches/$(churchId)/schedules/$(resource.data.schedule_id)).data.status == 'published');
         allow write: if isSchedulerOrAbove(churchId);
       }
 
@@ -226,9 +234,19 @@ service cloud.firestore {
         allow write: if isSchedulerOrAbove(churchId);
       }
 
+      // ─── Calendar Feeds ───
+      // SECURITY (Codex QA 2026-05-15): only the user who created a feed
+      // may read or manage it. Feeds carry `created_by_user_id`; the feed
+      // token at /api/calendar is still public-by-token but the API now
+      // performs additional checks. See plan i-want-you-to-iterative-spring.md
+      // Layer 1.
       match /calendar_feeds/{docId} {
-        allow read: if isActiveMember(churchId);
-        allow write: if isSchedulerOrAbove(churchId);
+        allow read: if isActiveMember(churchId)
+                    && resource.data.created_by_user_id == request.auth.uid;
+        allow create: if isActiveMember(churchId)
+                      && request.resource.data.created_by_user_id == request.auth.uid;
+        allow update, delete: if isActiveMember(churchId)
+                              && resource.data.created_by_user_id == request.auth.uid;
       }
 
       match /prerequisites/{docId} {

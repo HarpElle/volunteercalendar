@@ -33,6 +33,8 @@ import type {
 } from "@/lib/types";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
+import { TIER_LIMITS } from "@/lib/constants";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
   schedule: Schedule;
@@ -114,6 +116,7 @@ const VALID_TRANSITIONS: Record<string, ScheduleStatus[]> = {
 export default function SchedulesPage() {
   const { profile, user, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
+  const { confirm } = useConfirm();
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -121,6 +124,7 @@ export default function SchedulesPage() {
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [households, setHouseholds] = useState<Household[]>([]);
   const [orgPrerequisites, setOrgPrerequisites] = useState<OnboardingStep[]>([]);
+  const [subscriptionTier, setSubscriptionTier] = useState<string>("free");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -162,6 +166,9 @@ export default function SchedulesPage() {
         setHouseholds(hhs as unknown as Household[]);
         if (churchSnap.exists()) {
           setOrgPrerequisites(churchSnap.data().org_prerequisites || []);
+          setSubscriptionTier(
+            (churchSnap.data().subscription_tier as string) || "free",
+          );
         }
       } catch {
         setFetchError(true);
@@ -174,6 +181,40 @@ export default function SchedulesPage() {
 
   async function handleGenerate(options: CreateScheduleOptions) {
     if (!churchId || !user) return;
+
+    // Preflight (Codex QA 2026-05-15): catch the common misconfiguration where
+    // a user tries to generate a schedule for a ministry that has no active
+    // volunteers. Previously this would silently produce empty assignments OR
+    // (before Layer 3.1 strict eligibility) assign volunteers who weren't on
+    // the team at all. Now we warn explicitly and let the admin decide.
+    const scopeIds = options.ministryIds.length > 0
+      ? options.ministryIds
+      : ministries.map((m) => m.id);
+    const emptyMinistries: string[] = [];
+    for (const mid of scopeIds) {
+      const memberCount = volunteers.filter((v) =>
+        v.ministry_ids?.includes(mid),
+      ).length;
+      if (memberCount === 0) {
+        const m = ministries.find((m) => m.id === mid);
+        if (m) emptyMinistries.push(m.name);
+      }
+    }
+
+    if (emptyMinistries.length > 0) {
+      const list = emptyMinistries.join(", ");
+      const proceed = await confirm({
+        title: "Some teams have no volunteers",
+        message:
+          emptyMinistries.length === 1
+            ? `No active volunteers are members of "${list}". The schedule will be generated but ${list}'s roles will be left empty. Add volunteers to the team first if you'd rather wait.`
+            : `${emptyMinistries.length} teams have no active volunteers: ${list}. The schedule will be generated but their roles will be left empty. Add volunteers to those teams first if you'd rather wait.`,
+        confirmLabel: "Generate anyway",
+        cancelLabel: "Go back",
+      });
+      if (!proceed) return;
+    }
+
     setGenerating(true);
 
     try {
@@ -356,8 +397,11 @@ export default function SchedulesPage() {
     try {
       const updates: Record<string, unknown> = { status: newStatus };
 
-      // When sending for review, init ministry approvals
-      if (newStatus === "in_review") {
+      // When sending for review on Growth+, init per-ministry approval entries
+      // so each lead has an explicit pending gate. On lower tiers there are no
+      // ministry gates (multi_stage_approval=false), so skip the init to keep
+      // the data clean and let `allMinistriesApproved` short-circuit to true.
+      if (newStatus === "in_review" && requireMinistryApproval) {
         const approvals: Record<string, MinistryApproval> = {};
         const ministryIds = new Set(activeAssignments.map((a) => a.ministry_id));
         for (const mid of ministryIds) {
@@ -556,9 +600,18 @@ export default function SchedulesPage() {
     ? VALID_TRANSITIONS[activeSchedule.status] || []
     : [];
 
+  // Multi-stage approval is a Growth+ feature. On lower tiers the owner/admin
+  // approves the whole schedule in one step — no per-ministry gates.
+  // (Codex QA 2026-05-15: Free-tier publish was blocked because the gate was
+  // unconditional. See plan i-want-you-to-iterative-spring.md Layer 2.)
+  const tierLimits = TIER_LIMITS[subscriptionTier] || TIER_LIMITS.free;
+  const requireMinistryApproval = tierLimits.multi_stage_approval === true;
+
   const allMinistriesApproved = activeSchedule
-    ? Object.values(activeSchedule.ministry_approvals).length > 0 &&
-      Object.values(activeSchedule.ministry_approvals).every((a) => a.status === "approved")
+    ? !requireMinistryApproval
+      ? true
+      : Object.values(activeSchedule.ministry_approvals).length > 0 &&
+        Object.values(activeSchedule.ministry_approvals).every((a) => a.status === "approved")
     : false;
 
   function statusActionLabel(status: ScheduleStatus): string {
@@ -616,6 +669,7 @@ export default function SchedulesPage() {
         serviceCount={services.length}
         volunteers={volunteers}
         ministries={ministries}
+        workflowModesAll={tierLimits.workflow_modes_all === true}
       />
 
       {/* Active schedule view */}
@@ -719,7 +773,7 @@ export default function SchedulesPage() {
                   Send Availability Request
                 </Button>
               )}
-              {activeSchedule.status === "in_review" && (
+              {activeSchedule.status === "in_review" && requireMinistryApproval && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -729,11 +783,27 @@ export default function SchedulesPage() {
                 </Button>
               )}
               {nextStatuses.map((next) => {
-                // Block "approved" if not all ministries approved (during in_review)
+                // Block "approved" only when ministry approval is required and
+                // not all gates have cleared. On tiers without multi-stage
+                // approval, `allMinistriesApproved` short-circuits to true so
+                // the owner can approve in one click.
                 const blocked =
                   next === "approved" &&
                   activeSchedule.status === "in_review" &&
                   !allMinistriesApproved;
+
+                // Specific reason, not the cryptic "ministries must approve".
+                const pendingMinistries = blocked
+                  ? Object.entries(activeSchedule.ministry_approvals)
+                      .filter(([, a]) => a.status !== "approved")
+                      .map(([mid]) => ministries.find((m) => m.id === mid)?.name)
+                      .filter(Boolean)
+                  : [];
+                const blockedTitle = blocked
+                  ? pendingMinistries.length > 0
+                    ? `Waiting on ${pendingMinistries.length} team approval${pendingMinistries.length === 1 ? "" : "s"}: ${pendingMinistries.join(", ")}`
+                    : "Waiting on team approvals"
+                  : undefined;
 
                 return (
                   <Button
@@ -743,7 +813,7 @@ export default function SchedulesPage() {
                     loading={transitioning}
                     disabled={blocked}
                     onClick={() => transitionStatus(next)}
-                    title={blocked ? "All ministries must approve first" : undefined}
+                    title={blockedTitle}
                   >
                     {statusActionLabel(next)}
                   </Button>
@@ -820,8 +890,23 @@ export default function SchedulesPage() {
             </div>
           )}
 
-          {/* Approval Countdown — shown during in_review */}
-          {activeSchedule.status === "in_review" && (
+          {/* Single-step approval hint (tiers without multi-stage approval) */}
+          {activeSchedule.status === "in_review" && !requireMinistryApproval && (
+            <div className="mb-4 rounded-xl border border-vc-sand/40 bg-vc-sand/10 px-5 py-4">
+              <div className="flex items-start gap-3">
+                <svg className="h-5 w-5 shrink-0 text-vc-sand-dark mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                </svg>
+                <div className="text-sm text-vc-text-secondary">
+                  <p className="font-semibold text-vc-indigo mb-0.5">Ready to review</p>
+                  Look over the matrix below. When you&apos;re satisfied, click <strong>Approve Schedule</strong> above, then <strong>Publish</strong> to send confirmation emails to volunteers. Per-team approval is a Growth+ feature.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Multi-stage approval UI — Growth+ only */}
+          {activeSchedule.status === "in_review" && requireMinistryApproval && (
             <div className="mb-4">
               <ApprovalCountdown
                 schedule={activeSchedule}

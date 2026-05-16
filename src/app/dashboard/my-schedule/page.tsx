@@ -110,8 +110,8 @@ export default function MySchedulePage() {
           if (myPerson) myPersonId = myPerson.id;
         }
 
-        // Phase 2: fetch my assignments (indexed by person_id) + supporting data in parallel
-        const [assigns, svcs, mins, evts] = await Promise.all([
+        // Phase 2: fetch my assignments (indexed by person_id) + supporting data + schedules in parallel
+        const [assigns, svcs, mins, evts, schedules] = await Promise.all([
           myPersonId
             ? getChurchDocuments(churchId, "assignments",
                 where("person_id", "==", myPersonId),
@@ -121,10 +121,23 @@ export default function MySchedulePage() {
           getChurchDocuments(churchId, "services") as Promise<unknown[]>,
           getChurchDocuments(churchId, "ministries") as Promise<unknown[]>,
           getChurchDocuments(churchId, "events") as Promise<unknown[]>,
+          getChurchDocuments(churchId, "schedules") as Promise<unknown[]>,
         ]);
 
         if (myPersonId) {
-          myAssignments.push(...(assigns as Assignment[]));
+          // SECURITY (Codex QA 2026-05-15): volunteers must not see assignments
+          // belonging to draft/in_review/approved schedules. Only published
+          // schedule assignments may surface in My Schedule. Mirrors the
+          // Firestore rule on assignments + the iCal filter.
+          const publishedScheduleIds = new Set(
+            (schedules as { id: string; status?: string }[])
+              .filter((s) => s.status === "published")
+              .map((s) => s.id),
+          );
+          const publishedAssigns = (assigns as Assignment[]).filter(
+            (a) => publishedScheduleIds.has(a.schedule_id as string),
+          );
+          myAssignments.push(...publishedAssigns);
           const myVol = volMap.get(myPersonId);
           if (myVol) {
             ministryIds = myVol.ministry_ids || [];
@@ -167,12 +180,19 @@ export default function MySchedulePage() {
         }
       }
 
-      // Load calendar feeds for the active membership's church
+      // Load calendar feeds for the active membership's church.
+      // SECURITY (Codex QA 2026-05-15): scope to feeds the current user created.
+      // The Firestore rule rejects any read that isn't owner-matched, so the
+      // explicit `where` is required.
       let feeds: CalendarFeed[] = [];
       const feedChurchId = activeMembers[0]?.church_id || profile?.church_id;
-      if (feedChurchId && volId) {
+      if (feedChurchId && volId && user?.uid) {
         try {
-          const feedDocs = await getChurchDocuments(feedChurchId, "calendar_feeds") as unknown[];
+          const feedDocs = await getChurchDocuments(
+            feedChurchId,
+            "calendar_feeds",
+            where("created_by_user_id", "==", user.uid),
+          ) as unknown[];
           feeds = (feedDocs as CalendarFeed[]).filter((f) => f.target_id === volId);
         } catch {
           // silent

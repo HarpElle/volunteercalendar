@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { TIER_LIMITS } from "@/lib/constants";
 import type { SongUsageRecord } from "@/lib/types";
 
 /**
@@ -37,9 +38,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    // Fetch church CCLI number for the report
+    // Fetch church CCLI number AND tier for gate enforcement
     const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
-    const churchCcliNumber = (churchSnap.data()?.ccli_number as string) || "";
+    const churchData = churchSnap.data();
+    const churchCcliNumber = (churchData?.ccli_number as string) || "";
+
+    // Codex QA 2026-05-15: CSV export for CCLI is gated by tier. Landing
+    // page promises it on Growth+; constants and this endpoint now enforce
+    // that. Free/Starter get 403 with an upgrade hint.
+    const tier = (churchData?.subscription_tier as string) || "free";
+    const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
+    if (!tierLimits.ccli_csv_export) {
+      return NextResponse.json(
+        {
+          error:
+            "CCLI CSV export is included on the Growth plan and above. Upgrade your plan to unlock this report.",
+        },
+        { status: 403 },
+      );
+    }
 
     // Query song usage records
     let query: FirebaseFirestore.Query = adminDb

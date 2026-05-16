@@ -10,6 +10,7 @@ import {
   removeChurchDocument,
   updateDocument,
   getMembership,
+  where,
 } from "@/lib/firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
@@ -102,16 +103,24 @@ export default function AccountPage() {
     setPhone(formatPhoneInput(profile?.phone));
   }, [profile]);
 
-  // Load calendar feed data
+  // Load calendar feed data.
+  // SECURITY: calendar_feeds are scoped to the current user — never list other
+  // users' feeds. Backed by a matching Firestore rule. See plan
+  // i-want-you-to-iterative-spring.md Layer 1.
   useEffect(() => {
-    if (!churchId) {
+    if (!churchId || !user?.uid) {
       setLoading(false);
       return;
     }
+    const uid = user.uid;
     async function load() {
       try {
         const [feedDocs, volDocs, minDocs, churchSnap] = await Promise.all([
-          getChurchDocuments(churchId!, "calendar_feeds"),
+          getChurchDocuments(
+            churchId!,
+            "calendar_feeds",
+            where("created_by_user_id", "==", uid),
+          ),
           getChurchDocuments(churchId!, "people"),
           getChurchDocuments(churchId!, "ministries"),
           getDoc(doc(db, "churches", churchId!)),
@@ -132,7 +141,7 @@ export default function AccountPage() {
       }
     }
     load();
-  }, [churchId]);
+  }, [churchId, user?.uid]);
 
   // --- Profile handlers ---
 
@@ -340,7 +349,7 @@ export default function AccountPage() {
   }
 
   async function handleCreateIntegrationFeed() {
-    if (!churchId) return;
+    if (!churchId || !user?.uid) return;
     setCreatingIntegration(true);
     try {
       const feedData: Omit<CalendarFeed, "id"> = {
@@ -350,6 +359,7 @@ export default function AccountPage() {
         secret_token: crypto.randomUUID(),
         created_at: new Date().toISOString(),
         label: "app_integration",
+        created_by_user_id: user.uid,
       };
       const ref = await addChurchDocument(churchId, "calendar_feeds", feedData);
       setFeeds((prev) => [{ id: ref.id, ...feedData }, ...prev]);
@@ -369,16 +379,25 @@ export default function AccountPage() {
   // --- Calendar feed handlers ---
 
   async function handleCreateFeed() {
-    if (!churchId) return;
+    if (!churchId || !user?.uid) return;
     if (feedType !== "org" && !targetId) return;
     setCreating(true);
     try {
-      const feedData = {
+      const resolvedTargetId = feedType === "org" ? churchId : targetId;
+      // For personal feeds the creator IS the target person; record that link
+      // so future filters can show "feeds I created" vs "feeds others made for me".
+      const created_by_person_id =
+        feedType === "personal" && myVolunteerId === resolvedTargetId
+          ? resolvedTargetId
+          : undefined;
+      const feedData: Omit<CalendarFeed, "id"> = {
         church_id: churchId,
         type: feedType,
-        target_id: feedType === "org" ? churchId : targetId,
+        target_id: resolvedTargetId,
         secret_token: crypto.randomUUID(),
         created_at: new Date().toISOString(),
+        created_by_user_id: user.uid,
+        ...(created_by_person_id ? { created_by_person_id } : {}),
       };
       const ref = await addChurchDocument(churchId, "calendar_feeds", feedData);
       setFeeds((prev) => [{ id: ref.id, ...feedData }, ...prev]);

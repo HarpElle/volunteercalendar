@@ -53,11 +53,29 @@ const gettingStarted: HelpSection[] = [
   {
     title: "5. Review and approve",
     content: (
-      <p>
-        The draft schedule appears in the Schedule Matrix where you can review
-        assignments, make manual swaps, and resolve any conflicts. Once
-        satisfied, approve and publish the schedule.
-      </p>
+      <>
+        <p>
+          The draft schedule appears in the Schedule Matrix where you can review
+          assignments, make manual swaps, and resolve any conflicts. Once
+          satisfied, approve and publish the schedule.
+        </p>
+        <p className="mt-3">
+          <strong>How approval works depends on your plan:</strong>
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            <strong>Free &amp; Starter:</strong> the owner approves and publishes
+            in one step — no per-team gates.
+          </li>
+          <li>
+            <strong>Growth and Pro:</strong> multi-stage approval is unlocked.
+            Each ministry lead approves their team&apos;s section first; the
+            admin can then publish. The Approve button stays disabled until
+            every team signs off, and hovering it shows which teams are still
+            pending.
+          </li>
+        </ul>
+      </>
     ),
   },
   {

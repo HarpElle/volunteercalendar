@@ -35,6 +35,22 @@ const RECURRENCE_OPTIONS: { value: RecurrencePattern; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
+/**
+ * Format a bare "HH:MM" time string for the "Will save as" preview line.
+ * Returns "10:00 AM" style. Returns "—" for empty input.
+ * No timezone conversion — the stored value is whatever the user picked,
+ * interpreted at display time in the org's configured timezone.
+ */
+function formatTimeLabel(time: string): string {
+  if (!time) return "—";
+  const [h, m] = time.split(":");
+  const hour = Number(h);
+  if (Number.isNaN(hour)) return time;
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${display}:${m} ${ampm}`;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -357,12 +373,17 @@ export function ServiceFormModal({
               required
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
+              // Defense in depth (Codex QA 2026-05-15): <input type="time">
+              // in Chrome doesn't always fire `change` on arrow-key edits.
+              // onBlur catches the final value when the user tabs away.
+              onBlur={(e) => setStartTime(e.target.value)}
             />
             <Input
               label="Default End Time"
               type="time"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
+              onBlur={(e) => setEndTime(e.target.value)}
             />
           </div>
         )}
@@ -372,6 +393,16 @@ export function ServiceFormModal({
             ? "No specific times \u2014 each ministry can set its own time window below."
             : "Default times for the service. Each ministry can override these below."}
         </p>
+
+        {/* Visible preview so the user can verify what will be saved.
+            Catches the case where the browser's time picker didn't actually
+            commit a typed/scrolled value. */}
+        {!allDay && (startTime || endTime) && (
+          <p className="-mt-1 rounded-md bg-vc-bg-warm px-3 py-1.5 text-xs text-vc-text-secondary">
+            Will save as: <strong className="text-vc-indigo">{formatTimeLabel(startTime)}</strong>
+            {endTime ? <> &ndash; <strong className="text-vc-indigo">{formatTimeLabel(endTime)}</strong></> : ""}
+          </p>
+        )}
 
         {/* Ministry sections */}
         <div>
@@ -423,6 +454,7 @@ export function ServiceFormModal({
                           className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
                           value={fm.start_time || ""}
                           onChange={(e) => updateMinistryField(fm.id, "start_time", e.target.value || null)}
+                          onBlur={(e) => updateMinistryField(fm.id, "start_time", e.target.value || null)}
                         />
                         <span className="text-xs text-vc-text-muted">&ndash;</span>
                         <input
@@ -430,6 +462,7 @@ export function ServiceFormModal({
                           className="rounded-md border border-vc-border bg-white px-2 py-1.5 text-xs text-vc-text focus:border-vc-coral focus:outline-none"
                           value={fm.end_time || ""}
                           onChange={(e) => updateMinistryField(fm.id, "end_time", e.target.value || null)}
+                          onBlur={(e) => updateMinistryField(fm.id, "end_time", e.target.value || null)}
                         />
                         <button
                           type="button"

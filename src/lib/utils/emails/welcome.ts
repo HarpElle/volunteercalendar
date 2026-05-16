@@ -61,7 +61,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): {
               ${ctaButton("https://volunteercal.com/dashboard", "Go to Your Dashboard")}
 
               <p style="margin:0;font-size:14px;line-height:1.6;color:#4A4A6A;">
-                If you have any questions or run into anything, just reply to this email \u2014 we're happy to help.
+                Questions or feedback? Email <a href="mailto:info@volunteercal.com" style="color:#E07A5F;text-decoration:none;">info@volunteercal.com</a> \u2014 we read every message.
               </p>`;
 
   const html = wrapInLayout({
@@ -85,7 +85,7 @@ Here's how to get started:
 
 Go to your dashboard: https://volunteercal.com/dashboard
 
-If you have any questions, just reply to this email \u2014 we're happy to help.
+Questions or feedback? Email info@volunteercal.com \u2014 we read every message.
 
 \u2014
 VolunteerCal \u00b7 Thoughtfully built by HarpElle`;
@@ -110,10 +110,10 @@ export function buildAccountCreatedEmail(data: AccountCreatedEmailData): {
                 Hi ${firstName},
               </p>
               <p ${P}>
-                Your VolunteerCal account has been created. You can now view your schedule, set your availability, and stay connected with your team.
+                Your VolunteerCal account is ready. As soon as you're added to an organization (or you accept an invite), you'll see your upcoming assignments, set your availability, and manage your schedule from the dashboard.
               </p>
               <p ${P_LAST}>
-                Once you join an organization, you'll be able to see your assignments, manage blockout dates, and confirm or decline when you're scheduled to serve.
+                Questions? Email <a href="mailto:info@volunteercal.com" style="color:#E07A5F;text-decoration:none;">info@volunteercal.com</a>.
               </p>
 
               ${ctaButton("https://volunteercal.com/dashboard", "Go to Your Dashboard")}`;
@@ -128,9 +128,9 @@ export function buildAccountCreatedEmail(data: AccountCreatedEmailData): {
 
 Hi ${firstName},
 
-Your VolunteerCal account has been created. You can now view your schedule, set your availability, and stay connected with your team.
+Your VolunteerCal account is ready. As soon as you're added to an organization (or you accept an invite), you'll see your upcoming assignments, set your availability, and manage your schedule from the dashboard.
 
-Once you join an organization, you'll be able to see your assignments, manage blockout dates, and confirm or decline when you're scheduled to serve.
+Questions? Email info@volunteercal.com.
 
 Go to your dashboard: https://volunteercal.com/dashboard
 

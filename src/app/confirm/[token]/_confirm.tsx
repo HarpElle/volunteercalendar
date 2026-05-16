@@ -34,12 +34,28 @@ export default function ConfirmPage() {
   const [swapLoading, setSwapLoading] = useState(false);
 
   useEffect(() => {
+    // Hard timeout — if the API hangs or the page lifecycle gets stuck, flip
+    // to error after 10s so the user never stares at "Loading..." forever.
+    // Codex QA 2026-05-15: `/confirm/badtoken` was reported stuck on Loading.
+    const abort = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      abort.abort();
+    }, 10_000);
+
     async function load() {
       try {
-        const res = await fetch(`/api/confirm?token=${encodeURIComponent(token)}`);
+        const res = await fetch(
+          `/api/confirm?token=${encodeURIComponent(token)}`,
+          { signal: abort.signal },
+        );
         if (!res.ok) {
-          const err = await res.json();
-          setError(err.error || "Assignment not found");
+          let errBody: { error?: string } = {};
+          try {
+            errBody = await res.json();
+          } catch {
+            // ignore — fall through to default message
+          }
+          setError(errBody.error || "Assignment not found");
           setState("error");
           return;
         }
@@ -52,12 +68,25 @@ export default function ConfirmPage() {
         } else {
           setState("ready");
         }
-      } catch {
-        setError("Unable to load assignment details");
+      } catch (err) {
+        // AbortError fires when the 10s timeout aborts the fetch.
+        const isAbort = err instanceof DOMException && err.name === "AbortError";
+        setError(
+          isAbort
+            ? "This is taking longer than expected. Please refresh the page or contact your church administrator."
+            : "Unable to load assignment details.",
+        );
         setState("error");
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     }
     load();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      abort.abort();
+    };
   }, [token]);
 
   async function handleAction(action: "confirm" | "decline") {

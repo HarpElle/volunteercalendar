@@ -1,7 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { getBaseUrl } from "@/lib/utils/base-url";
+import { buildEventSignupConfirmationEmail } from "@/lib/utils/emails";
 import type { Event, Church, EventSignup } from "@/lib/types";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+function formatEventDate(iso: string): string {
+  // iso may be a date-only string like "2026-04-12"; render as "Saturday, April 12, 2026"
+  const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
+  return d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatEventTime(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  allDay: boolean | undefined,
+): string {
+  if (allDay) return "All day";
+  if (!start) return "TBD";
+  function fmt(t: string): string {
+    const [h, m] = t.split(":");
+    const hour = Number(h);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${display}:${m} ${ampm}`;
+  }
+  return end ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
+}
 
 /**
  * GET /api/signup?eventId=xxx
@@ -187,6 +220,42 @@ export async function POST(req: NextRequest) {
     };
 
     const ref = await adminDb.collection("event_signups").add(signupData);
+
+    // Codex QA 2026-05-15: send a confirmation email so the volunteer has a
+    // record of what they signed up for. Fire-and-forget — failures must not
+    // break the signup response.
+    if (process.env.RESEND_API_KEY && volunteer_email) {
+      const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
+      const churchName = (churchSnap.data()?.name as string) || "the church";
+      const eventDate = formatEventDate(event.date || "");
+      const eventTime = formatEventTime(
+        event.start_time,
+        event.end_time,
+        event.all_day,
+      );
+      const eventUrl = `${getBaseUrl(req)}/events/${church_id}/${event_id}`;
+      const { subject, html, text } = buildEventSignupConfirmationEmail({
+        recipientName: volunteer_name || volunteer_email,
+        eventName: event.name || "Event",
+        eventDate,
+        eventTime,
+        roleTitle,
+        churchName,
+        eventUrl,
+      });
+      resend.emails
+        .send({
+          from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+          replyTo: "info@volunteercal.com",
+          to: [volunteer_email],
+          subject,
+          html,
+          text,
+        })
+        .catch((emailErr) => {
+          console.error("[POST /api/signup] confirmation email failed:", emailErr);
+        });
+    }
 
     return NextResponse.json({ id: ref.id, ...signupData }, { status: 201 });
   } catch (err) {
