@@ -39,14 +39,22 @@ export async function GET(request: Request) {
     const feedType = (feed.type as string) || "personal";
     const targetId = feed.target_id as string;
 
+    // SECURITY (Codex QA 2026-05-15): personal/team feeds must resolve to a
+    // real target. Refuse if target_id is missing — guards against corrupted
+    // or partially-deleted feeds serving stale assignments.
+    if ((feedType === "personal" || feedType === "team") && !targetId) {
+      return new NextResponse("Feed not found", { status: 404 });
+    }
+
     // Fetch church for timezone + name
     const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
     const church = churchSnap.exists ? churchSnap.data() : null;
     const timezone = (church?.timezone as string) || "America/New_York";
     const churchName = (church?.name as string) || "Church";
 
-    // Fetch assignments and supporting data in parallel
-    const [assignSnap, servicesSnap, ministriesSnap, peopleSnap] =
+    // Fetch assignments, supporting data, AND schedules in parallel. Schedules
+    // are required to filter out non-published assignments.
+    const [assignSnap, servicesSnap, ministriesSnap, peopleSnap, schedulesSnap] =
       await Promise.all([
         adminDb
           .collection("churches")
@@ -68,6 +76,11 @@ export async function GET(request: Request) {
           .doc(churchId)
           .collection("people")
           .get(),
+        adminDb
+          .collection("churches")
+          .doc(churchId)
+          .collection("schedules")
+          .get(),
       ]);
 
     const serviceMap = new Map(
@@ -79,10 +92,20 @@ export async function GET(request: Request) {
     const volunteerMap = new Map(
       peopleSnap.docs.map((d) => [d.id, d.data()]),
     );
-    let assignments = assignSnap.docs.map((d) => ({
+
+    // SECURITY (Codex QA 2026-05-15): collect IDs of published schedules.
+    // Drafts, in_review, and approved schedules must NEVER bleed into iCal.
+    const publishedScheduleIds = new Set(
+      schedulesSnap.docs
+        .filter((d) => (d.data().status as string) === "published")
+        .map((d) => d.id),
+    );
+
+    let assignments = (assignSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
-    })) as Record<string, unknown>[];
+    })) as Record<string, unknown>[])
+      .filter((a) => publishedScheduleIds.has(a.schedule_id as string));
 
     // Filter assignments and build calendar name based on feed type
     let calendarName = `${churchName} - Volunteer Schedule`;
@@ -118,7 +141,6 @@ export async function GET(request: Request) {
           description: [
             `Ministry: ${(ministry?.name as string) || "Unknown"}`,
             `Role: ${a.role_title}`,
-            `Status: ${a.status}`,
           ].join("\n"),
           dtstart: a.service_date as string,
           startTime: (service?.start_time as string) || "09:00",

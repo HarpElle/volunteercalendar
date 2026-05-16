@@ -338,8 +338,8 @@ function SetupContent() {
                         {mode.label}
                       </p>
                       {!isAvailable && (
-                        <span className="rounded-full bg-vc-bg-cream px-2 py-0.5 text-[10px] font-medium text-vc-text-muted">
-                          Coming soon
+                        <span className="rounded-full bg-vc-sand/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-vc-sand-dark">
+                          Starter+
                         </span>
                       )}
                     </div>

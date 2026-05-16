@@ -99,9 +99,46 @@ beforeEach(async () => {
     await set(`churches/${CHURCH_A}/people/p1`, { name: "Alice" });
     await set(`churches/${CHURCH_A}/ministries/m1`, { name: "Worship" });
     await set(`churches/${CHURCH_A}/services/s1`, { name: "Sunday" });
+
+    // Codex QA 2026-05-15 — assignment reads now require the parent schedule
+    // to be `published` for non-scheduler members. Seed both a published and a
+    // draft schedule so the new tests can exercise both branches.
+    await set(`churches/${CHURCH_A}/schedules/sched_published`, {
+      church_id: CHURCH_A,
+      status: "published",
+    });
+    await set(`churches/${CHURCH_A}/schedules/sched_draft`, {
+      church_id: CHURCH_A,
+      status: "draft",
+    });
     await set(`churches/${CHURCH_A}/assignments/a1`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
+      schedule_id: "sched_published",
+    });
+    await set(`churches/${CHURCH_A}/assignments/a_draft`, {
+      person_id: VOLUNTEER_A,
+      service_id: "s1",
+      schedule_id: "sched_draft",
+    });
+
+    // Codex QA 2026-05-15 — calendar_feeds are now owner-scoped (read/write).
+    // Seed feeds owned by OWNER_A and (cross-test) by ADMIN_A.
+    await set(`churches/${CHURCH_A}/calendar_feeds/feed_owner`, {
+      church_id: CHURCH_A,
+      type: "personal",
+      target_id: "p1",
+      secret_token: "tok-owner",
+      created_at: "2026-01-01T00:00:00Z",
+      created_by_user_id: OWNER_A,
+    });
+    await set(`churches/${CHURCH_A}/calendar_feeds/feed_admin`, {
+      church_id: CHURCH_A,
+      type: "personal",
+      target_id: "p1",
+      secret_token: "tok-admin",
+      created_at: "2026-01-01T00:00:00Z",
+      created_by_user_id: ADMIN_A,
     });
     await set(`churches/${CHURCH_A}/children/c1`, {
       first_name: "Sam",
@@ -299,6 +336,94 @@ describe("Firestore rules — unauthenticated access", () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertSucceeds(
       getDoc(doc(ctx.firestore(), "stage_sync_live/random-token")),
+    );
+  });
+});
+
+/**
+ * Codex QA 2026-05-15 — Calendar feed permission leak fix.
+ *
+ * The bug: account page listed every feed in the church to every member, and
+ * iCal API served any feed token to anyone. Rules now require
+ * `created_by_user_id == request.auth.uid` for read/write.
+ */
+describe("Firestore rules — calendar_feeds owner scoping (Codex QA Layer 1)", () => {
+  it("Owner CAN read their own calendar feed", async () => {
+    const ctx = testEnv.authenticatedContext(OWNER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_owner`)),
+    );
+  });
+
+  it("Admin CAN read their own calendar feed", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_admin`)),
+    );
+  });
+
+  it("Volunteer CANNOT read another user's feed (the leaked-feed bug)", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_owner`)),
+    );
+  });
+
+  it("Admin CANNOT read the owner's feed (admin/scheduler is NOT a backdoor)", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_owner`)),
+    );
+  });
+
+  it("Non-member CANNOT read any feed", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_B);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_owner`)),
+    );
+  });
+
+  it("Unauthenticated CANNOT read any feed", async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/calendar_feeds/feed_owner`)),
+    );
+  });
+});
+
+/**
+ * Codex QA 2026-05-15 — Draft assignment visibility fix.
+ *
+ * The bug: volunteers saw `Draft` assignments in My Schedule before publish,
+ * with Can't-Make-It and Remove actions but no Confirm/Decline. Rules now
+ * gate volunteer reads on the parent schedule being `published`.
+ */
+describe("Firestore rules — assignment published-only filter (Codex QA Layer 1)", () => {
+  it("Volunteer CAN read assignment whose schedule is published", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a1`)),
+    );
+  });
+
+  it("Volunteer CANNOT read assignment whose schedule is draft", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    );
+  });
+
+  it("Admin CAN read assignment from a draft schedule (scheduler-or-above bypass)", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    );
+  });
+
+  it("Owner CAN read assignment from a draft schedule", async () => {
+    const ctx = testEnv.authenticatedContext(OWNER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
     );
   });
 });

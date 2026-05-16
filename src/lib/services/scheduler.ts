@@ -216,9 +216,18 @@ function getHouseholdPreferenceBonus(
   return hasFamilyOnSameService ? 0.5 : 0;
 }
 
-function canServeInMinistry(volunteer: Person, ministryId: string): boolean {
-  // If volunteer has no ministry assignments, they can serve anywhere (flexible)
-  return volunteer.ministry_ids.length === 0 || volunteer.ministry_ids.includes(ministryId);
+/**
+ * STRICT eligibility (Codex QA 2026-05-15): volunteers must be explicitly
+ * added to a team to be auto-assigned to that team's service roles.
+ * Previously an empty `ministry_ids` array was treated as a wildcard, which
+ * meant brand-new volunteers got auto-assigned to every team. Volunteers
+ * who aren't on any team can still sign up for events (events don't go
+ * through this function — see /api/signup/route.ts).
+ *
+ * Exported for regression tests in tests/unit/scheduler-eligibility.test.ts.
+ */
+export function canServeInMinistry(volunteer: Person, ministryId: string): boolean {
+  return volunteer.ministry_ids.includes(ministryId);
 }
 
 function canServeInRole(volunteer: Person, roleId: string): boolean {

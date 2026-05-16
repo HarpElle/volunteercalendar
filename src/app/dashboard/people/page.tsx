@@ -79,6 +79,9 @@ function PeopleContent() {
   // Data
   const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  // Codex QA 2026-05-15: pending_invites covers invites sent to emails that
+  // don't yet have an account. Counted alongside pending memberships.
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [churchName, setChurchName] = useState("");
@@ -145,6 +148,9 @@ function PeopleContent() {
           (data.queueItems as InviteQueueItem[]).filter(
             (i) => i.status === "pending_review" || i.status === "approved",
           ),
+        );
+        setPendingInviteCount(
+          Array.isArray(data.pendingInvites) ? data.pendingInvites.length : 0,
         );
         if (data.church) {
           setChurchName(data.church.name || "");
@@ -242,6 +248,13 @@ function PeopleContent() {
   const pendingMems = memberships.filter(
     (m) => m.status === "pending_org_approval" || m.status === "pending_volunteer_approval",
   );
+  // Total "pending invite" count combines:
+  //   • pending memberships (invitee has an account)
+  //   • pending_invites (invitee hasn't registered yet)
+  // Codex QA: previously the count stayed 0 until the invitee registered
+  // because /api/invite writes to pending_invites for not-yet-registered emails
+  // and the People page only looked at memberships.
+  const pendingInviteTotal = pendingMems.length + pendingInviteCount;
 
   // Build unified roster: start with volunteers, enrich with membership data
   const rosterPeople = volunteers.map((v) => {
@@ -533,7 +546,7 @@ function PeopleContent() {
         <div>
           <h1 className="font-display text-3xl text-vc-indigo">Volunteers</h1>
           <p className="mt-1 text-vc-text-secondary">
-            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingMems.length} pending
+            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -629,7 +642,7 @@ function PeopleContent() {
       <TabBar
         tabs={[
           { key: "roster" as const, label: `Roster (${volunteers.length})` },
-          ...(canManage ? [{ key: "invites" as const, label: `Invites (${pendingMems.length})` }] : []),
+          ...(canManage ? [{ key: "invites" as const, label: `Invites (${pendingInviteTotal})` }] : []),
           ...(canManage ? [{ key: "families" as const, label: `Families (${households.length})` }] : []),
         ]}
         active={tab}
@@ -803,13 +816,21 @@ function PeopleContent() {
             user={user}
             ministries={ministries}
             onInvited={async () => {
-              if (churchId) {
-                const t = await getAuth().currentUser?.getIdToken();
-                const r = await fetch(`/api/memberships?church_id=${encodeURIComponent(churchId)}`, {
-                  headers: { Authorization: `Bearer ${t}` },
-                });
-                if (r.ok) setMemberships(await r.json());
-              }
+              if (!churchId) return;
+              // Refetch the whole people-data so both pending memberships
+              // AND pending_invites (invitees without accounts yet) reflect
+              // immediately in the Invites tab count. Codex QA Layer 7.
+              const t = await getAuth().currentUser?.getIdToken();
+              const res = await fetch(
+                `/api/people-data?church_id=${encodeURIComponent(churchId)}`,
+                { headers: { Authorization: `Bearer ${t}` } },
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              setMemberships(data.memberships as Membership[]);
+              setPendingInviteCount(
+                Array.isArray(data.pendingInvites) ? data.pendingInvites.length : 0,
+              );
             }}
           />
 

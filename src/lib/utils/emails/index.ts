@@ -13,6 +13,7 @@ export { buildInviteEmail } from "./invite";
 export { buildReminderEmail, buildReminderSms } from "./reminder";
 export { buildMembershipApprovedEmail } from "./membership-approved";
 export { buildEventInviteEmail } from "./event-invite";
+export { buildEventSignupConfirmationEmail } from "./event-signup-confirmation";
 export { buildOrgDeletedEmail } from "./org-deleted";
 export { buildAccountDeletedEmail } from "./account-deleted";
 export { buildVacancyAlertEmail } from "./vacancy-alert";

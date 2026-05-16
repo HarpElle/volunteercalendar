@@ -18,15 +18,26 @@ export default function JoinChurchPage() {
   const [churchName, setChurchName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState<"idle" | "already_member" | "pending" | "success" | "not_found">("idle");
+  const [status, setStatus] = useState<"idle" | "already_member" | "pending" | "success" | "not_found" | "load_failed">("idle");
   const [error, setError] = useState("");
 
-  // Load church info and check existing membership
+  // Load church info and check existing membership.
+  // Codex QA 2026-05-15: previously the page could go effectively-blank on
+  // unusual API failure modes (load timeout, churchName null but status idle).
+  // Now: any failure flips to a clear `load_failed` UI; 10s timeout caps load.
   useEffect(() => {
+    const abort = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      abort.abort();
+    }, 10_000);
+
     async function load() {
       // 1. Fetch church info
       try {
-        const res = await fetch(`/api/church-info?id=${encodeURIComponent(churchId)}`);
+        const res = await fetch(
+          `/api/church-info?id=${encodeURIComponent(churchId)}`,
+          { signal: abort.signal },
+        );
         if (res.status === 404) {
           setStatus("not_found");
           setLoading(false);
@@ -36,7 +47,8 @@ export default function JoinChurchPage() {
         const church = await res.json();
         setChurchName(church.name || "this organization");
       } catch {
-        setError("Failed to load organization info.");
+        setStatus("load_failed");
+        setError("We couldn't load this organization. Please check the link or try again.");
         setLoading(false);
         return;
       }
@@ -65,7 +77,15 @@ export default function JoinChurchPage() {
       }
       setLoading(false);
     }
-    if (!authLoading) load();
+    if (!authLoading) {
+      load().finally(() => window.clearTimeout(timeoutId));
+    } else {
+      window.clearTimeout(timeoutId);
+    }
+    return () => {
+      window.clearTimeout(timeoutId);
+      abort.abort();
+    };
   }, [churchId, user, authLoading, router]);
 
   async function handleJoin(e: FormEvent) {
@@ -134,8 +154,34 @@ export default function JoinChurchPage() {
                 Organization Not Found
               </h1>
               <p className="text-center text-vc-text-secondary">
-                This link doesn't match any organization on VolunteerCal. Check with your admin for the correct invite link.
+                This link doesn&apos;t match any organization on VolunteerCal. Check with your admin for the correct invite link.
               </p>
+              <div className="mt-6 text-center">
+                <Link href="/" className="text-sm text-vc-coral hover:underline">
+                  Visit VolunteerCal home &rarr;
+                </Link>
+              </div>
+            </>
+          )}
+
+          {status === "load_failed" && (
+            <>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-vc-danger/10">
+                <svg className="h-7 w-7 text-vc-danger" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+              </div>
+              <h1 className="font-display text-2xl text-vc-indigo text-center mb-3">
+                Couldn&apos;t Load Organization
+              </h1>
+              <p className="text-center text-vc-text-secondary">
+                {error || "Something went wrong loading this invite link."}
+              </p>
+              <div className="mt-6 flex justify-center">
+                <Button onClick={() => window.location.reload()} variant="outline" size="md">
+                  Try again
+                </Button>
+              </div>
             </>
           )}
 

@@ -104,10 +104,13 @@ export default function DashboardLayout({
   const userIsScheduler = isScheduler(activeMembership);
   const isVolunteerOnly = activeMembership && !userIsScheduler;
 
-  // Redirect volunteers from /dashboard to /dashboard/my-schedule
+  // Redirect logged-out visitors to /login (not the landing page) so the
+  // intent is clear. Codex QA 2026-05-15: previously redirected to "/"
+  // and showed a blank page during the redirect window. Now we keep the
+  // spinner visible until React Router lands them on /login.
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/");
+      router.replace("/login");
     }
   }, [loading, user, router]);
 
@@ -122,15 +125,15 @@ export default function DashboardLayout({
     router.push("/");
   }, [signOut, router]);
 
-  if (loading) {
+  // Show the spinner during initial auth resolution AND while the redirect
+  // is in flight for logged-out users — eliminates the blank-page window.
+  if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-vc-bg">
         <Spinner size="lg" />
       </div>
     );
   }
-
-  if (!user) return null;
 
   return (
     <div className="flex min-h-screen bg-vc-bg">

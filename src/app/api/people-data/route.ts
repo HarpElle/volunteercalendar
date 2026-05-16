@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
       hhSnap,
       churchDoc,
       queueSnap,
+      pendingInvitesSnap,
     ] = await Promise.all([
       churchRef.collection("people").get(),
       churchRef.collection("ministries").get(),
@@ -58,6 +59,10 @@ export async function GET(req: NextRequest) {
       churchRef.collection("households").get(),
       churchRef.get(),
       churchRef.collection("invite_queue").get(),
+      // Codex QA 2026-05-15: pending_invites holds invites sent to people who
+      // don't yet have an account. Without this, the People-page pending
+      // count showed 0 until the invitee registered. See plan Layer 7.
+      adminDb.collection("pending_invites").where("church_id", "==", churchId).get(),
     ]);
 
     type Doc = Record<string, unknown> & { id: string };
@@ -91,6 +96,7 @@ export async function GET(req: NextRequest) {
     const services: Doc[] = svcsSnap.docs.map(toDoc);
     const households: Doc[] = hhSnap.docs.map(toDoc);
     const queueItems: Doc[] = queueSnap.docs.map(toDoc);
+    const pendingInvites: Doc[] = pendingInvitesSnap.docs.map(toDoc);
 
     // Enrich memberships with user display data (Admin SDK bypasses self-read-only rule)
     const uniqueUserIds = [...new Set(
@@ -216,6 +222,7 @@ export async function GET(req: NextRequest) {
       households,
       church,
       queueItems,
+      pendingInvites,
     });
   } catch (err) {
     console.error("[API /people-data] Error:", err);

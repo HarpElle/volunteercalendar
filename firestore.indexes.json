@@ -226,6 +226,14 @@
       ]
     },
     {
+      "collectionGroup": "short_links",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "slug", "order": "ASCENDING" },
+        { "fieldPath": "expires_at", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "feedback",
       "queryScope": "COLLECTION",
       "fields": [

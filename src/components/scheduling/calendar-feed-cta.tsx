@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { addChurchDocument } from "@/lib/firebase/firestore";
+import { useAuth } from "@/lib/context/auth-context";
 import type { CalendarFeed, Ministry } from "@/lib/types";
 
 interface CalendarFeedCtaProps {
@@ -22,6 +23,7 @@ export function CalendarFeedCta({
   ministries,
   existingFeeds,
 }: CalendarFeedCtaProps) {
+  const { user } = useAuth();
   const [choice, setChoice] = useState<FeedChoice>("personal");
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -44,23 +46,29 @@ export function CalendarFeedCta({
   const webcalUrl = feedUrl ? feedUrl.replace(/^https:\/\//, "webcal://") : null;
 
   async function createFeed() {
+    if (!user?.uid) return;
     setCreating(true);
     try {
       const token = crypto.randomUUID();
+      const created_at = new Date().toISOString();
       const newFeed: CalendarFeed = {
         id: crypto.randomUUID(),
         church_id: churchId,
         type: choice,
         target_id: volunteerId,
         secret_token: token,
-        created_at: new Date().toISOString(),
+        created_at,
+        created_by_user_id: user.uid,
+        created_by_person_id: volunteerId,
       };
       await addChurchDocument(churchId, "calendar_feeds", {
         church_id: churchId,
         type: choice,
         target_id: volunteerId,
         secret_token: token,
-        created_at: newFeed.created_at,
+        created_at,
+        created_by_user_id: user.uid,
+        created_by_person_id: volunteerId,
       });
       // Optimistic update — add feed to local state without page reload
       setLocalFeeds((prev) => [...prev, newFeed]);

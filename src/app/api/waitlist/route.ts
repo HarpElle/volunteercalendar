@@ -1,48 +1,76 @@
 import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 
+/**
+ * POST /api/waitlist
+ *
+ * Public endpoint — accepts contact/waitlist form submissions from the
+ * landing page. Stored in the top-level `waitlist` collection.
+ *
+ * Codex QA 2026-05-15: this route previously used the CLIENT Firebase SDK,
+ * which respects Firestore security rules. The rule
+ *   match /waitlist/{docId} { allow read, write: if false; }
+ * was therefore blocking every submission, returning "Failed to save
+ * submission" to the user. Server routes must use the Admin SDK to
+ * bypass rules. See plan i-want-you-to-iterative-spring.md Layer 5.
+ */
 export async function POST(request: Request) {
   const limited = rateLimit(request, { limit: 5, windowMs: 60_000 });
   if (limited) return limited;
 
+  let body: Record<string, unknown>;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 },
+    );
+  }
 
-    const { name, email, church_name, team_size, current_tool, workflow_preference, phone } = body;
+  const {
+    name,
+    email,
+    church_name,
+    team_size,
+    current_tool,
+    workflow_preference,
+    phone,
+  } = body as {
+    name?: string;
+    email?: string;
+    church_name?: string;
+    team_size?: number | string;
+    current_tool?: string;
+    workflow_preference?: string;
+    phone?: string;
+  };
 
-    // Validate required fields
-    if (!name || !email || !church_name || !current_tool || !workflow_preference) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
-    }
+  // Validate required fields
+  if (
+    !name
+    || !email
+    || !church_name
+    || !current_tool
+    || !workflow_preference
+  ) {
+    return NextResponse.json(
+      { error: "Missing required fields" },
+      { status: 400 },
+    );
+  }
 
-    // Validate email format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { error: "Invalid email address" },
-        { status: 400 },
-      );
-    }
+  // Validate email format
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json(
+      { error: "Invalid email address" },
+      { status: 400 },
+    );
+  }
 
-    // Import Firebase dynamically to avoid client-side bundle issues
-    const { collection, addDoc, getFirestore } = await import("firebase/firestore");
-    const { initializeApp, getApps, getApp } = await import("firebase/app");
-
-    const firebaseConfig = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    };
-
-    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    const db = getFirestore(app);
-
-    await addDoc(collection(db, "waitlist"), {
+  try {
+    await adminDb.collection("waitlist").add({
       name,
       email,
       church_name,
@@ -55,9 +83,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Waitlist submission error:", error);
+    // Specific logging so future Sentry signals are actionable.
+    console.error("[POST /api/waitlist] Firestore write failed:", error);
     return NextResponse.json(
-      { error: "Failed to save submission" },
+      {
+        error:
+          "We couldn't save your submission. Please email info@volunteercal.com and we'll follow up.",
+      },
       { status: 500 },
     );
   }

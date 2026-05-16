@@ -11,7 +11,7 @@ import { StepTypeIcon } from "@/components/ui/step-type-icon";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
-import { normalizePhone, formatPhone } from "@/lib/utils/phone";
+import { normalizePhone, formatPhone, formatPhoneInput } from "@/lib/utils/phone";
 import { updateChurchDocument, updateMembershipPermissions } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
 import type { PermissionFlag } from "@/lib/types";
@@ -90,9 +90,12 @@ export function PersonDetailDrawer({
   const [editMode, setEditMode] = useState(false);
 
   // --- Profile edit state ---
+  // Codex QA 2026-05-15: phone is stored as digits-only, but the EDIT field
+  // should show it formatted ("(555) 010-1234") so it doesn't look like raw
+  // database state. formatPhoneInput returns empty string for empty input.
   const [name, setName] = useState(volunteer.name);
   const [email, setEmail] = useState(volunteer.email);
-  const [phone, setPhone] = useState(volunteer.phone || "");
+  const [phone, setPhone] = useState(formatPhoneInput(volunteer.phone));
   const [selectedMinistries, setSelectedMinistries] = useState<string[]>(volunteer.ministry_ids);
   const [selectedRoles, setSelectedRoles] = useState<string[]>(volunteer.role_ids);
   const [bgCheckStatus, setBgCheckStatus] = useState(volunteer.background_check?.status || "not_required");
@@ -142,7 +145,7 @@ export function PersonDetailDrawer({
       setAccessOpen(false);
       setName(volunteer.name);
       setEmail(volunteer.email);
-      setPhone(volunteer.phone || "");
+      setPhone(formatPhoneInput(volunteer.phone));
       setSelectedMinistries(volunteer.ministry_ids);
       setSelectedRoles(volunteer.role_ids);
       setBgCheckStatus(volunteer.background_check?.status || "not_required");
@@ -493,7 +496,7 @@ export function PersonDetailDrawer({
                     onClick={() => {
                       setName(volunteer.name);
                       setEmail(volunteer.email);
-                      setPhone(volunteer.phone || "");
+                      setPhone(formatPhoneInput(volunteer.phone));
                       setEditMode(false);
                     }}
                   >

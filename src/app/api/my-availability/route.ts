@@ -82,6 +82,8 @@ export async function PATCH(req: NextRequest) {
         preferred_frequency?: number;
         max_roles_per_month?: number;
         preferred_weeks?: number[];
+        // Codex QA 2026-05-15 wishlist: free-text notes for the scheduler.
+        notes?: string | null;
       };
     };
 
@@ -140,6 +142,18 @@ export async function PATCH(req: NextRequest) {
     if (Array.isArray(availability.preferred_weeks)) {
       update["scheduling_profile.preferred_weeks"] =
         availability.preferred_weeks;
+    }
+    if (
+      typeof availability.notes === "string"
+      || availability.notes === null
+      || availability.notes === undefined
+    ) {
+      // Send "" through to clear; cap at 500 chars defensively in case the
+      // client bypasses the textarea's maxLength.
+      const trimmed = typeof availability.notes === "string"
+        ? availability.notes.slice(0, 500).trim()
+        : "";
+      update["scheduling_profile.notes"] = trimmed || null;
     }
 
     if (Object.keys(update).length === 0) {

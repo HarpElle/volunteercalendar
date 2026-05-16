@@ -20,6 +20,8 @@ VolunteerCal/
 ├── docs/                       # Scaling assessment, roadmap, test plan
 ├── middleware.ts                # Centralized route redirects (old URLs → new pages)
 ├── CLAUDE.md                   # Claude Code conventions
+├── intense-review-codex.md      # External-style production audit findings and remediation plan
+├── intense-review-codex-2.md    # Synthesized audit across Codex, Claude, Gemini, and Vercel docs
 ├── PROJECT_OVERVIEW.md         # This file
 ├── README.md                   # Public-facing README
 ├── package.json

@@ -606,6 +606,10 @@ export interface CalendarFeed {
   secret_token: string;
   created_at: string;
   label?: string;
+  /** Firebase Auth UID of the user who created this feed. Authoritative owner; required for permission checks. */
+  created_by_user_id: string;
+  /** Person doc ID linked to the creator, when known. Lets schedulers see "I created this for Alex" without exposing it to other users. */
+  created_by_person_id?: string;
 }
 
 // --- Short Links ---
@@ -1437,6 +1441,12 @@ export interface SchedulingProfile {
   max_roles_per_month: number;
   /** Week-of-month preferences: [1, 3] = prefers 1st and 3rd weeks */
   preferred_weeks?: number[];
+  /**
+   * Free-text note from the volunteer for schedulers (e.g. "prefer morning
+   * services", "needs childcare"). Optional. Visible in the schedule matrix
+   * person-picker. Codex QA 2026-05-15: added per tester wishlist.
+   */
+  notes?: string;
 }
 
 /** Child-specific data embedded on a Person document (children only). */
