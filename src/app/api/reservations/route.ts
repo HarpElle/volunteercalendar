@@ -49,6 +49,55 @@ async function resolveRequesterName(
  * Check for time overlaps with existing reservations on the same room + date.
  * Returns array of conflicting reservation IDs.
  */
+/**
+ * Conflict descriptor returned to the booking UI's ReservationConflictModal.
+ * Shape must match `ConflictingReservation` in
+ * src/components/rooms/reservation-conflict-modal.tsx.
+ */
+export interface ConflictDetail {
+  id: string;
+  title: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  requested_by_name: string;
+}
+
+/**
+ * Open-interval overlap check: two reservations on the same room+date
+ * conflict iff `aStart < bEnd && bStart < aEnd`. Back-to-back bookings
+ * (one ends at 10:00, next starts at 10:00) do NOT conflict.
+ *
+ * Exported for unit tests so the overlap contract can be pinned without
+ * booting Firestore.
+ */
+export function intervalsOverlap(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/** Reservation statuses that no longer claim the time slot. */
+const NON_BLOCKING_STATUSES = new Set(["cancelled", "denied"]);
+
+function toConflictDetail(
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+): ConflictDetail {
+  return {
+    id,
+    title: (data.title as string) || "(untitled)",
+    date: data.date as string,
+    start_time: data.start_time as string,
+    end_time: data.end_time as string,
+    requested_by_name:
+      (data.requested_by_name as string) || "another organizer",
+  };
+}
+
 async function findConflicts(
   churchId: string,
   roomId: string,
@@ -56,21 +105,20 @@ async function findConflicts(
   startTime: string,
   endTime: string,
   excludeId?: string,
-): Promise<string[]> {
+): Promise<ConflictDetail[]> {
   const snap = await adminDb
     .collection(`churches/${churchId}/reservations`)
     .where("room_id", "==", roomId)
     .where("date", "==", date)
     .get();
 
-  const conflicts: string[] = [];
+  const conflicts: ConflictDetail[] = [];
   for (const doc of snap.docs) {
     if (doc.id === excludeId) continue;
     const r = doc.data();
-    if (r.status === "cancelled" || r.status === "denied") continue;
-    // Overlap: A_start < B_end && B_start < A_end
-    if (startTime < r.end_time && r.start_time < endTime) {
-      conflicts.push(doc.id);
+    if (NON_BLOCKING_STATUSES.has(r.status as string)) continue;
+    if (intervalsOverlap(startTime, endTime, r.start_time, r.end_time)) {
+      conflicts.push(toConflictDetail(doc.id, r));
     }
   }
   return conflicts;
@@ -89,18 +137,20 @@ async function findConflictsInTransaction(
   date: string,
   startTime: string,
   endTime: string,
-): Promise<string[]> {
+  excludeId?: string,
+): Promise<ConflictDetail[]> {
   const query = adminDb
     .collection(`churches/${churchId}/reservations`)
     .where("room_id", "==", roomId)
     .where("date", "==", date);
   const snap = await tx.get(query);
-  const conflicts: string[] = [];
+  const conflicts: ConflictDetail[] = [];
   for (const doc of snap.docs) {
+    if (doc.id === excludeId) continue;
     const r = doc.data();
-    if (r.status === "cancelled" || r.status === "denied") continue;
-    if (startTime < r.end_time && r.start_time < endTime) {
-      conflicts.push(doc.id);
+    if (NON_BLOCKING_STATUSES.has(r.status as string)) continue;
+    if (intervalsOverlap(startTime, endTime, r.start_time, r.end_time)) {
+      conflicts.push(toConflictDetail(doc.id, r));
     }
   }
   return conflicts;
@@ -248,6 +298,12 @@ export async function POST(req: NextRequest) {
       "Unknown";
     const groupId = isRecurring ? randomBytes(8).toString("hex") : undefined;
 
+    // Booking form's conflict modal sets allow_conflict=true on the override
+    // retry. Without this flag the server fails closed — earlier behavior
+    // silently routed conflicting bookings into pending_approval, so the
+    // modal never fired and the user had no idea the slot was taken.
+    const allowConflict = body.allow_conflict === true;
+
     // Single reservations — wrapped in a Firestore transaction so the conflict
     // check + write are atomic. Eliminates the race where two concurrent
     // bookings can both pass conflict-check and both succeed (Track E.2).
@@ -259,7 +315,11 @@ export async function POST(req: NextRequest) {
         .collection(`churches/${church_id}/reservation_requests`)
         .doc();
 
-      const result = await adminDb.runTransaction(async (tx) => {
+      type TxResult =
+        | { kind: "conflict"; conflicts: ConflictDetail[] }
+        | { kind: "ok"; reservation: Reservation; hasConflict: boolean };
+
+      const result = await adminDb.runTransaction(async (tx): Promise<TxResult> => {
         const conflicts = await findConflictsInTransaction(
           tx,
           church_id,
@@ -268,6 +328,14 @@ export async function POST(req: NextRequest) {
           start_time,
           end_time,
         );
+        if (conflicts.length > 0 && !allowConflict) {
+          // Fail closed: do NOT write. The booking form will pop the
+          // ReservationConflictModal so the user can pick a different
+          // time or explicitly override (which retries with
+          // allow_conflict=true).
+          return { kind: "conflict", conflicts };
+        }
+
         const hasConflict = conflicts.length > 0;
         const status =
           hasConflict || requireApproval ? "pending_approval" : "confirmed";
@@ -290,7 +358,7 @@ export async function POST(req: NextRequest) {
           attendee_count: body.attendee_count || null,
           setup_notes: body.setup_notes?.trim() || "",
           is_recurring: false,
-          conflict_with_ids: conflicts,
+          conflict_with_ids: conflicts.map((c) => c.id),
           created_at: now,
           updated_at: now,
         };
@@ -301,14 +369,24 @@ export async function POST(req: NextRequest) {
             id: requestRef.id,
             church_id,
             new_reservation_id: docRef.id,
-            conflicting_reservation_ids: conflicts,
+            conflicting_reservation_ids: conflicts.map((c) => c.id),
             status: "pending",
             created_at: now,
           });
         }
 
-        return { reservation, hasConflict };
+        return { kind: "ok", reservation, hasConflict };
       });
+
+      if (result.kind === "conflict") {
+        return NextResponse.json(
+          {
+            error: "Reservation conflicts with existing booking(s)",
+            conflicts: result.conflicts,
+          },
+          { status: 409 },
+        );
+      }
 
       return NextResponse.json(
         { reservation: result.reservation, has_conflict: result.hasConflict },
@@ -326,12 +404,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Check conflicts across all dates
-    const allConflicts: string[] = [];
+    const allConflicts: ConflictDetail[] = [];
     for (const d of dates) {
       const c = await findConflicts(church_id, room_id, d, start_time, end_time);
       allConflicts.push(...c);
     }
     const hasConflict = allConflicts.length > 0;
+    if (hasConflict && !allowConflict) {
+      return NextResponse.json(
+        {
+          error: "Recurring reservation conflicts with existing booking(s)",
+          conflicts: allConflicts,
+        },
+        { status: 409 },
+      );
+    }
     const status =
       hasConflict || requireApproval ? "pending_approval" : "confirmed";
 
