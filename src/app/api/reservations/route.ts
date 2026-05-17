@@ -22,6 +22,30 @@ async function getMembership(userId: string, churchId: string) {
 }
 
 /**
+ * Resolve a human-readable name for the requester. Membership docs don't
+ * carry a display_name field; the canonical name lives on `users/{uid}`.
+ * Falls back through the chain so an unnamed user still gets *something*.
+ */
+async function resolveRequesterName(
+  userId: string,
+  membershipDisplayName?: string,
+): Promise<string> {
+  if (membershipDisplayName) return membershipDisplayName;
+  try {
+    const userSnap = await adminDb.doc(`users/${userId}`).get();
+    if (userSnap.exists) {
+      const u = userSnap.data()!;
+      const name = (u.display_name as string) || (u.name as string);
+      if (name) return name;
+      if (u.email) return u.email as string;
+    }
+  } catch {
+    // fall through
+  }
+  return "Unknown";
+}
+
+/**
  * Check for time overlaps with existing reservations on the same room + date.
  * Returns array of conflicting reservation IDs.
  */
@@ -219,7 +243,9 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString();
     const requesterName =
-      membership.display_name || body.requested_by_name || "Unknown";
+      (await resolveRequesterName(userId, membership.display_name)) ||
+      body.requested_by_name ||
+      "Unknown";
     const groupId = isRecurring ? randomBytes(8).toString("hex") : undefined;
 
     // Single reservations — wrapped in a Firestore transaction so the conflict
