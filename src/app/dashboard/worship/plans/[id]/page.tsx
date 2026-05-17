@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Modal } from "@/components/ui/modal";
 import { StageSyncShareModal } from "@/components/worship/stage-sync-share-modal";
+import { formatLocalDateLong } from "@/lib/utils/date";
 import type {
   ServicePlan,
   ServicePlanItem,
@@ -88,6 +89,8 @@ export default function PlanEditorPage() {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [stageSyncOpen, setStageSyncOpen] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [exportingProPresenter, setExportingProPresenter] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Song picker state
   const [songs, setSongs] = useState<Song[]>([]);
@@ -267,6 +270,46 @@ export default function PlanEditorPage() {
     }
   }
 
+  // ---- ProPresenter export ----
+
+  async function handleExportProPresenter() {
+    if (!user || !churchId || !planId) return;
+    setExportingProPresenter(true);
+    setExportError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/service-plans/${planId}/export-propresenter?church_id=${churchId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setExportError(
+          data.error || `ProPresenter export failed (${res.status})`,
+        );
+        return;
+      }
+      // Download as JSON file
+      const blob = await res.blob();
+      const dateSlug = (plan?.service_date || "service-plan").replace(/[^0-9-]/g, "-");
+      const filename = `propresenter_${dateSlug}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(
+        e instanceof Error ? e.message : "ProPresenter export failed",
+      );
+    } finally {
+      setExportingProPresenter(false);
+    }
+  }
+
   // ---- Derived ----
 
   const isPublished = plan?.published ?? false;
@@ -332,12 +375,7 @@ export default function PlanEditorPage() {
 
         <div className="flex-1">
           <h1 className="font-display text-2xl text-vc-indigo">
-            {new Date(plan.service_date).toLocaleDateString(undefined, {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formatLocalDateLong(plan.service_date)}
           </h1>
           <div className="mt-1 flex items-center gap-2">
             {isPublished ? (
@@ -357,15 +395,26 @@ export default function PlanEditorPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {isPublished && items.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setStageSyncOpen(true)}
-            >
-              Stage Sync
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setStageSyncOpen(true)}
+              >
+                Stage Sync
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={exportingProPresenter}
+                onClick={handleExportProPresenter}
+                title="Download a ProPresenter-compatible JSON of this plan"
+              >
+                Export for ProPresenter
+              </Button>
+            </>
           )}
           {!isPublished && (
             <Button
@@ -379,6 +428,12 @@ export default function PlanEditorPage() {
           )}
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {exportError}
+        </div>
+      )}
 
       {/* Metadata section */}
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">

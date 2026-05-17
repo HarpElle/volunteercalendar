@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { StageSyncShareModal } from "@/components/worship/stage-sync-share-modal";
+import { formatLocalDate } from "@/lib/utils/date";
 import type { ServicePlan, Service } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -19,8 +20,10 @@ import type { ServicePlan, Service } from "@/lib/types";
 // ---------------------------------------------------------------------------
 
 function formatServiceDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  // Use formatLocalDate so the YYYY-MM-DD calendar date renders on the
+  // intended day in the user's timezone. Previously `new Date(iso)` parsed
+  // as UTC midnight and rendered the prior day on US clients.
+  return formatLocalDate(iso, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -28,11 +31,12 @@ function formatServiceDate(iso: string): string {
   });
 }
 
-/** True when the service date is today or in the future. */
+/** True when the service date is today or in the future. Compares as
+ *  calendar dates (anchored at local noon) to avoid UTC drift. */
 function isUpcoming(iso: string): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return new Date(iso) >= today;
+  return new Date(`${iso}T12:00:00`) >= today;
 }
 
 // ---------------------------------------------------------------------------
