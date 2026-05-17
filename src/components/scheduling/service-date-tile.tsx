@@ -47,6 +47,14 @@ export function ServiceDateTile({ group, onClick, churchId }: ServiceDateTilePro
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
+        // Codex Run 2 Phase 3 retest 2 (2026-05-17): only respond to Enter/
+        // Space when the tile itself has keyboard focus. Without this check,
+        // pressing Enter on the nested QR Check-In button bubbles up here
+        // and opens the roster modal — even though the button's native
+        // click was the intended target. e.target === e.currentTarget
+        // ensures we only act on direct key events, not bubbled ones from
+        // nested interactive elements.
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onClick?.();
