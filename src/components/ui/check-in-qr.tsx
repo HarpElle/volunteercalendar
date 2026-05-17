@@ -32,7 +32,13 @@ export function CheckInQR({
   const [code, setCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function generateQR() {
+  async function generateQR(e?: React.MouseEvent) {
+    // Stop propagation so consumers can safely mount this button inside
+    // their own clickable containers (e.g. ServiceDateTile, where the
+    // outer tile click opens the roster). Codex Run 2 Phase 3 retest
+    // (2026-05-17): without this, clicking the QR button bubbled to the
+    // tile and opened the roster modal instead of the QR modal.
+    e?.stopPropagation();
     setOpen(true);
     setLoading(true);
     setError(null);
@@ -110,7 +116,11 @@ export function CheckInQR({
   return (
     <>
       <button
-        onClick={generateQR}
+        type="button"
+        onClick={(e) => generateQR(e)}
+        // onMouseDown also stops propagation because mousedown can trigger
+        // some click-handlers (especially focus-based) before click fires.
+        onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:border-vc-coral hover:text-vc-coral transition-colors"
         title="Generate QR code for volunteer check-in"
       >

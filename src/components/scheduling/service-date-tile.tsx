@@ -75,9 +75,16 @@ export function ServiceDateTile({ group, onClick, churchId }: ServiceDateTilePro
             </span>
           )}
           {churchId && (
-            // Stop click propagation so the QR icon doesn't also open the
-            // roster modal that the tile-click triggers.
-            <div onClick={(e) => e.stopPropagation()}>
+            // Codex Run 2 Phase 3 retest (2026-05-17): belt-and-suspenders
+            // event stopping. CheckInQR's button now also stops propagation
+            // internally; this wrapper catches any stray clicks landing in
+            // the wrapper's padding/whitespace before they bubble to the
+            // tile. Both click AND mousedown — some focus/click-handler
+            // chains fire on mousedown before click.
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <CheckInQR
                 churchId={churchId}
                 serviceId={service.id}
