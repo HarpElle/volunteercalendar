@@ -6,6 +6,9 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { TabBar } from "@/components/ui/tab-bar";
+import { RoomBookingForm } from "@/components/rooms/room-booking-form";
+import { TIER_LIMITS } from "@/lib/constants";
+import type { SubscriptionTier } from "@/lib/types";
 
 interface RoomDetail {
   id: string;
@@ -18,6 +21,7 @@ interface RoomDetail {
   display_public?: boolean;
   public_visible?: boolean;
   suggested_ministry_ids?: string[];
+  requires_approval?: boolean;
 }
 
 interface ReservationItem {
@@ -48,8 +52,13 @@ export default function RoomDetailPage() {
   const [editName, setEditName] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editCapacity, setEditCapacity] = useState("");
+  const [editEquipment, setEditEquipment] = useState<string[]>([]);
+  const [editRequiresApproval, setEditRequiresApproval] = useState(false);
+  const [equipmentTags, setEquipmentTags] = useState<string[]>([]);
   const [copiedIcal, setCopiedIcal] = useState(false);
   const [copiedDisplay, setCopiedDisplay] = useState(false);
+  const [showBookingForm, setShowBookingForm] = useState(false);
+  const [tier, setTier] = useState<SubscriptionTier>("free");
 
   const fetchRoom = useCallback(async () => {
     if (!user || !churchId) return;
@@ -95,12 +104,49 @@ export default function RoomDetailPage() {
     fetchReservations();
   }, [fetchRoom, fetchReservations]);
 
+  // Load tier (for recurring gating) + global equipment tags for the edit form.
+  useEffect(() => {
+    if (!user || !churchId) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const [tierRes, settingsRes] = await Promise.all([
+          fetch(`/api/church-info?id=${churchId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`/api/rooms/settings?church_id=${churchId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (tierRes.ok) {
+          const t = await tierRes.json();
+          if (t.subscription_tier) setTier(t.subscription_tier as SubscriptionTier);
+        }
+        if (settingsRes.ok) {
+          const s = await settingsRes.json();
+          const tags = s.settings?.equipment_tags || s.equipment_tags || [];
+          setEquipmentTags(tags);
+        }
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, [user, churchId]);
+
   function startEdit() {
     if (!room) return;
     setEditName(room.name);
     setEditLocation(room.location || "");
     setEditCapacity(room.capacity?.toString() || "");
+    setEditEquipment(room.equipment || []);
+    setEditRequiresApproval(!!room.requires_approval);
     setEditing(true);
+  }
+
+  function toggleEditEquipment(item: string) {
+    setEditEquipment((prev) =>
+      prev.includes(item) ? prev.filter((e) => e !== item) : [...prev, item],
+    );
   }
 
   async function saveRoom() {
@@ -119,6 +165,8 @@ export default function RoomDetailPage() {
           name: editName.trim(),
           location: editLocation.trim() || null,
           capacity: editCapacity ? parseInt(editCapacity, 10) : null,
+          equipment: editEquipment,
+          requires_approval: editRequiresApproval,
         }),
       });
       if (res.ok) {
@@ -132,18 +180,31 @@ export default function RoomDetailPage() {
     }
   }
 
+  const recurringEnabled = TIER_LIMITS[tier]?.rooms_recurring ?? false;
+
+  // URL builders used both for visible inputs (so admins can read/share/open)
+  // and for the Copy actions. Codex Phase 5 feedback (2026-05-17): the
+  // previous "Copy on click only" buttons left admins blind to the actual
+  // URL, which made the wall-display + iCal flows hard to verify.
+  const icalUrl =
+    room?.calendar_token && typeof window !== "undefined"
+      ? `${window.location.origin.replace(/^http:\/\//, "https://")}/api/calendar/room/${roomId}/${room.calendar_token}`
+      : "";
+  const displayUrl =
+    room?.calendar_token && churchId && typeof window !== "undefined"
+      ? `${window.location.origin}/display/room/${roomId}?token=${room.calendar_token}&church_id=${churchId}`
+      : "";
+
   function copyIcalUrl() {
-    if (!room?.calendar_token) return;
-    const url = `${window.location.origin.replace(/^http:\/\//, "https://")}/api/calendar/room/${roomId}/${room.calendar_token}`;
-    navigator.clipboard.writeText(url);
+    if (!icalUrl) return;
+    navigator.clipboard.writeText(icalUrl);
     setCopiedIcal(true);
     setTimeout(() => setCopiedIcal(false), 2000);
   }
 
   function copyDisplayUrl() {
-    if (!room?.calendar_token || !churchId) return;
-    const url = `${window.location.origin}/display/room/${roomId}?token=${room.calendar_token}&church_id=${churchId}`;
-    navigator.clipboard.writeText(url);
+    if (!displayUrl) return;
+    navigator.clipboard.writeText(displayUrl);
     setCopiedDisplay(true);
     setTimeout(() => setCopiedDisplay(false), 2000);
   }
@@ -186,7 +247,7 @@ export default function RoomDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-vc-indigo font-display">
             {room.name}
@@ -194,28 +255,99 @@ export default function RoomDetailPage() {
           {room.location && (
             <p className="text-sm text-gray-400 mt-0.5">{room.location}</p>
           )}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             {room.capacity && (
               <Badge variant="default">Capacity: {room.capacity}</Badge>
+            )}
+            {room.requires_approval && (
+              <Badge variant="warning">Requires approval</Badge>
             )}
             {!room.is_active && <Badge variant="danger">Inactive</Badge>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={copyDisplayUrl}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
+        <button
+          onClick={() => setShowBookingForm(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white hover:bg-vc-coral/90 transition-colors min-h-[44px]"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
           >
-            {copiedDisplay ? "Copied!" : "Display URL"}
-          </button>
-          <button
-            onClick={copyIcalUrl}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
-          >
-            {copiedIcal ? "Copied!" : "iCal URL"}
-          </button>
-        </div>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+          </svg>
+          Book this room
+        </button>
       </div>
+
+      {showBookingForm && churchId && (
+        <RoomBookingForm
+          churchId={churchId}
+          initialRoomId={roomId}
+          recurringEnabled={recurringEnabled}
+          onClose={() => setShowBookingForm(false)}
+          onCreated={() => {
+            setShowBookingForm(false);
+            fetchReservations();
+          }}
+        />
+      )}
+
+      {/* Visible URLs panel — Display + iCal */}
+      {room.calendar_token && (
+        <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 bg-vc-bg-warm/40 p-3">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500 mb-1">
+              Wall Display URL
+            </p>
+            <p className="break-all font-mono text-xs text-vc-indigo">
+              {displayUrl}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <a
+                href={displayUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-vc-coral text-vc-coral px-3 py-1.5 text-xs font-medium hover:bg-vc-coral/5 transition-colors"
+              >
+                Open
+              </a>
+              <button
+                onClick={copyDisplayUrl}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                {copiedDisplay ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-vc-bg-warm/40 p-3">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500 mb-1">
+              iCal Feed URL
+            </p>
+            <p className="break-all font-mono text-xs text-vc-indigo">
+              {icalUrl}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <a
+                href={icalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-vc-coral text-vc-coral px-3 py-1.5 text-xs font-medium hover:bg-vc-coral/5 transition-colors"
+              >
+                Open
+              </a>
+              <button
+                onClick={copyIcalUrl}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                {copiedIcal ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Equipment */}
       {room.equipment && room.equipment.length > 0 && (
@@ -302,9 +434,17 @@ export default function RoomDetailPage() {
         {activeTab === "reservations" && (
           <div>
             {reservations.length === 0 ? (
-              <p className="text-gray-400 text-sm py-8 text-center">
-                No reservations in the next 30 days
-              </p>
+              <div className="text-center py-8">
+                <p className="text-gray-400 text-sm mb-3">
+                  No reservations in the next 30 days
+                </p>
+                <button
+                  onClick={() => setShowBookingForm(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white hover:bg-vc-coral/90 transition-colors"
+                >
+                  Book this room
+                </button>
+              </div>
             ) : (
               <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                 <table className="w-full text-sm">
@@ -404,6 +544,57 @@ export default function RoomDetailPage() {
                     className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Equipment
+                  </label>
+                  {equipmentTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {equipmentTags.map((tag) => {
+                        const on = editEquipment.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleEditEquipment(tag)}
+                            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                              on
+                                ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                                : "border-gray-200 text-gray-600 hover:border-gray-300"
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400">
+                      Add equipment tags in Room Settings (Settings → Campuses).
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editRequiresApproval}
+                      onChange={(e) =>
+                        setEditRequiresApproval(e.target.checked)
+                      }
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-vc-coral focus:ring-vc-coral"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Reservations require admin approval
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Overrides the org-wide setting for this room only.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
                 <div className="flex gap-3">
                   <button
                     onClick={saveRoom}
@@ -448,6 +639,22 @@ export default function RoomDetailPage() {
                     <dt className="text-gray-400">Capacity</dt>
                     <dd className="text-vc-indigo">
                       {room.capacity || "Not set"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400">Equipment</dt>
+                    <dd className="text-vc-indigo">
+                      {room.equipment && room.equipment.length > 0
+                        ? room.equipment.join(", ")
+                        : "None"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400">Approval</dt>
+                    <dd className="text-vc-indigo">
+                      {room.requires_approval
+                        ? "Required for this room"
+                        : "Org-wide setting applies"}
                     </dd>
                   </div>
                   <div>

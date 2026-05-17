@@ -1263,6 +1263,11 @@ export interface Room {
   display_public: boolean;
   public_visible: boolean;
   calendar_token: string;
+  /** Per-room approval override. When true, any reservation against this
+   *  room is created as `pending_approval` regardless of the org-wide
+   *  `RoomSettings.require_approval`. Falsy/undefined → fall back to the
+   *  org-wide setting. */
+  requires_approval?: boolean;
   // Check-in specific fields
   default_grades?: ChildGrade[];
   overflow_room_id?: string;
