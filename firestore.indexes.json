@@ -131,6 +131,14 @@
       ]
     },
     {
+      "collectionGroup": "reservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "start_time", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "rooms",
       "queryScope": "COLLECTION",
       "fields": [

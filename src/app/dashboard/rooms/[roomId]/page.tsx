@@ -61,6 +61,7 @@ export default function RoomDetailPage() {
   const [copiedDisplay, setCopiedDisplay] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [tier, setTier] = useState<SubscriptionTier>("free");
+  const [reservationsError, setReservationsError] = useState<string | null>(null);
 
   const fetchRoom = useCallback(async () => {
     if (!user || !churchId) return;
@@ -83,6 +84,7 @@ export default function RoomDetailPage() {
 
   const fetchReservations = useCallback(async () => {
     if (!user || !churchId) return;
+    setReservationsError(null);
     try {
       const token = await user.getIdToken();
       const today = new Date().toISOString().split("T")[0];
@@ -95,9 +97,16 @@ export default function RoomDetailPage() {
       if (res.ok) {
         const json = await res.json();
         setReservations(json.reservations || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setReservationsError(
+          data.error || `Failed to load reservations (${res.status})`,
+        );
       }
-    } catch {
-      // silent
+    } catch (e) {
+      setReservationsError(
+        e instanceof Error ? e.message : "Failed to load reservations",
+      );
     }
   }, [user, churchId, roomId]);
 
@@ -372,6 +381,12 @@ export default function RoomDetailPage() {
         active={activeTab}
         onChange={(t) => setActiveTab(t)}
       />
+
+      {reservationsError && (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {reservationsError}
+        </div>
+      )}
 
       <div className="mt-4">
         {/* Timeline Tab */}
