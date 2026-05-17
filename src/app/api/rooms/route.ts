@@ -40,16 +40,23 @@ export async function GET(req: NextRequest) {
     const includeInactive =
       req.nextUrl.searchParams.get("include_inactive") === "true";
 
-    let query = adminDb
-      .collection(`churches/${churchId}/rooms`)
-      .orderBy("name");
+    // Avoid combining where() + orderBy() on different fields — Firestore would
+    // require a composite index for (is_active, name) and the query 500s with
+    // a confusing error until that index is built. Fetch by filter only and
+    // sort by name client-side. Room lists per-church are small enough that
+    // this is a non-issue performance-wise.
+    let query: FirebaseFirestore.Query = adminDb.collection(
+      `churches/${churchId}/rooms`,
+    );
 
     if (!includeInactive) {
       query = query.where("is_active", "==", true);
     }
 
     const snap = await query.get();
-    const rooms = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const rooms = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as { id: string; name?: string })
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     return NextResponse.json({ rooms });
   } catch (e) {
     return NextResponse.json(

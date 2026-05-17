@@ -150,32 +150,86 @@ export async function POST(req: NextRequest) {
 
     const churchRef = adminDb.collection("churches").doc(church_id);
     const now = new Date().toISOString();
+
+    // Detect unified mode (households + people) vs legacy (checkin_households +
+    // children). When the church has any unified Person docs we write to the
+    // unified collections so the data is reachable from the admin household
+    // detail page and the kiosk lookup endpoint, both of which prefer unified.
+    const peopleSample = await churchRef.collection("people").limit(1).get();
+    const useUnified = !peopleSample.empty;
+
     let householdsCreated = 0;
     let childrenCreated = 0;
 
     for (const [, group] of householdMap) {
       const householdId = adminDb.collection("_").doc().id;
 
-      const household: CheckInHousehold = {
-        id: householdId,
-        church_id,
-        primary_guardian_name: group.guardian_name,
-        primary_guardian_phone: group.phone,
-        qr_token: randomBytes(16).toString("hex"),
-        imported_from: "generic",
-        created_at: now,
-        updated_at: now,
-        created_by: userId,
-      };
+      if (useUnified) {
+        // Create unified household
+        await churchRef.collection("households").doc(householdId).set({
+          id: householdId,
+          church_id,
+          name: group.guardian_name,
+          qr_token: randomBytes(16).toString("hex"),
+          imported_from: "generic",
+          created_at: now,
+          updated_at: now,
+        });
 
-      await churchRef
-        .collection("checkin_households")
-        .doc(householdId)
-        .set(household);
+        // Create primary adult Person
+        const nameParts = group.guardian_name.split(" ");
+        const phoneDigits = group.phone ? group.phone.replace(/\D/g, "") : "";
+        await churchRef.collection("people").add({
+          church_id,
+          person_type: "adult",
+          first_name: nameParts[0] || "",
+          last_name: nameParts.slice(1).join(" ") || "",
+          preferred_name: null,
+          name: group.guardian_name,
+          search_name: group.guardian_name.toLowerCase(),
+          email: null,
+          phone: group.phone || null,
+          search_phones: phoneDigits ? [phoneDigits] : [],
+          photo_url: null,
+          user_id: null,
+          membership_id: null,
+          status: "active",
+          is_volunteer: false,
+          ministry_ids: [],
+          role_ids: [],
+          campus_ids: [],
+          household_ids: [householdId],
+          scheduling_profile: null,
+          child_profile: null,
+          stats: null,
+          imported_from: "generic",
+          background_check: null,
+          role_constraints: null,
+          volunteer_journey: null,
+          qr_token: null,
+          created_at: now,
+          updated_at: now,
+        });
+      } else {
+        const household: CheckInHousehold = {
+          id: householdId,
+          church_id,
+          primary_guardian_name: group.guardian_name,
+          primary_guardian_phone: group.phone,
+          qr_token: randomBytes(16).toString("hex"),
+          imported_from: "generic",
+          created_at: now,
+          updated_at: now,
+          created_by: userId,
+        };
+        await churchRef
+          .collection("checkin_households")
+          .doc(householdId)
+          .set(household);
+      }
       householdsCreated++;
 
       for (const row of group.children) {
-        const childId = adminDb.collection("_").doc().id;
         const fName = row[column_map.first_name]?.trim() || "";
         const lName = row[column_map.last_name]?.trim() || "";
 
@@ -195,25 +249,69 @@ export async function POST(req: NextRequest) {
           column_map.birthdate != null
             ? row[column_map.birthdate]?.trim()
             : "";
+        const hasAlerts = !!(allergies || medicalNotes);
 
-        const child: Child = {
-          id: childId,
-          church_id,
-          household_id: householdId,
-          first_name: fName,
-          last_name: lName,
-          date_of_birth: birthdate || undefined,
-          grade: grade || undefined,
-          has_alerts: !!(allergies || medicalNotes),
-          allergies: allergies || undefined,
-          medical_notes: medicalNotes || undefined,
-          imported_from: "generic",
-          is_active: true,
-          created_at: now,
-          updated_at: now,
-        };
-
-        await churchRef.collection("children").doc(childId).set(child);
+        if (useUnified) {
+          await churchRef.collection("people").add({
+            church_id,
+            person_type: "child",
+            first_name: fName,
+            last_name: lName,
+            preferred_name: null,
+            name: `${fName} ${lName}`.trim(),
+            search_name: `${fName} ${lName}`.trim().toLowerCase(),
+            email: null,
+            phone: null,
+            search_phones: [],
+            photo_url: null,
+            user_id: null,
+            membership_id: null,
+            status: "active",
+            is_volunteer: false,
+            ministry_ids: [],
+            role_ids: [],
+            campus_ids: [],
+            household_ids: [householdId],
+            scheduling_profile: null,
+            child_profile: {
+              date_of_birth: birthdate || null,
+              grade: grade || null,
+              photo_url: null,
+              default_room_id: null,
+              has_alerts: hasAlerts,
+              allergies: allergies || null,
+              medical_notes: medicalNotes || null,
+              authorized_pickups: [],
+            },
+            stats: null,
+            imported_from: "generic",
+            background_check: null,
+            role_constraints: null,
+            volunteer_journey: null,
+            qr_token: null,
+            created_at: now,
+            updated_at: now,
+          });
+        } else {
+          const childId = adminDb.collection("_").doc().id;
+          const child: Child = {
+            id: childId,
+            church_id,
+            household_id: householdId,
+            first_name: fName,
+            last_name: lName,
+            date_of_birth: birthdate || undefined,
+            grade: grade || undefined,
+            has_alerts: hasAlerts,
+            allergies: allergies || undefined,
+            medical_notes: medicalNotes || undefined,
+            imported_from: "generic",
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+          };
+          await churchRef.collection("children").doc(childId).set(child);
+        }
         childrenCreated++;
       }
     }

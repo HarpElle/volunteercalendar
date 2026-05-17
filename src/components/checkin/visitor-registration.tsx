@@ -25,7 +25,8 @@ interface VisitorRegistrationProps {
 
 const GRADES = [
   { value: "nursery", label: "Nursery" },
-  { value: "pre_k", label: "Pre-K" },
+  { value: "toddler", label: "Toddler" },
+  { value: "pre-k", label: "Pre-K" },
   { value: "kindergarten", label: "Kindergarten" },
   { value: "1st", label: "1st" },
   { value: "2nd", label: "2nd" },

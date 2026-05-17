@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
@@ -8,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
+import { Modal } from "@/components/ui/modal";
+import { Input } from "@/components/ui/input";
 import { StageSyncShareModal } from "@/components/worship/stage-sync-share-modal";
 import type { ServicePlan, Service } from "@/lib/types";
 
@@ -47,6 +50,11 @@ export default function PlansPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [stageSyncPlanId, setStageSyncPlanId] = useState<string | null>(null);
+  const [newPlanOpen, setNewPlanOpen] = useState(false);
+  const [newServiceId, setNewServiceId] = useState("");
+  const [newServiceDate, setNewServiceDate] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // ---- Fetch plans + services ----
 
@@ -112,6 +120,55 @@ export default function PlansPage() {
     return sorted.filter((p) => isUpcoming(p.service_date));
   }, [plans, showAll]);
 
+  // ---- New Plan handler ----
+
+  function openNewPlanModal() {
+    setCreateError(null);
+    // Default to next Sunday for convenience
+    const today = new Date();
+    const daysUntilSunday = (7 - today.getDay()) % 7 || 7;
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() + daysUntilSunday);
+    setNewServiceDate(sunday.toISOString().split("T")[0]);
+    setNewServiceId(services[0]?.id || "");
+    setNewPlanOpen(true);
+  }
+
+  async function handleCreatePlan() {
+    if (!user || !churchId || !newServiceId || !newServiceDate) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/service-plans", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          service_id: newServiceId,
+          service_date: newServiceDate,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCreateError(data.error || `Failed to create plan (${res.status})`);
+        setCreating(false);
+        return;
+      }
+      const data = await res.json();
+      const plan = data.plan ?? data;
+      setNewPlanOpen(false);
+      router.push(`/dashboard/worship/plans/${plan.id}`);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create plan");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   // ---- Render ----
 
   return (
@@ -137,9 +194,87 @@ export default function PlansPage() {
             </svg>
             Song Usage Reports
           </Button>
-          <Button>New Plan</Button>
+          <Button onClick={openNewPlanModal} disabled={services.length === 0}>
+            New Plan
+          </Button>
         </div>
       </div>
+
+      {/* New Plan Modal */}
+      <Modal
+        open={newPlanOpen}
+        onClose={() => {
+          setNewPlanOpen(false);
+          setCreateError(null);
+        }}
+        title="New Service Plan"
+        subtitle="Pick a service and date. You'll add songs and order-of-service items next."
+        maxWidth="max-w-md"
+      >
+        {services.length === 0 ? (
+          <div className="rounded-lg border border-vc-warning/20 bg-vc-warning/5 p-4 text-sm text-vc-text-secondary">
+            You need at least one Service defined first.{" "}
+            <Link
+              href="/dashboard/services-events"
+              className="font-medium text-vc-coral hover:underline"
+            >
+              Add a Service →
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-vc-indigo mb-1">
+                Service <span className="text-vc-coral">*</span>
+              </label>
+              <select
+                value={newServiceId}
+                onChange={(e) => setNewServiceId(e.target.value)}
+                className="w-full rounded-lg border border-vc-border-light px-3 py-2 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+              >
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vc-indigo mb-1">
+                Service Date <span className="text-vc-coral">*</span>
+              </label>
+              <Input
+                type="date"
+                value={newServiceDate}
+                onChange={(e) => setNewServiceDate(e.target.value)}
+              />
+            </div>
+            {createError && (
+              <div className="rounded-lg border border-vc-danger/20 bg-vc-danger/5 p-3 text-sm text-vc-danger">
+                {createError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setNewPlanOpen(false);
+                  setCreateError(null);
+                }}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreatePlan}
+                disabled={creating || !newServiceId || !newServiceDate}
+              >
+                {creating ? <Spinner size="sm" /> : "Create Plan"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Filter toggle */}
       <div className="mb-6 flex items-center gap-3">
