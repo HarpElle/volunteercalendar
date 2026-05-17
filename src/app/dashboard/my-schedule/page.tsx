@@ -45,6 +45,14 @@ interface ScheduleItem {
   allDay: boolean;
   status: string;
   isTrainee?: boolean;
+  /**
+   * Confirmation token (assignments only). Lets the My Schedule UI POST to
+   * /api/confirm without needing to open the email link. Codex Run 2 retest
+   * (2026-05-17): previously the only confirmation path was the emailed
+   * token link, so pending assignments inside the app had no Confirm/Decline
+   * actions and labeled as "Draft."
+   */
+  confirmationToken?: string | null;
 }
 
 type TabKey = "upcoming" | "past" | "team";
@@ -69,6 +77,11 @@ export default function MySchedulePage() {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
   const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
+  // Codex Run 2 retest (2026-05-17): in-app confirm/decline for pending
+  // assignments. Tracks the assignment ID currently in flight so we can
+  // disable both buttons and show a spinner on the right one.
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [responseError, setResponseError] = useState<string | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -252,6 +265,7 @@ export default function MySchedulePage() {
       allDay: service?.all_day || false,
       status: a.status,
       isTrainee: a.assignment_type === "trainee",
+      confirmationToken: a.confirmation_token || null,
     });
   }
 
@@ -272,6 +286,48 @@ export default function MySchedulePage() {
       allDay: evt?.all_day || false,
       status: s.status,
     });
+  }
+
+  // --- Confirm / Decline (in-app) ---
+  // Posts to the same token-protected endpoint the email link uses, so the
+  // confirmation/decline flow is unified. Codex Run 2 retest (2026-05-17):
+  // before this, the only way to confirm was the emailed link — pending
+  // assignments inside the app had no Confirm/Decline actions.
+  async function respondToAssignment(
+    item: ScheduleItem,
+    action: "confirm" | "decline",
+  ) {
+    if (!item.confirmationToken) {
+      setResponseError("Couldn't find a response token. Try refreshing the page.");
+      return;
+    }
+    setRespondingId(item.id);
+    setResponseError(null);
+    try {
+      const res = await fetch("/api/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: item.confirmationToken, action }),
+      });
+      if (!res.ok && res.status !== 409) {
+        const body = await res.json().catch(() => ({}));
+        setResponseError(body.error || "Couldn't record your response. Try again.");
+        return;
+      }
+      // Optimistic local update — the server has accepted (or it was already
+      // confirmed on the other side). Avoid a full reload.
+      setAssignments((prev) =>
+        prev.map((a) =>
+          a.id === item.id
+            ? { ...a, status: action === "confirm" ? "confirmed" : "declined" }
+            : a,
+        ),
+      );
+    } catch {
+      setResponseError("Network error. Please try again.");
+    } finally {
+      setRespondingId(null);
+    }
   }
 
   // --- Schedule filtering ---
@@ -355,6 +411,20 @@ export default function MySchedulePage() {
         </div>
       )}
 
+      {/* In-app confirm/decline error banner */}
+      {responseError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3">
+          <p className="text-sm text-vc-danger">{responseError}</p>
+          <button
+            onClick={() => setResponseError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0 text-vc-text-muted hover:text-vc-danger"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Schedule list (Upcoming / Past tabs) */}
       {(activeTab === "upcoming" || activeTab === "past") && (
         <>
@@ -373,15 +443,24 @@ export default function MySchedulePage() {
             <div className="space-y-3">
               {filtered.map((item) => {
                 const isPast = item.date < today;
-                const statusColor =
-                  item.status === "confirmed" || item.status === "approved"
+                // After the client-side published-schedule filter runs, any
+                // assignment-kind item with status "draft" is a PUBLISHED but
+                // not-yet-responded-to assignment. Treat it as Pending in the
+                // UI and surface Confirm/Decline actions. Codex Run 2 retest
+                // (2026-05-17): previously labeled "Draft" with no Confirm.
+                const isPending = item.kind === "assignment" && item.status === "draft";
+                const statusColor = isPending
+                  ? "bg-vc-sand/30 text-vc-sand-dark"
+                  : item.status === "confirmed" || item.status === "approved"
                     ? "bg-vc-sage/15 text-vc-sage"
                     : item.status === "declined" || item.status === "cancelled"
                       ? "bg-vc-danger/10 text-vc-danger"
-                      : item.status === "draft"
-                        ? "bg-vc-bg-cream text-vc-text-muted"
-                        : "bg-vc-sand/30 text-vc-sand";
-                const statusLabel = item.status === "approved" ? "confirmed" : item.status;
+                      : "bg-vc-bg-cream text-vc-text-muted";
+                const statusLabel = isPending
+                  ? "Pending"
+                  : item.status === "approved"
+                    ? "confirmed"
+                    : item.status;
 
                 return (
                   <div
@@ -431,30 +510,51 @@ export default function MySchedulePage() {
                       </div>
                       {!isPast && item.status !== "declined" && item.status !== "cancelled" && (
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => setCantMakeItItem({
-                              kind: item.kind,
-                              id: item.id,
-                              roleName: item.roleName,
-                              eventOrServiceName: item.eventOrServiceName,
-                              date: item.date,
-                            })}
-                            className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
-                          >
-                            Can&apos;t Make It
-                          </button>
-                          <button
-                            onClick={() => setRemoveItem({
-                              kind: item.kind,
-                              id: item.id,
-                              roleName: item.roleName,
-                              eventOrServiceName: item.eventOrServiceName,
-                              date: item.date,
-                            })}
-                            className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
-                          >
-                            Remove
-                          </button>
+                          {isPending ? (
+                            <>
+                              <button
+                                onClick={() => respondToAssignment(item, "decline")}
+                                disabled={respondingId === item.id}
+                                className="min-h-[44px] rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-danger/30 hover:bg-vc-danger/5 hover:text-vc-danger disabled:opacity-50"
+                              >
+                                {respondingId === item.id ? "..." : "Decline"}
+                              </button>
+                              <button
+                                onClick={() => respondToAssignment(item, "confirm")}
+                                disabled={respondingId === item.id}
+                                className="min-h-[44px] rounded-lg bg-vc-sage px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-vc-sage/90 disabled:opacity-50"
+                              >
+                                {respondingId === item.id ? "..." : "Confirm"}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setCantMakeItItem({
+                                  kind: item.kind,
+                                  id: item.id,
+                                  roleName: item.roleName,
+                                  eventOrServiceName: item.eventOrServiceName,
+                                  date: item.date,
+                                })}
+                                className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
+                              >
+                                Can&apos;t Make It
+                              </button>
+                              <button
+                                onClick={() => setRemoveItem({
+                                  kind: item.kind,
+                                  id: item.id,
+                                  roleName: item.roleName,
+                                  eventOrServiceName: item.eventOrServiceName,
+                                  date: item.date,
+                                })}
+                                className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
