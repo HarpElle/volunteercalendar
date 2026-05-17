@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { loadChild } from "@/lib/server/checkin-helpers";
 
 /**
  * POST /api/admin/checkin/checkout
@@ -71,13 +72,10 @@ export async function POST(req: NextRequest) {
       checked_out_by_user_id: userId,
     });
 
-    // Load child name
-    const childSnap = await churchRef
-      .collection("children")
-      .doc(session.child_id)
-      .get();
-    const childName = childSnap.exists
-      ? `${childSnap.data()!.preferred_name || childSnap.data()!.first_name} ${childSnap.data()!.last_name}`
+    // Load child name — unified-aware so Pro-tier kiosk sessions resolve.
+    const child = await loadChild(churchRef, session.child_id);
+    const childName = child
+      ? `${child.display_name} ${child.last_name}`.trim()
       : "Unknown";
 
     return NextResponse.json({

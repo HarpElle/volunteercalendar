@@ -124,8 +124,11 @@ export default function CheckInRoomsPage() {
   };
 
   const copyRoomViewUrl = (room: RoomData) => {
-    if (!room.checkin_view_token) return;
-    const url = `${window.location.origin}/checkin/room/${room.id}?token=${room.checkin_view_token}`;
+    if (!room.checkin_view_token || !churchId) return;
+    // Include church_id — the room view route requires it because rooms are
+    // scoped under `churches/{cid}/rooms/{rid}`. Without it the page renders
+    // "Missing church_id or token parameter."
+    const url = `${window.location.origin}/checkin/room/${room.id}?church_id=${encodeURIComponent(churchId)}&token=${encodeURIComponent(room.checkin_view_token)}`;
     navigator.clipboard.writeText(url);
     setCopiedToken(room.id);
     setTimeout(() => setCopiedToken(null), 2000);

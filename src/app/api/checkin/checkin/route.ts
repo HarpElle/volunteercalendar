@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { audit, kioskActor } from "@/lib/server/audit";
+import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
@@ -77,18 +78,21 @@ export async function POST(req: NextRequest) {
       .get();
     const settings = settingsSnap.exists ? settingsSnap.data()! : null;
 
-    // Load household for guardian phone (used for SMS)
+    // Load household for guardian phone (used for SMS). Use the unified-aware
+    // helper so SMS works for Pro-tier orgs (where the household lives in
+    // `households` and the phone lives on the linked adult Person).
     let guardianPhone: string | null = null;
     let isFirstSms = false;
     if (settings?.guardian_sms_on_checkin) {
-      const householdSnap = await churchRef
+      guardianPhone = await loadHouseholdPhone(churchRef, household_id);
+      // For unified households we don't track `first_sms_sent` yet; default to
+      // true so we don't ever send a duplicate vCard link.
+      const legacySnap = await churchRef
         .collection("checkin_households")
         .doc(household_id)
         .get();
-      if (householdSnap.exists) {
-        const hData = householdSnap.data()!;
-        guardianPhone = (hData.primary_guardian_phone as string) || null;
-        isFirstSms = !hData.first_sms_sent;
+      if (legacySnap.exists) {
+        isFirstSms = !legacySnap.data()!.first_sms_sent;
       }
     }
 
@@ -137,12 +141,12 @@ export async function POST(req: NextRequest) {
     let anyAlerts = false;
 
     for (const childId of child_ids) {
-      const childSnap = await churchRef
-        .collection("children")
-        .doc(childId)
-        .get();
-      if (!childSnap.exists) continue;
-      const child = childSnap.data()!;
+      // Handle both unified Person docs (Pro tier) and legacy children docs.
+      // Before this change, the legacy-only lookup silently skipped Person
+      // IDs, which is why kiosk check-ins for unified-mode orgs never
+      // created sessions even though the kiosk UI showed success.
+      const child = await loadChild(churchRef, childId);
+      if (!child) continue;
 
       // Resolve room
       let roomId: string | null =

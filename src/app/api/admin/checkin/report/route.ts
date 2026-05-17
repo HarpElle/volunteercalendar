@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { loadChild } from "@/lib/server/checkin-helpers";
 
 /**
  * GET /api/admin/checkin/report?church_id=...&type=...&date=...&from=...&to=...
@@ -203,21 +204,55 @@ export async function GET(req: NextRequest) {
           );
         }
 
-        const householdsSnap = await churchRef
-          .collection("checkin_households")
-          .where("created_at", ">=", from)
-          .where("created_at", "<=", to + "T23:59:59.999Z")
-          .get();
+        // Read from both legacy and unified household collections so the
+        // report covers Pro-tier orgs whose households live in `households`.
+        const [legacySnap, unifiedSnap] = await Promise.all([
+          churchRef
+            .collection("checkin_households")
+            .where("created_at", ">=", from)
+            .where("created_at", "<=", to + "T23:59:59.999Z")
+            .get(),
+          churchRef
+            .collection("households")
+            .where("created_at", ">=", from)
+            .where("created_at", "<=", to + "T23:59:59.999Z")
+            .get(),
+        ]);
 
-        const households = householdsSnap.docs.map((doc) => {
-          const d = doc.data();
-          return {
-            id: d.id,
-            primary_guardian_name: d.primary_guardian_name,
-            created_at: d.created_at,
-            imported_from: d.imported_from,
-          };
-        });
+        // For unified households, primary_guardian_name lives on the linked
+        // adult Person; fall back to the household `name` field.
+        const unifiedHouseholds = await Promise.all(
+          unifiedSnap.docs.map(async (doc) => {
+            const d = doc.data();
+            const adultsSnap = await churchRef
+              .collection("people")
+              .where("household_ids", "array-contains", doc.id)
+              .where("person_type", "==", "adult")
+              .limit(1)
+              .get();
+            const primaryAdult = adultsSnap.docs[0]?.data();
+            return {
+              id: doc.id,
+              primary_guardian_name:
+                primaryAdult?.name || d.name || "Unknown",
+              created_at: d.created_at,
+              imported_from: d.imported_from,
+            };
+          }),
+        );
+
+        const households = [
+          ...legacySnap.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: d.id,
+              primary_guardian_name: d.primary_guardian_name,
+              created_at: d.created_at,
+              imported_from: d.imported_from,
+            };
+          }),
+          ...unifiedHouseholds,
+        ].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
 
         if (format === "csv") {
           return csvResponse(
@@ -330,14 +365,14 @@ async function enrichSessions(
     let firstName = "Unknown";
     let lastName = "";
 
-    const childSnap = await churchRef
-      .collection("children")
-      .doc(data.child_id)
-      .get();
-    if (childSnap.exists) {
-      const c = childSnap.data()!;
-      firstName = c.preferred_name || c.first_name;
-      lastName = c.last_name || "";
+    // Use the unified-aware loader so unified-mode Person IDs resolve.
+    // Previously this only checked the legacy `children` collection and
+    // every Pro-tier kiosk session showed up as "Unknown" — which made
+    // the dashboard/report/CSV appear empty even when sessions existed.
+    const child = await loadChild(churchRef, data.child_id);
+    if (child) {
+      firstName = child.display_name;
+      lastName = child.last_name;
     }
 
     results.push({

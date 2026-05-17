@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
 import type { CheckInSession } from "@/lib/types";
 
 /**
@@ -107,20 +108,13 @@ export async function GET(
     for (const doc of sessionsSnap.docs) {
       const session = doc.data() as CheckInSession;
 
-      const childSnap = await churchRef
-        .collection("children")
-        .doc(session.child_id)
-        .get();
-      if (!childSnap.exists) continue;
-      const child = childSnap.data()!;
+      // Unified-aware child lookup. Before this change, Pro-tier kiosk sessions
+      // with Person doc IDs as child_id silently `continue`d here, hiding the
+      // child from the teacher room view entirely.
+      const child = await loadChild(churchRef, session.child_id);
+      if (!child) continue;
 
-      // Load household for parent phone
-      const householdSnap = await churchRef
-        .collection("checkin_households")
-        .doc(session.household_id)
-        .get();
-      const household = householdSnap.exists ? householdSnap.data()! : null;
-      const phone = household?.primary_guardian_phone || "";
+      const phone = (await loadHouseholdPhone(churchRef, session.household_id)) || "";
       const maskedPhone = phone.length >= 4 ? `***${phone.slice(-4)}` : "****";
 
       // Determine if late arrival
@@ -134,7 +128,7 @@ export async function GET(
         isLate = checkinMs > lateMs;
       }
 
-      const displayName = child.preferred_name || child.first_name;
+      const displayName = child.display_name;
       children.push({
         session_id: session.id,
         child_id: session.child_id,
