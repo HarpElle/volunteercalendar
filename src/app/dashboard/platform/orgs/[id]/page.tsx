@@ -62,6 +62,13 @@ export default function PlatformOrgDetailPage({
   const [refreshing, setRefreshing] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
+  // Tier override state
+  const [newTier, setNewTier] = useState<SubscriptionTier>("free");
+  const [tierSaving, setTierSaving] = useState(false);
+  const [tierMessage, setTierMessage] = useState<
+    { kind: "success" | "error"; text: string } | null
+  >(null);
+
   useEffect(() => {
     if (!user) return;
     async function load() {
@@ -93,6 +100,11 @@ export default function PlatformOrgDetailPage({
     load();
   }, [user, id]);
 
+  // Sync the dropdown default to the current tier whenever the snapshot loads.
+  useEffect(() => {
+    if (snapshot?.tier) setNewTier(snapshot.tier as SubscriptionTier);
+  }, [snapshot?.tier]);
+
   async function handleRecompute() {
     if (!user || refreshing) return;
     setRefreshing(true);
@@ -110,6 +122,57 @@ export default function PlatformOrgDetailPage({
       console.error("[Recompute] Failed:", err);
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  /**
+   * Platform admin tier override.
+   * Codex Run 2 follow-up (2026-05-17): the BillingSettings component already
+   * has a tier-override UI, but it only renders when you're SIGNED IN to the
+   * target org. Platform admins typically aren't members of every customer
+   * org, which made the in-org UI awkward. This control on the platform
+   * org-detail page lets the platform admin bump any org's tier without
+   * needing to be a member. Same backing endpoint (/api/admin/tier-override).
+   */
+  async function handleTierChange(target: SubscriptionTier | "__remove__") {
+    if (!user || tierSaving) return;
+    setTierSaving(true);
+    setTierMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const body = target === "__remove__"
+        ? { church_id: id, remove_override: true }
+        : { church_id: id, tier: target };
+      const res = await fetch("/api/admin/tier-override", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTierMessage({ kind: "error", text: data.error || `Failed (HTTP ${res.status})` });
+        return;
+      }
+      // Optimistic local update so the badge + footer reflect the change
+      // without requiring a full snapshot recompute.
+      if (snapshot) {
+        setSnapshot({
+          ...snapshot,
+          tier: data.tier as SubscriptionTier,
+          subscription_source: data.source,
+        });
+      }
+      setTierMessage({
+        kind: "success",
+        text: target === "__remove__"
+          ? "Override removed — reverted to Free (Stripe-managed)."
+          : `Tier set to ${data.tier} (manual override).`,
+      });
+    } catch (err) {
+      console.error("[Tier override] Failed:", err);
+      setTierMessage({ kind: "error", text: "Network error. Please try again." });
+    } finally {
+      setTierSaving(false);
     }
   }
 
@@ -260,6 +323,67 @@ export default function PlatformOrgDetailPage({
           <Sparkline label="Check-ins / day" values={s.recent_activity.sessions_by_day} />
           <Sparkline label="Schedule updates / day" values={s.recent_activity.assignments_by_day} />
           <Sparkline label="New members / day" values={s.recent_activity.members_added_by_day} />
+        </Card>
+
+        {/* Platform admin — tier override.
+            Codex Run 2 follow-up (2026-05-17): set any org's subscription
+            tier without needing to be a member or use Stripe. */}
+        <Card title="Subscription tier (admin)" tone="warning">
+          <p className="mb-3 text-xs text-vc-text-secondary">
+            Current: <Badge variant={TIER_BADGE[s.tier]?.variant || "default"}>{s.tier}</Badge>
+            <span className="ml-2 text-vc-text-muted">source: {s.subscription_source || "—"}</span>
+          </p>
+          <label className="block text-xs font-medium text-vc-text-muted mb-1">
+            Set tier
+          </label>
+          <select
+            value={newTier}
+            onChange={(e) => setNewTier(e.target.value as SubscriptionTier)}
+            disabled={tierSaving}
+            className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20 disabled:opacity-50"
+          >
+            <option value="free">Free</option>
+            <option value="starter">Starter</option>
+            <option value="growth">Growth</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleTierChange(newTier)}
+              disabled={tierSaving || newTier === s.tier}
+              className="rounded-lg bg-vc-coral px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-vc-coral/90 disabled:opacity-50"
+            >
+              {tierSaving ? "Saving…" : "Apply override"}
+            </button>
+            {s.subscription_source === "manual" && (
+              <button
+                type="button"
+                onClick={() => handleTierChange("__remove__")}
+                disabled={tierSaving}
+                className="rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-danger/40 hover:text-vc-danger disabled:opacity-50"
+              >
+                Remove override
+              </button>
+            )}
+          </div>
+          {tierMessage && (
+            <p
+              className={`mt-2 text-xs ${
+                tierMessage.kind === "success"
+                  ? "text-vc-sage"
+                  : "text-vc-danger"
+              }`}
+            >
+              {tierMessage.text}
+            </p>
+          )}
+          <p className="mt-3 text-[10px] leading-snug text-vc-text-muted">
+            Manual overrides bypass Stripe billing. Use for beta testers,
+            comped accounts, or sales-led deals. Stripe webhook updates won't
+            change a manually-set tier — remove the override first to re-enable.
+          </p>
         </Card>
       </div>
 
