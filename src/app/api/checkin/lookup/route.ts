@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { assignRoomByGrade, type AssignedRoom } from "@/lib/server/checkin-helpers";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
 /**
@@ -122,16 +123,34 @@ async function handleUnifiedLookup(
       const primaryAdult = familyMembers.find((p) => p.person_type === "adult");
       const children = familyMembers.filter((p) => p.person_type === "child" && p.status === "active");
 
-      // Resolve room names for children
+      // Resolve room names for children — preset default_room_id first, then
+      // fall back to grade-based room matching so the kiosk pre-check-in
+      // screen shows the same room the check-in route will assign.
       const roomIds = [...new Set(children.map((c) => c.child_profile?.default_room_id).filter(Boolean) as string[])];
       const roomNames: Record<string, string> = {};
       for (const rid of roomIds) {
         const roomSnap = await churchRef.collection("rooms").doc(rid).get();
         if (roomSnap.exists) roomNames[rid] = roomSnap.data()!.name;
       }
+      const today = new Date().toISOString().split("T")[0];
+      const gradeRoomCache = new Map<string, AssignedRoom | null>();
+      async function resolveGradeRoom(grade: string | undefined): Promise<AssignedRoom | null> {
+        if (!grade) return null;
+        const key = grade.toLowerCase();
+        if (gradeRoomCache.has(key)) return gradeRoomCache.get(key) ?? null;
+        const room = await assignRoomByGrade(churchRef, grade, today);
+        gradeRoomCache.set(key, room);
+        return room;
+      }
+      const gradeRooms: Record<string, AssignedRoom | null> = {};
+      for (const c of children) {
+        const cp = c.child_profile;
+        if (cp?.default_room_id) continue; // explicit room wins
+        if (!cp?.grade) continue;
+        gradeRooms[c.id] = await resolveGradeRoom(cp.grade as string);
+      }
 
       // Check for today's pre-check-in sessions
-      const today = new Date().toISOString().split("T")[0];
       const preCheckSnap = await churchRef
         .collection("checkInSessions")
         .where("household_id", "==", hhId)
@@ -152,6 +171,10 @@ async function handleUnifiedLookup(
         },
         children: children.map((c) => {
           const cp = c.child_profile;
+          const presetRoomName = cp?.default_room_id
+            ? roomNames[cp.default_room_id] || null
+            : null;
+          const gradeRoom = gradeRooms[c.id];
           // Track B.4: do NOT include allergies / medical_notes in lookup
           // responses. Lookup is the kiosk's "find this family" call and is
           // the most rate-vulnerable surface. Reveal sensitive details only
@@ -164,12 +187,12 @@ async function handleUnifiedLookup(
             preferred_name: c.preferred_name,
             grade: cp?.grade,
             photo_url: c.photo_url || cp?.photo_url,
-            default_room_id: cp?.default_room_id,
+            default_room_id: cp?.default_room_id || gradeRoom?.id || null,
             has_alerts: cp?.has_alerts || false,
             // allergies + medical_notes intentionally omitted; clients use
             // has_alerts as the boolean indicator and request details from
             // /checkin once the operator has confirmed the child.
-            room_name: cp?.default_room_id ? roomNames[cp.default_room_id] || null : null,
+            room_name: presetRoomName || gradeRoom?.name || null,
             pre_checked_in: preCheckedChildIds.includes(c.id),
           };
         }),
@@ -260,6 +283,23 @@ async function handleLegacyLookup(
       }
 
       const today = new Date().toISOString().split("T")[0];
+
+      // Grade-based room fallback for legacy children with no default_room_id.
+      const gradeRoomCache = new Map<string, AssignedRoom | null>();
+      const gradeRoomsLegacy: Record<string, AssignedRoom | null> = {};
+      for (const c of children) {
+        if (c.default_room_id) continue;
+        if (!c.grade) continue;
+        const key = String(c.grade).toLowerCase();
+        if (!gradeRoomCache.has(key)) {
+          gradeRoomCache.set(
+            key,
+            await assignRoomByGrade(churchRef, c.grade, today),
+          );
+        }
+        gradeRoomsLegacy[c.id!] = gradeRoomCache.get(key) ?? null;
+      }
+
       const preCheckSnap = await churchRef
         .collection("checkInSessions")
         .where("household_id", "==", household.id)
@@ -278,11 +318,17 @@ async function handleLegacyLookup(
             ? `***${household.primary_guardian_phone.slice(-4)}`
             : null,
         },
-        children: children.map((c) => ({
-          ...c,
-          room_name: c.default_room_id ? roomNames[c.default_room_id] || null : null,
-          pre_checked_in: preCheckedChildIds.includes(c.id!),
-        })),
+        children: children.map((c) => {
+          const gradeRoom = gradeRoomsLegacy[c.id!];
+          return {
+            ...c,
+            default_room_id: c.default_room_id || gradeRoom?.id,
+            room_name: c.default_room_id
+              ? roomNames[c.default_room_id] || null
+              : gradeRoom?.name || null,
+            pre_checked_in: preCheckedChildIds.includes(c.id!),
+          };
+        }),
       };
     }),
   );
