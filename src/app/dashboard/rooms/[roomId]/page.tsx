@@ -472,9 +472,17 @@ export default function RoomDetailPage() {
                             }`}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-vc-indigo truncate">
-                              {r.title}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-vc-indigo truncate">
+                                {r.title}
+                              </p>
+                              {r.status === "pending_approval" && (
+                                <Badge variant="warning">Pending</Badge>
+                              )}
+                              {r.status === "denied" && (
+                                <Badge variant="danger">Denied</Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-400">
                               {r.requested_by_name}
                               {r.is_recurring && " (recurring)"}

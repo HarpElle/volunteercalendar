@@ -364,11 +364,17 @@ export async function POST(req: NextRequest) {
         };
         tx.set(docRef, reservation);
 
-        if (status === "pending_approval" && hasConflict) {
+        // Any pending_approval reservation lands in the queue. Before this
+        // fix, the queue doc was only created on conflict overrides, so
+        // approval-required bookings (e.g., Fellowship Hall with
+        // room.requires_approval) silently sat at pending_approval with no
+        // way for an admin to find them in /dashboard/rooms/requests.
+        if (status === "pending_approval") {
           tx.set(requestRef, {
             id: requestRef.id,
             church_id,
             new_reservation_id: docRef.id,
+            reason: hasConflict ? "conflict" : "approval_required",
             conflicting_reservation_ids: conflicts.map((c) => c.id),
             status: "pending",
             created_at: now,
@@ -451,6 +457,26 @@ export async function POST(req: NextRequest) {
       adminDb,
       church_id,
     );
+
+    // One queue doc per recurring booking. The approve/deny endpoints look
+    // up `recurrence_group_id` and update all occurrences in the group at
+    // once. Before this fix, recurring approval-required bookings never
+    // entered the queue at all.
+    if (status === "pending_approval" && ids.length > 0 && groupId) {
+      const requestRef = adminDb
+        .collection(`churches/${church_id}/reservation_requests`)
+        .doc();
+      await requestRef.set({
+        id: requestRef.id,
+        church_id,
+        new_reservation_id: ids[0],
+        recurrence_group_id: groupId,
+        reason: hasConflict ? "conflict" : "approval_required",
+        conflicting_reservation_ids: allConflicts.map((c) => c.id),
+        status: "pending",
+        created_at: now,
+      });
+    }
 
     return NextResponse.json(
       {

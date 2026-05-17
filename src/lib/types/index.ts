@@ -1368,6 +1368,13 @@ export interface ReservationRequest {
   id: string;
   church_id: string;
   new_reservation_id: string;
+  /** Reason the request landed in the queue. "conflict" = overlapping
+   *  existing reservation; "approval_required" = the room or org requires
+   *  admin approval for every booking. */
+  reason?: "conflict" | "approval_required";
+  /** Populated only when the source booking was recurring. Approve/deny
+   *  applies to the whole group, not just `new_reservation_id`. */
+  recurrence_group_id?: string;
   conflicting_reservation_ids: string[];
   status: "pending" | "approved" | "denied";
   admin_note?: string;

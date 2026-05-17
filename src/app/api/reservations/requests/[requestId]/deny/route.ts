@@ -65,17 +65,39 @@ export async function POST(
       reviewed_at: now,
     });
 
-    // Update reservation status
+    // Update reservation status. Recurring bookings flip the whole group
+    // (see approve endpoint for the same pattern).
     const reservationRef = adminDb.doc(
       `churches/${church_id}/reservations/${requestData.new_reservation_id}`,
     );
-    await reservationRef.update({
-      status: "denied",
-      denied_by: userId,
-      denied_at: now,
-      denied_reason: admin_note || "",
-      updated_at: now,
-    });
+    const groupId = requestData.recurrence_group_id as string | undefined;
+    if (groupId) {
+      const groupSnap = await adminDb
+        .collection(`churches/${church_id}/reservations`)
+        .where("recurrence_group_id", "==", groupId)
+        .get();
+      const batch = adminDb.batch();
+      for (const doc of groupSnap.docs) {
+        if (doc.data().status === "pending_approval") {
+          batch.update(doc.ref, {
+            status: "denied",
+            denied_by: userId,
+            denied_at: now,
+            denied_reason: admin_note || "",
+            updated_at: now,
+          });
+        }
+      }
+      await batch.commit();
+    } else {
+      await reservationRef.update({
+        status: "denied",
+        denied_by: userId,
+        denied_at: now,
+        denied_reason: admin_note || "",
+        updated_at: now,
+      });
+    }
 
     // Notify requester
     const reservationSnap = await reservationRef.get();
