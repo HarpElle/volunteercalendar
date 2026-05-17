@@ -1,3 +1,4 @@
+import { resend } from "@/lib/resend";
 /**
  * GET /api/cron/outbox-drain
  *
@@ -23,14 +24,11 @@ import {
   type OutboxSmsPayload,
   OUTBOX_DEFAULTS,
 } from "@/lib/server/outbox";
-import { Resend } from "resend";
 import { sendSms } from "@/lib/services/sms";
 
 export const maxDuration = 300;
 
 const BATCH_SIZE = 50;
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET(req: NextRequest) {
   const blocked = requireCronSecret(req);

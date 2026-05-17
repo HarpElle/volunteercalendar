@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
+import { resend } from "@/lib/resend";
 import {
   buildAccountDeletedEmail,
   buildVacancyAlertEmail,
   buildAdminDepartureEmail,
 } from "@/lib/utils/email-templates";
 import { stripe } from "@/lib/stripe";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 interface SoleAdminOrg {
   id: string;

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildStepCompletedEmail } from "@/lib/utils/emails/prerequisite-step-completed";
 import { buildEligibleNotifyEmail } from "@/lib/utils/emails/prerequisite-eligible-notify";
@@ -7,8 +6,7 @@ import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/notify/prerequisite

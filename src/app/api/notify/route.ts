@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { resend } from "@/lib/resend";
 import {
   buildBatchConfirmationEmail,
   type BatchAssignment,
 } from "@/lib/utils/emails/batch-confirmation";
 import { resolveUserId, createUserNotificationBatch } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: NextRequest) {
   try {

@@ -6,6 +6,7 @@ import { autoReschedule } from "@/lib/services/auto-reschedule";
 import { buildConfirmationEmail } from "@/lib/utils/email-templates";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
+import { resend } from "@/lib/resend";
 
 export async function GET(request: Request) {
   const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
@@ -143,8 +144,6 @@ export async function POST(request: Request) {
               startTime: svcSnap.exists ? (svcSnap.data()?.start_time as string) || "" : "",
               confirmUrl: `${origin}/confirm/${result.confirmationToken}`,
             });
-
-            const resend = new Resend(process.env.RESEND_API_KEY);
             resend.emails.send({
               from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
               replyTo: "info@volunteercal.com",

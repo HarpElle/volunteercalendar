@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { Resend } from "resend";
 import { buildAvailabilityWindowEmail } from "@/lib/utils/emails";
 import type { Person, Schedule } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/schedules/{id}/availability-window

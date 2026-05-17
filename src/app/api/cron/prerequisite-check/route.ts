@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
-import { Resend } from "resend";
 import { buildExpiryWarningEmail } from "@/lib/utils/emails/prerequisite-expiry-warning";
 import { buildPrerequisiteNudgeEmail } from "@/lib/utils/emails/prerequisite-nudge";
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+import { resend } from "@/lib/resend";
 
 export const maxDuration = 300;
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 /** How many days before expiry to send the warning. */
 const EXPIRY_WARNING_DAYS = 30;

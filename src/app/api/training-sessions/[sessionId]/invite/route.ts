@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildTrainingSessionInviteEmail } from "@/lib/utils/emails/training-session-invite";
 import type { VolunteerJourneyStep, TrainingSessionRsvp } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/training-sessions/[sessionId]/invite

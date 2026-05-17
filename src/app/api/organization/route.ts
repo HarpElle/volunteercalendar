@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
 import { buildOrgDeletedEmail, buildOrgDeletedMembersEmail } from "@/lib/utils/email-templates";
 import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
 import { audit, userActor } from "@/lib/server/audit";
 import { generateShortCode } from "@/lib/utils/short-code";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/organization

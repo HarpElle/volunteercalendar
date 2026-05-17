@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildEventInviteEmail } from "@/lib/utils/email-templates";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/event-invite

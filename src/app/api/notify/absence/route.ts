@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { Resend } from "resend";
 import { buildAbsenceAlertEmail } from "@/lib/utils/emails/absence-alert";
 import { sendSms } from "@/lib/services/sms";
 import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
 import type { Membership } from "@/lib/types";
 import { createUserNotification } from "@/lib/services/user-notifications";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 interface AbsenceBody {
   church_id: string;
