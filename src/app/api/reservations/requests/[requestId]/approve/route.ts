@@ -65,16 +65,41 @@ export async function POST(
       reviewed_at: now,
     });
 
-    // Update reservation status
+    // Update reservation status. If this request came from a recurring
+    // booking, the queue doc carries `recurrence_group_id` and we approve
+    // every occurrence in the group in one batch — so the admin doesn't
+    // have to approve 12 weeks individually.
     const reservationRef = adminDb.doc(
       `churches/${church_id}/reservations/${requestData.new_reservation_id}`,
     );
-    await reservationRef.update({
-      status: "confirmed",
-      approved_by: userId,
-      approved_at: now,
-      updated_at: now,
-    });
+    const groupId = requestData.recurrence_group_id as string | undefined;
+    if (groupId) {
+      const groupSnap = await adminDb
+        .collection(`churches/${church_id}/reservations`)
+        .where("recurrence_group_id", "==", groupId)
+        .get();
+      const batch = adminDb.batch();
+      for (const doc of groupSnap.docs) {
+        // Only flip docs that are still pending; never resurrect a
+        // cancelled/denied occurrence.
+        if (doc.data().status === "pending_approval") {
+          batch.update(doc.ref, {
+            status: "confirmed",
+            approved_by: userId,
+            approved_at: now,
+            updated_at: now,
+          });
+        }
+      }
+      await batch.commit();
+    } else {
+      await reservationRef.update({
+        status: "confirmed",
+        approved_by: userId,
+        approved_at: now,
+        updated_at: now,
+      });
+    }
 
     // Notify requester via SMS
     const reservationSnap = await reservationRef.get();
