@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { cancelRecurrenceGroup } from "@/lib/utils/recurrence";
+import {
+  intervalsOverlap,
+  type ConflictDetail,
+} from "@/app/api/reservations/route";
 
 async function verifyAuth(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
@@ -117,12 +121,108 @@ export async function PUT(
       "created_at",
       "requested_by",
       "edit_scope",
+      "allow_conflict",
     ];
     const updates: Record<string, unknown> = { updated_at: now };
 
     for (const [key, value] of Object.entries(body)) {
       if (key === "church_id" || IMMUTABLE.includes(key)) continue;
       updates[key] = value;
+    }
+
+    // Edit-to-overlap fail-closed: if the caller is changing start_time /
+    // end_time, re-check conflicts on every reservation that this edit
+    // would touch, and 409 back to the booking UI if anything overlaps
+    // (unless the caller passes allow_conflict=true to override).
+    const nextStart = (updates.start_time as string) || existing.start_time;
+    const nextEnd = (updates.end_time as string) || existing.end_time;
+    const timeChanged =
+      nextStart !== existing.start_time || nextEnd !== existing.end_time;
+
+    if (timeChanged) {
+      if (nextStart >= nextEnd) {
+        return NextResponse.json(
+          { error: "start_time must be before end_time" },
+          { status: 400 },
+        );
+      }
+      const allowConflict = body.allow_conflict === true;
+      type TargetDoc = {
+        id: string;
+        room_id: string;
+        date: string;
+      };
+      const targetDocs: TargetDoc[] =
+        existing.is_recurring &&
+        existing.recurrence_group_id &&
+        edit_scope &&
+        edit_scope !== "single_date"
+          ? await (async () => {
+              let q = adminDb
+                .collection(`churches/${church_id}/reservations`)
+                .where("recurrence_group_id", "==", existing.recurrence_group_id);
+              if (edit_scope === "from_date") {
+                q = q.where("date", ">=", existing.date);
+              }
+              const s = await q.get();
+              return s.docs.map((d) => {
+                const data = d.data();
+                return {
+                  id: d.id,
+                  room_id: data.room_id as string,
+                  date: data.date as string,
+                };
+              });
+            })()
+          : [
+              {
+                id: snap.id,
+                room_id: existing.room_id as string,
+                date: existing.date as string,
+              },
+            ];
+
+      const conflicts: ConflictDetail[] = [];
+      const targetIds = new Set(targetDocs.map((d) => d.id));
+      for (const target of targetDocs) {
+        const dayQuery = await adminDb
+          .collection(`churches/${church_id}/reservations`)
+          .where("room_id", "==", target.room_id)
+          .where("date", "==", target.date)
+          .get();
+        for (const d of dayQuery.docs) {
+          if (targetIds.has(d.id)) continue; // don't conflict with self / siblings
+          const data = d.data();
+          if (data.status === "cancelled" || data.status === "denied") continue;
+          if (
+            intervalsOverlap(
+              nextStart,
+              nextEnd,
+              data.start_time as string,
+              data.end_time as string,
+            )
+          ) {
+            conflicts.push({
+              id: d.id,
+              title: (data.title as string) || "(untitled)",
+              date: data.date as string,
+              start_time: data.start_time as string,
+              end_time: data.end_time as string,
+              requested_by_name:
+                (data.requested_by_name as string) || "another organizer",
+            });
+          }
+        }
+      }
+      if (conflicts.length > 0 && !allowConflict) {
+        return NextResponse.json(
+          {
+            error: "Edit conflicts with existing booking(s)",
+            conflicts,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     // Single update
