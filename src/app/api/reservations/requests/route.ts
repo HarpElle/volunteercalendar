@@ -59,16 +59,36 @@ export async function GET(req: NextRequest) {
     }
 
     const reservations: Record<string, unknown>[] = [];
+    const reservationById = new Map<string, Record<string, unknown>>();
     for (const id of reservationIds) {
       const rSnap = await adminDb
         .doc(`churches/${churchId}/reservations/${id}`)
         .get();
       if (rSnap.exists) {
-        reservations.push({ id: rSnap.id, ...rSnap.data() });
+        const r = { id: rSnap.id, ...rSnap.data() };
+        reservations.push(r);
+        reservationById.set(rSnap.id, r);
       }
     }
 
-    return NextResponse.json({ requests, reservations });
+    // Filter out queue rows whose target reservation is cancelled or denied
+    // — those are orphans (the reservation was cleaned up after the request
+    // was created). Without this, admins see "ghost" pending rows that lead
+    // nowhere when approved.
+    const filteredRequests = requests.filter((r) => {
+      const data = r as Record<string, unknown>;
+      const targetId = data.new_reservation_id as string | undefined;
+      if (!targetId) return true;
+      const target = reservationById.get(targetId);
+      if (!target) return false; // reservation was hard-deleted
+      const status = target.status as string | undefined;
+      return status !== "cancelled" && status !== "denied";
+    });
+
+    return NextResponse.json({
+      requests: filteredRequests,
+      reservations,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Internal error" },
