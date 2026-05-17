@@ -276,7 +276,16 @@ export default function CheckInImportPage() {
               <div>
                 <p className="text-vc-indigo font-medium">{fileName}</p>
                 <p className="text-sm text-vc-text-muted mt-1">
-                  {csvText.split("\n").length - 1} data rows
+                  {(() => {
+                    // Count non-empty lines, then subtract the header row.
+                    // The previous `split("\n").length - 1` counted trailing
+                    // empty lines as data, so a 1-row CSV showed "2 data rows".
+                    const nonEmpty = csvText
+                      .split("\n")
+                      .filter((line) => line.trim()).length;
+                    return Math.max(0, nonEmpty - 1);
+                  })()}{" "}
+                  data rows
                 </p>
               </div>
             ) : (

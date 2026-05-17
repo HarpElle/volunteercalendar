@@ -23,26 +23,33 @@ export default function RoomsPage() {
 
   const [rooms, setRooms] = useState<RoomItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newCapacity, setNewCapacity] = useState("");
 
   const fetchRooms = useCallback(async () => {
     if (!user || !churchId) return;
+    setLoadError(null);
     try {
       const token = await user.getIdToken();
+      // Admin view: include inactive rooms so admins see everything they manage.
       const res = await fetch(
-        `/api/rooms?church_id=${encodeURIComponent(churchId)}`,
+        `/api/rooms?church_id=${encodeURIComponent(churchId)}&include_inactive=true`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
         const json = await res.json();
         setRooms(json.rooms || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setLoadError(data.error || `Failed to load rooms (${res.status})`);
       }
-    } catch {
-      // silent
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load rooms");
     } finally {
       setLoading(false);
     }
@@ -55,6 +62,7 @@ export default function RoomsPage() {
   async function handleCreate() {
     if (!user || !churchId || !newName.trim()) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/rooms", {
@@ -76,9 +84,12 @@ export default function RoomsPage() {
         setNewCapacity("");
         setShowCreateModal(false);
         fetchRooms();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setCreateError(data.error || `Failed to create room (${res.status})`);
       }
-    } catch {
-      // silent
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create room");
     } finally {
       setCreating(false);
     }
@@ -124,6 +135,13 @@ export default function RoomsPage() {
           Add Room
         </button>
       </div>
+
+      {/* Load error */}
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
 
       {/* Room grid */}
       {rooms.length === 0 ? (
@@ -249,9 +267,17 @@ export default function RoomsPage() {
                 />
               </div>
             </div>
+            {createError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {createError}
+              </div>
+            )}
             <div className="flex items-center justify-end gap-3 mt-6">
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateError(null);
+                }}
                 className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors min-h-[44px]"
               >
                 Cancel

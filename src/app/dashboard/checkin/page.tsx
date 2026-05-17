@@ -52,31 +52,57 @@ export default function CheckInDashboardPage() {
   const [showKioskQr, setShowKioskQr] = useState(false);
   const [kioskQrDataUrl, setKioskQrDataUrl] = useState("");
   const [activitySearch, setActivitySearch] = useState("");
-  const [shortCode, setShortCode] = useState("");
+  const [activationCode, setActivationCode] = useState("");
+  const [activationLoading, setActivationLoading] = useState(false);
+  const [activationError, setActivationError] = useState<string | null>(null);
   const kioskMenuRef = useRef<HTMLDivElement>(null);
 
   const kioskUrl = typeof window !== "undefined" && churchId
     ? `${window.location.origin}/checkin?church_id=${churchId}`
     : "";
 
-  // Fetch the church's short setup code
-  useEffect(() => {
+  // Generate a real kiosk station activation code (8 hex chars). This is the
+  // code the iPad/tablet kiosk validates against — previously this dropdown
+  // displayed the church's 6-letter short_code, which the kiosk REJECTS with
+  // "Enter the 8-character code (letters A-F and digits 0-9)" because the
+  // short_code is a church identifier, not a kiosk credential.
+  const handleGenerateActivationCode = useCallback(async () => {
     if (!user || !churchId) return;
-    (async () => {
-      try {
-        const token = await user.getIdToken();
-        const res = await fetch(
-          `/api/church-info?id=${churchId}`,
-          { headers: { Authorization: `Bearer ${token}` } },
+    setActivationLoading(true);
+    setActivationError(null);
+    setActivationCode("");
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/kiosk/stations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          name: `Kiosk (created ${new Date().toLocaleString()})`,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActivationError(
+          data.error || `Failed to generate code (${res.status})`,
         );
-        if (res.ok) {
-          const data = await res.json();
-          if (data.short_code) setShortCode(data.short_code);
-        }
-      } catch {
-        // Non-critical
+        return;
       }
-    })();
+      const data = await res.json();
+      const code: string | undefined =
+        data.activation_code || data.code || data.station?.activation_code;
+      if (code) setActivationCode(code);
+      else setActivationError("Code generated but not returned by server");
+    } catch (e) {
+      setActivationError(
+        e instanceof Error ? e.message : "Failed to generate code",
+      );
+    } finally {
+      setActivationLoading(false);
+    }
   }, [user, churchId]);
 
   const handleLaunchKiosk = useCallback(() => {
@@ -117,16 +143,15 @@ export default function CheckInDashboardPage() {
     }
   }, [kioskUrl]);
 
-  const handleCopySetupCode = useCallback(async () => {
-    const code = shortCode || churchId;
-    if (!code) return;
+  const handleCopyActivationCode = useCallback(async () => {
+    if (!activationCode) return;
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(activationCode);
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     } catch {
       const input = document.createElement("input");
-      input.value = code;
+      input.value = activationCode;
       document.body.appendChild(input);
       input.select();
       document.execCommand("copy");
@@ -134,7 +159,7 @@ export default function CheckInDashboardPage() {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     }
-  }, [shortCode, churchId]);
+  }, [activationCode]);
 
   // Close kiosk menu on outside click or Escape
   useEffect(() => {
@@ -243,35 +268,67 @@ export default function CheckInDashboardPage() {
 
           {/* Dropdown sub-menu */}
           {showKioskMenu && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-vc-border-light
+            <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl border border-vc-border-light
               shadow-lg z-40 overflow-hidden">
-              {/* Setup Code row */}
-              {(shortCode || churchId) && (
-                <div className="px-4 py-3 bg-vc-indigo/5 border-b border-vc-border-light">
-                  <p className="text-xs text-vc-text-secondary mb-1">Setup Code</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono text-vc-indigo select-all flex-1 tracking-widest">
-                      {shortCode || churchId}
-                    </code>
+              {/* Activation code generator — produces a valid 8-char hex code
+                  the kiosk accepts. Previously this panel showed the church's
+                  6-letter short_code, which the kiosk rejected. */}
+              <div className="px-4 py-3 bg-vc-indigo/5 border-b border-vc-border-light">
+                <p className="text-xs text-vc-text-secondary mb-2">
+                  iPad / Tablet activation code
+                </p>
+                {activationCode ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <code className="text-base font-mono font-bold text-vc-indigo select-all flex-1 tracking-widest">
+                        {activationCode}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={handleCopyActivationCode}
+                        className="shrink-0 p-1.5 rounded-lg hover:bg-vc-sand/20 transition-colors"
+                        title="Copy activation code"
+                      >
+                        {copiedId ? (
+                          <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-vc-text-muted mt-1.5">
+                      Enter on the kiosk. Manage all stations under{" "}
+                      <Link href="/dashboard/org/check-ins?tab=stations" className="underline">
+                        Settings → Stations
+                      </Link>
+                      .
+                    </p>
+                  </>
+                ) : (
+                  <>
                     <button
                       type="button"
-                      onClick={handleCopySetupCode}
-                      className="shrink-0 p-1.5 rounded-lg hover:bg-vc-sand/20 transition-colors"
-                      title="Copy setup code"
+                      onClick={handleGenerateActivationCode}
+                      disabled={activationLoading}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-vc-indigo px-3 py-2 text-sm font-medium text-white hover:bg-vc-indigo/90 disabled:opacity-50 transition-colors"
                     >
-                      {copiedId ? (
-                        <svg className="h-4 w-4 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      ) : (
-                        <svg className="h-4 w-4 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                        </svg>
-                      )}
+                      {activationLoading ? "Generating..." : "Generate Activation Code"}
                     </button>
-                  </div>
-                </div>
-              )}
+                    <p className="text-[11px] text-vc-text-muted mt-1.5">
+                      Creates a new station + 8-character code for an iPad or tablet.
+                    </p>
+                  </>
+                )}
+                {activationError && (
+                  <p className="mt-1.5 text-[11px] text-red-600">
+                    {activationError}
+                  </p>
+                )}
+              </div>
 
               {/* Action items */}
               <div className="py-1">
@@ -345,17 +402,17 @@ export default function CheckInDashboardPage() {
               width={280}
               height={280}
             />
-            {(shortCode || churchId) && (
+            {activationCode && (
               <div className="flex items-center justify-center gap-2 mb-5 px-4 py-2.5 rounded-lg bg-vc-bg-warm">
-                <span className="text-xs text-vc-text-secondary">Setup Code:</span>
+                <span className="text-xs text-vc-text-secondary">Activation Code:</span>
                 <code className="text-sm font-mono text-vc-indigo select-all tracking-widest">
-                  {shortCode || churchId}
+                  {activationCode}
                 </code>
                 <button
                   type="button"
-                  onClick={handleCopySetupCode}
+                  onClick={handleCopyActivationCode}
                   className="p-1 rounded hover:bg-vc-sand/20 transition-colors"
-                  title="Copy setup code"
+                  title="Copy activation code"
                 >
                   {copiedId ? (
                     <svg className="h-3.5 w-3.5 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

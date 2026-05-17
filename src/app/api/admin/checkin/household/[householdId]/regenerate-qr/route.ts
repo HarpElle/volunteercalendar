@@ -41,11 +41,15 @@ export async function POST(
       );
     }
 
-    const householdRef = adminDb
-      .collection("churches")
-      .doc(church_id)
-      .collection("checkin_households")
-      .doc(householdId);
+    // Detect unified mode (households + people) vs legacy (checkin_households).
+    // New Pro-tier orgs are unified; older orgs still use the legacy path.
+    const churchRef = adminDb.collection("churches").doc(church_id);
+    const peopleSample = await churchRef.collection("people").limit(1).get();
+    const useUnified = !peopleSample.empty;
+
+    const householdRef = useUnified
+      ? churchRef.collection("households").doc(householdId)
+      : churchRef.collection("checkin_households").doc(householdId);
 
     const snap = await householdRef.get();
     if (!snap.exists) {

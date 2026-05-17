@@ -33,6 +33,8 @@ interface PreviewSong {
   chart_data: SongChartData;
   file: File;
   file_type: "chordpro" | "pdf";
+  /** True when a song with the same CCLI number (or title fallback) already exists. */
+  duplicate?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +192,47 @@ export function SongSelectImportModal({
     }
 
     setParseErrors(errors);
+
+    // Flag duplicates against the existing library so the operator sees them
+    // BEFORE clicking Import All. We match on CCLI number when present, falling
+    // back to title (case-insensitive). The /api/songs/upload endpoint also
+    // enforces this server-side, but surfacing it in preview avoids a confusing
+    // "X imported, Y already in library" message after the fact.
+    if (newSongs.length > 0 && churchId && user) {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/songs?church_id=${churchId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const existing: { ccli_number?: string | null; title?: string }[] =
+            data.songs ?? data ?? [];
+          const ccliSet = new Set(
+            existing
+              .map((s) => s.ccli_number?.trim())
+              .filter((c): c is string => !!c),
+          );
+          const titleSet = new Set(
+            existing.map((s) => s.title?.trim().toLowerCase()).filter(Boolean),
+          );
+          for (const s of newSongs) {
+            const ccliHit = s.ccli_number && ccliSet.has(s.ccli_number.trim());
+            const titleHit = titleSet.has(s.title.trim().toLowerCase());
+            s.duplicate = !!(ccliHit || titleHit);
+          }
+        }
+      } catch {
+        // Non-fatal — server will still reject duplicates on upload
+      }
+    }
+
     if (newSongs.length > 0) {
       setPreviewSongs(newSongs);
       setStep("preview");
     }
     setProcessing(false);
-  }, [user]);
+  }, [user, churchId]);
 
   // ---- Drag & drop ----
 
@@ -285,7 +322,10 @@ export function SongSelectImportModal({
   }
 
   async function handleImportAll() {
+    // Skip songs flagged as duplicates — they would just fail server-side and
+    // pad the "X already in library" counter without adding value.
     for (const song of [...previewSongs]) {
+      if (song.duplicate) continue;
       await handleImport(song);
     }
     if (previewSongs.length === 0) {
@@ -438,38 +478,50 @@ export function SongSelectImportModal({
       ) : step === "preview" ? (
         <>
           {/* Preview header */}
-          <div className="mt-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-vc-text-secondary">
-                {previewSongs.length} song{previewSongs.length !== 1 ? "s" : ""} ready to import
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setStep("upload");
-                  setPreviewSongs([]);
-                  setParseErrors([]);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-              >
-                Upload More
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleImportAll}
-                disabled={importing || previewSongs.length === 0}
-              >
-                {importing ? (
-                  <Spinner size="sm" />
-                ) : (
-                  `Import All (${previewSongs.length})`
-                )}
-              </Button>
-            </div>
-          </div>
+          {(() => {
+            const importable = previewSongs.filter((s) => !s.duplicate).length;
+            const duplicateCount = previewSongs.length - importable;
+            return (
+              <div className="mt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-vc-text-secondary">
+                    {importable} new song{importable !== 1 ? "s" : ""} ready to import
+                    {duplicateCount > 0 && (
+                      <span className="text-vc-text-muted">
+                        {" "}
+                        · {duplicateCount} already in your library (will be skipped)
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStep("upload");
+                      setPreviewSongs([]);
+                      setParseErrors([]);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                  >
+                    Upload More
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleImportAll}
+                    disabled={importing || importable === 0}
+                  >
+                    {importing ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      `Import All (${importable})`
+                    )}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Error */}
           {error && (
@@ -553,13 +605,16 @@ function SongPreviewCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h4 className="truncate text-base font-semibold text-vc-indigo">
               {song.title}
             </h4>
             <Badge variant={song.file_type === "chordpro" ? "accent" : "default"}>
               {song.file_type === "chordpro" ? "ChordPro" : "PDF"}
             </Badge>
+            {song.duplicate && (
+              <Badge variant="warning">Already in library</Badge>
+            )}
           </div>
           {(song.writers || song.artist) && (
             <p className="mt-0.5 text-sm text-vc-text-secondary">
@@ -567,8 +622,8 @@ function SongPreviewCard({
             </p>
           )}
         </div>
-        <Button size="sm" onClick={onImport} disabled={importing}>
-          {importing ? <Spinner size="sm" /> : "Import"}
+        <Button size="sm" onClick={onImport} disabled={importing || !!song.duplicate}>
+          {importing ? <Spinner size="sm" /> : song.duplicate ? "Skipped" : "Import"}
         </Button>
       </div>
 

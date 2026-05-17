@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Modal } from "@/components/ui/modal";
 import { SongSelectImportModal } from "@/components/worship/songselect-import-modal";
 import type { Song } from "@/lib/types";
 
@@ -56,6 +58,7 @@ function statusBadgeVariant(
 // ---------------------------------------------------------------------------
 
 export default function SongsPage() {
+  const router = useRouter();
   const { user, profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
 
@@ -65,6 +68,11 @@ export default function SongsPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // ---- Fetch songs ----
 
@@ -116,12 +124,105 @@ export default function SongsPage() {
 
   // ---- Archive handler ----
 
-  function handleArchive(songId: string) {
-    setSongs((prev) =>
-      prev.map((s) =>
-        s.id === songId ? { ...s, status: "archived" as const, in_rotation: false } : s,
-      ),
-    );
+  async function handleArchive(songId: string) {
+    if (!user || !churchId) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/songs/${songId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          status: "archived",
+          in_rotation: false,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to archive song");
+        return;
+      }
+      setSongs((prev) =>
+        prev.map((s) =>
+          s.id === songId
+            ? { ...s, status: "archived" as const, in_rotation: false }
+            : s,
+        ),
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to archive song");
+    }
+  }
+
+  // ---- Restore handler (Archived -> active) ----
+
+  async function handleRestore(songId: string) {
+    if (!user || !churchId) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/songs/${songId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ church_id: churchId, status: "active" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to restore song");
+        return;
+      }
+      setSongs((prev) =>
+        prev.map((s) =>
+          s.id === songId ? { ...s, status: "active" as const } : s,
+        ),
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to restore song");
+    }
+  }
+
+  // ---- Add Song handler ----
+
+  async function handleCreateSong() {
+    if (!user || !churchId || !newTitle.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/songs", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          title: newTitle.trim(),
+          default_key: newKey.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCreateError(data.error || `Failed to create song (${res.status})`);
+        setCreating(false);
+        return;
+      }
+      const data = await res.json();
+      const song = data.song ?? data;
+      setNewTitle("");
+      setNewKey("");
+      setAddModalOpen(false);
+      router.push(`/dashboard/worship/songs/${song.id}`);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create song");
+    } finally {
+      setCreating(false);
+    }
   }
 
   // ---- Render ----
@@ -140,7 +241,7 @@ export default function SongsPage() {
           <Button variant="outline" onClick={() => setImportModalOpen(true)}>
             Import Songs
           </Button>
-          <Button>Add Song</Button>
+          <Button onClick={() => setAddModalOpen(true)}>Add Song</Button>
         </div>
       </div>
 
@@ -150,6 +251,67 @@ export default function SongsPage() {
         onClose={() => setImportModalOpen(false)}
         onImportComplete={loadSongs}
       />
+
+      {/* Add Song Modal */}
+      <Modal
+        open={addModalOpen}
+        onClose={() => {
+          setAddModalOpen(false);
+          setCreateError(null);
+        }}
+        title="Add Song"
+        subtitle="Create a song you can edit and add to service plans."
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-vc-indigo mb-1">
+              Title <span className="text-vc-coral">*</span>
+            </label>
+            <Input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="e.g. Amazing Grace"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newTitle.trim() && !creating) {
+                  handleCreateSong();
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-vc-indigo mb-1">
+              Default Key (optional)
+            </label>
+            <Input
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder="e.g. G, D, A"
+            />
+          </div>
+          {createError && (
+            <div className="rounded-lg border border-vc-danger/20 bg-vc-danger/5 p-3 text-sm text-vc-danger">
+              {createError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setAddModalOpen(false);
+                setCreateError(null);
+              }}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateSong} disabled={creating || !newTitle.trim()}>
+              {creating ? <Spinner size="sm" /> : "Create & Edit"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Search + filter tabs */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -320,10 +482,22 @@ export default function SongsPage() {
                         variant="ghost"
                         size="sm"
                         className="min-h-[44px] min-w-[44px]"
+                        onClick={() =>
+                          router.push(`/dashboard/worship/songs/${song.id}`)
+                        }
                       >
                         Edit
                       </Button>
-                      {song.status !== "archived" && (
+                      {song.status === "archived" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="min-h-[44px] min-w-[44px] text-vc-sage"
+                          onClick={() => handleRestore(song.id)}
+                        >
+                          Restore
+                        </Button>
+                      ) : (
                         <Button
                           variant="ghost"
                           size="sm"
