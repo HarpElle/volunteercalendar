@@ -126,3 +126,77 @@ export async function loadHouseholdPhone(
   const phone = adultsSnap.docs[0].data()?.phone;
   return phone ? String(phone) : null;
 }
+
+/** A room configured to accept check-ins for one or more grades. */
+export interface AssignedRoom {
+  id: string;
+  name: string;
+  capacity?: number;
+  overflow_room_id?: string;
+}
+
+/**
+ * Look up an active check-in room whose configured `default_grades` includes
+ * the child's grade. Returns null if no matching room is found.
+ *
+ * When multiple rooms match a grade (rare for small orgs but possible), the
+ * first room with available capacity is returned; ties go to the alphabetic
+ * first name so behavior is stable. Rooms with no capacity configured are
+ * treated as having unlimited capacity. Inactive rooms (`is_active === false`)
+ * are skipped.
+ *
+ * Why this exists: prior to this helper the kiosk check-in route only resolved
+ * a room via (a) operator override or (b) the child's own `default_room_id`.
+ * The Add Child UI doesn't collect `default_room_id`, so freshly-added
+ * children always landed in "Unassigned" even when a room had been configured
+ * for their grade. The room had the contract (`default_grades`); we just
+ * weren't honoring it at check-in time.
+ */
+export async function assignRoomByGrade(
+  churchRef: firestore.DocumentReference,
+  grade: string | undefined,
+  serviceDate: string,
+): Promise<AssignedRoom | null> {
+  if (!grade) return null;
+  const normalized = grade.toLowerCase().replace(/_/g, "-");
+
+  // Firestore array-contains on `default_grades`. Stored values are the
+  // canonical lowercase ChildGrade strings (e.g. "kindergarten").
+  const candidatesSnap = await churchRef
+    .collection("rooms")
+    .where("default_grades", "array-contains", normalized)
+    .get();
+
+  if (candidatesSnap.empty) return null;
+
+  const candidates = candidatesSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as AssignedRoom & { is_active?: boolean })
+    .filter((r) => r.is_active !== false)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  // Multi-room tie: pick the first room with remaining capacity. Rooms with
+  // no capacity are treated as unlimited.
+  for (const room of candidates) {
+    if (!room.capacity) {
+      return room;
+    }
+    const countSnap = await churchRef
+      .collection("checkInSessions")
+      .where("service_date", "==", serviceDate)
+      .where("room_id", "==", room.id)
+      .where("checked_out_at", "==", null)
+      .count()
+      .get();
+    if (countSnap.data().count < room.capacity) {
+      return room;
+    }
+  }
+
+  // Every matching room is full. Return the first match anyway so capacity
+  // overflow / SMS logic downstream can still react; better than silently
+  // dropping the child into "Unassigned".
+  return candidates[0];
+}

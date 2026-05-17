@@ -3,7 +3,11 @@ import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { audit, kioskActor } from "@/lib/server/audit";
-import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import {
+  assignRoomByGrade,
+  loadChild,
+  loadHouseholdPhone,
+} from "@/lib/server/checkin-helpers";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
@@ -148,7 +152,14 @@ export async function POST(req: NextRequest) {
       const child = await loadChild(churchRef, childId);
       if (!child) continue;
 
-      // Resolve room
+      // Resolve room. Precedence:
+      //   1. Operator override (per-child selection on the kiosk)
+      //   2. The child's preset default_room_id
+      //   3. Grade-based assignment from configured room.default_grades
+      //   4. Unassigned
+      // Step 3 fixes the case where a child has a grade but no preset room
+      // (Add Child UI doesn't collect default_room_id), so previously every
+      // such child landed in "Unassigned" regardless of room configuration.
       let roomId: string | null =
         room_overrides?.[childId] || child.default_room_id || null;
       let roomName = "Unassigned";
@@ -162,6 +173,18 @@ export async function POST(req: NextRequest) {
           roomName = roomData.name;
           roomCapacity = roomData.capacity;
           overflowRoomId = roomData.overflow_room_id;
+        }
+      } else if (child.grade) {
+        const matched = await assignRoomByGrade(
+          churchRef,
+          child.grade,
+          service_date,
+        );
+        if (matched) {
+          roomId = matched.id;
+          roomName = matched.name;
+          roomCapacity = matched.capacity;
+          overflowRoomId = matched.overflow_room_id;
         }
       }
 
