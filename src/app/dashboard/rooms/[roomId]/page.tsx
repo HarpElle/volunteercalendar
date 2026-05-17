@@ -35,6 +35,15 @@ interface ReservationItem {
   status: string;
   requested_by_name: string;
   is_recurring: boolean;
+  recurrence_group_id?: string;
+}
+
+/** Edit scope choices for recurring reservation actions. */
+type EditScope = "single_date" | "from_date" | "all";
+
+interface OccurrenceAction {
+  mode: "edit" | "cancel";
+  reservation: ReservationItem;
 }
 
 type Tab = "timeline" | "reservations" | "settings";
@@ -62,6 +71,11 @@ export default function RoomDetailPage() {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [tier, setTier] = useState<SubscriptionTier>("free");
   const [reservationsError, setReservationsError] = useState<string | null>(null);
+  /** Days into the future to show. Default covers most quarterly recurring
+   *  series; "Show full year" pushes to 365. */
+  const [rangeDays, setRangeDays] = useState<number>(180);
+  /** Currently-open occurrence-action modal (edit time or cancel). */
+  const [actionTarget, setActionTarget] = useState<OccurrenceAction | null>(null);
 
   const fetchRoom = useCallback(async () => {
     if (!user || !churchId) return;
@@ -89,7 +103,7 @@ export default function RoomDetailPage() {
       const token = await user.getIdToken();
       const today = new Date().toISOString().split("T")[0];
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 30);
+      endDate.setDate(endDate.getDate() + rangeDays);
       const res = await fetch(
         `/api/reservations?church_id=${encodeURIComponent(churchId)}&room_id=${roomId}&date_from=${today}&date_to=${endDate.toISOString().split("T")[0]}`,
         { headers: { Authorization: `Bearer ${token}` } },
@@ -108,7 +122,7 @@ export default function RoomDetailPage() {
         e instanceof Error ? e.message : "Failed to load reservations",
       );
     }
-  }, [user, churchId, roomId]);
+  }, [user, churchId, roomId, rangeDays]);
 
   useEffect(() => {
     fetchRoom();
@@ -388,13 +402,44 @@ export default function RoomDetailPage() {
         </div>
       )}
 
+      {/* Date range chips — apply to both Timeline + Reservations tabs */}
+      {(activeTab === "timeline" || activeTab === "reservations") && (
+        <div className="mt-4 flex items-center gap-2 text-xs">
+          <span className="text-gray-400">Window:</span>
+          {[
+            { label: "30d", days: 30 },
+            { label: "90d", days: 90 },
+            { label: "6mo", days: 180 },
+            { label: "1yr", days: 365 },
+          ].map(({ label, days }) => (
+            <button
+              key={days}
+              type="button"
+              onClick={() => setRangeDays(days)}
+              className={`rounded-full border px-3 py-1 transition-colors ${
+                rangeDays === days
+                  ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-gray-300">·</span>
+          <span className="text-gray-400">
+            {reservations.length}{" "}
+            {reservations.length === 1 ? "reservation" : "reservations"}
+          </span>
+        </div>
+      )}
+
       <div className="mt-4">
         {/* Timeline Tab */}
         {activeTab === "timeline" && (
           <div>
             {sortedDates.length === 0 ? (
               <p className="text-gray-400 text-sm py-8 text-center">
-                No upcoming reservations
+                No upcoming reservations in the next {rangeDays} days
               </p>
             ) : (
               <div className="space-y-4">
@@ -407,6 +452,7 @@ export default function RoomDetailPage() {
                           weekday: "long",
                           month: "short",
                           day: "numeric",
+                          year: "numeric",
                         },
                       )}
                     </h3>
@@ -438,6 +484,31 @@ export default function RoomDetailPage() {
                             {formatTime12(r.start_time)} &ndash;{" "}
                             {formatTime12(r.end_time)}
                           </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActionTarget({ mode: "edit", reservation: r })
+                              }
+                              className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-vc-coral hover:text-vc-coral transition-colors"
+                              title="Edit reservation"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActionTarget({
+                                  mode: "cancel",
+                                  reservation: r,
+                                })
+                              }
+                              className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-red-400 hover:text-red-600 transition-colors"
+                              title="Cancel reservation"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -454,7 +525,7 @@ export default function RoomDetailPage() {
             {reservations.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-400 text-sm mb-3">
-                  No reservations in the next 30 days
+                  No reservations in the next {rangeDays} days
                 </p>
                 <button
                   onClick={() => setShowBookingForm(true)}
@@ -473,6 +544,9 @@ export default function RoomDetailPage() {
                       <th className="px-4 py-3">Time</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">By</th>
+                      <th className="px-4 py-3">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -488,8 +562,10 @@ export default function RoomDetailPage() {
                           {new Date(
                             r.date + "T12:00:00",
                           ).toLocaleDateString(undefined, {
+                            weekday: "short",
                             month: "short",
                             day: "numeric",
+                            year: "numeric",
                           })}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
@@ -513,6 +589,33 @@ export default function RoomDetailPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                           {r.requested_by_name}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActionTarget({ mode: "edit", reservation: r })
+                              }
+                              className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-vc-coral hover:text-vc-coral transition-colors"
+                              title="Edit reservation"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActionTarget({
+                                  mode: "cancel",
+                                  reservation: r,
+                                })
+                              }
+                              className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-red-400 hover:text-red-600 transition-colors"
+                              title="Cancel reservation"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -696,6 +799,248 @@ export default function RoomDetailPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Per-occurrence Edit / Cancel modal */}
+      {actionTarget && churchId && (
+        <OccurrenceActionModal
+          churchId={churchId}
+          action={actionTarget}
+          onClose={() => setActionTarget(null)}
+          onApplied={() => {
+            setActionTarget(null);
+            fetchReservations();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Occurrence Edit / Cancel modal
+// ---------------------------------------------------------------------------
+
+interface OccurrenceActionModalProps {
+  churchId: string;
+  action: OccurrenceAction;
+  onClose: () => void;
+  onApplied: () => void;
+}
+
+function OccurrenceActionModal({
+  churchId,
+  action,
+  onClose,
+  onApplied,
+}: OccurrenceActionModalProps) {
+  const { user } = useAuth();
+  const r = action.reservation;
+  const isRecurring = !!(r.is_recurring && r.recurrence_group_id);
+  const [scope, setScope] = useState<EditScope>("single_date");
+  const [startTime, setStartTime] = useState(r.start_time);
+  const [endTime, setEndTime] = useState(r.end_time);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const niceDate = new Date(r.date + "T12:00:00").toLocaleDateString(
+    undefined,
+    { weekday: "long", month: "long", day: "numeric", year: "numeric" },
+  );
+
+  async function handleSubmit() {
+    if (!user) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      if (action.mode === "cancel") {
+        // DELETE accepts edit_scope of "single" | "from_date" | "all"
+        const apiScope =
+          scope === "single_date"
+            ? "single"
+            : scope === "from_date"
+              ? "from_date"
+              : "all";
+        const res = await fetch(
+          `/api/reservations/${r.id}?church_id=${encodeURIComponent(churchId)}&edit_scope=${apiScope}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || `Cancel failed (${res.status})`);
+          return;
+        }
+      } else {
+        // PUT accepts edit_scope of "single_date" | "from_date" | "all"
+        const body: Record<string, unknown> = {
+          church_id: churchId,
+          start_time: startTime,
+          end_time: endTime,
+          edit_scope: scope,
+        };
+        const res = await fetch(`/api/reservations/${r.id}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || `Save failed (${res.status})`);
+          return;
+        }
+      }
+      onApplied();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const title =
+    action.mode === "edit" ? "Edit reservation" : "Cancel reservation";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl mx-4">
+        <h2 className="text-lg font-bold text-vc-indigo font-display mb-1">
+          {title}
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          <span className="font-medium text-vc-indigo">{r.title}</span> ·{" "}
+          {niceDate} · {r.start_time}–{r.end_time}
+        </p>
+
+        {/* Scope picker — only when recurring */}
+        {isRecurring && (
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-gray-700">Apply to:</p>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={scope === "single_date"}
+                onChange={() => setScope("single_date")}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">This occurrence only</span>
+                <span className="block text-xs text-gray-400">
+                  Other weeks in the series stay unchanged.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={scope === "from_date"}
+                onChange={() => setScope("from_date")}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">From this date forward</span>
+                <span className="block text-xs text-gray-400">
+                  Applies to this occurrence and every subsequent week.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={scope === "all"}
+                onChange={() => setScope("all")}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">All occurrences in series</span>
+                <span className="block text-xs text-gray-400">
+                  Applies to every occurrence, past and future.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
+        {/* Edit fields — time only for now */}
+        {action.mode === "edit" && (
+          <div className="space-y-3 mb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Start time
+                </label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  End time
+                </label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {action.mode === "cancel" && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            This will set the reservation status to{" "}
+            <span className="font-medium">cancelled</span>. It cannot be undone
+            from this screen.
+          </p>
+        )}
+
+        {error && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={
+              submitting ||
+              (action.mode === "edit" &&
+                (!startTime || !endTime || startTime >= endTime))
+            }
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+              action.mode === "cancel"
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-vc-coral hover:bg-vc-coral/90"
+            }`}
+          >
+            {submitting
+              ? "Working..."
+              : action.mode === "cancel"
+                ? "Cancel reservation"
+                : "Save changes"}
+          </button>
+        </div>
       </div>
     </div>
   );
