@@ -190,13 +190,16 @@ export async function POST(req: NextRequest) {
     if (!roomSnap.exists || !roomSnap.data()!.is_active) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
+    const roomData = roomSnap.data()!;
 
     // Load settings
     const settingsSnap = await adminDb
       .doc(`churches/${church_id}/roomSettings/config`)
       .get();
     const settings = (settingsSnap.data() || {}) as Partial<RoomSettings>;
-    const requireApproval = settings.require_approval ?? false;
+    // Either the org-wide flag OR the per-room flag forces approval.
+    const requireApproval =
+      (settings.require_approval ?? false) || !!roomData.requires_approval;
 
     // Handle recurrence
     const recurrenceRule = body.recurrence_rule as RecurrenceRule | undefined;
