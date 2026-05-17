@@ -26,7 +26,7 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { setDoc, doc, getDoc } from "firebase/firestore";
+import { setDoc, doc, getDoc, getDocs, collection, query, where } from "firebase/firestore";
 
 const CHURCH_A = "church-a";
 const CHURCH_B = "church-b";
@@ -114,11 +114,19 @@ beforeEach(async () => {
     await set(`churches/${CHURCH_A}/assignments/a1`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
+      service_date: "2026-06-01",
+      schedule_id: "sched_published",
+    });
+    await set(`churches/${CHURCH_A}/assignments/a2`, {
+      person_id: VOLUNTEER_A,
+      service_id: "s1",
+      service_date: "2026-06-08",
       schedule_id: "sched_published",
     });
     await set(`churches/${CHURCH_A}/assignments/a_draft`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
+      service_date: "2026-06-15",
       schedule_id: "sched_draft",
     });
 
@@ -392,38 +400,59 @@ describe("Firestore rules — calendar_feeds owner scoping (Codex QA Layer 1)", 
 });
 
 /**
- * Codex QA 2026-05-15 — Draft assignment visibility fix.
+ * Codex QA 2026-05-15 + Run 2 2026-05-16 — Assignment access semantics.
  *
- * The bug: volunteers saw `Draft` assignments in My Schedule before publish,
- * with Can't-Make-It and Remove actions but no Confirm/Decline. Rules now
- * gate volunteer reads on the parent schedule being `published`.
+ * History:
+ *   Round 1 tried to deny non-published assignments at the rule layer via
+ *   cross-doc get(). That broke volunteer My Schedule queries (Run 2 blocker).
+ *
+ *   Round 2 keeps the rule open (any active member can read assignments in
+ *   their church) and enforces draft-hiding at the application layer:
+ *     • my-schedule page filters by published schedule client-side
+ *     • iCal route filters server-side
+ *
+ *   This test set verifies the rule SHAPE that's actually deployed.
+ *   Cross-tenant denial is covered by the volunteer-access describe
+ *   block above.
  */
-describe("Firestore rules — assignment published-only filter (Codex QA Layer 1)", () => {
-  it("Volunteer CAN read assignment whose schedule is published", async () => {
+describe("Firestore rules — assignment reads (Codex QA Run 2)", () => {
+  it("Volunteer's My Schedule query (getDocs) succeeds", async () => {
+    // The blocker from Run 2: the previous rule (with cross-doc get) made
+    // this throw. This test fails immediately if anyone re-introduces a rule
+    // shape that breaks list queries.
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    const assignmentsRef = collection(
+      ctx.firestore(),
+      `churches/${CHURCH_A}/assignments`,
+    );
+    const q = query(
+      assignmentsRef,
+      where("person_id", "==", VOLUNTEER_A),
+      where("service_date", ">=", "2026-01-01"),
+    );
+    await assertSucceeds(getDocs(q));
+  });
+
+  it("Volunteer CAN read individual published assignment", async () => {
     const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
     await assertSucceeds(
       getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a1`)),
     );
   });
 
-  it("Volunteer CANNOT read assignment whose schedule is draft", async () => {
-    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+  it("Volunteer in another church CANNOT read assignments", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_B);
     await assertFails(
-      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a1`)),
     );
   });
 
-  it("Admin CAN read assignment from a draft schedule (scheduler-or-above bypass)", async () => {
+  it("Admin CAN read all assignments via list query", async () => {
     const ctx = testEnv.authenticatedContext(ADMIN_A);
-    await assertSucceeds(
-      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    const assignmentsRef = collection(
+      ctx.firestore(),
+      `churches/${CHURCH_A}/assignments`,
     );
-  });
-
-  it("Owner CAN read assignment from a draft schedule", async () => {
-    const ctx = testEnv.authenticatedContext(OWNER_A);
-    await assertSucceeds(
-      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
-    );
+    await assertSucceeds(getDocs(assignmentsRef));
   });
 });

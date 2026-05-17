@@ -222,39 +222,45 @@ export async function POST(req: NextRequest) {
     const ref = await adminDb.collection("event_signups").add(signupData);
 
     // Codex QA 2026-05-15: send a confirmation email so the volunteer has a
-    // record of what they signed up for. Fire-and-forget — failures must not
-    // break the signup response.
+    // record of what they signed up for.
+    //
+    // Codex Run 2 2026-05-16: this was previously fire-and-forget
+    // (`.catch(...)` without await). Vercel serverless functions terminate
+    // as soon as the response is sent, which killed the pending Resend
+    // promise — no email arrived. Now we await the send so it completes
+    // before the response is returned. Failures are still caught so a
+    // transient email outage doesn't fail the user-facing signup.
     if (process.env.RESEND_API_KEY && volunteer_email) {
-      const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
-      const churchName = (churchSnap.data()?.name as string) || "the church";
-      const eventDate = formatEventDate(event.date || "");
-      const eventTime = formatEventTime(
-        event.start_time,
-        event.end_time,
-        event.all_day,
-      );
-      const eventUrl = `${getBaseUrl(req)}/events/${church_id}/${event_id}`;
-      const { subject, html, text } = buildEventSignupConfirmationEmail({
-        recipientName: volunteer_name || volunteer_email,
-        eventName: event.name || "Event",
-        eventDate,
-        eventTime,
-        roleTitle,
-        churchName,
-        eventUrl,
-      });
-      resend.emails
-        .send({
+      try {
+        const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
+        const churchName = (churchSnap.data()?.name as string) || "the church";
+        const eventDate = formatEventDate(event.date || "");
+        const eventTime = formatEventTime(
+          event.start_time,
+          event.end_time,
+          event.all_day,
+        );
+        const eventUrl = `${getBaseUrl(req)}/events/${church_id}/${event_id}`;
+        const { subject, html, text } = buildEventSignupConfirmationEmail({
+          recipientName: volunteer_name || volunteer_email,
+          eventName: event.name || "Event",
+          eventDate,
+          eventTime,
+          roleTitle,
+          churchName,
+          eventUrl,
+        });
+        await resend.emails.send({
           from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
           replyTo: "info@volunteercal.com",
           to: [volunteer_email],
           subject,
           html,
           text,
-        })
-        .catch((emailErr) => {
-          console.error("[POST /api/signup] confirmation email failed:", emailErr);
         });
+      } catch (emailErr) {
+        console.error("[POST /api/signup] confirmation email failed:", emailErr);
+      }
     }
 
     return NextResponse.json({ id: ref.id, ...signupData }, { status: 201 });

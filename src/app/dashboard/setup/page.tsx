@@ -544,20 +544,46 @@ function TemplateCard({
 
   const displayName = customName || template.name;
 
+  // Codex Run 2 (2026-05-16): row body now toggles selection. Clicking the
+  // template name no longer enters rename mode — that's reserved for the
+  // explicit pencil button on the right. Codex accidentally created the
+  // org with 0 teams because the name behaved like a rename trigger.
+  function handleRowClick() {
+    if (disabled || editing) return;
+    onToggle();
+  }
+
+  function handleRowKeyDown(e: React.KeyboardEvent) {
+    if (disabled || editing) return;
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      onToggle();
+    }
+  }
+
   return (
     <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-pressed={selected}
+      aria-disabled={disabled}
+      onClick={handleRowClick}
+      onKeyDown={handleRowKeyDown}
       className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${
         selected
-          ? "border-vc-coral/40 bg-vc-coral/5"
+          ? "border-vc-coral bg-vc-coral/5"
           : disabled
             ? "border-vc-border-light bg-white opacity-50 cursor-not-allowed"
-            : "border-vc-border-light bg-white"
+            : "border-vc-border-light bg-white cursor-pointer hover:border-vc-coral/40 hover:bg-vc-bg-warm"
       }`}
     >
       <input
         type="checkbox"
         checked={selected}
         onChange={onToggle}
+        // Click handler on the wrapper already calls onToggle; stop the
+        // event so we don't toggle twice when the user clicks the checkbox.
+        onClick={(e) => e.stopPropagation()}
         disabled={disabled}
         className="mt-0.5 h-4 w-4 shrink-0 rounded border-vc-border text-vc-coral accent-vc-coral disabled:cursor-not-allowed"
       />
@@ -573,7 +599,10 @@ function TemplateCard({
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
+            // Stop click so editing the name doesn't toggle the row.
+            onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === "Enter") commitEdit();
               if (e.key === "Escape") {
                 setEditValue(customName || template.name);
@@ -583,31 +612,36 @@ function TemplateCard({
             className="w-full rounded border border-vc-coral/40 bg-white px-1.5 py-0.5 text-sm font-medium text-vc-indigo focus:outline-none focus:ring-1 focus:ring-vc-coral"
           />
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setEditValue(displayName);
-              setEditing(true);
-            }}
-            className="group flex items-center gap-1.5 text-left"
-          >
+          <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium text-vc-indigo">
               {displayName}
             </span>
-            <svg
-              className="h-3 w-3 text-vc-text-muted opacity-0 transition-opacity group-hover:opacity-100"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditValue(displayName);
+                setEditing(true);
+              }}
+              disabled={disabled}
+              aria-label={`Rename ${displayName}`}
+              className="rounded p-0.5 text-vc-text-muted transition-colors hover:bg-vc-coral/10 hover:text-vc-coral disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"
-              />
-            </svg>
-          </button>
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"
+                />
+              </svg>
+            </button>
+          </div>
         )}
         <p className="mt-0.5 text-xs text-vc-text-muted">
           {template.description}
