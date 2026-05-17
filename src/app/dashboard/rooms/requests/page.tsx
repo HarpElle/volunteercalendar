@@ -33,11 +33,13 @@ export default function RoomRequestsPage() {
 
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState<Record<string, string>>({});
 
   const fetchRequests = useCallback(async () => {
     if (!user || !churchId) return;
+    setLoadError(null);
     try {
       const token = await user.getIdToken();
       const res = await fetch(
@@ -47,9 +49,14 @@ export default function RoomRequestsPage() {
       if (res.ok) {
         const json = await res.json();
         setRequests(json.requests || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setLoadError(
+          data.error || `Failed to load requests (${res.status})`,
+        );
       }
-    } catch {
-      // silent
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load requests");
     } finally {
       setLoading(false);
     }
@@ -117,12 +124,18 @@ export default function RoomRequestsPage() {
         </p>
       </div>
 
-      {requests.length === 0 ? (
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+
+      {!loadError && requests.length === 0 ? (
         <EmptyState
           title="No pending requests"
           description="All reservation requests have been reviewed."
         />
-      ) : (
+      ) : !loadError && requests.length > 0 ? (
         <div className="space-y-4">
           {requests.map((req) => {
             const r = req.reservation;
@@ -208,7 +221,7 @@ export default function RoomRequestsPage() {
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
