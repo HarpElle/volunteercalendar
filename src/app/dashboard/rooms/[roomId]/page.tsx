@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/context/auth-context";
+import { db } from "@/lib/firebase/config";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { TabBar } from "@/components/ui/tab-bar";
@@ -105,22 +107,23 @@ export default function RoomDetailPage() {
   }, [fetchRoom, fetchReservations]);
 
   // Load tier (for recurring gating) + global equipment tags for the edit form.
+  // Tier comes from the church doc directly because /api/church-info is a
+  // public endpoint that doesn't expose subscription_tier (mirrors the
+  // pattern in /calendar/page.tsx).
   useEffect(() => {
     if (!user || !churchId) return;
     (async () => {
       try {
         const token = await user.getIdToken();
-        const [tierRes, settingsRes] = await Promise.all([
-          fetch(`/api/church-info?id=${churchId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [tierSnap, settingsRes] = await Promise.all([
+          getDoc(doc(db, "churches", churchId)),
           fetch(`/api/rooms/settings?church_id=${churchId}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
-        if (tierRes.ok) {
-          const t = await tierRes.json();
-          if (t.subscription_tier) setTier(t.subscription_tier as SubscriptionTier);
+        if (tierSnap.exists()) {
+          const t = tierSnap.data().subscription_tier as SubscriptionTier | undefined;
+          if (t) setTier(t);
         }
         if (settingsRes.ok) {
           const s = await settingsRes.json();

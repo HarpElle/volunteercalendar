@@ -26,6 +26,41 @@ interface RoomBookingFormProps {
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+/** Human-readable summary of a RecurrenceRule for the Review step. */
+function describeRecurrence(rule: import("@/lib/types").RecurrenceRule): string {
+  const parts: string[] = [];
+  if (rule.frequency === "weekly") parts.push("Weekly");
+  else if (rule.frequency === "biweekly") parts.push("Every 2 weeks");
+  else if (rule.frequency === "daily") parts.push("Daily");
+  else if (rule.frequency === "monthly_by_date") parts.push("Monthly (by date)");
+  else if (rule.frequency === "monthly_by_weekday") parts.push("Monthly (by weekday)");
+  else parts.push(rule.frequency);
+
+  if (rule.days_of_week && rule.days_of_week.length > 0) {
+    parts.push(
+      `every ${rule.days_of_week.map((d) => WEEKDAY_NAMES[d]).join(", ")}`,
+    );
+  }
+  if (rule.end_type === "count" && rule.count) {
+    parts.push(`for ${rule.count} occurrence${rule.count === 1 ? "" : "s"}`);
+  } else if (rule.end_type === "until_date" && rule.end_date) {
+    parts.push(`until ${rule.end_date}`);
+  } else if (rule.end_type === "never") {
+    parts.push("ongoing");
+  }
+  return parts.join(", ");
+}
+
 interface ConflictData {
   id: string;
   title: string;
@@ -411,6 +446,14 @@ export function RoomBookingForm({
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none resize-none"
                 />
               </div>
+              {/* Organizer is auto-attributed to the current user on submit.
+                  Showing it here so admins aren't surprised on Review. */}
+              <p className="text-xs text-gray-400">
+                You&apos;ll be recorded as the organizer:{" "}
+                <span className="text-vc-indigo">
+                  {user?.displayName || user?.email || "current user"}
+                </span>
+              </p>
             </div>
           )}
 
@@ -460,6 +503,15 @@ export function RoomBookingForm({
                   <dt className="text-gray-400">Title</dt>
                   <dd className="text-vc-indigo font-medium">{title}</dd>
                 </div>
+                {/* Organizer is inferred from the logged-in user's membership
+                    display name on the server. Surfaced here so the admin
+                    knows who the reservation will be attributed to. */}
+                <div className="flex justify-between">
+                  <dt className="text-gray-400">Organizer</dt>
+                  <dd className="text-vc-indigo">
+                    {user?.displayName || user?.email || "You"}
+                  </dd>
+                </div>
                 {description && (
                   <div className="flex justify-between">
                     <dt className="text-gray-400">Description</dt>
@@ -476,10 +528,17 @@ export function RoomBookingForm({
                     </dd>
                   </div>
                 )}
-                {recurrenceRule && (
+                {recurrenceRule ? (
                   <div className="flex justify-between">
                     <dt className="text-gray-400">Repeats</dt>
-                    <dd className="text-vc-coral font-medium">Yes</dd>
+                    <dd className="text-vc-coral font-medium text-right">
+                      {describeRecurrence(recurrenceRule)}
+                    </dd>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-400">Repeats</dt>
+                    <dd className="text-gray-500">One-time booking</dd>
                   </div>
                 )}
               </dl>
