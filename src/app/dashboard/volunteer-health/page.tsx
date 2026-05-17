@@ -17,10 +17,62 @@ interface VolunteerHealth {
   volunteer: Person;
   category: HealthCategory;
   detail: string;
+  /** Live-computed stats (see computeLiveStats); kept on the result so the
+   * row can render counts without recomputing per render. */
+  liveStats: { times_scheduled_last_90d: number; last_served_date: string | null; decline_count: number; no_show_count: number };
+}
+
+/**
+ * Compute fresh stats from the actual assignments collection.
+ *
+ * Codex Run 2 Phase 3 (2026-05-17): `v.stats` is initialized to zeros at
+ * Person creation and never updated. The dashboard was reading stale
+ * init values and classifying everyone as "Inactive / Never scheduled."
+ * We now compute live from the assignments we already loaded.
+ */
+function computeLiveStats(
+  v: Person,
+  recentAssignments: Assignment[],
+): { times_scheduled_last_90d: number; last_served_date: string | null; decline_count: number; no_show_count: number } {
+  const today = new Date();
+  const ninetyDaysAgo = new Date(today);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const cutoff = ninetyDaysAgo.toISOString().split("T")[0];
+  const todayStr = today.toISOString().split("T")[0];
+
+  let times_scheduled_last_90d = 0;
+  let last_served_date: string | null = null;
+  let decline_count = 0;
+  let no_show_count = 0;
+
+  for (const a of recentAssignments) {
+    if (a.person_id !== v.id) continue;
+    const dateStr = a.service_date as string | undefined;
+    if (!dateStr) continue;
+
+    // "Scheduled" = assigned to a service in the last 90 days (any status
+    // except declined, which means the volunteer is NOT serving).
+    if (dateStr >= cutoff && a.status !== "declined") {
+      times_scheduled_last_90d++;
+    }
+    // "Last served" = most recent PAST service date the volunteer was
+    // confirmed for OR marked attended.
+    if (dateStr < todayStr && (a.status === "confirmed" || (a as { attended?: string }).attended === "present")) {
+      if (!last_served_date || dateStr > last_served_date) {
+        last_served_date = dateStr;
+      }
+    }
+    if (a.status === "declined") decline_count++;
+    if ((a as { attended?: string }).attended === "no_show") no_show_count++;
+  }
+
+  return { times_scheduled_last_90d, last_served_date, decline_count, no_show_count };
 }
 
 function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHealth {
-  const stats = v.stats ?? { times_scheduled_last_90d: 0, last_served_date: null, decline_count: 0, no_show_count: 0 };
+  // Codex Run 2 Phase 3 (2026-05-17): compute live from assignments instead
+  // of trusting the never-updated v.stats.
+  const stats = computeLiveStats(v, recentAssignments);
   const scheduling = v.scheduling_profile;
 
   // No-show pattern: 2+ no-shows
@@ -29,6 +81,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
       volunteer: v,
       category: "no_show",
       detail: `${stats.no_show_count} no-show${stats.no_show_count > 1 ? "s" : ""}`,
+      liveStats: stats,
     };
   }
 
@@ -41,6 +94,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
       volunteer: v,
       category: "declining",
       detail: `${stats.decline_count} decline${stats.decline_count > 1 ? "s" : ""} (${rate}% rate)`,
+      liveStats: stats,
     };
   }
 
@@ -54,6 +108,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
       volunteer: v,
       category: "at_risk",
       detail: `Scheduled ${stats.times_scheduled_last_90d}× in 90d (prefers ${preferredFreq}/mo)`,
+      liveStats: stats,
     };
   }
 
@@ -67,6 +122,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
         volunteer: v,
         category: "inactive",
         detail: `Last served ${daysSince} days ago`,
+        liveStats: stats,
       };
     }
   } else if (v.status === "active") {
@@ -75,6 +131,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
       volunteer: v,
       category: "inactive",
       detail: "Never scheduled",
+      liveStats: stats,
     };
   }
 
@@ -82,6 +139,7 @@ function classifyHealth(v: Person, recentAssignments: Assignment[]): VolunteerHe
     volunteer: v,
     category: "healthy",
     detail: `${stats.times_scheduled_last_90d}× in 90 days`,
+    liveStats: stats,
   };
 }
 
@@ -272,12 +330,12 @@ export default function VolunteerHealthPage() {
                     <div className="text-right">
                       <p className="text-sm text-vc-text-secondary">{h.detail}</p>
                       <div className="mt-0.5 flex items-center gap-2 text-xs text-vc-text-muted">
-                        <span>Scheduled: {h.volunteer.stats?.times_scheduled_last_90d ?? 0}×</span>
-                        {(h.volunteer.stats?.decline_count ?? 0) > 0 && (
-                          <span>Declined: {h.volunteer.stats?.decline_count}</span>
+                        <span>Scheduled: {h.liveStats.times_scheduled_last_90d}×</span>
+                        {h.liveStats.decline_count > 0 && (
+                          <span>Declined: {h.liveStats.decline_count}</span>
                         )}
-                        {(h.volunteer.stats?.no_show_count ?? 0) > 0 && (
-                          <span>No-shows: {h.volunteer.stats?.no_show_count}</span>
+                        {h.liveStats.no_show_count > 0 && (
+                          <span>No-shows: {h.liveStats.no_show_count}</span>
                         )}
                       </div>
                     </div>

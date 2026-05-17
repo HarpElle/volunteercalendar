@@ -118,12 +118,29 @@ export async function reissueActivationCode(opts: {
 export async function listStationsForChurch(
   church_id: string,
 ): Promise<KioskStation[]> {
-  const snap = await adminDb
-    .collection("kiosk_stations")
-    .where("church_id", "==", church_id)
-    .orderBy("created_at", "desc")
-    .get();
-  return snap.docs.map((d) => d.data() as KioskStation);
+  // Codex Run 2 Phase 3 (2026-05-17): the composite index
+  // (church_id, created_at desc) is required for this ordered query.
+  // If the index is missing or still building, Firestore throws — fall
+  // back to an unordered query so the Stations tab UI shows an empty
+  // state (or any existing rows) instead of crashing. Same defensive
+  // shape used for /s/[slug] in Round 1.
+  try {
+    const snap = await adminDb
+      .collection("kiosk_stations")
+      .where("church_id", "==", church_id)
+      .orderBy("created_at", "desc")
+      .get();
+    return snap.docs.map((d) => d.data() as KioskStation);
+  } catch (err) {
+    console.error("[listStationsForChurch] ordered query failed, trying unordered:", err);
+    const snap = await adminDb
+      .collection("kiosk_stations")
+      .where("church_id", "==", church_id)
+      .get();
+    const rows = snap.docs.map((d) => d.data() as KioskStation);
+    rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    return rows;
+  }
 }
 
 export async function revokeStation(opts: {

@@ -879,18 +879,11 @@ export function PersonDetailDrawer({
                       className="overflow-hidden"
                     >
                       <div className="mt-2 rounded-xl border border-vc-border-light bg-white p-4 space-y-3">
-                        {selectedOrgRole !== "admin" ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOrgRoleChange("admin")}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                            </svg>
-                            Make Administrator
-                          </button>
-                        ) : (
+                        {/* Codex Run 2 Phase 3 (2026-05-17): the only role
+                            promotion option was "Make Administrator." Scheduler
+                            could only be reached implicitly via team-toggle.
+                            Now both options are explicit. */}
+                        {selectedOrgRole === "admin" ? (
                           <button
                             type="button"
                             onClick={() => handleOrgRoleChange("volunteer")}
@@ -898,6 +891,46 @@ export function PersonDetailDrawer({
                           >
                             Remove admin access
                           </button>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedOrgRole !== "scheduler" && (
+                              <button
+                                type="button"
+                                onClick={() => handleOrgRoleChange("scheduler")}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-coral/40 hover:text-vc-coral min-h-[44px]"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                                Make Scheduler
+                              </button>
+                            )}
+                            {selectedOrgRole === "scheduler" && (
+                              <button
+                                type="button"
+                                onClick={() => handleOrgRoleChange("volunteer")}
+                                className="text-xs font-medium text-vc-text-muted transition-colors hover:text-vc-danger"
+                              >
+                                Remove scheduler access
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOrgRoleChange("admin")}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-sm font-medium text-vc-text-secondary transition-colors hover:border-vc-indigo/20 hover:text-vc-indigo min-h-[44px]"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                              </svg>
+                              Make Administrator
+                            </button>
+                          </div>
+                        )}
+
+                        {selectedOrgRole === "scheduler" && (
+                          <p className="text-xs text-vc-text-muted">
+                            Schedulers default to all-team access. Scope to specific teams below.
+                          </p>
                         )}
 
                         {/* Scheduler scope — show when relevant */}

@@ -48,7 +48,7 @@ export function buildOrgDeletedMembersEmail(data: OrgDeletedMembersEmailData): {
                 ${followUpHtml}
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard", "Go to Dashboard")}
+              ${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}
 
               ${mutedCenter("You're receiving this because you were a member of " + data.orgName + ".")}`;
 
@@ -65,7 +65,7 @@ ${data.orgName} has been deleted by its administrator. Your membership and any a
 
 ${followUpText}
 
-Go to Dashboard: https://volunteercal.org/dashboard
+Go to Dashboard: https://volunteercal.com/dashboard
 
 --
 VolunteerCal - Thoughtfully built by HarpElle`;

@@ -64,7 +64,7 @@ export function buildVacancyAlertEmail(data: VacancyAlertEmailData): {
                 Please review these openings and reassign them at your earliest convenience.
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard/schedules", "Review Schedules")}
+              ${ctaButton("https://volunteercal.com/dashboard/schedules", "Review Schedules")}
 
               ${mutedCenter("You're receiving this because you manage schedules that were affected by this departure.")}`;
 
@@ -92,7 +92,7 @@ ${vacancyList}
 
 Please review these openings and reassign them at your earliest convenience.
 
-Review Schedules: https://volunteercal.org/dashboard/schedules
+Review Schedules: https://volunteercal.com/dashboard/schedules
 
 --
 Sent by VolunteerCal on behalf of ${data.churchName}`;

@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const { subject, html, text } = buildMembershipApprovedEmail({
       userName,
       churchName,
-      dashboardUrl: "https://volunteercal.org/dashboard",
+      dashboardUrl: "https://volunteercal.com/dashboard",
     });
 
     await resend.emails.send({

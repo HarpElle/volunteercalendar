@@ -53,7 +53,7 @@ export function buildAdminDepartureEmail(data: AdminDepartureEmailData): {
                 ${schedulerNote}
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard/people", "View People")}
+              ${ctaButton("https://volunteercal.com/dashboard/people", "View People")}
 
               ${mutedCenter("You're receiving this because you're an administrator of " + data.churchName + ".")}`;
 
@@ -74,7 +74,7 @@ Teams affected: ${teamsList}.
 
 ${schedulerNote}
 
-View People: https://volunteercal.org/dashboard/people
+View People: https://volunteercal.com/dashboard/people
 
 --
 Sent by VolunteerCal on behalf of ${data.churchName}`;

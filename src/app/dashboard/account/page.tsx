@@ -1153,6 +1153,15 @@ export default function AccountPage() {
           <p className="mt-2 text-sm font-medium text-vc-danger">
             This action cannot be undone.
           </p>
+          {/* Codex Run 2 Phase 3 confusion (2026-05-17): surface the
+              non-destructive "promote someone first" path before the DELETE
+              confirmation, so admins don't have to approach the destructive
+              flow to learn what their alternative is. */}
+          {userIsAdmin && (
+            <div className="mt-3 rounded-lg bg-vc-bg-warm/60 px-3 py-2 text-xs text-vc-text-secondary">
+              Want to keep your organization alive? <Link href="/dashboard/people" className="font-medium text-vc-coral hover:underline">Promote someone else to admin first</Link>, then come back to delete just your own account.
+            </div>
+          )}
           <div className="mt-4 space-y-3">
             <Input
               label={`Type "DELETE" to confirm`}

@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckInQR } from "@/components/ui/check-in-qr";
 import type { Assignment, Service, Ministry } from "@/lib/types";
 
 interface ServiceDateGroup {
@@ -13,6 +14,11 @@ interface ServiceDateTileProps {
   group: ServiceDateGroup;
   ministryMap: Map<string, Ministry>;
   onClick?: () => void;
+  /** Codex Run 2 Phase 3 (2026-05-17): when provided, renders the QR check-in
+   *  icon button in the tile's top-right corner. The CheckInQR component is
+   *  self-contained — generates the code via /api/check-in and shows the QR
+   *  in a modal. Click on the QR icon does not bubble to the tile's onClick. */
+  churchId?: string;
 }
 
 function formatDateLong(iso: string): string {
@@ -24,7 +30,7 @@ function formatDateLong(iso: string): string {
   });
 }
 
-export function ServiceDateTile({ group, onClick }: ServiceDateTileProps) {
+export function ServiceDateTile({ group, onClick, churchId }: ServiceDateTileProps) {
   const { date, service, assignments, totalRoles } = group;
 
   const confirmed = assignments.filter((a) => a.status === "confirmed").length;
@@ -36,9 +42,17 @@ export function ServiceDateTile({ group, onClick }: ServiceDateTileProps) {
   const hasGaps = unfilled > 0 || declined > 0 || awaiting > 0;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="w-full rounded-xl border border-vc-border-light bg-white p-4 text-left transition-all hover:shadow-sm hover:border-vc-coral/30"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className="w-full rounded-xl border border-vc-border-light bg-white p-4 text-left transition-all hover:shadow-sm hover:border-vc-coral/30 cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -50,15 +64,29 @@ export function ServiceDateTile({ group, onClick }: ServiceDateTileProps) {
             {service.start_time ? ` · ${service.start_time}` : ""}
           </p>
         </div>
-        {hasGaps ? (
-          <span className="shrink-0 rounded-full bg-vc-sand/25 px-2 py-0.5 text-xs font-medium text-vc-warning">
-            Needs attention
-          </span>
-        ) : (
-          <span className="shrink-0 rounded-full bg-vc-sage/15 px-2 py-0.5 text-xs font-medium text-vc-sage">
-            All set
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {hasGaps ? (
+            <span className="rounded-full bg-vc-sand/25 px-2 py-0.5 text-xs font-medium text-vc-warning">
+              Needs attention
+            </span>
+          ) : (
+            <span className="rounded-full bg-vc-sage/15 px-2 py-0.5 text-xs font-medium text-vc-sage">
+              All set
+            </span>
+          )}
+          {churchId && (
+            // Stop click propagation so the QR icon doesn't also open the
+            // roster modal that the tile-click triggers.
+            <div onClick={(e) => e.stopPropagation()}>
+              <CheckInQR
+                churchId={churchId}
+                serviceId={service.id}
+                serviceDate={date}
+                serviceName={service.name}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stats Row */}
@@ -93,7 +121,7 @@ export function ServiceDateTile({ group, onClick }: ServiceDateTileProps) {
           style={{ width: `${Math.min(fillPct, 100)}%` }}
         />
       </div>
-    </button>
+    </div>
   );
 }
 

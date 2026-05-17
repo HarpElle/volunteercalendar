@@ -300,8 +300,8 @@ export default function SchedulingDashboardPage() {
                       {formatDate(a.service_date)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-vc-sand/20 px-2.5 py-0.5 text-xs font-medium text-vc-warning">
-                    Draft
+                  <span className="rounded-full bg-vc-sand/30 px-2.5 py-0.5 text-xs font-medium text-vc-sand-dark">
+                    Pending
                   </span>
                 </div>
               ))}
@@ -399,6 +399,7 @@ export default function SchedulingDashboardPage() {
                   group={group}
                   ministryMap={ministryMap}
                   onClick={() => setRosterService({ service: group.service, date: group.date })}
+                  churchId={churchId || undefined}
                 />
               ))}
             </div>
