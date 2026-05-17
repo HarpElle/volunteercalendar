@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth } from "@/lib/firebase/admin";
 import { buildReminderEmail, buildConfirmationEmail } from "@/lib/utils/email-templates";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/test-email

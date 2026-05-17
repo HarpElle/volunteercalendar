@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { Resend } from "resend";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
 import { audit, userActor } from "@/lib/server/audit";
 import { enqueueOutboxEntry } from "@/lib/server/outbox";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/schedules/{id}/publish

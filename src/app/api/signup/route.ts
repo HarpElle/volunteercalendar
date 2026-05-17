@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { buildEventSignupConfirmationEmail } from "@/lib/utils/emails";
 import type { Event, Church, EventSignup } from "@/lib/types";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 function formatEventDate(iso: string): string {
   // iso may be a date-only string like "2026-04-12"; render as "Saturday, April 12, 2026"

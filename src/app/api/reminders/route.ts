@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildReminderEmail, buildReminderSms } from "@/lib/utils/email-templates";
 import { sendSms } from "@/lib/services/sms";
@@ -7,8 +6,7 @@ import { safeCompare } from "@/lib/utils/safe-compare";
 import type { NotificationType, NotificationChannel } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { resend } from "@/lib/resend";
 
 /**
  * POST /api/reminders

@@ -7,6 +7,7 @@ import { buildDowngradeNotificationEmail } from "@/lib/utils/emails/downgrade-no
 import { isDowngrade, computeLostFeatures, computeOverLimitItems } from "@/lib/utils/tier-enforcement";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { Resend } from "resend";
+import { resend } from "@/lib/resend";
 
 const VALID_TIERS = ["free", "starter", "growth", "pro", "enterprise"];
 
@@ -72,8 +73,6 @@ async function sendDowngradeEmail(churchId: string, oldTier: string, newTier: st
       lostFeatures,
       overLimitItems,
     });
-
-    const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: "VolunteerCal <noreply@harpelle.com>",
       replyTo: "info@volunteercal.com",
@@ -173,7 +172,6 @@ export async function POST(req: NextRequest) {
 
         // Send purchase thank-you email (fire-and-forget)
         if (process.env.RESEND_API_KEY && session.customer_email) {
-          const resend = new Resend(process.env.RESEND_API_KEY);
           const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
           const churchName = churchSnap.exists ? (churchSnap.data()?.name as string) || "Your church" : "Your church";
           const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);

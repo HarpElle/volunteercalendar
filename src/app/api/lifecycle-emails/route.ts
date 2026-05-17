@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
+import { resend } from "@/lib/resend";
 import {
   buildPurchaseThankYouEmail,
   buildReEngagementEmail,
   buildUpsellEmail,
 } from "@/lib/utils/email-templates";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Lifecycle email API. Called with a type and payload.
