@@ -121,6 +121,13 @@ export function CheckInQR({
         // onMouseDown also stops propagation because mousedown can trigger
         // some click-handlers (especially focus-based) before click fires.
         onMouseDown={(e) => e.stopPropagation()}
+        // Codex Run 2 Phase 3 retest 2 (2026-05-17): keyboard Enter on this
+        // button bubbled to the parent tile and opened the roster instead
+        // of the QR modal. Stop key events from bubbling — native button
+        // Enter→click behavior still works at this level.
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:border-vc-coral hover:text-vc-coral transition-colors"
         title="Generate QR code for volunteer check-in"
       >
@@ -175,7 +182,18 @@ export function CheckInQR({
             <p className="mt-1 text-xs text-vc-text-muted">
               Volunteers scan this code to check in
             </p>
-            <div className="mt-4 flex gap-2 justify-center">
+            {/* Codex Run 2 Phase 3 retest 2 (2026-05-17): surface the
+                check-in URL visibly so admins can read or share it
+                directly without having to copy/paste blind. */}
+            <div className="mt-4 rounded-lg border border-vc-border-light bg-vc-bg-warm/60 px-3 py-2 text-left">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-vc-text-muted">
+                Check-in URL
+              </p>
+              <p className="mt-0.5 break-all font-mono text-xs text-vc-indigo">
+                {`${typeof window !== "undefined" ? window.location.origin : "https://volunteercal.com"}/check-in/${code}`}
+              </p>
+            </div>
+            <div className="mt-3 flex gap-2 justify-center">
               <Button size="sm" onClick={handlePrint}>
                 Print
               </Button>
