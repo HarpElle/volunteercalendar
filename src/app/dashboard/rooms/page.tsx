@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/context/auth-context";
+import { db } from "@/lib/firebase/config";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -69,23 +71,23 @@ export default function RoomsPage() {
   }, [fetchRooms]);
 
   // Fetch tier (for recurring-reservation gating) and equipment tags (for
-  // the Add Room modal). Both are lightweight one-time loads.
+  // the Add Room modal). Tier comes from the church doc directly because
+  // /api/church-info is a public endpoint that intentionally does not expose
+  // subscription_tier — mirroring the pattern used in /calendar/page.tsx.
   useEffect(() => {
     if (!user || !churchId) return;
     (async () => {
       try {
         const token = await user.getIdToken();
-        const [tierRes, settingsRes] = await Promise.all([
-          fetch(`/api/church-info?id=${churchId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [tierSnap, settingsRes] = await Promise.all([
+          getDoc(doc(db, "churches", churchId)),
           fetch(`/api/rooms/settings?church_id=${churchId}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
-        if (tierRes.ok) {
-          const t = await tierRes.json();
-          if (t.subscription_tier) setTier(t.subscription_tier as SubscriptionTier);
+        if (tierSnap.exists()) {
+          const t = tierSnap.data().subscription_tier as SubscriptionTier | undefined;
+          if (t) setTier(t);
         }
         if (settingsRes.ok) {
           const s = await settingsRes.json();
