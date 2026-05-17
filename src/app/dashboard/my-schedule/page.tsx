@@ -53,6 +53,13 @@ interface ScheduleItem {
    * actions and labeled as "Draft."
    */
   confirmationToken?: string | null;
+  /**
+   * Attendance / absence state. Codex Run 2 Phase 3 (2026-05-17): after
+   * submitting "Can't Make It" the page now shows a Can't Make It chip and
+   * hides the Confirm/Decline/Remove buttons, so the volunteer can see their
+   * action was recorded. Previously the page silently reverted to Confirmed.
+   */
+  attended?: string | null;
 }
 
 type TabKey = "upcoming" | "past" | "team";
@@ -266,6 +273,7 @@ export default function MySchedulePage() {
       status: a.status,
       isTrainee: a.assignment_type === "trainee",
       confirmationToken: a.confirmation_token || null,
+      attended: a.attended || null,
     });
   }
 
@@ -449,18 +457,27 @@ export default function MySchedulePage() {
                 // UI and surface Confirm/Decline actions. Codex Run 2 retest
                 // (2026-05-17): previously labeled "Draft" with no Confirm.
                 const isPending = item.kind === "assignment" && item.status === "draft";
-                const statusColor = isPending
-                  ? "bg-vc-sand/30 text-vc-sand-dark"
-                  : item.status === "confirmed" || item.status === "approved"
-                    ? "bg-vc-sage/15 text-vc-sage"
-                    : item.status === "declined" || item.status === "cancelled"
-                      ? "bg-vc-danger/10 text-vc-danger"
-                      : "bg-vc-bg-cream text-vc-text-muted";
-                const statusLabel = isPending
-                  ? "Pending"
-                  : item.status === "approved"
-                    ? "confirmed"
-                    : item.status;
+                // Codex Run 2 Phase 3 (2026-05-17): if the volunteer submitted
+                // Can't Make It, the absence API set `attended = "excused"`
+                // on the assignment. Show that state distinctly and suppress
+                // the action buttons (they've already responded).
+                const cantMakeIt = item.attended === "excused" && !isPast;
+                const statusColor = cantMakeIt
+                  ? "bg-vc-coral/10 text-vc-coral"
+                  : isPending
+                    ? "bg-vc-sand/30 text-vc-sand-dark"
+                    : item.status === "confirmed" || item.status === "approved"
+                      ? "bg-vc-sage/15 text-vc-sage"
+                      : item.status === "declined" || item.status === "cancelled"
+                        ? "bg-vc-danger/10 text-vc-danger"
+                        : "bg-vc-bg-cream text-vc-text-muted";
+                const statusLabel = cantMakeIt
+                  ? "Can't make it"
+                  : isPending
+                    ? "Pending"
+                    : item.status === "approved"
+                      ? "confirmed"
+                      : item.status;
 
                 return (
                   <div
@@ -508,7 +525,7 @@ export default function MySchedulePage() {
                           </span>
                         ) : null}
                       </div>
-                      {!isPast && item.status !== "declined" && item.status !== "cancelled" && (
+                      {!isPast && item.status !== "declined" && item.status !== "cancelled" && !cantMakeIt && (
                         <div className="flex items-center gap-1">
                           {isPending ? (
                             <>
@@ -620,6 +637,19 @@ export default function MySchedulePage() {
           open={!!cantMakeItItem}
           onClose={() => setCantMakeItItem(null)}
           onNotified={() => {
+            // Codex Run 2 Phase 3 (2026-05-17): optimistic update so the
+            // volunteer sees the new "Can't make it" state immediately
+            // without waiting for a reload. The /api/notify/absence
+            // endpoint has already written attended="excused" server-side.
+            if (cantMakeItItem.kind === "assignment") {
+              setAssignments((prev) =>
+                prev.map((a) =>
+                  a.id === cantMakeItItem.id
+                    ? { ...a, attended: "excused" }
+                    : a,
+                ),
+              );
+            }
             setCantMakeItItem(null);
           }}
           churchId={activeMembership?.church_id || profile?.church_id || ""}

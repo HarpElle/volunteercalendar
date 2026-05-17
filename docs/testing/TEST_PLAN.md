@@ -450,15 +450,8 @@ Test the operational features Sarah uses week-to-week: QR check-in, smart check-
 - [ ] Switch to admin Gmail tab. ✅ Absence alert email arrives addressed to `you+admin@gmail.com` with Alex's note.
 - [ ] **SMS check**: on Free tier, no SMS should fire. ✅ No text on your Google Voice.
 
-#### 3.5 — Shift swap
-- [ ] As Alex (volunteer), find another upcoming confirmed assignment.
-- [ ] Click _Request Swap_ (look for swap option, may be in "Can't Make It" modal or a separate action).
-- [ ] System lists eligible replacements. Send the swap request.
-- [ ] As Jordan Reyes (`+vol2`), receive the swap request notification (Inbox + email).
-- [ ] Accept the swap.
-- [ ] As admin, see the swap pending approval → approve it.
-  - ✅ Assignment now belongs to Jordan, not Alex.
-  - ✅ Notifications (in-app + email) confirm the change.
+#### 3.5 — Shift swap (Starter+ — skipped on Free)
+> Shift swap is a Starter+ feature per the tier matrix in [USER_GUIDE.md](USER_GUIDE.md). On Free you'll **not** see a Request Swap option — that's expected. Verify the absence (no swap surface on confirmed assignments and no swap action in the Can't Make It flow) and move on. The full swap exercise happens in Phase 4 after Jason upgrades you to Pro.
 
 #### 3.6 — Attendance tracking
 - [ ] As admin, visit a service roster (Services & Events → click _Roster & Attendance_ on a past or current service).

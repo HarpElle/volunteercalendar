@@ -46,7 +46,7 @@ export function buildRolePromotionEmail(data: RolePromotionEmailData): {
                 ${capabilitiesHtml} We're glad to have you in this role.
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard", "Go to Dashboard")}
+              ${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}
 
               ${mutedCenter("You're receiving this because your role was updated at " + data.churchName + ".")}`;
 
@@ -65,7 +65,7 @@ Great news -- you've been promoted to ${data.newRole} at ${data.churchName}.
 
 ${capabilitiesText} We're glad to have you in this role.
 
-Go to Dashboard: https://volunteercal.org/dashboard
+Go to Dashboard: https://volunteercal.com/dashboard
 
 --
 Sent by VolunteerCal on behalf of ${data.churchName}`;

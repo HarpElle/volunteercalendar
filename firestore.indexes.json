@@ -234,6 +234,14 @@
       ]
     },
     {
+      "collectionGroup": "kiosk_stations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "church_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "feedback",
       "queryScope": "COLLECTION",
       "fields": [

@@ -58,7 +58,7 @@ export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
 
   const ctaHtml = data.isPending
     ? ""
-    : `${ctaButton("https://volunteercal.org/dashboard", "Go to Dashboard")}`;
+    : `${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}`;
 
   const mutedNote = data.isPending
     ? mutedCenter("We'll send you another email once your request has been reviewed.")
@@ -85,7 +85,7 @@ export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
 
   const ctaText = data.isPending
     ? ""
-    : "\n\nGo to Dashboard: https://volunteercal.org/dashboard";
+    : "\n\nGo to Dashboard: https://volunteercal.com/dashboard";
 
   const text = `Welcome! — ${data.churchName}
 

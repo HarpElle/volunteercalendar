@@ -33,7 +33,7 @@ export function buildAccountDeletedEmail(data: AccountDeletedEmailData): {
                 We truly appreciate the time you spent with us. Whether you coordinated a single service or managed months of schedules, your work made a difference for the teams you served alongside.
               </p>
               <p ${P}>
-                If you ever want to come back, you're always welcome — just sign up again at <strong ${BOLD}>volunteercal.org</strong>.
+                If you ever want to come back, you're always welcome — just sign up again at <strong ${BOLD}>volunteercal.com</strong>.
               </p>
               <p ${P_LAST}>
                 In the meantime, if you know someone who could benefit from simpler volunteer scheduling, we'd be grateful if you shared VolunteerCal with them. Wishing you all the best.
@@ -52,7 +52,7 @@ Your VolunteerCal account has been successfully deleted, and all associated data
 
 We truly appreciate the time you spent with us. Whether you coordinated a single service or managed months of schedules, your work made a difference for the teams you served alongside.
 
-If you ever want to come back, you're always welcome -- just sign up again at volunteercal.org.
+If you ever want to come back, you're always welcome -- just sign up again at volunteercal.com.
 
 In the meantime, if you know someone who could benefit from simpler volunteer scheduling, we'd be grateful if you shared VolunteerCal with them. Wishing you all the best.
 

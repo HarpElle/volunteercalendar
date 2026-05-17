@@ -37,7 +37,7 @@ export function buildOrgDeletedEmail(data: OrgDeletedEmailData): {
                 If your team ever needs a hand with volunteer coordination again, we'd love to welcome you back. Your account is still active — you can create a new organization anytime from your dashboard.
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard", "Go to Dashboard")}
+              ${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}
 
               <p style="margin:0;font-size:13px;line-height:1.6;color:#9A9BB5;text-align:center;">
                 If you'd also like to delete your account entirely, you can do so from Account Settings.
@@ -58,7 +58,7 @@ Thank you for giving VolunteerCal a place in your workflow. We genuinely appreci
 
 If your team ever needs a hand with volunteer coordination again, we'd love to welcome you back. Your account is still active — you can create a new organization anytime from your dashboard.
 
-Go to your dashboard: https://volunteercal.org/dashboard
+Go to your dashboard: https://volunteercal.com/dashboard
 
 If you'd also like to delete your account entirely, you can do so from Account Settings.
 

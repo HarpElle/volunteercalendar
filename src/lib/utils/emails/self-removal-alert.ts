@@ -68,7 +68,7 @@ export function buildSelfRemovalAlertEmail(data: SelfRemovalAlertData): {
                 This role may need to be reassigned. Please review and fill the opening.
               </p>
 
-              ${ctaButton("https://volunteercal.org/dashboard/scheduling-dashboard", "View Dashboard")}
+              ${ctaButton("https://volunteercal.com/dashboard/scheduling-dashboard", "View Dashboard")}
 
               ${mutedCenter("You're receiving this because you manage schedules affected by this change.")}`;
 
@@ -92,7 +92,7 @@ Role: ${data.roleName}
 ${data.note ? `\nNote: ${data.note}\n` : ""}
 This role may need to be reassigned.
 
-View Dashboard: https://volunteercal.org/dashboard/scheduling-dashboard
+View Dashboard: https://volunteercal.com/dashboard/scheduling-dashboard
 
 --
 Sent by VolunteerCal on behalf of ${data.churchName}`;

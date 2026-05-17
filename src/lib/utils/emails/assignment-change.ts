@@ -73,7 +73,7 @@ export function buildAssignmentChangeEmail(data: AssignmentChangeEmailData): {
 
               ${card}
 
-              ${ctaButton("https://volunteercal.org/dashboard/my-schedule", "View My Schedule")}
+              ${ctaButton("https://volunteercal.com/dashboard/my-schedule", "View My Schedule")}
 
               ${mutedCenter("You're receiving this because your volunteer schedule was updated.")}`;
 
@@ -98,7 +98,7 @@ Service: ${data.serviceName}
 Date: ${dateStr}
 ${data.action === "removed" ? `Role: ${data.oldRole}\nAction: Removed` : `Previous Role: ${data.oldRole}\nNew Role: ${data.newRole}`}
 
-View My Schedule: https://volunteercal.org/dashboard/my-schedule
+View My Schedule: https://volunteercal.com/dashboard/my-schedule
 
 --
 Sent by VolunteerCal on behalf of ${data.churchName}`;
