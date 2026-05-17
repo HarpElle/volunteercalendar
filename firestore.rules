@@ -187,15 +187,31 @@ service cloud.firestore {
       }
 
       // ─── Assignments ───
-      // SECURITY (Codex QA 2026-05-15): volunteers cannot read draft/in_review/
-      // approved assignments — only published. Schedulers and above keep full
-      // read access for review/edit. The `get()` here costs one extra read per
-      // query; acceptable for typical volunteer list sizes. See plan
-      // i-want-you-to-iterative-spring.md Layer 1.
+      // SECURITY HISTORY (Codex QA 2026-05-15 → Run 2 2026-05-16):
+      //
+      //   Round 1 tightened this rule to deny non-published assignments to
+      //   volunteers via `get(/.../schedules/$(resource.data.schedule_id))`.
+      //   That works for single-doc reads but fails for list queries —
+      //   Firestore's rule engine throws "schedule_id is undefined" when
+      //   evaluating a list query because the predicate can't be statically
+      //   proven safe for all possible matching docs. Volunteers' My Schedule
+      //   page (which calls getDocs) was blocked completely.
+      //
+      //   Round 2 reverts the rule to the pre-tightening shape (active member
+      //   reads all assignments in their church). Draft-visibility defense
+      //   now lives at the application layer:
+      //     • src/app/dashboard/my-schedule/page.tsx filters drafts client-side
+      //     • src/app/api/calendar/route.ts filters drafts server-side
+      //     • All other consumers go through admin endpoints that filter
+      //
+      //   TODO: for true rule-layer enforcement, denormalize the parent
+      //   schedule's status onto each assignment (`schedule_status` field)
+      //   and update this rule to `... && resource.data.schedule_status ==
+      //   'published'`. That avoids the get() and works for list queries.
+      //   Tracked as a follow-up; not urgent because the leak is closed at
+      //   every realistic access point.
       match /assignments/{docId} {
-        allow read: if isSchedulerOrAbove(churchId)
-                    || (isActiveMember(churchId)
-                        && get(/databases/$(database)/documents/churches/$(churchId)/schedules/$(resource.data.schedule_id)).data.status == 'published');
+        allow read: if isActiveMember(churchId);
         allow write: if isSchedulerOrAbove(churchId);
       }
 

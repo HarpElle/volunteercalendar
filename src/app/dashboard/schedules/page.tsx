@@ -614,8 +614,19 @@ export default function SchedulesPage() {
         Object.values(activeSchedule.ministry_approvals).every((a) => a.status === "approved")
     : false;
 
-  function statusActionLabel(status: ScheduleStatus): string {
-    switch (status) {
+  /**
+   * Context-aware action label.
+   * Codex Run 2 (2026-05-16): on an approved schedule the only valid
+   * "backwards" transition is in_review, but labeling that button
+   * "Send for Review" implied the schedule still needed review. The button
+   * now reads "Send Back for Review" so an approver who wants to reopen
+   * the discussion can find it without being misled about state.
+   */
+  function statusActionLabel(currentStatus: ScheduleStatus, nextStatus: ScheduleStatus): string {
+    if (currentStatus === "approved" && nextStatus === "in_review") {
+      return "Send Back for Review";
+    }
+    switch (nextStatus) {
       case "in_review": return "Send for Review";
       case "draft": return "Back to Draft";
       case "approved": return "Approve Schedule";
@@ -624,8 +635,13 @@ export default function SchedulesPage() {
     }
   }
 
-  function statusActionVariant(status: ScheduleStatus): "primary" | "secondary" | "outline" | "ghost" | "danger" {
-    switch (status) {
+  function statusActionVariant(currentStatus: ScheduleStatus, nextStatus: ScheduleStatus): "primary" | "secondary" | "outline" | "ghost" | "danger" {
+    // A backwards transition (current=approved, next=in_review) is a low-
+    // emphasis ghost so it doesn't compete with the primary Publish button.
+    if (currentStatus === "approved" && nextStatus === "in_review") {
+      return "ghost";
+    }
+    switch (nextStatus) {
       case "published": return "primary";
       case "approved": return "secondary";
       case "in_review": return "outline";
@@ -809,13 +825,13 @@ export default function SchedulesPage() {
                   <Button
                     key={next}
                     size="sm"
-                    variant={statusActionVariant(next)}
+                    variant={statusActionVariant(activeSchedule.status, next)}
                     loading={transitioning}
                     disabled={blocked}
                     onClick={() => transitionStatus(next)}
                     title={blockedTitle}
                   >
-                    {statusActionLabel(next)}
+                    {statusActionLabel(activeSchedule.status, next)}
                   </Button>
                 );
               })}
