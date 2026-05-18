@@ -18,7 +18,7 @@ import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
 import { ApprovalCountdown } from "@/components/scheduling/approval-countdown";
 import { SelfServiceOpenSlots } from "@/components/scheduling/self-service-open-slots";
-import { normalizeWorkflowMode } from "@/lib/services/scheduler";
+import { normalizeWorkflowMode, generateOccurrences } from "@/lib/services/scheduler";
 import type {
   Schedule,
   ScheduleStatus,
@@ -66,6 +66,16 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
       })
     : services;
   const hasServices = scopedServices.length > 0;
+  // PR #29 retest 2026-05-18: distinguish "the scope has services configured"
+  // (hasServices) from "those services have occurrences in this date range"
+  // (hasOccurrences). Codex's Nov 9–14 draft (Mon–Sat, weekly Sunday service)
+  // hit the role-definition branch because hasServices was true even though
+  // no occurrence fell in the range.
+  const hasOccurrences = generateOccurrences(
+    scopedServices,
+    schedule.date_range_start,
+    schedule.date_range_end,
+  ).length > 0;
   // For org-wide schedules (empty ministry_ids) any active volunteer counts —
   // the previous `.some(id => schedMinistryIds.includes(id))` always returned
   // false on an empty schedule scope and produced a false "no volunteers"
@@ -84,19 +94,25 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
       </svg>
       <h3 className="mt-3 text-base font-semibold text-vc-indigo">No Assignments Generated</h3>
 
-      {!hasServices && (
+      {!hasServices ? (
         <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
           {teamNames.length > 0
             ? <>No services include the <strong>{teamNames.join(", ")}</strong> team. Add this team&apos;s roles to a service first.</>
-            : "No services exist in the selected date range."}
+            : "No services are configured yet."}
         </p>
-      )}
-      {hasServices && !hasVolunteers && (
+      ) : !hasOccurrences ? (
+        <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
+          No services occur between{" "}
+          <strong>{schedule.date_range_start}</strong> and{" "}
+          <strong>{schedule.date_range_end}</strong>. Pick a date range that
+          covers at least one service occurrence, or add a service that
+          recurs in this window.
+        </p>
+      ) : !hasVolunteers ? (
         <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
           Services exist, but <strong>{teamNames.join(", ") || "the selected team"}</strong> has no volunteers assigned to it.
         </p>
-      )}
-      {hasServices && hasVolunteers && (
+      ) : (
         <p className="mt-2 text-sm text-vc-text-secondary max-w-md mx-auto">
           Volunteers and services exist, but no volunteers have the required role IDs for the service roles. Check that volunteers&apos; roles match the service role definitions.
         </p>
@@ -108,12 +124,17 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
             Configure Services &amp; Roles
           </a>
         )}
-        {hasServices && !hasVolunteers && (
+        {hasServices && !hasOccurrences && (
+          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+            Manage Services
+          </a>
+        )}
+        {hasServices && hasOccurrences && !hasVolunteers && (
           <a href="/dashboard/people" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
             Add Volunteers to {teamNames[0] || "Team"}
           </a>
         )}
-        {hasServices && hasVolunteers && (
+        {hasServices && hasOccurrences && hasVolunteers && (
           <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
             Check Service Role Definitions
           </a>

@@ -221,4 +221,21 @@ describe("generateOccurrences — used by SelfServiceOpenSlots UI", () => {
     const occs = generateOccurrences([svc], "2026-09-05", "2026-09-07");
     expect(occs).toEqual([]);
   });
+
+  // Codex PR #29 retest 2026-05-18 regression. The Mon–Sat Nov 9–14 range
+  // against a weekly Sunday service hit the empty-state's role-definition
+  // branch because `hasServices = scopedServices.length > 0` was true even
+  // though no occurrence fell in the range. ScheduleEmptyState now uses
+  // `generateOccurrences(...).length > 0` to decide; this test locks in the
+  // expected empty result for that specific range so a future change to
+  // generateOccurrences doesn't silently reopen the bug.
+  it("returns empty for Mon–Sat range against a weekly Sunday service (PR #29 retest case)", () => {
+    const sundayService = makeService({ day_of_week: 0 });
+    const occs = generateOccurrences(
+      [sundayService],
+      "2026-11-09",
+      "2026-11-14",
+    );
+    expect(occs).toEqual([]);
+  });
 });
