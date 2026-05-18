@@ -101,6 +101,10 @@ export async function GET(
     });
   } catch (e) {
     console.error("Room iCal feed error:", e);
-    return new NextResponse("Server error", { status: 500 });
+    const raw = e instanceof Error ? e.message : "Internal error";
+    const friendly = raw.includes("FAILED_PRECONDITION")
+      ? "Calendar feed is initializing. Please try again in a minute."
+      : raw;
+    return new NextResponse(friendly, { status: 500 });
   }
 }

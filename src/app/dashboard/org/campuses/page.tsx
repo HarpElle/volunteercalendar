@@ -257,15 +257,40 @@ function RoomsSettingsSection({ churchId }: { churchId: string }) {
       {/* Public Calendar */}
       <section className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-6">
         <h3 className="mb-1 font-display text-lg text-vc-indigo">Public Calendar</h3>
-        <p className="mb-4 text-sm text-vc-text-secondary">Expose room availability via an iCal feed.</p>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          Expose room availability via a browser page and/or an iCal feed.
+          Token is regenerated each time you disable + re-enable.
+        </p>
         <label className="flex items-center gap-3 text-sm font-medium text-vc-text">
           <input type="checkbox" checked={settings.public_calendar_enabled} onChange={(e) => setSettings((s) => ({ ...s, public_calendar_enabled: e.target.checked }))} className="h-4 w-4 rounded border-vc-border-light text-vc-coral accent-vc-coral" />
           Enable public calendar feed
         </label>
         {settings.public_calendar_enabled && settings.public_calendar_token && (
-          <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs break-all text-vc-text-muted">
-            {`/api/calendar/church/${churchId}/${settings.public_calendar_token}`}
-          </p>
+          <div className="mt-3 space-y-3">
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-vc-text-muted">
+                Browser page
+              </p>
+              <p className="rounded-lg bg-white px-3 py-2 text-xs break-all text-vc-indigo">
+                {typeof window !== "undefined"
+                  ? `${window.location.origin}/calendar/public?church_id=${churchId}&token=${settings.public_calendar_token}`
+                  : `/calendar/public?church_id=${churchId}&token=${settings.public_calendar_token}`}
+              </p>
+              <p className="mt-1 text-[11px] text-vc-text-muted">
+                Append <code>&amp;embed=true</code> for iframe embedding.
+              </p>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-vc-text-muted">
+                iCal feed
+              </p>
+              <p className="rounded-lg bg-white px-3 py-2 text-xs break-all text-vc-text-muted">
+                {typeof window !== "undefined"
+                  ? `${window.location.origin}/api/calendar/church/${churchId}/${settings.public_calendar_token}`
+                  : `/api/calendar/church/${churchId}/${settings.public_calendar_token}`}
+              </p>
+            </div>
+          </div>
         )}
       </section>
 
