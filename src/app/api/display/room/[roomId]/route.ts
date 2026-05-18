@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
+import { todayInTimezone } from "@/lib/utils/date";
 
 /**
  * GET /api/display/room/[roomId]?token=...&church_id=...
@@ -34,8 +35,15 @@ export async function GET(
       return NextResponse.json({ error: "Invalid token" }, { status: 403 });
     }
 
-    // Get today's confirmed reservations for this room
-    const today = new Date().toISOString().split("T")[0];
+    // Get today's confirmed reservations for this room. "Today" must be
+    // resolved in the church's timezone — otherwise after ~7pm local time on
+    // US west/central coasts, UTC rolls to tomorrow and the wall display
+    // shows "no reservations" for the rest of the day. Read the timezone
+    // from the church doc; fall back to the room doc's church_id (already
+    // resolved as `churchId`) since the room belongs to that church.
+    const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+    const churchTz = (churchSnap.data()?.timezone as string) || "UTC";
+    const today = todayInTimezone(churchTz);
     const reservationsSnap = await adminDb
       .collection(`churches/${churchId}/reservations`)
       .where("room_id", "==", roomId)

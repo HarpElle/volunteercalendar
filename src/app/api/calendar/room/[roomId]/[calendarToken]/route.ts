@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { todayInTimezone } from "@/lib/utils/date";
 
 /**
  * GET /api/calendar/room/[roomId]/[calendarToken]
@@ -46,12 +47,16 @@ export async function GET(
     const timezone =
       (churchSnap.data()?.timezone as string) || "America/New_York";
 
-    // Query confirmed reservations in 90-day window
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date(now);
-    endDate.setDate(endDate.getDate() + 60);
+    // Query confirmed reservations in 90-day window, anchored to the
+    // church's local "today" (not UTC today) so the iCal range doesn't
+    // shift by a day in the late evening.
+    const today = todayInTimezone(timezone);
+    const [ty, tm, td] = today.split("-").map(Number);
+    const anchor = new Date(Date.UTC(ty, tm - 1, td));
+    const startDate = new Date(anchor);
+    startDate.setUTCDate(startDate.getUTCDate() - 30);
+    const endDate = new Date(anchor);
+    endDate.setUTCDate(endDate.getUTCDate() + 60);
 
     const reservationsSnap = await adminDb
       .collection(`churches/${churchId}/reservations`)

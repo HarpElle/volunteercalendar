@@ -45,3 +45,38 @@ export function formatLocalDateShort(iso: string | undefined | null): string {
     day: "numeric",
   });
 }
+
+/**
+ * Today's calendar date in the given IANA timezone as a YYYY-MM-DD string.
+ *
+ * Why this exists:
+ *   Lots of places use `new Date().toISOString().split("T")[0]` to derive
+ *   "today" — but `toISOString()` is UTC. After ~7pm local time on the
+ *   US west / central coast, the UTC date rolls to tomorrow and queries
+ *   for "today" silently miss every same-day reservation, check-in, etc.
+ *
+ *   Pass the church's `timezone` field (e.g. "America/Chicago") to compute
+ *   the calendar date the user actually sees. Falls back to UTC if the
+ *   timezone is invalid (no exception thrown).
+ *
+ *   Works in both Node (server) and browser (client) — `Intl.DateTimeFormat`
+ *   is universally available.
+ */
+export function todayInTimezone(timezone: string | undefined | null): string {
+  const tz = timezone || "UTC";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const year = parts.find((p) => p.type === "year")?.value || "0000";
+    const month = parts.find((p) => p.type === "month")?.value || "01";
+    const day = parts.find((p) => p.type === "day")?.value || "01";
+    return `${year}-${month}-${day}`;
+  } catch {
+    // Invalid timezone — fall back to UTC. Better wrong than crashed.
+    return new Date().toISOString().split("T")[0];
+  }
+}
