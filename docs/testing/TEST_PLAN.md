@@ -752,14 +752,20 @@ Test the Rooms & Reservations system end-to-end, plus the Pro-tier advanced work
 - [ ] Add per-room URL to your calendar app. ✅ Reservations appear as events.
 
 #### 5.9 — Shared Facility Groups
-- [ ] **Create a 2nd org**: open an incognito window. Register with `you+facility@gmail.com`. Create a small org named `TESTER FACILITY — [Your Name]`.
-- [ ] Back in your main admin window, visit Settings → Campuses (or wherever Shared Facility section lives).
-- [ ] Click _Create Facility Group_ → name it `Riverside Building`.
-- [ ] Send an invite to the 2nd org by entering its admin email (`you+facility@gmail.com`).
-- [ ] Switch to `+facility` tab. ✅ Invitation email arrived.
-- [ ] Accept the invite from the 2nd org's admin view.
-- [ ] Back in main org: ✅ 2nd org appears as a member of the facility group.
-- [ ] Test cross-org visibility: from the 2nd org's room calendar, ✅ you should see the main org's reservations (and vice versa).
+> **Tier note:** Hosting a facility group requires **Growth+**. Invitees can
+> be on any tier — they only need to share their Setup Code. The Shared
+> Facility section is now visible on every tier so invitees can find their
+> code and accept invitations even on Free/Starter.
+
+- [ ] **Create a 2nd org**: open an incognito window. Register with `you+facility@gmail.com`. Create a small org named `TESTER FACILITY — [Your Name]`. If you want the 2nd org to host its own groups too, upgrade it to Growth+ (or have an admin bump the tier via the platform-admin tier override).
+- [ ] In the 2nd org's window, visit `/dashboard/org/campuses`. The **Shared Facility** section shows your 6-letter Setup Code at the top. Copy it.
+- [ ] In your main admin window, visit `/dashboard/org/campuses`. Scroll to **Shared Facility**.
+- [ ] Click _Create Group_ → name it `Riverside Building`.
+- [ ] Click **Invite Org** on the new group → paste the 2nd org's Setup Code → **Send Invite**.
+- [ ] Switch to the 2nd org's window. ✅ A `Pending Invitations` row for `Riverside Building` appears in the Shared Facility section. The 2nd org admin also gets an email notification.
+- [ ] Click **Accept**.
+- [ ] Back in the main org: ✅ The 2nd org appears as an active member of `Riverside Building`.
+- [ ] Test cross-org visibility: open the 2nd org's `/calendar` (or any room calendar). ✅ Reservations from the main org's rooms in `Riverside Building` are visible, and vice versa.
 
 #### 5.10 — Multi-Stage Approval (Pro tier)
 - [ ] Generate a new schedule via the wizard.
