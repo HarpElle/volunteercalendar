@@ -180,8 +180,31 @@ export async function POST(req: NextRequest) {
       expires_at: expiresAt,
     });
   } catch (err) {
+    // Codex PR #31 Phase 6 retest 2026-05-18: the page surfaced only
+    // "Internal error" when the tier-limit query missed its composite
+    // index, leaving the operator with no useful breadcrumb. Surface the
+    // Firestore failed-precondition message (it includes the create-index
+    // URL) so the next missing-index lands as a self-explanatory hint
+    // instead of an opaque 500.
+    const code = (err as { code?: string | number })?.code;
+    const message = (err as Error)?.message || "Internal error";
     console.error("POST /api/short-links error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    // Firebase admin returns "failed-precondition" as the code string for
+    // missing composite indexes; the gRPC numeric form is 9.
+    if (code === "failed-precondition" || code === 9) {
+      return NextResponse.json(
+        {
+          error:
+            "Short-link query needs a composite index. Re-run `firebase deploy --only firestore:indexes` and try again.",
+          detail: message,
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json(
+      { error: "Internal error", detail: message },
+      { status: 500 },
+    );
   }
 }
 
