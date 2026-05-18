@@ -1,8 +1,46 @@
-import type { Person, Ministry, OnboardingStep } from "@/lib/types";
+import type { Person, Ministry, OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 
 export type EligibilityStage = "cleared" | "in_progress" | "not_started";
 export type OrgEligibility = EligibilityStage | "no_prereqs";
+
+/**
+ * A journey step counts as "effectively complete" for eligibility checks
+ * only when its `status` is "completed"/"waived" AND its per-volunteer
+ * `expires_at` (if any) is still in the future.
+ *
+ * PR #31 introduced OnboardingStep.expires_in_days and started writing
+ * VolunteerJourneyStep.expires_at on completion (365 days for a typical
+ * background check). The scheduler + onboarding pipeline previously
+ * checked only `status`, so an expired background check still counted
+ * as "cleared" — exactly the failure mode the expiration system is
+ * meant to prevent.
+ *
+ * Pass `todayIso` as `YYYY-MM-DD` (local-date) so callers can pin the
+ * date in tests. The ISO-string comparison `expires_at <= today` is
+ * lexicographic-safe because `expires_at` is stored as a full ISO
+ * timestamp.
+ */
+export function isJourneyStepEffectivelyValid(
+  step: VolunteerJourneyStep | undefined,
+  todayIso: string,
+): boolean {
+  if (!step) return false;
+  if (step.status !== "completed" && step.status !== "waived") return false;
+  if (!step.expires_at) return true;
+  // step.expires_at is a full ISO timestamp; todayIso is a YYYY-MM-DD date.
+  // Treat the entire expiry day as expired so a 1-day-overlap edge case
+  // (expires_at = today at any time → not valid for today). This is the
+  // conservative answer for compliance use cases (a background check that
+  // expired this morning at 3 a.m. shouldn't be honored for an 11 a.m.
+  // service).
+  const expiryDate = step.expires_at.split("T")[0];
+  return expiryDate > todayIso;
+}
+
+function todayLocalIso(): string {
+  return new Date().toISOString().split("T")[0];
+}
 
 /**
  * Filter prerequisites by scope context and optional role.
@@ -42,24 +80,32 @@ export function getOrgEligibility(
   if (applicable.length === 0) return "no_prereqs";
 
   const journey = volunteer.volunteer_journey || [];
+  const today = todayLocalIso();
   const completed = applicable.filter((p) => {
     const step = journey.find(
       (j) => j.step_id === p.id && j.ministry_id === ORG_WIDE_MINISTRY_ID,
     );
-    return step?.status === "completed" || step?.status === "waived";
+    return isJourneyStepEffectivelyValid(step, today);
   });
 
   if (completed.length === applicable.length) return "cleared";
   if (completed.length > 0) return "in_progress";
 
-  const hasInProgress = applicable.some((p) => {
+  // Treat expired steps as in_progress (the volunteer was once cleared and
+  // needs to renew), not not_started. Otherwise the dashboard would tell
+  // an admin "background check not started" when they did one a year ago.
+  const hasInProgressOrExpired = applicable.some((p) => {
     const step = journey.find(
       (j) => j.step_id === p.id && j.ministry_id === ORG_WIDE_MINISTRY_ID,
     );
-    return step?.status === "in_progress";
+    if (!step) return false;
+    if (step.status === "in_progress") return true;
+    const wasCompleted = step.status === "completed" || step.status === "waived";
+    if (wasCompleted && step.expires_at && step.expires_at.split("T")[0] <= today) return true;
+    return false;
   });
 
-  return hasInProgress ? "in_progress" : "not_started";
+  return hasInProgressOrExpired ? "in_progress" : "not_started";
 }
 
 /**
@@ -83,22 +129,28 @@ export function getVolunteerStage(
   if (allPrereqs.length === 0) return "cleared";
 
   const journey = volunteer.volunteer_journey || [];
+  const today = todayLocalIso();
   const completed = allPrereqs.filter((p) => {
     const step = journey.find(
       (j) => j.step_id === p.id && j.ministry_id === p._ministryId,
     );
-    return step?.status === "completed" || step?.status === "waived";
+    return isJourneyStepEffectivelyValid(step, today);
   });
 
   if (completed.length === allPrereqs.length) return "cleared";
   if (completed.length > 0) return "in_progress";
 
-  const hasInProgress = allPrereqs.some((p) => {
+  // Same expired-step treatment as getOrgEligibility above.
+  const hasInProgressOrExpired = allPrereqs.some((p) => {
     const step = journey.find(
       (j) => j.step_id === p.id && j.ministry_id === p._ministryId,
     );
-    return step?.status === "in_progress";
+    if (!step) return false;
+    if (step.status === "in_progress") return true;
+    const wasCompleted = step.status === "completed" || step.status === "waived";
+    if (wasCompleted && step.expires_at && step.expires_at.split("T")[0] <= today) return true;
+    return false;
   });
 
-  return hasInProgress ? "in_progress" : "not_started";
+  return hasInProgressOrExpired ? "in_progress" : "not_started";
 }
