@@ -109,3 +109,5 @@ jobs:
           must_contain "Open Slots" "Self-Service Open Slots tab on /dashboard/my-schedule (PR #35)"
           must_contain "Send Availability Request" "Schedules availability-request button (PR #27)"
           must_contain "Create a test link" "Short Links admin test-create form (PR #31)"
+          must_contain "Training Sessions" "Training Sessions admin pages (PR #38)"
+          must_contain "Sign Up" "Self-Service Sign Up button (PR #37)"

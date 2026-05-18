@@ -34,6 +34,7 @@ import {
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -66,6 +67,16 @@ interface ScheduleItem {
   allDay: boolean;
   status: string;
   isTrainee?: boolean;
+  /**
+   * True when this assignment is a self-signup claim AND the parent
+   * schedule is still in `draft` (not yet locked for review/publish).
+   * Drives the "Release" button — volunteers can undo their own claim
+   * while the admin hasn't started reviewing the schedule yet.
+   * PR #38 bonus (Phase 6 follow-up #4).
+   */
+  isReleasable?: boolean;
+  /** Church the assignment belongs to (used by handleReleaseClaim). */
+  churchId?: string;
   /**
    * Confirmation token (assignments only). Lets the My Schedule UI POST to
    * /api/confirm without needing to open the email link. Codex Run 2 retest
@@ -410,6 +421,14 @@ export default function MySchedulePage() {
 
   // --- Build unified schedule items ---
 
+  // Set of schedule IDs that are still in `draft` AND self-service —
+  // self-signup assignments on these schedules are releasable. PR #38.
+  const releasableScheduleIds = new Set(
+    selfServiceSchedules
+      .filter((s) => s.status === "draft")
+      .map((s) => s.id),
+  );
+
   const scheduleItems: ScheduleItem[] = [];
 
   // Assignments → schedule items
@@ -417,6 +436,7 @@ export default function MySchedulePage() {
     const service = a.service_id ? services.get(a.service_id) : null;
     const ministry = a.ministry_id ? ministries.get(a.ministry_id) : null;
     const roleTime = service?.roles.find((r) => r.role_id === a.role_id);
+    const isSelfSignup = a.signup_type === "self_signup";
     scheduleItems.push({
       id: a.id,
       kind: "assignment",
@@ -431,6 +451,8 @@ export default function MySchedulePage() {
       isTrainee: a.assignment_type === "trainee",
       confirmationToken: a.confirmation_token || null,
       attended: a.attended || null,
+      isReleasable: isSelfSignup && releasableScheduleIds.has(a.schedule_id),
+      churchId: a.church_id,
     });
   }
 
@@ -710,6 +732,45 @@ export default function MySchedulePage() {
     return () => clearTimeout(t);
   }, [claimSuccess]);
 
+  // PR #38 bonus: volunteer releases their own self-signup claim while
+  // the parent schedule is still in draft. Confirm modal → DELETE
+  // /api/assignments/claim → optimistic remove from local state.
+  const { confirm } = useConfirm();
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+
+  async function handleReleaseClaim(item: ScheduleItem) {
+    if (!user || !item.churchId) return;
+    const ok = await confirm({
+      title: `Release ${item.roleName} on ${formatDate(item.date)}?`,
+      message:
+        "This frees up the slot for another volunteer to sign up. You can sign up again later if the slot is still open and the schedule is still in draft.",
+      confirmLabel: "Release slot",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setReleasingId(item.id);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/assignments/claim?church_id=${encodeURIComponent(item.churchId)}&assignment_id=${encodeURIComponent(item.id)}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setResponseError(data.error || `Couldn't release slot (${res.status})`);
+        return;
+      }
+      // Optimistic remove from both slices so Upcoming + Open Slots
+      // recompute consistently.
+      setAssignments((prev) => prev.filter((a) => a.id !== item.id));
+      setAllChurchAssignments((prev) => prev.filter((a) => a.id !== item.id));
+    } catch {
+      setResponseError("Network error. Please try again.");
+    } finally {
+      setReleasingId(null);
+    }
+  }
+
   // --- Schedule filtering ---
 
   const timeFilter = activeTab === "past" ? "past" : "upcoming";
@@ -962,30 +1023,48 @@ export default function MySchedulePage() {
                             </>
                           ) : (
                             <>
-                              <button
-                                onClick={() => setCantMakeItItem({
-                                  kind: item.kind,
-                                  id: item.id,
-                                  roleName: item.roleName,
-                                  eventOrServiceName: item.eventOrServiceName,
-                                  date: item.date,
-                                })}
-                                className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
-                              >
-                                Can&apos;t Make It
-                              </button>
-                              <button
-                                onClick={() => setRemoveItem({
-                                  kind: item.kind,
-                                  id: item.id,
-                                  roleName: item.roleName,
-                                  eventOrServiceName: item.eventOrServiceName,
-                                  date: item.date,
-                                })}
-                                className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
-                              >
-                                Remove
-                              </button>
+                              {item.isReleasable ? (
+                                /* PR #38 bonus: self-signup claim on a
+                                   still-draft schedule — volunteer can
+                                   undo it cleanly. Mutually-exclusive
+                                   with "Can't Make It"/"Remove" because
+                                   the schedule isn't published yet, so
+                                   absence-tracking semantics don't apply. */
+                                <button
+                                  onClick={() => handleReleaseClaim(item)}
+                                  disabled={releasingId === item.id}
+                                  className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors disabled:opacity-50"
+                                >
+                                  {releasingId === item.id ? "Releasing…" : "Release"}
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => setCantMakeItItem({
+                                      kind: item.kind,
+                                      id: item.id,
+                                      roleName: item.roleName,
+                                      eventOrServiceName: item.eventOrServiceName,
+                                      date: item.date,
+                                    })}
+                                    className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-coral transition-colors"
+                                  >
+                                    Can&apos;t Make It
+                                  </button>
+                                  <button
+                                    onClick={() => setRemoveItem({
+                                      kind: item.kind,
+                                      id: item.id,
+                                      roleName: item.roleName,
+                                      eventOrServiceName: item.eventOrServiceName,
+                                      date: item.date,
+                                    })}
+                                    className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
