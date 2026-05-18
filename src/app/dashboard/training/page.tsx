@@ -235,7 +235,7 @@ export default function VolunteerRsvpPage() {
               size="md"
               disabled={submitting !== null}
             >
-              Decline
+              Can&apos;t make it
             </Button>
             <Button
               onClick={() => submit("accepted")}

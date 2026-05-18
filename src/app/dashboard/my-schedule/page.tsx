@@ -1035,7 +1035,7 @@ export default function MySchedulePage() {
                                   disabled={releasingId === item.id}
                                   className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-danger transition-colors disabled:opacity-50"
                                 >
-                                  {releasingId === item.id ? "Releasing…" : "Release"}
+                                  {releasingId === item.id ? "Releasing…" : "Release slot"}
                                 </button>
                               ) : (
                                 <>
