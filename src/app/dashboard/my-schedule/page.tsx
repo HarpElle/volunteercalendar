@@ -97,8 +97,9 @@ interface OpenSlot {
   serviceId: string;
   serviceName: string;
   serviceDate: string;
+  /** Per Service type: start_time is required (non-null); end_time is nullable. */
   startTime: string;
-  endTime: string;
+  endTime: string | null;
   ministryId: string;
   ministryName: string;
   ministryColor: string;
