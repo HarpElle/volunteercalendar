@@ -22,6 +22,7 @@ import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
 import { getVolunteerStage, type EligibilityStage } from "@/lib/utils/eligibility";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // ---------------------------------------------------------------------------
 // Pipeline Stage
@@ -144,6 +145,25 @@ export default function OnboardingPage() {
     const vol = volunteers.find((v) => v.id === volunteerId);
     if (!vol) return;
 
+    // Look up the prerequisite definition so we can honor its
+    // expires_in_days when computing the per-volunteer expires_at.
+    // Codex Phase 6 2026-05-18.
+    const isOrgWide = ministryId === ORG_WIDE_MINISTRY_ID;
+    const stepDef = isOrgWide
+      ? orgPrereqs.find((p) => p.id === stepId)
+      : ministries.find((m) => m.id === ministryId)?.prerequisites?.find((p) => p.id === stepId);
+
+    const completedAt =
+      newStatus === "completed" || newStatus === "waived"
+        ? new Date().toISOString()
+        : null;
+    const expiresAt =
+      completedAt && stepDef?.expires_in_days
+        ? new Date(
+            Date.parse(completedAt) + stepDef.expires_in_days * 86400000,
+          ).toISOString()
+        : null;
+
     const journey: VolunteerJourneyStep[] = [
       ...(vol.volunteer_journey || []),
     ];
@@ -155,10 +175,8 @@ export default function OnboardingPage() {
       step_id: stepId,
       ministry_id: ministryId,
       status: newStatus,
-      completed_at:
-        newStatus === "completed" || newStatus === "waived"
-          ? new Date().toISOString()
-          : null,
+      completed_at: completedAt,
+      expires_at: expiresAt,
       verified_by:
         newStatus === "completed" || newStatus === "waived"
           ? profile?.id || null
@@ -181,6 +199,44 @@ export default function OnboardingPage() {
           v.id === volunteerId ? { ...v, volunteer_journey: journey } : v,
         ),
       );
+
+      // Codex Phase 6 2026-05-18: notify the volunteer via email + in-app
+      // notification when a step is marked complete. Fire-and-forget — the
+      // UI update has already landed; an email failure must not roll back
+      // the journey write.
+      if (newStatus === "completed") {
+        try {
+          const prereqs = isOrgWide
+            ? orgPrereqs
+            : ministries.find((m) => m.id === ministryId)?.prerequisites || [];
+          const completedCount = journey.filter(
+            (j) =>
+              j.ministry_id === ministryId &&
+              (j.status === "completed" || j.status === "waived"),
+          ).length;
+          const allDone =
+            prereqs.length > 0 && completedCount >= prereqs.length;
+          const token = await getAuth().currentUser?.getIdToken();
+          if (token) {
+            void fetch("/api/notify/prerequisite", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                type: allDone ? "all_completed" : "step_completed",
+                church_id: churchId,
+                volunteer_id: volunteerId,
+                step_id: stepId,
+                ministry_id: ministryId,
+              }),
+            });
+          }
+        } catch {
+          // Best-effort; surface nothing to the admin
+        }
+      }
     } catch {
       // silent
     } finally {

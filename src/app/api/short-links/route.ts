@@ -186,6 +186,66 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * PATCH /api/short-links
+ *
+ * Admin-only. Currently supports one action: `{ action: "expire_now" }`
+ * which back-dates `expires_at` so the slug starts returning 404. Lets
+ * testers verify the expired-link UX without needing to wait days.
+ * Codex Phase 6 2026-05-18.
+ *
+ * Body: { church_id, link_id, action: "expire_now" }
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const userId = decoded.uid;
+    const body = await req.json();
+    const { church_id, link_id, action } = body as {
+      church_id: string;
+      link_id: string;
+      action: string;
+    };
+
+    if (!church_id || !link_id || !action) {
+      return NextResponse.json(
+        { error: "Missing required fields: church_id, link_id, action" },
+        { status: 400 },
+      );
+    }
+    if (action !== "expire_now") {
+      return NextResponse.json(
+        { error: `Unsupported action: ${action}` },
+        { status: 400 },
+      );
+    }
+
+    const memSnap = await adminDb.doc(`memberships/${userId}_${church_id}`).get();
+    if (!memSnap.exists || !["owner", "admin"].includes(memSnap.data()?.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const linkRef = adminDb.collection("short_links").doc(link_id);
+    const snap = await linkRef.get();
+    if (!snap.exists || snap.data()?.church_id !== church_id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    // Back-date by 1s so the `expires_at > now` queries treat it as expired.
+    const expiredAt = new Date(Date.now() - 1000).toISOString();
+    await linkRef.update({ expires_at: expiredAt });
+
+    return NextResponse.json({ success: true, expires_at: expiredAt });
+  } catch (err) {
+    console.error("PATCH /api/short-links error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+/**
  * DELETE /api/short-links
  * Body: { church_id, link_id }
  */

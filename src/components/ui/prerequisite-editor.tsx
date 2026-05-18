@@ -153,6 +153,29 @@ export function PrerequisiteEditor({
               </svg>
             </button>
           </div>
+          {/* Expiration (Codex Phase 6 2026-05-18). Common for background
+              checks (365) and certifications; null = never expires. */}
+          <div className="ml-[152px] flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+              Expires after
+            </span>
+            <input
+              type="number"
+              min={1}
+              className="w-20 rounded border border-vc-border bg-white px-1.5 py-1 text-[11px] text-vc-text focus:border-vc-coral focus:outline-none"
+              placeholder="365"
+              value={prereq.expires_in_days ?? ""}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                updatePrereq(idx, {
+                  expires_in_days: Number.isFinite(n) && n > 0 ? n : null,
+                });
+              }}
+            />
+            <span className="text-[10px] text-vc-text-muted">
+              days from completion (leave blank for never)
+            </span>
+          </div>
           {/* Scope selector */}
           <div className="ml-[152px] flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
