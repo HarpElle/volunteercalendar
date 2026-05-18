@@ -21,6 +21,7 @@ import type {
 } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
+import { isJourneyStepEffectivelyValid } from "@/lib/utils/eligibility";
 
 // --- Date Helpers ---
 
@@ -317,6 +318,12 @@ function hasCompletedPrerequisites(
   roleId?: string,
 ): boolean {
   const journey = volunteer.volunteer_journey || [];
+  // isJourneyStepEffectivelyValid checks status AND that any per-volunteer
+  // expires_at is still in the future. Without this gate the scheduler
+  // happily auto-assigns volunteers whose background check expired —
+  // exactly the failure mode the OnboardingStep.expires_in_days field
+  // introduced in PR #31 is meant to prevent.
+  const today = new Date().toISOString().split("T")[0];
 
   // Check org-wide prerequisites (filtered by scope for team scheduling)
   if (orgPrerequisites && orgPrerequisites.length > 0) {
@@ -335,7 +342,7 @@ function hasCompletedPrerequisites(
       const step = journey.find(
         (j) => j.step_id === prereq.id && j.ministry_id === ORG_WIDE_MINISTRY_ID,
       );
-      return step?.status === "completed" || step?.status === "waived";
+      return isJourneyStepEffectivelyValid(step, today);
     });
     if (!orgComplete) return false;
   }
@@ -349,7 +356,7 @@ function hasCompletedPrerequisites(
     const step = journey.find(
       (j) => j.step_id === prereq.id && j.ministry_id === ministryId,
     );
-    return step?.status === "completed" || step?.status === "waived";
+    return isJourneyStepEffectivelyValid(step, today);
   });
 }
 
