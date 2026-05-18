@@ -134,7 +134,11 @@ export async function POST(req: NextRequest) {
       suggested_ministry_ids: body.suggested_ministry_ids || [],
       is_active: true,
       display_public: body.display_public ?? false,
-      public_visible: body.public_visible ?? false,
+      // Default to visible on the public calendar. Admins can opt a
+      // sensitive room out via the Edit Room form; before this default
+      // flipped, every newly-created room defaulted to false and the
+      // public calendar always showed an empty list.
+      public_visible: body.public_visible ?? true,
       // Per-room approval override (Phase 5: Fellowship Hall scenario)
       requires_approval: !!body.requires_approval,
       calendar_token: randomBytes(16).toString("hex"),

@@ -38,6 +38,7 @@ export default function RoomsPage() {
   const [newCapacity, setNewCapacity] = useState("");
   const [newEquipment, setNewEquipment] = useState<string[]>([]);
   const [newRequiresApproval, setNewRequiresApproval] = useState(false);
+  const [newPublicVisible, setNewPublicVisible] = useState(true);
   const [equipmentTags, setEquipmentTags] = useState<string[]>([]);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [tier, setTier] = useState<SubscriptionTier>("free");
@@ -112,6 +113,7 @@ export default function RoomsPage() {
     setNewCapacity("");
     setNewEquipment([]);
     setNewRequiresApproval(false);
+    setNewPublicVisible(true);
     setCreateError(null);
   }
 
@@ -134,6 +136,7 @@ export default function RoomsPage() {
           capacity: newCapacity ? parseInt(newCapacity, 10) : undefined,
           equipment: newEquipment,
           requires_approval: newRequiresApproval,
+          public_visible: newPublicVisible,
         }),
       });
       if (res.ok) {
@@ -414,6 +417,25 @@ export default function RoomsPage() {
                     Reservations require admin approval
                     <span className="block text-xs text-gray-400 mt-0.5">
                       Overrides the org-wide setting for this room only.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {/* Public calendar visibility */}
+              <div>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newPublicVisible}
+                    onChange={(e) => setNewPublicVisible(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-vc-coral focus:ring-vc-coral"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Show on public calendar + iCal feed
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      Untick for sensitive rooms (e.g. counseling). Has no
+                      effect if the org-wide public calendar is disabled.
                     </span>
                   </span>
                 </label>

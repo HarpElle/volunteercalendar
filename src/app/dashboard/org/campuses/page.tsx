@@ -150,7 +150,14 @@ function RoomsSettingsSection({ churchId }: { churchId: string }) {
         );
         if (res.ok) {
           const data = await res.json();
-          setSettings({ ...DEFAULT_ROOM_SETTINGS, ...data });
+          // GET returns { settings: {...} } — spread the inner object, not
+          // the wrapper. Previously this spread the wrapper, so the page
+          // always rendered the in-memory defaults (e.g. checkbox always
+          // unchecked, URLs hidden) even when the API said otherwise.
+          setSettings({
+            ...DEFAULT_ROOM_SETTINGS,
+            ...(data.settings || data),
+          });
         }
       } catch {
         // silent
@@ -176,6 +183,13 @@ function RoomsSettingsSection({ churchId }: { churchId: string }) {
         body: JSON.stringify({ church_id: churchId, ...settings }),
       });
       if (res.ok) {
+        // Refresh local state from the server so a freshly-regenerated
+        // public_calendar_token (when enable flips from false → true) is
+        // visible immediately without a page reload.
+        const data = await res.json().catch(() => ({}));
+        if (data?.settings) {
+          setSettings({ ...DEFAULT_ROOM_SETTINGS, ...data.settings });
+        }
         setSaved(true);
         if (savedTimeout.current) clearTimeout(savedTimeout.current);
         savedTimeout.current = setTimeout(() => setSaved(false), 3000);
