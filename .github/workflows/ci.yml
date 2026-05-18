@@ -111,3 +111,5 @@ jobs:
           must_contain "Create a test link" "Short Links admin test-create form (PR #31)"
           must_contain "Training Sessions" "Training Sessions admin pages (PR #38)"
           must_contain "Sign Up" "Self-Service Sign Up button (PR #37)"
+          must_contain "Release slot" "Self-Service release-claim row label (PR #38 + #39)"
+          must_contain "Can't make it" "Training session RSVP decline label (PR #39)"

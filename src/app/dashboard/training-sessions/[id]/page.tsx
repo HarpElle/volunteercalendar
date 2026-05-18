@@ -164,12 +164,18 @@ export default function TrainingSessionDetailPage() {
   async function handleMarkComplete() {
     if (!user || !churchId || !session) return;
     const attended = [...attendedIds];
+    // PR #39 polish: copy is now honest about already-cleared attendees.
+    // The API silently skips them and reports the actual delta in the
+    // toast; the modal previously implied every attendee would get a
+    // status change, which read as a bug when the toast said "0 completed".
     const ok = await confirm({
       title: "Mark session complete?",
       message:
         attended.length === 0
           ? "No attendees checked. Continue anyway? The session will be marked complete with zero attendees."
-          : `${attended.length} attendee${attended.length !== 1 ? "s" : ""} will have their "${prereqLabel}" prerequisite marked complete${session.auto_complete ? "" : " — but this session is set to NOT auto-complete, so journey steps will be left untouched"}.`,
+          : session.auto_complete
+            ? `${attended.length} attendee${attended.length !== 1 ? "s" : ""} will be marked attended. Anyone who still has "${prereqLabel}" pending will have it auto-completed; volunteers who already cleared the prerequisite are skipped.`
+            : `${attended.length} attendee${attended.length !== 1 ? "s" : ""} will be marked attended. Auto-complete is OFF, so no journey steps will be touched.`,
       confirmLabel: "Mark complete",
     });
     if (!ok) return;
@@ -222,7 +228,10 @@ export default function TrainingSessionDetailPage() {
         },
       );
       if (res.ok) {
-        router.push("/dashboard/training-sessions");
+        // PR #39 polish: drop back into the Cancelled filter so the
+        // cancelled session is immediately visible (Codex PR #38 retest:
+        // returning to the default Scheduled filter hid the cancellation).
+        router.push("/dashboard/training-sessions?status=cancelled");
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error || `Failed to delete (${res.status})`);

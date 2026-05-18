@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/context/auth-context";
@@ -42,7 +43,19 @@ export default function TrainingSessionsPage() {
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("scheduled");
+  // PR #39 polish: respect ?status= query param so the detail page can
+  // redirect back to the right filter after a Cancel (otherwise the
+  // cancelled session "vanishes" into the hidden Cancelled tab without
+  // visible confirmation).
+  const searchParams = useSearchParams();
+  const initialFilter: StatusFilter = (() => {
+    const q = searchParams.get("status");
+    if (q === "scheduled" || q === "completed" || q === "cancelled" || q === "all") {
+      return q;
+    }
+    return "scheduled";
+  })();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilter);
   const [showCreate, setShowCreate] = useState(false);
 
   // Load sessions + ministries + church (for org prereqs) on mount.
