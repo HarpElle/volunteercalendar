@@ -18,6 +18,7 @@ import { describe, it, expect } from "vitest";
 import {
   generateDraftSchedule,
   generateOccurrences,
+  normalizeWorkflowMode,
 } from "@/lib/services/scheduler";
 import type { Person, Service, Household, Ministry } from "@/lib/types";
 
@@ -158,6 +159,47 @@ describe("generateDraftSchedule — Self-Service workflow", () => {
       "centralized",
     );
     expect(centralized.assignments.length).toBe(1);
+  });
+});
+
+describe("normalizeWorkflowMode — Codex PR #28 retest 2026-05-17", () => {
+  // PR #28 ran a strict `=== "self-service"` check; the existing 2026-09-07
+  // draft missed it and fell into the empty state even though Firestore
+  // visibly stored `"self-service"`. This helper guarantees any variant
+  // collapses to the canonical form.
+
+  it("returns the canonical value when input already matches", () => {
+    expect(normalizeWorkflowMode("self-service")).toBe("self-service");
+    expect(normalizeWorkflowMode("centralized")).toBe("centralized");
+    expect(normalizeWorkflowMode("ministry-first")).toBe("ministry-first");
+    expect(normalizeWorkflowMode("hybrid")).toBe("hybrid");
+  });
+
+  it("tolerates underscore variants (self_service)", () => {
+    expect(normalizeWorkflowMode("self_service")).toBe("self-service");
+  });
+
+  it("tolerates whitespace variants (display value bleeding back)", () => {
+    expect(normalizeWorkflowMode("self service")).toBe("self-service");
+    expect(normalizeWorkflowMode("ministry first")).toBe("ministry-first");
+    expect(normalizeWorkflowMode("  self-service  ")).toBe("self-service");
+  });
+
+  it("tolerates casing variants", () => {
+    expect(normalizeWorkflowMode("Self-Service")).toBe("self-service");
+    expect(normalizeWorkflowMode("CENTRALIZED")).toBe("centralized");
+  });
+
+  it("returns null for null/undefined/empty", () => {
+    expect(normalizeWorkflowMode(null)).toBe(null);
+    expect(normalizeWorkflowMode(undefined)).toBe(null);
+    expect(normalizeWorkflowMode("")).toBe(null);
+    expect(normalizeWorkflowMode("   ")).toBe(null);
+  });
+
+  it("returns null for an unrecognized value rather than guessing", () => {
+    expect(normalizeWorkflowMode("custom-mode")).toBe(null);
+    expect(normalizeWorkflowMode("draft")).toBe(null);
   });
 });
 

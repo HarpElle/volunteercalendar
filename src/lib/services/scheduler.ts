@@ -38,6 +38,38 @@ function formatLocalDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Normalize a stored workflow_mode value to its canonical WorkflowMode form.
+ *
+ * Codex Run 3 PR #28 retest 2026-05-17: the existing Self-Service draft
+ * `2026-09-07 → 2026-09-13` was reading as something other than
+ * `"self-service"` in the schedule detail conditional even though the
+ * Firestore doc visibly stored `"self-service"`. This helper guarantees
+ * any stored variant (whitespace, underscore vs. hyphen, casing) maps to
+ * the same canonical string so the render path can never miss.
+ *
+ * Returns the canonical value when matched, the trimmed input otherwise,
+ * or null when the input is null/undefined/empty.
+ */
+export function normalizeWorkflowMode(
+  raw: string | null | undefined,
+): "centralized" | "ministry-first" | "hybrid" | "self-service" | null {
+  if (raw == null) return null;
+  const cleaned = String(raw).trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (!cleaned) return null;
+  if (cleaned === "centralized") return "centralized";
+  if (cleaned === "ministry-first" || cleaned === "ministryfirst") return "ministry-first";
+  if (cleaned === "hybrid") return "hybrid";
+  if (
+    cleaned === "self-service" ||
+    cleaned === "selfservice" ||
+    cleaned === "self"
+  ) {
+    return "self-service";
+  }
+  return null;
+}
+
 /** Generate all dates a service occurs within a range */
 export function generateOccurrences(
   services: Service[],

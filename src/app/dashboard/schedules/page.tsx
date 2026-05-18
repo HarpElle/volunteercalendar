@@ -18,6 +18,7 @@ import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
 import { ApprovalCountdown } from "@/components/scheduling/approval-countdown";
 import { SelfServiceOpenSlots } from "@/components/scheduling/self-service-open-slots";
+import { normalizeWorkflowMode } from "@/lib/services/scheduler";
 import type {
   Schedule,
   ScheduleStatus,
@@ -43,6 +44,19 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
   volunteers: Person[];
   ministries: Ministry[];
 }) {
+  // Safety net: if a self-service schedule somehow reaches the empty state
+  // (e.g. the page-level conditional was bypassed for any reason), render
+  // the open-slots view instead. PR #28 retest 2026-05-17.
+  if (normalizeWorkflowMode(schedule.workflow_mode) === "self-service") {
+    return (
+      <SelfServiceOpenSlots
+        schedule={schedule}
+        services={services}
+        ministries={ministries}
+      />
+    );
+  }
+
   const schedMinistryIds = schedule.ministry_ids || [];
   const teamNames = schedMinistryIds.map((id) => ministries.find((m) => m.id === id)?.name).filter(Boolean) as string[];
   const scopedServices = schedMinistryIds.length > 0
@@ -52,9 +66,15 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
       })
     : services;
   const hasServices = scopedServices.length > 0;
-  const teamVolunteers = volunteers.filter((v) =>
-    v.ministry_ids?.some((id) => schedMinistryIds.includes(id))
-  );
+  // For org-wide schedules (empty ministry_ids) any active volunteer counts —
+  // the previous `.some(id => schedMinistryIds.includes(id))` always returned
+  // false on an empty schedule scope and produced a false "no volunteers"
+  // empty state. PR #28 retest 2026-05-17.
+  const teamVolunteers = schedMinistryIds.length === 0
+    ? volunteers
+    : volunteers.filter((v) =>
+        v.ministry_ids?.some((id) => schedMinistryIds.includes(id)),
+      );
   const hasVolunteers = teamVolunteers.length > 0;
 
   return (
@@ -1168,8 +1188,11 @@ export default function SchedulesPage() {
           {/* Matrix or Empty State — Self-Service drafts intentionally start
               with zero assignments, so render the open-slots view instead of
               the misleading "selected team has no volunteers" empty state.
-              Codex Run 3 PR #27 retest (2026-05-17). */}
-          {activeAssignments.length === 0 && activeSchedule.workflow_mode === "self-service" ? (
+              normalizeWorkflowMode handles any stored variant (whitespace,
+              underscores, case) per the Codex PR #28 retest where the
+              existing draft missed the strict-equality check.
+              Codex Run 3 PR #27/#28 retests (2026-05-17). */}
+          {activeAssignments.length === 0 && normalizeWorkflowMode(activeSchedule.workflow_mode) === "self-service" ? (
             <SelfServiceOpenSlots
               schedule={activeSchedule}
               services={services}
