@@ -746,7 +746,11 @@ export type UserNotificationType =
   | "prerequisite_milestone"
   | "prerequisite_expiry"
   | "absence_alert"
-  | "self_removal_alert";
+  | "self_removal_alert"
+  /** Admin sent an Availability Window request — volunteer should submit
+   * their availability before the schedule is generated. Codex Run 3 retest
+   * (2026-05-17): added so the banner on /dashboard/my-schedule can surface. */
+  | "availability_request";
 
 export interface UserNotification {
   id: string;

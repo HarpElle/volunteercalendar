@@ -4,6 +4,7 @@ import { buildAvailabilityWindowEmail } from "@/lib/utils/emails";
 import type { Person, Schedule } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { createUserNotificationBatch } from "@/lib/services/user-notifications";
 
 /**
  * POST /api/schedules/{id}/availability-window
@@ -125,9 +126,56 @@ export async function POST(
       "availability_window.reminder_sent_at": new Date().toISOString(),
     });
 
+    // Codex Run 3 retest (2026-05-17): emails alone aren't enough — the
+    // volunteer's dashboard needs an in-app banner so the request is
+    // unmissable when they log in. Fan out a notification per volunteer
+    // (best-effort: skips people not linked to a Firebase user account).
+    const personIds = volunteers.map((v) => v.id);
+    let notifSent = 0;
+    if (personIds.length > 0) {
+      const membershipSnap = await adminDb
+        .collection("memberships")
+        .where("church_id", "==", church_id)
+        .where("status", "==", "active")
+        .get();
+
+      const userIdByPersonId = new Map<string, string>();
+      for (const doc of membershipSnap.docs) {
+        const m = doc.data();
+        if (m.volunteer_id && m.user_id) {
+          userIdByPersonId.set(m.volunteer_id as string, m.user_id as string);
+        }
+      }
+
+      const notifications = volunteers
+        .map((v) => {
+          const uid = userIdByPersonId.get(v.id);
+          if (!uid) return null;
+          return {
+            user_id: uid,
+            church_id,
+            type: "availability_request" as const,
+            title: "Availability requested",
+            body: `${churchName} is collecting availability for ${coveragePeriod}. Please respond by ${schedule.availability_window!.due_date}.`,
+            metadata: {
+              schedule_id: scheduleId,
+              due_date: schedule.availability_window!.due_date,
+              link_href: "/dashboard/my-availability",
+            },
+          };
+        })
+        .filter((n): n is NonNullable<typeof n> => n !== null);
+
+      if (notifications.length > 0) {
+        await createUserNotificationBatch(notifications);
+        notifSent = notifications.length;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       emails_sent: sentCount,
+      notifications_sent: notifSent,
       total_volunteers: volunteers.length,
     });
   } catch (error) {

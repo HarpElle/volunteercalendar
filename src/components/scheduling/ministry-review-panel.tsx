@@ -17,6 +17,12 @@ interface MinistryReviewPanelProps {
   ministries: Ministry[];
   services: Service[];
   volunteers: Person[];
+  /**
+   * Church IANA timezone (e.g. "America/Chicago"). Used to render the
+   * "Approved {date}" badge in the org's local time instead of the browser's.
+   * Falls back to UTC if not provided. Codex Run 3 retest (2026-05-17).
+   */
+  churchTimezone?: string;
   onApprove: (ministryId: string, notes?: string) => void;
   onReject: (ministryId: string, notes?: string) => void;
   loading?: boolean;
@@ -28,6 +34,7 @@ export function MinistryReviewPanel({
   ministries,
   services,
   volunteers,
+  churchTimezone,
   onApprove,
   onReject,
   loading,
@@ -36,10 +43,39 @@ export function MinistryReviewPanel({
     () => new Map(volunteers.map((v) => [v.id, v])),
     [volunteers],
   );
+  // Codex Run 3 retest (2026-05-17): the approver UID stored on
+  // ministry_approvals.approved_by is a Firebase Auth UID — resolve it to a
+  // human name via Person.user_id so the badge reads e.g. "Sarah Pastor
+  // Tester" instead of "NQUd09eP1fOD3MWrdpIbHYUXm0z2".
+  const personByUserId = useMemo(() => {
+    const m = new Map<string, Person>();
+    for (const v of volunteers) {
+      if (v.user_id) m.set(v.user_id, v);
+    }
+    return m;
+  }, [volunteers]);
   const serviceMap = useMemo(
     () => new Map(services.map((s) => [s.id, s])),
     [services],
   );
+
+  function formatApprovedAt(iso: string): string {
+    try {
+      return new Date(iso).toLocaleDateString(undefined, {
+        timeZone: churchTimezone || "UTC",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return new Date(iso).toLocaleDateString();
+    }
+  }
+
+  function resolveApproverName(uid: string | null | undefined): string {
+    if (!uid) return "—";
+    return personByUserId.get(uid)?.name || uid;
+  }
 
   // Group assignments by ministry
   const byMinistry = useMemo(() => {
@@ -119,11 +155,20 @@ export function MinistryReviewPanel({
               </div>
 
               {status === "approved" ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-vc-sage/10 px-2.5 py-1 text-xs font-medium text-vc-sage">
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-vc-sage/10 px-2.5 py-1 text-xs font-medium text-vc-sage"
+                  title={
+                    approval?.approved_by
+                      ? `Approved by ${resolveApproverName(approval.approved_by)}${approval.approved_at ? ` on ${formatApprovedAt(approval.approved_at)}` : ""}`
+                      : undefined
+                  }
+                >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
-                  Approved{approval?.approved_at ? ` · ${new Date(approval.approved_at).toLocaleDateString()}` : ""}
+                  Approved
+                  {approval?.approved_at ? ` ${formatApprovedAt(approval.approved_at)}` : ""}
+                  {approval?.approved_by ? ` by ${resolveApproverName(approval.approved_by)}` : ""}
                 </span>
               ) : status === "rejected" ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-vc-danger/10 px-2.5 py-1 text-xs font-medium text-vc-danger">

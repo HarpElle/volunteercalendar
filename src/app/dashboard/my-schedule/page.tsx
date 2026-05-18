@@ -12,7 +12,16 @@ import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import { CantMakeItModal } from "@/components/scheduling/cant-make-it-modal";
-import type { Assignment, Service, Ministry, Event, EventSignup, Person, CalendarFeed } from "@/lib/types";
+import type {
+  Assignment,
+  Service,
+  Ministry,
+  Event,
+  EventSignup,
+  Person,
+  CalendarFeed,
+  UserNotification,
+} from "@/lib/types";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -89,6 +98,12 @@ export default function MySchedulePage() {
   // disable both buttons and show a spinner on the right one.
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [responseError, setResponseError] = useState<string | null>(null);
+  // Codex Run 3 retest (2026-05-17): availability campaign banner. Populated
+  // from /api/user/notifications filtered to unread "availability_request"
+  // notifications across the volunteer's active orgs.
+  const [availabilityRequests, setAvailabilityRequests] = useState<
+    UserNotification[]
+  >([]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -251,6 +266,58 @@ export default function MySchedulePage() {
     if (user) loadAll();
   }, [user, profile, memberships]);
 
+  // Codex Run 3 retest (2026-05-17): availability_request notifications drive
+  // the "Availability requested" banner. Re-fetched whenever the active org
+  // changes so the banner is org-scoped.
+  useEffect(() => {
+    async function loadAvailabilityRequests() {
+      if (!user) return;
+      const active = memberships.filter((m) => m.status === "active");
+      const results: UserNotification[] = [];
+      for (const m of active) {
+        try {
+          const token = await user.getIdToken();
+          const res = await fetch(
+            `/api/user/notifications?church_id=${encodeURIComponent(m.church_id)}&limit=50`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (!res.ok) continue;
+          const data = (await res.json()) as { notifications: UserNotification[] };
+          results.push(
+            ...data.notifications.filter(
+              (n) => n.type === "availability_request" && !n.read,
+            ),
+          );
+        } catch {
+          // best effort — banner just doesn't render
+        }
+      }
+      setAvailabilityRequests(results);
+    }
+    loadAvailabilityRequests();
+  }, [user, memberships]);
+
+  async function dismissAvailabilityRequest(notif: UserNotification) {
+    if (!user) return;
+    setAvailabilityRequests((prev) => prev.filter((n) => n.id !== notif.id));
+    try {
+      const token = await user.getIdToken();
+      await fetch(`/api/user/notifications/read`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          notification_id: notif.id,
+          church_id: notif.church_id,
+        }),
+      });
+    } catch {
+      // Banner is already gone from UI; ignore network error
+    }
+  }
+
   // --- Build unified schedule items ---
 
   const scheduleItems: ScheduleItem[] = [];
@@ -406,6 +473,46 @@ export default function MySchedulePage() {
           </button>
         ))}
       </div>
+
+      {/* Availability campaign banner (Codex Run 3 retest 2026-05-17) */}
+      {availabilityRequests.map((notif) => {
+        const dueDate = notif.metadata?.due_date || null;
+        return (
+          <div
+            key={notif.id}
+            className="mb-4 flex flex-col gap-3 rounded-xl border border-vc-coral/30 bg-vc-coral/5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-vc-indigo">
+                {notif.title}
+              </p>
+              <p className="mt-0.5 text-sm text-vc-text-secondary">
+                {notif.body}
+              </p>
+              {dueDate && (
+                <p className="mt-1 text-xs text-vc-coral">
+                  Due {formatDate(dueDate)}
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href={notif.metadata?.link_href || "/dashboard/my-availability"}
+                onClick={() => dismissAvailabilityRequest(notif)}
+                className="inline-flex min-h-[44px] items-center rounded-lg bg-vc-coral px-3 py-2 text-sm font-medium text-white hover:bg-vc-coral/90"
+              >
+                Submit Availability
+              </Link>
+              <button
+                onClick={() => dismissAvailabilityRequest(notif)}
+                className="inline-flex min-h-[44px] items-center rounded-lg border border-vc-border px-3 py-2 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Fetch error banner */}
       {fetchError && !loading && (

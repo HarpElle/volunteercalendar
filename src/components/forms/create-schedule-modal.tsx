@@ -411,7 +411,17 @@ export function CreateScheduleModal({
 
             {collectAvailability && (
               <div className="rounded-lg bg-vc-sand/20 px-4 py-3 text-sm text-vc-text-secondary">
-                An availability request will be sent to all active volunteers after the draft is created.
+                After the draft is created, you&apos;ll see a{" "}
+                <strong>Send Availability Request</strong> button on the
+                schedule. Click it to email all active volunteers.
+              </div>
+            )}
+            {workflowMode === "self-service" && (
+              <div className="rounded-lg border border-vc-coral/30 bg-vc-coral/5 px-4 py-3 text-sm text-vc-text-secondary">
+                <strong className="text-vc-coral">Self-Service:</strong> the draft will be created with{" "}
+                <em>no</em> auto-assignments. Every role appears as an open
+                slot for volunteers to claim from their{" "}
+                <strong>My Schedule</strong> page.
               </div>
             )}
 
