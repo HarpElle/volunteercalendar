@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   getChurchDocuments,
@@ -525,7 +526,13 @@ function FacilitySharingSection({
                           <p className="text-sm font-semibold text-vc-indigo">{g.name}</p>
                           <p className="text-xs text-vc-text-muted">{(g.members?.filter((m) => m.status === "active").length || 0)} organization{(g.members?.filter((m) => m.status === "active").length || 0) !== 1 ? "s" : ""}</p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <Link
+                            href={`/dashboard/rooms/facility/${g.id}`}
+                            className="inline-flex items-center gap-1 rounded-md border border-vc-coral text-vc-coral px-3 py-1.5 text-xs font-medium hover:bg-vc-coral/5 transition-colors"
+                          >
+                            View shared calendar →
+                          </Link>
                           <Button size="sm" variant="secondary" onClick={() => setInviteGroupId(inviteGroupId === g.id ? null : g.id)}>Invite Org</Button>
                           <button onClick={() => handleLeave(g.id)} className="text-xs text-vc-text-muted hover:text-vc-danger">Leave</button>
                         </div>

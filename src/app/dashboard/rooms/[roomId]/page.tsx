@@ -6,6 +6,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/context/auth-context";
 import { db } from "@/lib/firebase/config";
 import { todayInTimezone } from "@/lib/utils/date";
+import { getChurchFacilityGroups } from "@/lib/firebase/firestore";
+import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { TabBar } from "@/components/ui/tab-bar";
@@ -25,6 +27,10 @@ interface RoomDetail {
   public_visible?: boolean;
   suggested_ministry_ids?: string[];
   requires_approval?: boolean;
+  /** Links this room to a shared facility group. When set, the room and
+   *  its reservations are visible to other orgs in the group via the
+   *  shared facility calendar. */
+  facility_group_id?: string | null;
 }
 
 interface ReservationItem {
@@ -67,6 +73,10 @@ export default function RoomDetailPage() {
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editRequiresApproval, setEditRequiresApproval] = useState(false);
   const [editPublicVisible, setEditPublicVisible] = useState(true);
+  const [editFacilityGroupId, setEditFacilityGroupId] = useState<string>("");
+  const [facilityGroups, setFacilityGroups] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [equipmentTags, setEquipmentTags] = useState<string[]>([]);
   const [copiedIcal, setCopiedIcal] = useState(false);
   const [copiedDisplay, setCopiedDisplay] = useState(false);
@@ -171,6 +181,13 @@ export default function RoomDetailPage() {
           const tags = s.settings?.equipment_tags || s.equipment_tags || [];
           setEquipmentTags(tags);
         }
+
+        // Load org's active facility groups for the Edit Room dropdown.
+        const groups = await getChurchFacilityGroups(churchId);
+        const active = groups
+          .filter((g) => g.membership.status === "active")
+          .map((g) => ({ id: g.id, name: g.name }));
+        setFacilityGroups(active);
       } catch {
         // Non-critical
       }
@@ -187,6 +204,7 @@ export default function RoomDetailPage() {
     // Treat undefined as public so old rooms (pre-PR-24) default to visible
     // when first edited, matching the new POST default.
     setEditPublicVisible(room.public_visible !== false);
+    setEditFacilityGroupId(room.facility_group_id || "");
     setEditing(true);
   }
 
@@ -215,6 +233,10 @@ export default function RoomDetailPage() {
           equipment: editEquipment,
           requires_approval: editRequiresApproval,
           public_visible: editPublicVisible,
+          // Empty string means "no group" — persist null so the filter
+          // `where("facility_group_id", "==", X)` in /api/facility/reservations
+          // doesn't accidentally match other rooms whose field is null.
+          facility_group_id: editFacilityGroupId || null,
         }),
       });
       if (res.ok) {
@@ -764,6 +786,47 @@ export default function RoomDetailPage() {
                       </span>
                     </span>
                   </label>
+                </div>
+
+                {/* Shared facility group selector. Tagging a room with a
+                    facility group makes it visible to other orgs in the
+                    same group via the facility calendar at
+                    /dashboard/rooms/facility/[groupId]. Only the active
+                    facility groups this org belongs to are listed. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shared facility group
+                  </label>
+                  {facilityGroups.length > 0 ? (
+                    <>
+                      <select
+                        value={editFacilityGroupId}
+                        onChange={(e) => setEditFacilityGroupId(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                      >
+                        <option value="">(none — not shared cross-org)</option>
+                        {facilityGroups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        When set, partner orgs in this group can see this room
+                        and its reservations on the shared facility calendar.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">
+                      No facility groups yet.{" "}
+                      <Link
+                        href="/dashboard/org/campuses"
+                        className="text-vc-coral underline"
+                      >
+                        Create a group →
+                      </Link>
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
