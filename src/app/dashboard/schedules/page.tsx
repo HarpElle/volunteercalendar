@@ -17,6 +17,7 @@ import { CreateScheduleModal, type CreateScheduleOptions } from "@/components/fo
 import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
 import { ApprovalCountdown } from "@/components/scheduling/approval-countdown";
+import { SelfServiceOpenSlots } from "@/components/scheduling/self-service-open-slots";
 import type {
   Schedule,
   ScheduleStatus,
@@ -978,6 +979,8 @@ export default function SchedulesPage() {
               <ApprovalCountdown
                 schedule={activeSchedule}
                 ministries={ministries}
+                volunteers={volunteers}
+                churchTimezone={churchTimezone}
                 onRequestApproval={async () => {
                   if (!user || !churchId) return;
                   try {
@@ -1162,8 +1165,17 @@ export default function SchedulesPage() {
             </div>
           )}
 
-          {/* Matrix or Empty State */}
-          {activeAssignments.length === 0 ? (
+          {/* Matrix or Empty State — Self-Service drafts intentionally start
+              with zero assignments, so render the open-slots view instead of
+              the misleading "selected team has no volunteers" empty state.
+              Codex Run 3 PR #27 retest (2026-05-17). */}
+          {activeAssignments.length === 0 && activeSchedule.workflow_mode === "self-service" ? (
+            <SelfServiceOpenSlots
+              schedule={activeSchedule}
+              services={services}
+              ministries={ministries}
+            />
+          ) : activeAssignments.length === 0 ? (
             <ScheduleEmptyState
               schedule={activeSchedule}
               services={services}

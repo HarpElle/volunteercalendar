@@ -3,11 +3,24 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { Ministry, Schedule, ApprovalStatus } from "@/lib/types";
+import type { Ministry, Schedule, ApprovalStatus, Person } from "@/lib/types";
 
 interface ApprovalCountdownProps {
   schedule: Schedule;
   ministries: Ministry[];
+  /**
+   * Active volunteers/people for the church — used to resolve
+   * approval.approved_by (Firebase UID) to a human name via Person.user_id.
+   * Codex Run 3 PR #27 retest (2026-05-17): the summary used to render the
+   * raw UID; now it mirrors MinistryReviewPanel's name resolution.
+   */
+  volunteers?: Person[];
+  /**
+   * Church IANA timezone (e.g. "America/Chicago") so the "Approved {date}"
+   * line shows the org's local date instead of the browser's UTC. Falls
+   * back to UTC if not provided.
+   */
+  churchTimezone?: string;
   onRequestApproval?: () => void;
   loading?: boolean;
 }
@@ -42,10 +55,42 @@ function statusLabel(status: ApprovalStatus): string {
 export function ApprovalCountdown({
   schedule,
   ministries,
+  volunteers,
+  churchTimezone,
   onRequestApproval,
   loading,
 }: ApprovalCountdownProps) {
   const targetDate = schedule.approval_workflow?.target_approval_date ?? null;
+
+  // Codex Run 3 PR #27 retest (2026-05-17): resolve Firebase UID →
+  // Person.name via the same map MinistryReviewPanel uses, so the summary
+  // tiles read "Approved May 17, 2026 by Sarah Pastor Tester" instead of
+  // "Approved May 18, 2026 by NQUd09eP1fOD3MWrdpIbHYUXm0z2".
+  const personByUserId = useMemo(() => {
+    const m = new Map<string, Person>();
+    for (const v of volunteers ?? []) {
+      if (v.user_id) m.set(v.user_id, v);
+    }
+    return m;
+  }, [volunteers]);
+
+  function resolveApproverName(uid: string | null | undefined): string {
+    if (!uid) return "";
+    return personByUserId.get(uid)?.name || uid;
+  }
+
+  function formatApprovedAt(iso: string): string {
+    try {
+      return new Date(iso).toLocaleDateString(undefined, {
+        timeZone: churchTimezone || "UTC",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return new Date(iso).toLocaleDateString();
+    }
+  }
 
   const daysRemaining = useMemo(() => {
     if (!targetDate) return null;
@@ -185,16 +230,28 @@ export function ApprovalCountdown({
 
                 {/* Approved details */}
                 {status === "approved" && approval?.approved_at && (
-                  <p className="mt-2 text-xs text-vc-text-muted">
-                    Approved {formatDate(approval.approved_at.split("T")[0])}
-                    {approval.approved_by ? ` by ${approval.approved_by}` : ""}
+                  <p
+                    className="mt-2 text-xs text-vc-text-muted"
+                    title={
+                      approval.approved_by
+                        ? `Approved by ${resolveApproverName(approval.approved_by)} on ${formatApprovedAt(approval.approved_at)}`
+                        : undefined
+                    }
+                  >
+                    Approved {formatApprovedAt(approval.approved_at)}
+                    {approval.approved_by
+                      ? ` by ${resolveApproverName(approval.approved_by)}`
+                      : ""}
                   </p>
                 )}
 
                 {/* Rejected details */}
                 {status === "rejected" && approval?.approved_at && (
                   <p className="mt-2 text-xs text-vc-text-muted">
-                    Rejected {formatDate(approval.approved_at.split("T")[0])}
+                    Rejected {formatApprovedAt(approval.approved_at)}
+                    {approval.approved_by
+                      ? ` by ${resolveApproverName(approval.approved_by)}`
+                      : ""}
                   </p>
                 )}
 
