@@ -51,6 +51,13 @@ jobs:
       - name: Firestore rules tests (emulator)
         run: npm run test:rules
 
+      - name: API integration tests (emulator)
+        # Smokes write-API route handlers against the Firestore emulator
+        # so missing composite indexes / role-gate regressions / cross-
+        # collection rewrites fail CI before they hit production. Added
+        # after PR #32's missing-index outage (POST /api/short-links).
+        run: npm run test:integration
+
       - name: Production build
         # Provide stub env vars so SDK constructors that init at module-load
         # don't crash during page-data collection. None of these placeholder
