@@ -21,7 +21,19 @@ import type {
   Person,
   CalendarFeed,
   UserNotification,
+  Schedule,
+  OnboardingStep,
+  ServiceRole,
 } from "@/lib/types";
+import {
+  generateOccurrences,
+  normalizeWorkflowMode,
+  canServeInMinistry,
+  hasCompletedPrerequisites,
+} from "@/lib/services/scheduler";
+import { getServiceMinistries } from "@/lib/utils/service-helpers";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -71,7 +83,33 @@ interface ScheduleItem {
   attended?: string | null;
 }
 
-type TabKey = "upcoming" | "past" | "team";
+type TabKey = "upcoming" | "past" | "team" | "open-slots";
+
+/**
+ * One claimable opening on a Self-Service draft schedule. Computed
+ * client-side from (schedule, service occurrence, role) minus filled
+ * assignments. PR #35 (Phase 6 follow-up #3).
+ */
+interface OpenSlot {
+  scheduleId: string;
+  scheduleDateStart: string;
+  scheduleDateEnd: string;
+  serviceId: string;
+  serviceName: string;
+  serviceDate: string;
+  startTime: string;
+  endTime: string;
+  ministryId: string;
+  ministryName: string;
+  ministryColor: string;
+  roleId: string;
+  roleTitle: string;
+  /**
+   * Synthetic key so React keys stay stable across re-renders and we can
+   * track the "Claim" button's in-flight state per row.
+   */
+  key: string;
+}
 
 export default function MySchedulePage() {
   const { user, profile, activeMembership, memberships } = useAuth();
@@ -104,6 +142,19 @@ export default function MySchedulePage() {
   const [availabilityRequests, setAvailabilityRequests] = useState<
     UserNotification[]
   >([]);
+  // PR #35 (Phase 6 follow-up #3): Self-Service open-slot claim state.
+  // Keyed by OpenSlot.key for the in-flight "Claim" spinner; error string
+  // is rendered inline below the claim list so a 409 ("slot already
+  // filled") is visible without a toast.
+  const [claimingKey, setClaimingKey] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [selfServiceSchedules, setSelfServiceSchedules] = useState<Schedule[]>([]);
+  const [orgPrereqsByChurch, setOrgPrereqsByChurch] = useState<
+    Map<string, OnboardingStep[]>
+  >(new Map());
+  const [myPersonByChurch, setMyPersonByChurch] = useState<Map<string, Person>>(
+    new Map(),
+  );
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -126,6 +177,10 @@ export default function MySchedulePage() {
       const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
 
       const activeMembers = memberships.filter((m) => m.status === "active");
+      // PR #35: collect across all loaded orgs for the Open Slots tab.
+      const ssSchedules: Schedule[] = [];
+      const orgPrereqsMap = new Map<string, OnboardingStep[]>();
+      const personByChurchMap = new Map<string, Person>();
 
       async function loadForChurch(churchId: string, memberVolunteerId: string | null) {
         // Phase 1: fetch people to determine this user's person ID
@@ -145,8 +200,8 @@ export default function MySchedulePage() {
           if (myPerson) myPersonId = myPerson.id;
         }
 
-        // Phase 2: fetch my assignments (indexed by person_id) + supporting data + schedules in parallel
-        const [assigns, svcs, mins, evts, schedules] = await Promise.all([
+        // Phase 2: fetch my assignments (indexed by person_id) + supporting data + schedules + church doc in parallel
+        const [assigns, svcs, mins, evts, schedules, churchSnap] = await Promise.all([
           myPersonId
             ? getChurchDocuments(churchId, "assignments",
                 where("person_id", "==", myPersonId),
@@ -157,6 +212,8 @@ export default function MySchedulePage() {
           getChurchDocuments(churchId, "ministries") as Promise<unknown[]>,
           getChurchDocuments(churchId, "events") as Promise<unknown[]>,
           getChurchDocuments(churchId, "schedules") as Promise<unknown[]>,
+          // PR #35: org-wide prerequisites for the Open Slots eligibility check.
+          getDoc(doc(db, "churches", churchId)),
         ]);
 
         if (myPersonId) {
@@ -177,7 +234,22 @@ export default function MySchedulePage() {
           if (myVol) {
             ministryIds = myVol.ministry_ids || [];
             volId = myVol.id;
+            personByChurchMap.set(churchId, myVol);
           }
+        }
+
+        // PR #35: keep self-service schedules in draft/in_review for Open Slots.
+        for (const s of schedules as Schedule[]) {
+          if (
+            normalizeWorkflowMode(s.workflow_mode) === "self-service" &&
+            (s.status === "draft" || s.status === "in_review")
+          ) {
+            ssSchedules.push(s);
+          }
+        }
+        if (churchSnap.exists()) {
+          const data = churchSnap.data();
+          orgPrereqsMap.set(churchId, (data.org_prerequisites as OnboardingStep[]) || []);
         }
 
         for (const s of svcs as Service[]) serviceMap.set(s.id, s);
@@ -243,6 +315,9 @@ export default function MySchedulePage() {
       setMyMinistryIds(ministryIds);
       setMyVolunteerId(volId);
       setCalendarFeeds(feeds);
+      setSelfServiceSchedules(ssSchedules);
+      setOrgPrereqsByChurch(orgPrereqsMap);
+      setMyPersonByChurch(personByChurchMap);
       if (!loadedAnyOrg && activeMembers.length > 0) setFetchError(true);
       setLoading(false);
 
@@ -405,6 +480,162 @@ export default function MySchedulePage() {
     }
   }
 
+  // --- Open Slots (PR #35, Phase 6 follow-up #3) ---
+  //
+  // For every self-service draft/in-review schedule across the volunteer's
+  // active churches, expand the schedule into service occurrences via
+  // generateOccurrences(), then for each (occurrence, role) compute open
+  // slots = role.count - (filled non-trainee assignments). Drop slots
+  // where the volunteer is not on the team OR has not (still) completed
+  // the team's prerequisites.
+  const openSlots: OpenSlot[] = (() => {
+    if (selfServiceSchedules.length === 0) return [];
+    const slots: OpenSlot[] = [];
+    const allServices = Array.from(services.values());
+
+    for (const sched of selfServiceSchedules) {
+      // Scope services to the schedule's selected ministries (if any).
+      const scopedMinistryIds = sched.ministry_ids || [];
+      const scopedServices = scopedMinistryIds.length > 0
+        ? allServices.filter((s) => {
+            const ids = [s.ministry_id, ...(s.ministries?.map((m) => m.ministry_id) ?? [])];
+            return scopedMinistryIds.some((id) => ids.includes(id));
+          })
+        : allServices;
+      const me = myPersonByChurch.get(sched.church_id);
+      if (!me) continue; // No person record in this church; can't claim
+      const orgPrereqs = orgPrereqsByChurch.get(sched.church_id) || [];
+      const ministriesArr = Array.from(ministries.values()).filter(
+        (m) => m.church_id === sched.church_id,
+      );
+
+      const occurrences = generateOccurrences(
+        scopedServices,
+        sched.date_range_start,
+        sched.date_range_end,
+      );
+      for (const occ of occurrences) {
+        if (occ.date < today) continue; // never list past dates
+        const sms = getServiceMinistries(occ.service, occ.date);
+        for (const sm of sms) {
+          const ministry = ministriesArr.find((m) => m.id === sm.ministry_id);
+          if (!ministry) continue;
+          if (!canServeInMinistry(me, sm.ministry_id)) continue;
+          for (const role of sm.roles as ServiceRole[]) {
+            // Filled count: non-trainee assignments for this exact slot.
+            const filled = allChurchAssignments.filter(
+              (a) =>
+                a.schedule_id === sched.id &&
+                a.service_id === occ.service.id &&
+                a.service_date === occ.date &&
+                a.role_id === role.role_id &&
+                (a.assignment_type ?? "regular") !== "trainee",
+            ).length;
+            if (filled >= role.count) continue;
+
+            // Prereq check (uses the PR #33 expiry-aware helper).
+            if (
+              !hasCompletedPrerequisites(
+                me,
+                sm.ministry_id,
+                [ministry],
+                orgPrereqs,
+                role.role_id,
+              )
+            ) {
+              continue;
+            }
+
+            // Skip slots the volunteer already has a claim for on this
+            // occurrence (no double-booking same service/date).
+            const alreadyClaimedSameOccurrence = allChurchAssignments.some(
+              (a) =>
+                a.schedule_id === sched.id &&
+                a.service_id === occ.service.id &&
+                a.service_date === occ.date &&
+                a.person_id === me.id,
+            );
+            if (alreadyClaimedSameOccurrence) continue;
+
+            slots.push({
+              scheduleId: sched.id,
+              scheduleDateStart: sched.date_range_start,
+              scheduleDateEnd: sched.date_range_end,
+              serviceId: occ.service.id,
+              serviceName: occ.service.name,
+              serviceDate: occ.date,
+              startTime: occ.service.start_time,
+              endTime: occ.service.end_time,
+              ministryId: sm.ministry_id,
+              ministryName: ministry.name,
+              ministryColor: ministry.color,
+              roleId: role.role_id,
+              roleTitle: role.title,
+              key: `${sched.id}|${occ.service.id}|${occ.date}|${sm.ministry_id}|${role.role_id}`,
+            });
+          }
+        }
+      }
+    }
+    return slots.sort((a, b) => {
+      const dateComp = a.serviceDate.localeCompare(b.serviceDate);
+      if (dateComp !== 0) return dateComp;
+      const timeComp = (a.startTime || "").localeCompare(b.startTime || "");
+      if (timeComp !== 0) return timeComp;
+      return a.roleTitle.localeCompare(b.roleTitle);
+    });
+  })();
+
+  async function handleClaim(slot: OpenSlot) {
+    if (!user) return;
+    setClaimError(null);
+    setClaimingKey(slot.key);
+    try {
+      const churchId = selfServiceSchedules.find((s) => s.id === slot.scheduleId)?.church_id;
+      if (!churchId) {
+        setClaimError("Couldn't determine which org this slot belongs to.");
+        return;
+      }
+      const token = await user.getIdToken();
+      const res = await fetch("/api/assignments/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          schedule_id: slot.scheduleId,
+          service_id: slot.serviceId,
+          service_date: slot.serviceDate,
+          role_id: slot.roleId,
+          ministry_id: slot.ministryId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setClaimError(data.error || `Couldn't claim slot (${res.status})`);
+        return;
+      }
+      // Refetch all-church assignments so the slot disappears from Open
+      // Slots and the new assignment shows up on Upcoming on the next
+      // navigation. Lighter than a full page reload.
+      try {
+        const fresh = await getChurchDocuments(churchId, "assignments",
+          where("service_date", ">=", today),
+        ) as unknown[];
+        setAllChurchAssignments((prev) => {
+          // Replace this church's slice with the fresh data.
+          const others = prev.filter((a) => a.church_id !== churchId);
+          return [...others, ...(fresh as Assignment[])];
+        });
+      } catch {
+        // best-effort
+      }
+    } catch {
+      setClaimError("Network error. Please try again.");
+    } finally {
+      setClaimingKey(null);
+    }
+  }
+
   // --- Schedule filtering ---
 
   const timeFilter = activeTab === "past" ? "past" : "upcoming";
@@ -461,6 +692,10 @@ export default function MySchedulePage() {
           { key: "upcoming" as const, label: "Upcoming" },
           { key: "past" as const, label: "Past" },
           { key: "team" as const, label: "Team" },
+          {
+            key: "open-slots" as const,
+            label: openSlots.length > 0 ? `Open Slots (${openSlots.length})` : "Open Slots",
+          },
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -681,6 +916,77 @@ export default function MySchedulePage() {
                           )}
                         </div>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Open Slots tab — PR #35 (Phase 6 follow-up #3) */}
+      {activeTab === "open-slots" && (
+        <>
+          {claimError && (
+            <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3">
+              <p className="text-sm text-vc-danger">{claimError}</p>
+              <button
+                onClick={() => setClaimError(null)}
+                aria-label="Dismiss error"
+                className="shrink-0 text-vc-text-muted hover:text-vc-danger"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {openSlots.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-vc-border bg-white p-12 text-center">
+              <svg className="mx-auto h-10 w-10 text-vc-text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <p className="mt-3 text-vc-text-secondary">
+                No open slots for you right now.
+              </p>
+              <p className="mt-1 text-sm text-vc-text-muted">
+                When your admin opens a self-service schedule, claimable
+                slots for your teams will show up here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {openSlots.map((slot) => {
+                const isClaiming = claimingKey === slot.key;
+                return (
+                  <div
+                    key={slot.key}
+                    className="rounded-xl border border-vc-border-light bg-white px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 text-xs text-vc-text-muted">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: slot.ministryColor }}
+                          />
+                          {slot.ministryName}
+                        </div>
+                        <p className="mt-0.5 font-medium text-vc-indigo">
+                          {slot.roleTitle}
+                        </p>
+                        <p className="text-sm text-vc-text-secondary">
+                          {formatDate(slot.serviceDate)} · {slot.serviceName}
+                          {slot.startTime ? ` · ${formatTime(slot.startTime)}` : ""}
+                          {slot.endTime ? `–${formatTime(slot.endTime)}` : ""}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleClaim(slot)}
+                        disabled={isClaiming || claimingKey !== null}
+                        className="inline-flex min-h-[44px] items-center rounded-lg bg-vc-coral px-4 py-2 text-sm font-medium text-white hover:bg-vc-coral/90 disabled:opacity-50"
+                      >
+                        {isClaiming ? "Claiming…" : "Claim"}
+                      </button>
                     </div>
                   </div>
                 );

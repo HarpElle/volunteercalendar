@@ -310,7 +310,7 @@ function isConditionalRoleSatisfied(
  * Scope-aware: only checks org-wide prereqs relevant to team scheduling
  * (scope "all", "teams", or "specific_roles" matching the assigned role).
  */
-function hasCompletedPrerequisites(
+export function hasCompletedPrerequisites(
   volunteer: Person,
   ministryId: string,
   ministries?: Ministry[],
