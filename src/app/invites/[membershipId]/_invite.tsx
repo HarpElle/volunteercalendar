@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
-import { getMembership, updateMembershipStatus } from "@/lib/firebase/firestore";
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
+import { updateMembershipStatus } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { Membership } from "@/lib/types";
@@ -21,32 +19,51 @@ export default function AcceptInvitePage() {
   const [churchName, setChurchName] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState<"idle" | "accepted" | "declined" | "not_found" | "wrong_user" | "already_active">("idle");
+  const [status, setStatus] = useState<"idle" | "accepted" | "declined" | "not_found" | "wrong_user" | "already_active" | "needs_login">("idle");
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function load() {
+      // Codex Phase 6 2026-05-18: the page used to read membership + church
+      // directly from Firestore on the client. Cross-org invitees aren't
+      // yet members of the destination church, so the church-doc read fails
+      // its rule check and the page flashed "Failed to load invitation",
+      // then accepted with a blank org name. The new /api/invites/[id]
+      // route uses admin SDK to return both safely.
+      if (!user) {
+        // Signed-out users see the sign-in path; we'll fetch the invite
+        // after they log in (the redirect param brings them back here).
+        setStatus("needs_login");
+        setLoading(false);
+        return;
+      }
       try {
-        const m = await getMembership(membershipId);
-        if (!m) {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/invites/${membershipId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 404) {
           setStatus("not_found");
           setLoading(false);
           return;
         }
-        setMembership(m);
-
-        // Load church name
-        const churchSnap = await getDoc(doc(db, "churches", m.church_id));
-        if (churchSnap.exists()) {
-          setChurchName(churchSnap.data().name || "this organization");
-        }
-
-        if (m.status === "active") {
-          setStatus("already_active");
-        } else if (m.status !== "pending_volunteer_approval") {
-          setStatus("not_found");
-        } else if (user && m.user_id !== user.uid) {
+        const data = await res.json();
+        if (res.status === 403 && data.wrong_user) {
           setStatus("wrong_user");
+          setLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          setError(data.error || "Failed to load invitation.");
+          setLoading(false);
+          return;
+        }
+        setMembership(data.membership as Membership);
+        setChurchName(data.church?.name || "this organization");
+        if (data.membership.status === "active") {
+          setStatus("already_active");
+        } else if (data.membership.status !== "pending_volunteer_approval") {
+          setStatus("not_found");
         }
       } catch {
         setError("Failed to load invitation.");
@@ -172,6 +189,26 @@ export default function AcceptInvitePage() {
             </>
           )}
 
+          {status === "needs_login" && (
+            <>
+              <h1 className="font-display text-2xl text-vc-indigo text-center mb-2">
+                You're Invited
+              </h1>
+              <p className="text-center text-vc-text-secondary mb-6">
+                Sign in or create an account to view this invitation.
+              </p>
+              <Button onClick={() => router.push(`/login?redirect=/invites/${membershipId}`)} size="lg" className="w-full mb-3">
+                Sign In to Accept
+              </Button>
+              <p className="text-center text-sm text-vc-text-muted">
+                Don't have an account?{" "}
+                <Link href={`/register?redirect=/invites/${membershipId}`} className="text-vc-coral hover:underline">
+                  Sign up
+                </Link>
+              </p>
+            </>
+          )}
+
           {status === "idle" && (
             <>
               <h1 className="font-display text-2xl text-vc-indigo text-center mb-2">
@@ -188,32 +225,18 @@ export default function AcceptInvitePage() {
                 </div>
               )}
 
-              {!user ? (
-                <>
-                  <Button onClick={() => router.push(`/login?redirect=/invites/${membershipId}`)} size="lg" className="w-full mb-3">
-                    Sign In to Accept
-                  </Button>
-                  <p className="text-center text-sm text-vc-text-muted">
-                    Don't have an account?{" "}
-                    <Link href={`/register?redirect=/invites/${membershipId}`} className="text-vc-coral hover:underline">
-                      Sign up
-                    </Link>
-                  </p>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <Button onClick={handleAccept} loading={submitting} size="lg" className="w-full">
-                    Accept Invitation
-                  </Button>
-                  <button
-                    onClick={handleDecline}
-                    disabled={submitting}
-                    className="w-full rounded-xl border border-vc-border px-4 py-3 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors disabled:opacity-50"
-                  >
-                    Decline
-                  </button>
-                </div>
-              )}
+              <div className="space-y-3">
+                <Button onClick={handleAccept} loading={submitting} size="lg" className="w-full">
+                  Accept Invitation
+                </Button>
+                <button
+                  onClick={handleDecline}
+                  disabled={submitting}
+                  className="w-full rounded-xl border border-vc-border px-4 py-3 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
             </>
           )}
         </div>

@@ -451,7 +451,11 @@ function PeopleContent() {
     if (!churchId) return;
     const vol = volunteers.find((v) => v.id === id);
     if (!vol) return;
-    if (!confirm(`Archive ${vol.name}? They'll be removed from all teams and excluded from future scheduling and event invitations. They can still see the organization. You can restore them later.`)) return;
+    // Codex Phase 6 2026-05-18: the person-detail drawer already shows a
+    // styled confirm modal before calling onArchive(); a second native
+    // window.confirm() was either getting auto-dismissed by browser
+    // automation or being treated as a no-op by users who already clicked
+    // through. Trust the drawer's confirmation.
     try {
       const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch(`/api/people/${id}/archive`, {
@@ -496,7 +500,8 @@ function PeopleContent() {
     if (!churchId) return;
     const vol = volunteers.find((v) => v.id === id);
     if (!vol) return;
-    if (!confirm(`Remove ${vol.name} from this organization? They will lose all access and won't be able to see the organization unless re-invited. This cannot be undone.`)) return;
+    // Drawer already confirms via the styled modal (see handleRemoveFromOrg
+    // in person-detail-drawer.tsx). Codex Phase 6 2026-05-18.
     try {
       const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch(`/api/people/${id}/remove`, {

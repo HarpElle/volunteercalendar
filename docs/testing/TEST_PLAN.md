@@ -825,6 +825,18 @@ It's a few weeks later. Sarah is doing her monthly housekeeping: archiving a vol
 
 Test the long-tail features: multi-org switching, profile sync across orgs, volunteer archiving, prerequisites, training sessions, and edge cases (404s, expired tokens, rate limiting).
 
+### Setup (do this before 6.1)
+
+Phase 6 expects ONE account to be a member of BOTH orgs so multi-org switching and profile sync can be tested without juggling logins. If you've followed Phases 1–5 with separate admin accounts per org (`+admin@…` for main, `+facility@…` for the facility org), do this prep first:
+
+1. Sign into the facility org as `jpaschall+facility@gmail.com`.
+2. Settings → People → invite your main org admin (`jpaschall+admin@gmail.com` / `+admin2@gmail.com` etc.) as **Admin**.
+3. Sign out and open the email invite link while signed in as the main admin.
+4. Accept the invitation.
+5. `/dashboard/my-orgs` for the main admin should now list both orgs.
+
+If you skip this, 6.1 / 6.2 will fail because `/dashboard/my-orgs` only shows one org. Codex Phase 6 2026-05-18 hit this and worked around with a manual invite.
+
 ### Walk-through
 
 #### 6.1 — Multi-org switching
@@ -856,17 +868,15 @@ Test the long-tail features: multi-org switching, profile sync across orgs, volu
   - ✅ Step-completed email arrives to that volunteer.
 - [ ] Verify scheduler gating: try to generate a new schedule. ✅ Volunteers with incomplete prereqs are excluded from auto-draft.
 
-#### 6.5 — Training Sessions
-- [ ] Find the training session creation UI (may be on the Onboarding page or under Settings).
-- [ ] Create a session: title `Safe Sanctuary Training`, date 2 weeks out, capacity 10, link to the `Safe Sanctuary Training` prereq.
-- [ ] Send invitations. ✅ Emails go out to volunteers with that pending prereq.
-- [ ] As one volunteer, RSVP yes. ✅ Attendee count increments.
-- [ ] As admin, mark the session complete.
-  - ✅ Attendees' prereq step is auto-completed.
-  - ✅ All-completed email may fire if this was their last prereq.
+#### 6.5 — Training Sessions (backend only in MVP)
+
+> **Status (2026-05-18):** the training-session backend (API + email template + auto-complete cron) is built, but the admin UI is **deferred to a follow-up PR**. Skip this section in manual testing; if you have curl handy, the API surface lives under `/api/training-sessions/*` (POST to create, POST `/[id]/invite`, POST `/[id]/rsvp`, POST `/[id]/complete`). The auto-complete on session-complete is what closes the prereq loop, not direct admin marking.
+
+- [ ] (Skipped in MVP) Find the training session creation UI.
+- [ ] (API only) Curl test the create/invite/rsvp/complete endpoints if interested.
 
 #### 6.6 — Edge cases
-- [ ] **Expired short link**: as admin (Pro tier now allows short links), create a short link with expiry date in the past. Visit it.
+- [ ] **Expired short link**: on `/dashboard/short-links`, expand **Create a test link (admin)**, give it a slug like `phase6-test` and a 1-day expiry, click **Create link**. Then on the new card, click **Expire now**. Visit `/s/phase6-test`.
   - ✅ 404 page (not crash).
 - [ ] **Double confirmation**: open a confirmation email link, confirm it. Click the same link again.
   - ✅ "Already Responded" message (not a duplicate confirmation).

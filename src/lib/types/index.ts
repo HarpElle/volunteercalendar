@@ -200,6 +200,15 @@ export interface OnboardingStep {
   scope?: PrerequisiteScope;
   /** When scope is "specific_roles": which role IDs this prereq applies to. */
   role_ids?: string[];
+  /**
+   * Days after completion before this step expires (e.g. 365 for a
+   * background check). When set, completion writes
+   * VolunteerJourneyStep.expires_at = completed_at + expires_in_days. Null
+   * or undefined means the completion never expires.
+   *
+   * Codex Phase 6 2026-05-18.
+   */
+  expires_in_days?: number | null;
 }
 
 export type JourneyStepStatus = "pending" | "in_progress" | "completed" | "waived";

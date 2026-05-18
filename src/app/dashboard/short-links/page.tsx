@@ -22,13 +22,20 @@ interface ShortLink {
 }
 
 export default function ShortLinksPage() {
-  const { user, profile, activeMembership } = useAuth();
+  const { user: _user, profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
 
   const [church, setChurch] = useState<Church | null>(null);
   const [links, setLinks] = useState<ShortLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [expiring, setExpiring] = useState<string | null>(null);
+  const [creatingTest, setCreatingTest] = useState(false);
+  const [testCreateError, setTestCreateError] = useState<string | null>(null);
+  const [testSlug, setTestSlug] = useState("");
+  const [testLabel, setTestLabel] = useState("");
+  const [testTarget, setTestTarget] = useState("/dashboard");
+  const [testExpiryDays, setTestExpiryDays] = useState(30);
 
   useEffect(() => {
     if (!churchId) { setLoading(false); return; }
@@ -65,6 +72,71 @@ export default function ShortLinksPage() {
   const currentTier = church?.subscription_tier || "free";
   const limits = TIER_LIMITS[currentTier] || TIER_LIMITS.free;
   const shortLinksLimit = limits.short_links;
+
+  async function handleExpireNow(linkId: string) {
+    if (!churchId) return;
+    setExpiring(linkId);
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch("/api/short-links", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ church_id: churchId, link_id: linkId, action: "expire_now" }),
+      });
+      if (res.ok) {
+        const { expires_at } = await res.json();
+        setLinks((prev) =>
+          prev.map((l) => (l.id === linkId ? { ...l, expires_at } : l)),
+        );
+      }
+    } catch {
+      // silent
+    } finally {
+      setExpiring(null);
+    }
+  }
+
+  async function handleCreateTestLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!churchId) return;
+    setCreatingTest(true);
+    setTestCreateError(null);
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch("/api/short-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          church_id: churchId,
+          slug: testSlug.trim().toLowerCase(),
+          target_url: testTarget.trim(),
+          label: testLabel.trim() || "Test link",
+          expires_in_days: testExpiryDays,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestCreateError(data.error || "Failed to create link");
+        return;
+      }
+      // Refetch list
+      const listRes = await fetch(`/api/short-links?church_id=${churchId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        setLinks(listData.links || []);
+      }
+      setTestSlug("");
+      setTestLabel("");
+    } catch {
+      setTestCreateError("Failed to create link");
+    } finally {
+      setCreatingTest(false);
+    }
+  }
 
   async function handleDelete(linkId: string) {
     setDeleting(linkId);
@@ -148,10 +220,76 @@ export default function ShortLinksPage() {
           )}
         </div>
 
-        <p className="mb-5 rounded-lg bg-vc-bg-warm px-4 py-3 text-xs text-vc-text-muted">
+        <p className="mb-3 rounded-lg bg-vc-bg-warm px-4 py-3 text-xs text-vc-text-muted">
           Short links are created automatically when you share an event or volunteer join link.
           Use the share button on any event or your volunteer join page to generate a short link.
         </p>
+
+        {/* Admin-only test-create form. Codex Phase 6 2026-05-18: testers
+            need a deterministic way to create a short link with a specific
+            slug/expiry, then verify the 404 path after expiration. */}
+        {shortLinksLimit > 0 && (
+          <details className="mb-5 rounded-lg border border-vc-border-light px-4 py-3 text-xs text-vc-text-secondary">
+            <summary className="cursor-pointer font-medium">
+              Create a test link (admin)
+            </summary>
+            <form onSubmit={handleCreateTestLink} className="mt-3 space-y-2">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="block">
+                  <span className="block text-[10px] uppercase tracking-wide text-vc-text-muted">Slug</span>
+                  <input
+                    required
+                    value={testSlug}
+                    onChange={(e) => setTestSlug(e.target.value)}
+                    placeholder="phase6-test"
+                    className="mt-0.5 w-full rounded border border-vc-border bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] uppercase tracking-wide text-vc-text-muted">Label</span>
+                  <input
+                    value={testLabel}
+                    onChange={(e) => setTestLabel(e.target.value)}
+                    placeholder="Phase 6 retest"
+                    className="mt-0.5 w-full rounded border border-vc-border bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="block text-[10px] uppercase tracking-wide text-vc-text-muted">Target URL or app path</span>
+                  <input
+                    required
+                    value={testTarget}
+                    onChange={(e) => setTestTarget(e.target.value)}
+                    placeholder="/dashboard"
+                    className="mt-0.5 w-full rounded border border-vc-border bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] uppercase tracking-wide text-vc-text-muted">Expires in (days, 1–90)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={testExpiryDays}
+                    onChange={(e) => setTestExpiryDays(Math.max(1, Math.min(90, Number(e.target.value) || 1)))}
+                    className="mt-0.5 w-24 rounded border border-vc-border bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <div className="self-end">
+                  <Button type="submit" loading={creatingTest} size="sm">
+                    Create link
+                  </Button>
+                </div>
+              </div>
+              <p className="text-[11px] text-vc-text-muted">
+                Tip: after creation, use <strong>Expire now</strong> on the link card to test the 404 path immediately.
+              </p>
+              {testCreateError && (
+                <p className="text-[11px] text-vc-danger">{testCreateError}</p>
+              )}
+            </form>
+          </details>
+        )}
 
         {links.length === 0 && shortLinksLimit > 0 && (
           <p className="text-sm text-vc-text-muted py-4 text-center">
@@ -184,6 +322,14 @@ export default function ShortLinksPage() {
                     </p>
                     <p className="text-[10px] text-vc-text-muted">Expires {formatDate(link.expires_at)}</p>
                   </div>
+                  <button
+                    onClick={() => handleExpireNow(link.id)}
+                    disabled={expiring === link.id}
+                    className="shrink-0 rounded-lg border border-vc-border-light px-2 py-1 text-[11px] font-medium text-vc-text-muted hover:border-vc-sand hover:text-vc-sand-dark transition-colors disabled:opacity-50"
+                    title="Force this link to expire immediately (for testing the 404 path)"
+                  >
+                    {expiring === link.id ? "Expiring…" : "Expire now"}
+                  </button>
                   <button onClick={() => handleDelete(link.id)} disabled={deleting === link.id} className="shrink-0 rounded-lg p-1.5 text-vc-text-muted hover:bg-vc-danger/5 hover:text-vc-danger transition-colors" title="Delete short link">
                     {deleting === link.id ? (
                       <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-vc-border border-t-vc-danger" />
