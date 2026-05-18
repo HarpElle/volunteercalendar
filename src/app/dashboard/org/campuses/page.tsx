@@ -102,6 +102,17 @@ function CampusesContent() {
           <RoomsSettingsSection churchId={churchId!} />
         </div>
       )}
+
+      {/* FacilitySharingSection renders on every tier so Free invitees can
+          accept invites and see their own setup code. It's gated internally
+          with a friendly upgrade message when the tier doesn't include the
+          host-side capability. Previously this section only rendered when
+          `rooms_enabled`, which meant Free orgs couldn't even appear as
+          invitees — blocking Codex's Phase 5.9 cross-org test. */}
+      <FacilitySharingSection
+        churchId={churchId!}
+        tierLimits={limits}
+      />
     </div>
   );
 }
@@ -312,9 +323,6 @@ function RoomsSettingsSection({ churchId }: { churchId: string }) {
         <Button onClick={handleSave} loading={saving}>Save Room Settings</Button>
         {saved && <Badge variant="success">Saved</Badge>}
       </div>
-
-      {/* Facility Sharing */}
-      <FacilitySharingSection churchId={churchId} />
     </div>
   );
 }
@@ -323,10 +331,19 @@ function RoomsSettingsSection({ churchId }: { churchId: string }) {
 // Facility Sharing Section (moved from settings/page.tsx)
 // ---------------------------------------------------------------------------
 
-function FacilitySharingSection({ churchId }: { churchId: string }) {
-  const { user, activeMembership } = useAuth();
-  const church = activeMembership;
-  const tierLimits = TIER_LIMITS[church?.church_id ? "growth" : "free"];
+function FacilitySharingSection({
+  churchId,
+  tierLimits,
+}: {
+  churchId: string;
+  tierLimits: (typeof TIER_LIMITS)[keyof typeof TIER_LIMITS];
+}) {
+  const { user } = useAuth();
+  // `facility_sharing` gates the HOST-side capability — creating a group and
+  // sending invites. Invitees can be on any tier (they just need to accept).
+  // The Setup Code panel below also renders on every tier so a Free invitee
+  // can read their code aloud to a Growth+ partner org's admin.
+  const canHostFacilityGroups = !!tierLimits?.facility_sharing;
 
   const [groups, setGroups] = useState<
     Array<FacilityGroup & { membership: FacilityGroupMember; members?: FacilityGroupMember[] }>
@@ -340,7 +357,9 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
   const [error, setError] = useState("");
   const [myShortCode, setMyShortCode] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  // Expand by default — collapsing made it hard for Phase 5.9 testers to
+  // even find the setup code or the pending-invite list.
+  const [expanded, setExpanded] = useState(true);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -405,7 +424,9 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!infoRes.ok) {
-        setError("Organization not found. Check the code and try again.");
+        setError(
+          `Couldn't find an organization with code "${inviteChurchId.trim().toUpperCase()}". Ask the partner org's admin for their 6-letter Setup Code from their Campuses page (Shared Facility section).`,
+        );
         setInviting(false);
         return;
       }
@@ -517,9 +538,23 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
                         ))}
                       </div>
                       {inviteGroupId === g.id && (
-                        <div className="mt-3 flex gap-2">
-                          <input type="text" value={inviteChurchId} onChange={(e) => setInviteChurchId(e.target.value)} placeholder="Setup code" className="min-h-[36px] flex-1 rounded-lg border border-vc-border-light bg-white px-3 py-1.5 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30" />
-                          <Button size="sm" onClick={() => handleInvite(g.id)} loading={inviting}>Send Invite</Button>
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-vc-text-muted">
+                            Ask the partner organization&apos;s admin for their
+                            6-letter Setup Code (visible at the top of this
+                            section on their Campuses page).
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={inviteChurchId}
+                              onChange={(e) => setInviteChurchId(e.target.value.toUpperCase())}
+                              placeholder="Partner org's Setup Code (e.g. ABC123)"
+                              maxLength={8}
+                              className="min-h-[36px] flex-1 rounded-lg border border-vc-border-light bg-white px-3 py-1.5 text-sm font-mono uppercase tracking-widest outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+                            />
+                            <Button size="sm" onClick={() => handleInvite(g.id)} loading={inviting}>Send Invite</Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -527,10 +562,28 @@ function FacilitySharingSection({ churchId }: { churchId: string }) {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <input type="text" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="New facility group name" className="min-h-[44px] flex-1 rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30" />
-                <Button onClick={handleCreate} loading={creating}>Create Group</Button>
-              </div>
+              {/* Host-only: create new group. Requires facility_sharing tier. */}
+              {canHostFacilityGroups ? (
+                <div className="flex gap-2">
+                  <input type="text" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="New facility group name" className="min-h-[44px] flex-1 rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30" />
+                  <Button onClick={handleCreate} loading={creating}>Create Group</Button>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-vc-warning/30 bg-vc-warning/5 px-4 py-3 text-sm text-vc-text-secondary">
+                  <p className="font-medium text-vc-indigo mb-1">
+                    Creating shared facility groups requires Growth+.
+                  </p>
+                  <p>
+                    Free and Starter orgs can still accept invitations from a
+                    partner org on a paid tier — your Setup Code above is
+                    valid. Upgrade in{" "}
+                    <a href="/dashboard/account" className="text-vc-coral underline">
+                      Account &rarr; Billing
+                    </a>{" "}
+                    to host your own groups.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

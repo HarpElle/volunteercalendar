@@ -20,6 +20,9 @@ interface RoomItem {
   equipment?: string[];
   is_active: boolean;
   display_public?: boolean;
+  /** Per-room toggle: appears on the public calendar + iCal feed. PR #24
+   *  flipped the default from false → true and exposed it in Add/Edit Room. */
+  public_visible?: boolean;
   requires_approval?: boolean;
 }
 
@@ -308,7 +311,11 @@ export default function RoomsPage() {
               {/* Quick action hint */}
               <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <span className="text-xs text-gray-400">
-                  {room.display_public ? "Public" : "Internal"}
+                  {/* "Public" reflects whether the room appears on the public
+                      calendar + iCal feed. `public_visible` is the operative
+                      field (see /api/calendar/public). Treats undefined as
+                      public to match the PR #24 default. */}
+                  {room.public_visible !== false ? "Public" : "Internal"}
                 </span>
                 <span className="text-xs text-vc-coral opacity-0 group-hover:opacity-100 transition-opacity">
                   View details
