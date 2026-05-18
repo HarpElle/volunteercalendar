@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/context/auth-context";
 import { db } from "@/lib/firebase/config";
+import { todayInTimezone } from "@/lib/utils/date";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { TabBar } from "@/components/ui/tab-bar";
@@ -70,6 +71,7 @@ export default function RoomDetailPage() {
   const [copiedDisplay, setCopiedDisplay] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [tier, setTier] = useState<SubscriptionTier>("free");
+  const [churchTimezone, setChurchTimezone] = useState<string>("UTC");
   const [reservationsError, setReservationsError] = useState<string | null>(null);
   /** Days into the future to show. Default covers most quarterly recurring
    *  series; "Show full year" pushes to 365. */
@@ -101,11 +103,16 @@ export default function RoomDetailPage() {
     setReservationsError(null);
     try {
       const token = await user.getIdToken();
-      const today = new Date().toISOString().split("T")[0];
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + rangeDays);
+      // "Today" must be computed in the church's timezone — same UTC-rollover
+      // trap the wall-display API just got fixed for. The range end is set
+      // by adding rangeDays to the church-local today, then formatted back.
+      const today = todayInTimezone(churchTimezone);
+      const endParts = today.split("-").map(Number);
+      const endDate = new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2]));
+      endDate.setUTCDate(endDate.getUTCDate() + rangeDays);
+      const endStr = endDate.toISOString().split("T")[0];
       const res = await fetch(
-        `/api/reservations?church_id=${encodeURIComponent(churchId)}&room_id=${roomId}&date_from=${today}&date_to=${endDate.toISOString().split("T")[0]}`,
+        `/api/reservations?church_id=${encodeURIComponent(churchId)}&room_id=${roomId}&date_from=${today}&date_to=${endStr}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
@@ -122,7 +129,7 @@ export default function RoomDetailPage() {
         e instanceof Error ? e.message : "Failed to load reservations",
       );
     }
-  }, [user, churchId, roomId, rangeDays]);
+  }, [user, churchId, roomId, rangeDays, churchTimezone]);
 
   useEffect(() => {
     fetchRoom();
@@ -145,8 +152,11 @@ export default function RoomDetailPage() {
           }),
         ]);
         if (tierSnap.exists()) {
-          const t = tierSnap.data().subscription_tier as SubscriptionTier | undefined;
+          const data = tierSnap.data();
+          const t = data.subscription_tier as SubscriptionTier | undefined;
           if (t) setTier(t);
+          const tz = data.timezone as string | undefined;
+          if (tz) setChurchTimezone(tz);
         }
         if (settingsRes.ok) {
           const s = await settingsRes.json();

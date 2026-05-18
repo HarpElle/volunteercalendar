@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { TIER_LIMITS } from "@/lib/constants";
+import { todayInTimezone } from "@/lib/utils/date";
 import { randomBytes } from "crypto";
 import {
   generateOccurrenceDates,
@@ -179,9 +180,15 @@ export async function GET(req: NextRequest) {
     const roomId = req.nextUrl.searchParams.get("room_id");
     const ministryId = req.nextUrl.searchParams.get("ministry_id");
     const status = req.nextUrl.searchParams.get("status");
-    const dateFrom =
-      req.nextUrl.searchParams.get("date_from") ||
-      new Date().toISOString().split("T")[0];
+    // Default `date_from` to today **in the church's timezone**. Without this,
+    // querying at 7pm CDT silently drops every same-day reservation because
+    // `new Date().toISOString()` is already on the next UTC calendar day.
+    let dateFrom = req.nextUrl.searchParams.get("date_from");
+    if (!dateFrom) {
+      const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+      const churchTz = (churchSnap.data()?.timezone as string) || "UTC";
+      dateFrom = todayInTimezone(churchTz);
+    }
     const dateTo = req.nextUrl.searchParams.get("date_to");
 
     let query = adminDb
