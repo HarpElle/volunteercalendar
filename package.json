@@ -10,6 +10,8 @@
     "test": "vitest run tests/unit",
     "test:unit": "vitest run tests/unit",
     "test:rules": "firebase emulators:exec --only firestore --project demo-test \"vitest run tests/rules\"",
+    "test:integration": "firebase emulators:exec --only firestore --project demo-test \"vitest run tests/integration --no-file-parallelism\"",
+    "test:emulator": "firebase emulators:exec --only firestore --project demo-test \"vitest run tests/rules tests/integration --no-file-parallelism\"",
     "test:watch": "vitest"
   },
   "dependencies": {
