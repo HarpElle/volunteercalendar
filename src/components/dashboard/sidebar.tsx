@@ -178,6 +178,15 @@ function getNavSections(
             "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
           gate: (m) => isAdmin(m),
         },
+        {
+          // PR #38: admin entry point for training sessions (creates +
+          // invites + mark-complete + auto-complete prereq).
+          label: "Training Sessions",
+          href: "/dashboard/training-sessions",
+          iconPath:
+            "M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222",
+          gate: (m) => isScheduler(m),
+        },
       ],
     },
 
