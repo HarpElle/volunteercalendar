@@ -86,3 +86,26 @@ jobs:
           SENTRY_DSN: ""
           NEXT_PUBLIC_SENTRY_DSN: ""
         run: npm run build
+
+      - name: Smoke check — critical UI strings present in build output
+        # Defense-in-depth against the PR #35 hot-reload class of bug
+        # (volunteer-facing feature regressed to silent absence because a
+        # TypeScript error broke the prod build but the merged PR slipped
+        # through anyway). Each grep here pins a user-visible string that
+        # MUST land in the built bundle. Adding a new check here is
+        # ~1 line per surface that we care about regression-protecting.
+        run: |
+          set -e
+          must_contain() {
+            local pattern="$1"
+            local label="$2"
+            if grep -rq -- "$pattern" .next/static; then
+              echo "OK: $label ('$pattern')"
+            else
+              echo "MISSING: $label ('$pattern')" >&2
+              exit 1
+            fi
+          }
+          must_contain "Open Slots" "Self-Service Open Slots tab on /dashboard/my-schedule (PR #35)"
+          must_contain "Send Availability Request" "Schedules availability-request button (PR #27)"
+          must_contain "Create a test link" "Short Links admin test-create form (PR #31)"
