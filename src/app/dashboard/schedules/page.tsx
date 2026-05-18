@@ -125,6 +125,7 @@ export default function SchedulesPage() {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [orgPrerequisites, setOrgPrerequisites] = useState<OnboardingStep[]>([]);
   const [subscriptionTier, setSubscriptionTier] = useState<string>("free");
+  const [churchTimezone, setChurchTimezone] = useState<string>("UTC");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -143,6 +144,13 @@ export default function SchedulesPage() {
   const [sendingNotify, setSendingNotify] = useState(false);
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Clear transient toasts whenever the admin switches between drafts —
+  // otherwise a "Resent to N volunteers" / "Sent availability request..."
+  // message from draft A persists on draft B/C.
+  useEffect(() => {
+    setNotifyResult(null);
+  }, [activeScheduleId]);
 
   useEffect(() => {
     if (!churchId) return;
@@ -169,6 +177,10 @@ export default function SchedulesPage() {
           setSubscriptionTier(
             (churchSnap.data().subscription_tier as string) || "free",
           );
+          // Codex Run 3 retest (2026-05-17): audit-metadata badge needs to
+          // render dates in the church's local TZ, not the browser's UTC.
+          const tz = churchSnap.data().timezone as string | undefined;
+          if (tz) setChurchTimezone(tz);
         }
       } catch {
         setFetchError(true);
@@ -263,7 +275,7 @@ export default function SchedulesPage() {
           : volunteers;
 
       const result = generateDraftSchedule(
-        scheduleId, churchId, scopedServices, scopedVolunteers, households, options.startDate, options.endDate, ministries, orgPrerequisites,
+        scheduleId, churchId, scopedServices, scopedVolunteers, households, options.startDate, options.endDate, ministries, orgPrerequisites, options.workflowMode,
       );
 
       const savedAssignments: Assignment[] = [];
@@ -522,6 +534,45 @@ export default function SchedulesPage() {
       setActiveAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
     } catch {
       setMutationError("Failed to unassign volunteer. Please try again.");
+    }
+  }
+
+  /**
+   * Toggle an assignment between "regular" and "trainee" (shadow). Codex
+   * Run 3 retest (2026-05-17): previously there was no UI to set
+   * assignment_type — only direct Firestore writes. Hits the new
+   * /api/assignments/[id] PATCH route which enforces scheduler+ role.
+   */
+  async function handleAssignmentTypeChange(
+    assignmentId: string,
+    assignmentType: "regular" | "trainee",
+  ) {
+    if (!churchId || !user) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/assignments/${assignmentId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          assignment_type: assignmentType,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setMutationError(data.error || "Failed to update assignment type");
+        return;
+      }
+      setActiveAssignments((prev) =>
+        prev.map((a) =>
+          a.id === assignmentId ? { ...a, assignment_type: assignmentType } : a,
+        ),
+      );
+    } catch {
+      setMutationError("Failed to update assignment type. Please try again.");
     }
   }
 
@@ -1103,6 +1154,7 @@ export default function SchedulesPage() {
                 ministries={ministries}
                 services={services}
                 volunteers={volunteers}
+                churchTimezone={churchTimezone}
                 onApprove={(mid) => handleMinistryApproval(mid, "approved")}
                 onReject={(mid) => handleMinistryApproval(mid, "rejected")}
                 loading={transitioning}
@@ -1127,6 +1179,11 @@ export default function SchedulesPage() {
               schedule={activeSchedule}
               onReassign={activeSchedule.status === "draft" ? handleReassign : undefined}
               onUnassign={activeSchedule.status === "draft" ? handleUnassign : undefined}
+              onAssignmentTypeChange={
+                activeSchedule.status === "draft" || activeSchedule.status === "in_review"
+                  ? handleAssignmentTypeChange
+                  : undefined
+              }
             />
           )}
         </div>

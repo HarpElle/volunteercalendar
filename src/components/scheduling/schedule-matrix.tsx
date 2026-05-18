@@ -12,6 +12,15 @@ interface ScheduleMatrixProps {
   schedule: Schedule;
   onReassign?: (assignmentId: string, newVolunteerId: string) => void;
   onUnassign?: (assignmentId: string) => void;
+  /**
+   * Flip an assignment between "regular" and "trainee" (shadow). Provided
+   * for admins/schedulers when the schedule is draft or in-review. Codex
+   * Run 3 retest (2026-05-17): previously no UI surfaced this control.
+   */
+  onAssignmentTypeChange?: (
+    assignmentId: string,
+    assignmentType: "regular" | "trainee",
+  ) => void;
 }
 
 type ViewMode = "by-date" | "by-volunteer" | "compare";
@@ -24,12 +33,16 @@ export function ScheduleMatrix({
   schedule,
   onReassign,
   onUnassign,
+  onAssignmentTypeChange,
 }: ScheduleMatrixProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("by-date");
   const [filterMinistry, setFilterMinistry] = useState<string>("all");
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Codex Run 3 retest (2026-05-17): per-chip menu used to flip
+  // Regular ↔ Trainee. Only one chip's menu is open at a time.
+  const [typeMenuFor, setTypeMenuFor] = useState<string | null>(null);
 
   const isDraft = schedule.status === "draft";
 
@@ -382,6 +395,8 @@ export function ScheduleMatrix({
                               );
                             }
 
+                            const isTrainee = a.assignment_type === "trainee";
+                            const typeMenuOpen = typeMenuFor === a.id;
                             return (
                               <div
                                 key={a.id}
@@ -390,28 +405,80 @@ export function ScheduleMatrix({
                                 onDragOver={isDraft && onReassign ? (e) => handleDragOver(e, a.id) : undefined}
                                 onDragLeave={isDraft && onReassign ? handleDragLeave : undefined}
                                 onDrop={isDraft && onReassign ? (e) => handleDrop(e, a) : undefined}
-                                className={`group/chip inline-flex items-center gap-1.5 rounded-lg border bg-vc-bg px-3 py-1.5 text-sm transition-all ${
+                                className={`group/chip relative inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                                  isTrainee
+                                    ? "border-dashed border-vc-sand/60 bg-vc-sand/10"
+                                    : "bg-vc-bg"
+                                } ${
                                   isDraft && onReassign ? "cursor-grab active:cursor-grabbing" : ""
                                 } ${
                                   dragOverTarget === a.id
                                     ? "border-vc-coral ring-2 ring-vc-coral/20 scale-105"
-                                    : "border-vc-border-light"
+                                    : isTrainee ? "" : "border-vc-border-light"
                                 }`}
                               >
                                 <span className="font-medium text-vc-indigo">
                                   {vol?.name || "Unknown"}
-                                  {a.assignment_type === "trainee" && (
-                                    <span className="ml-1 text-[9px] font-medium text-vc-sand">(shadow)</span>
+                                  {isTrainee && (
+                                    <span className="ml-1 inline-flex items-center rounded bg-vc-sand/30 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-vc-sand-dark">
+                                      Trainee
+                                    </span>
                                   )}
                                 </span>
                                 <span className="text-xs text-vc-text-muted">
                                   {a.role_title}
                                 </span>
                                 <StatusDot status={a.status} />
+                                {onAssignmentTypeChange && (
+                                  <button
+                                    onClick={() => setTypeMenuFor(typeMenuOpen ? null : a.id)}
+                                    className={`ml-1 text-vc-text-muted hover:text-vc-coral ${
+                                      typeMenuOpen ? "inline-flex" : "hidden group-hover/chip:inline-flex"
+                                    }`}
+                                    title={isTrainee ? "Trainee (shadow) — click to change" : "Regular assignment — click to change"}
+                                    aria-label="Assignment type"
+                                  >
+                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
+                                    </svg>
+                                  </button>
+                                )}
+                                {typeMenuOpen && onAssignmentTypeChange && (
+                                  <div className="absolute top-full left-0 z-20 mt-1 min-w-[180px] rounded-lg border border-vc-border-light bg-white shadow-lg">
+                                    <button
+                                      onClick={() => {
+                                        onAssignmentTypeChange(a.id, "regular");
+                                        setTypeMenuFor(null);
+                                      }}
+                                      className={`block w-full px-3 py-2 text-left text-xs hover:bg-vc-bg-warm ${
+                                        !isTrainee ? "font-semibold text-vc-indigo" : "text-vc-text-secondary"
+                                      }`}
+                                    >
+                                      Regular {!isTrainee && "✓"}
+                                      <p className="text-[10px] text-vc-text-muted font-normal">
+                                        Fills the role slot
+                                      </p>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        onAssignmentTypeChange(a.id, "trainee");
+                                        setTypeMenuFor(null);
+                                      }}
+                                      className={`block w-full border-t border-vc-border-light px-3 py-2 text-left text-xs hover:bg-vc-bg-warm ${
+                                        isTrainee ? "font-semibold text-vc-sand-dark" : "text-vc-text-secondary"
+                                      }`}
+                                    >
+                                      Trainee (shadow) {isTrainee && "✓"}
+                                      <p className="text-[10px] text-vc-text-muted font-normal">
+                                        Observes — does not fill the slot
+                                      </p>
+                                    </button>
+                                  </div>
+                                )}
                                 {isDraft && onReassign && (
                                   <button
                                     onClick={() => setReassigning(a.id)}
-                                    className="ml-1 hidden text-vc-text-muted hover:text-vc-coral group-hover/chip:inline-flex"
+                                    className="hidden text-vc-text-muted hover:text-vc-coral group-hover/chip:inline-flex"
                                     title="Reassign"
                                   >
                                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -441,7 +508,13 @@ export function ScheduleMatrix({
                         {/* Unfilled roles (service-level) */}
                         <div className="mt-1 flex flex-wrap gap-2">
                           {service.roles.map((role) => {
-                            const filled = svcAssignments.filter((a) => a.role_id === role.role_id).length;
+                            // Codex Run 3 retest (2026-05-17): trainee assignments
+                            // shadow the slot — they do NOT count toward `filled`.
+                            // Otherwise a role with 1 trainee shadow would render
+                            // as filled when the slot is actually still open.
+                            const filled = svcAssignments.filter(
+                              (a) => a.role_id === role.role_id && a.assignment_type !== "trainee",
+                            ).length;
                             const gap = role.count - filled;
                             return gap > 0 ? (
                               <div

@@ -369,6 +369,7 @@ export function generateDraftSchedule(
   endDate: string,
   ministries?: Ministry[],
   orgPrerequisites?: OnboardingStep[],
+  workflowMode?: string,
 ): SchedulingResult {
   const occurrences = generateOccurrences(services, startDate, endDate);
   const assignments: DraftAssignment[] = [];
@@ -382,6 +383,12 @@ export function generateDraftSchedule(
 
   let totalSlots = 0;
 
+  // Codex Run 3 retest (2026-05-17): Self-Service workflow must NOT
+  // auto-assign volunteers — every role slot starts as an open opportunity
+  // that volunteers claim themselves. Previously the generator ran greedy
+  // assignment regardless of workflow_mode, defeating the whole mode.
+  const isSelfService = workflowMode === "self-service";
+
   // --- Phase 1: Greedy Assignment ---
   for (const occurrence of occurrences) {
     const { service, date } = occurrence;
@@ -392,6 +399,20 @@ export function generateDraftSchedule(
       for (const role of sm.roles) {
         for (let slot = 0; slot < role.count; slot++) {
           totalSlots++;
+
+          // Self-Service mode: log the slot as unfilled (a claimable opening)
+          // and skip the matcher entirely. Volunteers will claim these via
+          // the open-slot list on /dashboard/my-schedule.
+          if (isSelfService) {
+            conflicts.push({
+              type: "unfilled_role",
+              service_id: service.id,
+              service_date: date,
+              role_id: role.role_id,
+              message: `Open slot: "${role.title}" on ${date} (${service.name}) — awaiting volunteer claim`,
+            });
+            continue;
+          }
 
           const bestVolunteer = findBestVolunteer(
             service,
