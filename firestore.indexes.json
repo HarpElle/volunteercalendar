@@ -312,6 +312,22 @@
       ]
     },
     {
+      "collectionGroup": "rooms",
+      "fieldPath": "calendar_token",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "roomSettings",
+      "fieldPath": "public_calendar_token",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "calendar_feeds",
       "fieldPath": "secret_token",
       "indexes": [

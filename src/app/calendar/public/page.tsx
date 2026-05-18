@@ -10,12 +10,19 @@ interface PublicReservation {
   date: string;
   start_time: string;
   end_time: string;
-  room_name?: string;
+  room_name?: string | null;
 }
 
 interface PublicRoom {
   id: string;
   name: string;
+}
+
+interface PublicCalendarResponse {
+  church: { id: string; name: string; timezone: string };
+  rooms: PublicRoom[];
+  reservations: PublicReservation[];
+  today: string;
 }
 
 function formatTime12(time24: string): string {
@@ -25,110 +32,134 @@ function formatTime12(time24: string): string {
   return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
 }
 
+/** Format a YYYY-MM-DD string for display, anchored at local noon to avoid
+ *  the UTC-rollover surprise PR #14 fixed. */
+function formatLocalDate(
+  iso: string,
+  opts: Intl.DateTimeFormatOptions,
+): string {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, opts);
+}
+
+/** Sunday-of-week relative to a YYYY-MM-DD anchor. */
+function sundayOfWeek(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay();
+  dt.setUTCDate(dt.getUTCDate() - dow);
+  return dt.toISOString().split("T")[0];
+}
+
+/** Add N days to a YYYY-MM-DD string. */
+function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().split("T")[0];
+}
+
 /**
  * /calendar/public — Public calendar (no auth required).
  *
  * Query params:
- *   church_id  — required
- *   token      — roomSettings public_calendar_token
- *   embed      — optional, if "true" hides header for iframe embedding
+ *   token      — roomSettings.public_calendar_token (required)
+ *   church_id  — optional. Auto-resolved from the token if missing.
+ *   embed      — optional. "true" hides the header for iframe embedding.
  */
 export default function PublicCalendarPage() {
   const searchParams = useSearchParams();
-  const churchId = searchParams.get("church_id") || "";
+  const churchIdParam = searchParams.get("church_id") || "";
   const token = searchParams.get("token") || "";
   const embed = searchParams.get("embed") === "true";
 
-  const [reservations, setReservations] = useState<PublicReservation[]>([]);
-  const [rooms, setRooms] = useState<PublicRoom[]>([]);
+  const [data, setData] = useState<PublicCalendarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay());
-    return d;
-  });
+  // Anchor day for the week view. Starts unset; once the API returns the
+  // church's "today" (in church TZ) we snap to that week's Sunday.
+  const [weekStart, setWeekStart] = useState<string | null>(null);
 
-  const weekDays = useMemo(() => {
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(currentWeekStart);
-      d.setDate(d.getDate() + i);
-      days.push(d);
-    }
-    return days;
-  }, [currentWeekStart]);
-
-  const fetchData = useCallback(async () => {
-    if (!churchId || !token) return;
-    setLoading(true);
-    try {
-      // Use the church-wide iCal endpoint data isn't practical for JSON...
-      // Instead, we fetch from the reservations API using token-based access
-      // For public calendar we need a lightweight public endpoint
-      // Reuse display API pattern but for all rooms
-      const dateFrom = weekDays[0].toISOString().split("T")[0];
-      const dateTo = weekDays[6].toISOString().split("T")[0];
-
-      const res = await fetch(
-        `/api/reservations?church_id=${encodeURIComponent(churchId)}&date_from=${dateFrom}&date_to=${dateTo}&public_token=${encodeURIComponent(token)}`,
-      );
-
-      if (!res.ok) {
-        // Fallback: if public token access not supported, show message
-        setError("Public calendar not available");
+  const fetchData = useCallback(
+    async (anchor?: string) => {
+      if (!token) {
+        setError("Missing token parameter.");
         setLoading(false);
         return;
       }
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({ token });
+        if (churchIdParam) params.set("church_id", churchIdParam);
+        if (anchor) {
+          params.set("date_from", anchor);
+          params.set("date_to", addDays(anchor, 6));
+        }
+        const res = await fetch(
+          `/api/calendar/public?${params.toString()}`,
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError(body.error || `Public calendar not available (${res.status})`);
+          return;
+        }
+        const json = (await res.json()) as PublicCalendarResponse;
+        setData(json);
+        // First load: snap the week view to the church's today
+        if (!anchor) {
+          setWeekStart(sundayOfWeek(json.today));
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load calendar");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, churchIdParam],
+  );
 
-      const json = await res.json();
-      setReservations(json.reservations || []);
-      if (json.rooms) setRooms(json.rooms);
-    } catch {
-      setError("Failed to load calendar");
-    } finally {
-      setLoading(false);
-    }
-  }, [churchId, token, weekDays]);
-
+  // Initial load — resolves church metadata + today + first week
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchData]);
 
+  // Re-fetch when navigating between weeks
+  useEffect(() => {
+    if (!weekStart) return;
+    fetchData(weekStart);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart]);
+
+  const weekDays = useMemo(() => {
+    if (!weekStart) return [];
+    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  }, [weekStart]);
+
   function navigate(dir: -1 | 1) {
-    setCurrentWeekStart((prev) => {
-      const d = new Date(prev);
-      d.setDate(d.getDate() + 7 * dir);
-      return d;
-    });
+    if (!weekStart) return;
+    setWeekStart(addDays(weekStart, 7 * dir));
   }
 
-  // Build room map
-  const roomMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of rooms) m.set(r.id, r.name);
-    return m;
-  }, [rooms]);
-
-  // Group by date
   const byDate = useMemo(() => {
     const map = new Map<string, PublicReservation[]>();
-    for (const r of reservations) {
+    if (!data) return map;
+    for (const r of data.reservations) {
       if (!map.has(r.date)) map.set(r.date, []);
       map.get(r.date)!.push(r);
     }
     return map;
-  }, [reservations]);
+  }, [data]);
 
-  if (!churchId || !token) {
+  if (!token) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-vc-bg">
-        <p className="text-gray-500">Missing church_id or token parameter.</p>
+        <p className="text-gray-500">Missing token parameter.</p>
       </div>
     );
   }
-
-  const today = new Date().toISOString().split("T")[0];
 
   return (
     <div
@@ -137,16 +168,16 @@ export default function PublicCalendarPage() {
       {!embed && (
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-vc-indigo font-display">
-            Room Calendar
+            {data?.church?.name ? `${data.church.name} — Room Calendar` : "Room Calendar"}
           </h1>
         </div>
       )}
 
-      {/* Week navigation */}
       <div className="flex items-center gap-3 mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          disabled={!weekStart || loading}
+          className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-40"
         >
           <svg
             className="h-4 w-4"
@@ -163,20 +194,27 @@ export default function PublicCalendarPage() {
           </svg>
         </button>
         <h2 className="text-lg font-semibold text-vc-indigo font-display">
-          {weekDays[0].toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}{" "}
-          &ndash;{" "}
-          {weekDays[6].toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
+          {weekStart ? (
+            <>
+              {formatLocalDate(weekStart, {
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              &ndash;{" "}
+              {formatLocalDate(addDays(weekStart, 6), {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </>
+          ) : (
+            "Loading…"
+          )}
         </h2>
         <button
           onClick={() => navigate(1)}
-          className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          disabled={!weekStart || loading}
+          className="rounded-lg border border-gray-200 p-2 hover:bg-gray-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-40"
         >
           <svg
             className="h-4 w-4"
@@ -200,17 +238,15 @@ export default function PublicCalendarPage() {
         </div>
       )}
 
-      {loading ? (
+      {loading && weekDays.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-3 border-vc-coral/30 border-t-vc-coral rounded-full animate-spin" />
         </div>
       ) : (
         <div className="space-y-3">
-          {weekDays.map((day) => {
-            const dateStr = day.toISOString().split("T")[0];
-            const isToday = dateStr === today;
+          {weekDays.map((dateStr) => {
+            const isToday = dateStr === data?.today;
             const dayReservations = byDate.get(dateStr) || [];
-
             return (
               <div
                 key={dateStr}
@@ -223,7 +259,7 @@ export default function PublicCalendarPage() {
                     isToday ? "text-vc-coral" : "text-gray-500"
                   }`}
                 >
-                  {day.toLocaleDateString(undefined, {
+                  {formatLocalDate(dateStr, {
                     weekday: "long",
                     month: "short",
                     day: "numeric",
@@ -251,7 +287,7 @@ export default function PublicCalendarPage() {
                           {r.title}
                         </span>
                         <span className="text-gray-400 text-xs shrink-0">
-                          {r.room_name || roomMap.get(r.room_id) || ""}
+                          {r.room_name || ""}
                         </span>
                       </div>
                     ))}

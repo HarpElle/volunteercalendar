@@ -71,7 +71,9 @@ export default function RoomDetailPage() {
   const [copiedDisplay, setCopiedDisplay] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [tier, setTier] = useState<SubscriptionTier>("free");
-  const [churchTimezone, setChurchTimezone] = useState<string>("UTC");
+  // null until the church doc loads, so the reservations fetch can defer
+  // and avoid an off-by-one UTC-today flash before the church TZ is known.
+  const [churchTimezone, setChurchTimezone] = useState<string | null>(null);
   const [reservationsError, setReservationsError] = useState<string | null>(null);
   /** Days into the future to show. Default covers most quarterly recurring
    *  series; "Show full year" pushes to 365. */
@@ -100,6 +102,11 @@ export default function RoomDetailPage() {
 
   const fetchReservations = useCallback(async () => {
     if (!user || !churchId) return;
+    // Wait until we know the church's timezone — otherwise the very first
+    // load can briefly query a UTC-rolled-forward date and show "no
+    // reservations" before the real list comes in (the PR #22 fix narrowed
+    // this to a single flash; this gate eliminates it).
+    if (!churchTimezone) return;
     setReservationsError(null);
     try {
       const token = await user.getIdToken();
