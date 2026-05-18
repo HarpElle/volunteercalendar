@@ -66,6 +66,7 @@ export default function RoomDetailPage() {
   const [editCapacity, setEditCapacity] = useState("");
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editRequiresApproval, setEditRequiresApproval] = useState(false);
+  const [editPublicVisible, setEditPublicVisible] = useState(true);
   const [equipmentTags, setEquipmentTags] = useState<string[]>([]);
   const [copiedIcal, setCopiedIcal] = useState(false);
   const [copiedDisplay, setCopiedDisplay] = useState(false);
@@ -183,6 +184,9 @@ export default function RoomDetailPage() {
     setEditCapacity(room.capacity?.toString() || "");
     setEditEquipment(room.equipment || []);
     setEditRequiresApproval(!!room.requires_approval);
+    // Treat undefined as public so old rooms (pre-PR-24) default to visible
+    // when first edited, matching the new POST default.
+    setEditPublicVisible(room.public_visible !== false);
     setEditing(true);
   }
 
@@ -210,6 +214,7 @@ export default function RoomDetailPage() {
           capacity: editCapacity ? parseInt(editCapacity, 10) : null,
           equipment: editEquipment,
           requires_approval: editRequiresApproval,
+          public_visible: editPublicVisible,
         }),
       });
       if (res.ok) {
@@ -736,6 +741,26 @@ export default function RoomDetailPage() {
                       Reservations require admin approval
                       <span className="block text-xs text-gray-400 mt-0.5">
                         Overrides the org-wide setting for this room only.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editPublicVisible}
+                      onChange={(e) =>
+                        setEditPublicVisible(e.target.checked)
+                      }
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-vc-coral focus:ring-vc-coral"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Show on public calendar + iCal feed
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Untick for sensitive rooms. Has no effect if the org-wide
+                        public calendar is disabled.
                       </span>
                     </span>
                   </label>
