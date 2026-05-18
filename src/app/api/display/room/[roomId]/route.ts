@@ -66,9 +66,13 @@ export async function GET(
       reservations,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Internal error" },
-      { status: 500 },
-    );
+    const raw = e instanceof Error ? e.message : "Internal error";
+    // Friendlier surface for Firestore-not-yet-ready cases (composite index
+    // still building, etc.) so a wall display doesn't show raw error text
+    // to a hallway full of people.
+    const friendly = raw.includes("FAILED_PRECONDITION")
+      ? "Display data is initializing. Please try again in a minute."
+      : raw;
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }
