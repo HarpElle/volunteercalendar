@@ -765,7 +765,9 @@ Test the Rooms & Reservations system end-to-end, plus the Pro-tier advanced work
 - [ ] Switch to the 2nd org's window. ✅ A `Pending Invitations` row for `Riverside Building` appears in the Shared Facility section. The 2nd org admin also gets an email notification.
 - [ ] Click **Accept**.
 - [ ] Back in the main org: ✅ The 2nd org appears as an active member of `Riverside Building`.
-- [ ] Test cross-org visibility: open the 2nd org's `/calendar` (or any room calendar). ✅ Reservations from the main org's rooms in `Riverside Building` are visible, and vice versa.
+- [ ] **Tag at least one room in each org with the shared facility group.** Open `/dashboard/rooms/<room>` → Settings → Edit. Set the new "Shared facility group" dropdown to `Riverside Building` → Save. Tagging is required: rooms NOT tagged with a shared group are not visible cross-org. (This is intentional — admins explicitly choose which rooms are shared.)
+- [ ] Test cross-org visibility: from the Shared Facility section on either org's Campuses page, click the **View shared calendar →** link on the `Riverside Building` card. The page at `/dashboard/rooms/facility/<groupId>` should list every tagged room with its owning org, plus that week's confirmed + pending reservations. Reservations from the OTHER org's tagged rooms are visible here (each row shows `Room · OrgName`).
+- [ ] Your own org's rooms (in the shared group) appear in your own `/calendar` as usual — the shared-calendar view is purposely cross-org-only. This split keeps own-org admin clean.
 
 #### 5.10 — Multi-Stage Approval (Pro tier)
 - [ ] Generate a new schedule via the wizard.

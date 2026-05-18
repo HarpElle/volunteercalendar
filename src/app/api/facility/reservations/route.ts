@@ -2,15 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 /**
- * GET /api/facility/reservations
+ * GET /api/facility/reservations?church_id=...&facility_group_id=...&date=...
+ *   OR
+ * GET /api/facility/reservations?church_id=...&facility_group_id=...
+ *     &date_from=...&date_to=...
  *
- * Returns reservations from linked organizations in the same facility group
- * for a given room's facility_group_id and date range.
+ * Returns rooms + reservations from the OTHER orgs in a facility group
+ * (everyone except the requesting org). Used by the shared facility calendar
+ * view at /dashboard/rooms/facility/[groupId].
  *
- * Query params:
- *   church_id       — requesting org
- *   facility_group_id — the facility group to query
- *   date            — ISO date string (YYYY-MM-DD)
+ * Auth: requester must be an active member of the requesting org AND the
+ * requesting org must be an active member of the facility group.
+ *
+ * Date param: pass either `date` (single day) or `date_from` + `date_to`
+ * (inclusive range). The range form was added in PR #26 so the cross-org
+ * calendar can fetch a whole week in one call.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -26,24 +32,31 @@ export async function GET(req: NextRequest) {
     const churchId = searchParams.get("church_id");
     const facilityGroupId = searchParams.get("facility_group_id");
     const date = searchParams.get("date");
+    const dateFrom = searchParams.get("date_from");
+    const dateTo = searchParams.get("date_to");
 
-    if (!churchId || !facilityGroupId || !date) {
+    if (!churchId || !facilityGroupId) {
       return NextResponse.json(
-        { error: "Missing church_id, facility_group_id, or date" },
+        { error: "Missing church_id or facility_group_id" },
+        { status: 400 },
+      );
+    }
+    if (!date && !(dateFrom && dateTo)) {
+      return NextResponse.json(
+        { error: "Missing date or (date_from + date_to)" },
         { status: 400 },
       );
     }
 
     // Verify user is a member of the requesting org
-    const membershipId = `${userId}_${churchId}`;
     const membershipSnap = await adminDb
-      .doc(`memberships/${membershipId}`)
+      .doc(`memberships/${userId}_${churchId}`)
       .get();
     if (!membershipSnap.exists) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
-    // Verify requesting org is an active member of this facility group
+    // Verify requesting org is an active member of the facility group
     const ownMemberSnap = await adminDb
       .doc(`facility_groups/${facilityGroupId}/members/${churchId}`)
       .get();
@@ -54,22 +67,27 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get all active members of the facility group (excluding requesting org)
+    // All active member orgs (excluding requesting org)
     const membersSnap = await adminDb
       .collection(`facility_groups/${facilityGroupId}/members`)
       .where("status", "==", "active")
       .get();
-
     const linkedChurchIds = membersSnap.docs
       .map((d) => d.id)
       .filter((id) => id !== churchId);
 
     if (linkedChurchIds.length === 0) {
-      return NextResponse.json({ reservations: [] });
+      return NextResponse.json({ rooms: [], reservations: [] });
     }
 
-    // Fetch reservations from each linked org for the given date
-    const allReservations: Array<{
+    interface SharedRoom {
+      id: string;
+      name: string;
+      capacity?: number;
+      church_id: string;
+      church_name: string;
+    }
+    interface SharedReservation {
       id: string;
       church_id: string;
       church_name: string;
@@ -79,15 +97,18 @@ export async function GET(req: NextRequest) {
       date: string;
       start_time: string;
       end_time: string;
-    }> = [];
+      status: string;
+    }
+    const allRooms: SharedRoom[] = [];
+    const allReservations: SharedReservation[] = [];
 
     for (const linkedChurchId of linkedChurchIds) {
       const memberData = membersSnap.docs.find(
         (d) => d.id === linkedChurchId,
       )?.data();
-      const churchName = memberData?.church_name || "Unknown";
+      const churchName = (memberData?.church_name as string) || "Unknown";
 
-      // Find rooms in this church that are part of the facility group
+      // Rooms in this linked org tagged with this facility group
       const roomsSnap = await adminDb
         .collection(`churches/${linkedChurchId}/rooms`)
         .where("facility_group_id", "==", facilityGroupId)
@@ -96,15 +117,31 @@ export async function GET(req: NextRequest) {
 
       for (const roomDoc of roomsSnap.docs) {
         const roomData = roomDoc.data();
+        const roomName = (roomData.name as string) || "Room";
+        allRooms.push({
+          id: roomDoc.id,
+          name: roomName,
+          capacity: roomData.capacity as number | undefined,
+          church_id: linkedChurchId,
+          church_name: churchName,
+        });
 
-        // Fetch reservations for this room on the given date
-        const reservationsSnap = await adminDb
+        // Reservations for this room
+        let resvQuery = adminDb
           .collection(`churches/${linkedChurchId}/reservations`)
           .where("room_id", "==", roomDoc.id)
-          .where("date", "==", date)
-          .where("status", "in", ["confirmed", "pending_approval"])
-          .get();
+          .where("status", "in", ["confirmed", "pending_approval"]);
 
+        if (date) {
+          resvQuery = resvQuery.where("date", "==", date);
+        } else {
+          // dateFrom + dateTo (validated above)
+          resvQuery = resvQuery
+            .where("date", ">=", dateFrom!)
+            .where("date", "<=", dateTo!);
+        }
+
+        const reservationsSnap = await resvQuery.get();
         for (const resDoc of reservationsSnap.docs) {
           const resData = resDoc.data();
           allReservations.push({
@@ -112,21 +149,25 @@ export async function GET(req: NextRequest) {
             church_id: linkedChurchId,
             church_name: churchName,
             room_id: roomDoc.id,
-            room_name: roomData.name || "Room",
-            title: resData.title || "Reserved",
-            date: resData.date,
-            start_time: resData.start_time,
-            end_time: resData.end_time,
+            room_name: roomName,
+            title: (resData.title as string) || "Reserved",
+            date: resData.date as string,
+            start_time: resData.start_time as string,
+            end_time: resData.end_time as string,
+            status: (resData.status as string) || "confirmed",
           });
         }
       }
     }
 
-    return NextResponse.json({ reservations: allReservations });
+    return NextResponse.json({
+      rooms: allRooms,
+      reservations: allReservations,
+    });
   } catch (err) {
     console.error("Facility reservations error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 },
     );
   }
