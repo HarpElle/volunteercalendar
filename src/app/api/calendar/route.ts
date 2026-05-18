@@ -94,7 +94,15 @@ export async function GET(request: Request) {
     );
 
     // SECURITY (Codex QA 2026-05-15): collect IDs of published schedules.
-    // Drafts, in_review, and approved schedules must NEVER bleed into iCal.
+    // Drafts, in_review, and approved schedules must NEVER bleed into iCal
+    // for team/ministry/org feeds — those are the "official lineup" view.
+    //
+    // SELF-SIGNUP CARVE-OUT (PR #37, Phase 6 follow-up retest):
+    // for a PERSONAL feed (the volunteer's own .ics), include the
+    // volunteer's own self-signup claims even when the parent schedule
+    // is still draft/in_review. They explicitly clicked "Sign Up"; the
+    // assignment is part of their plan from that moment on. Team / org
+    // feeds keep the published-only rule.
     const publishedScheduleIds = new Set(
       schedulesSnap.docs
         .filter((d) => (d.data().status as string) === "published")
@@ -105,7 +113,17 @@ export async function GET(request: Request) {
       id: d.id,
       ...d.data(),
     })) as Record<string, unknown>[])
-      .filter((a) => publishedScheduleIds.has(a.schedule_id as string));
+      .filter((a) => {
+        if (publishedScheduleIds.has(a.schedule_id as string)) return true;
+        if (
+          feedType === "personal" &&
+          a.signup_type === "self_signup" &&
+          a.person_id === targetId
+        ) {
+          return true;
+        }
+        return false;
+      });
 
     // Filter assignments and build calendar name based on feed type
     let calendarName = `${churchName} - Volunteer Schedule`;

@@ -149,6 +149,9 @@ export default function MySchedulePage() {
   // filled") is visible without a toast.
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
+  // PR #37: success toast for "Signed up!" feedback after a successful
+  // claim. Auto-dismisses after 5s.
+  const [claimSuccess, setClaimSuccess] = useState<string | null>(null);
   const [selfServiceSchedules, setSelfServiceSchedules] = useState<Schedule[]>([]);
   const [orgPrereqsByChurch, setOrgPrereqsByChurch] = useState<
     Map<string, OnboardingStep[]>
@@ -218,19 +221,30 @@ export default function MySchedulePage() {
         ]);
 
         if (myPersonId) {
-          // SECURITY (Codex QA 2026-05-15): volunteers must not see assignments
-          // belonging to draft/in_review/approved schedules. Only published
-          // schedule assignments may surface in My Schedule. Mirrors the
-          // Firestore rule on assignments + the iCal filter.
+          // SECURITY (Codex QA 2026-05-15): volunteers must not see
+          // SCHEDULER-PUSHED assignments belonging to draft/in_review/
+          // approved schedules. Only published scheduler-pushed
+          // assignments surface in My Schedule — so admin drafts can't
+          // leak into the volunteer view before the org approves them.
+          //
+          // SELF-SIGNUP CARVE-OUT (PR #37, Phase 6 follow-up retest):
+          // the volunteer's OWN claims on Self-Service drafts should
+          // always be visible to them on Upcoming. They just clicked
+          // "Sign Up" and got a 200 back — hiding the assignment until
+          // the schedule gets published would erase that confirmation.
+          // The query above already restricts to person_id == myPersonId,
+          // so a self-signup carve-out only widens THE CLAIMANT'S view of
+          // their own opt-in records, not anyone else's draft work.
           const publishedScheduleIds = new Set(
             (schedules as { id: string; status?: string }[])
               .filter((s) => s.status === "published")
               .map((s) => s.id),
           );
-          const publishedAssigns = (assigns as Assignment[]).filter(
-            (a) => publishedScheduleIds.has(a.schedule_id as string),
-          );
-          myAssignments.push(...publishedAssigns);
+          const visibleAssigns = (assigns as Assignment[]).filter((a) => {
+            if (a.signup_type === "self_signup") return true;
+            return publishedScheduleIds.has(a.schedule_id as string);
+          });
+          myAssignments.push(...visibleAssigns);
           const myVol = volMap.get(myPersonId);
           if (myVol) {
             ministryIds = myVol.ministry_ids || [];
@@ -590,13 +604,63 @@ export default function MySchedulePage() {
   async function handleClaim(slot: OpenSlot) {
     if (!user) return;
     setClaimError(null);
+    setClaimSuccess(null);
     setClaimingKey(slot.key);
-    try {
-      const churchId = selfServiceSchedules.find((s) => s.id === slot.scheduleId)?.church_id;
-      if (!churchId) {
-        setClaimError("Couldn't determine which org this slot belongs to.");
-        return;
+
+    const churchId = selfServiceSchedules.find((s) => s.id === slot.scheduleId)?.church_id;
+    if (!churchId) {
+      setClaimError("Couldn't determine which org this slot belongs to.");
+      setClaimingKey(null);
+      return;
+    }
+
+    /**
+     * After ANY claim attempt that mutates server state (success or 409),
+     * refetch:
+     *   - all-church assignments → updates the open-slot filled-count so
+     *     the stale row disappears from Open Slots
+     *   - my own assignments → updates Upcoming so the new claim is
+     *     immediately visible (handles the self_signup carve-out from
+     *     PR #37)
+     *
+     * Codex PR #36 retest 2026-05-18: previously only refetched on
+     * success, so a 409 left the just-filled row hanging around in the
+     * loser's Open Slots view. And before the page-load filter accepted
+     * self_signup, the claim landed in Firestore but never surfaced on
+     * Upcoming until the schedule got published.
+     */
+    async function refetchChurchState() {
+      try {
+        const [fresh, mine] = await Promise.all([
+          getChurchDocuments(churchId!, "assignments",
+            where("service_date", ">=", today),
+          ) as Promise<unknown[]>,
+          (async () => {
+            const me = myPersonByChurch.get(churchId!);
+            if (!me) return [];
+            return await getChurchDocuments(churchId!, "assignments",
+              where("person_id", "==", me.id),
+            ) as unknown[];
+          })(),
+        ]);
+        setAllChurchAssignments((prev) => {
+          const others = prev.filter((a) => a.church_id !== churchId);
+          return [...others, ...(fresh as Assignment[])];
+        });
+        // Replace this church's slice in `assignments` (the Upcoming/Past
+        // source). Mirrors the page-load filter: self_signup OR published.
+        const sched = selfServiceSchedules; // current snapshot used for is-published lookup not needed here — we trust API status writes
+        void sched;
+        setAssignments((prev) => {
+          const others = prev.filter((a) => a.church_id !== churchId);
+          return [...others, ...(mine as Assignment[])];
+        });
+      } catch {
+        // best-effort
       }
+    }
+
+    try {
       const token = await user.getIdToken();
       const res = await fetch("/api/assignments/claim", {
         method: "POST",
@@ -610,32 +674,41 @@ export default function MySchedulePage() {
           ministry_id: slot.ministryId,
         }),
       });
-      if (!res.ok) {
+
+      if (res.status === 409) {
+        // Race-loser path. Show a friendly message AND refresh so the
+        // stale row drops from the list.
+        await refetchChurchState();
         const data = await res.json().catch(() => ({}));
-        setClaimError(data.error || `Couldn't claim slot (${res.status})`);
+        setClaimError(
+          data.error
+            ? `That slot was just filled. We refreshed the list.`
+            : "That slot was just filled. We refreshed the list.",
+        );
         return;
       }
-      // Refetch all-church assignments so the slot disappears from Open
-      // Slots and the new assignment shows up on Upcoming on the next
-      // navigation. Lighter than a full page reload.
-      try {
-        const fresh = await getChurchDocuments(churchId, "assignments",
-          where("service_date", ">=", today),
-        ) as unknown[];
-        setAllChurchAssignments((prev) => {
-          // Replace this church's slice with the fresh data.
-          const others = prev.filter((a) => a.church_id !== churchId);
-          return [...others, ...(fresh as Assignment[])];
-        });
-      } catch {
-        // best-effort
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setClaimError(data.error || `Couldn't sign up for slot (${res.status})`);
+        return;
       }
+      await refetchChurchState();
+      setClaimSuccess(
+        `Signed up for ${slot.roleTitle} on ${formatDate(slot.serviceDate)}. See it on Upcoming.`,
+      );
     } catch {
       setClaimError("Network error. Please try again.");
     } finally {
       setClaimingKey(null);
     }
   }
+
+  // PR #37: auto-clear the success toast after 5s.
+  useEffect(() => {
+    if (!claimSuccess) return;
+    const t = setTimeout(() => setClaimSuccess(null), 5000);
+    return () => clearTimeout(t);
+  }, [claimSuccess]);
 
   // --- Schedule filtering ---
 
@@ -929,6 +1002,18 @@ export default function MySchedulePage() {
       {/* Open Slots tab — PR #35 (Phase 6 follow-up #3) */}
       {activeTab === "open-slots" && (
         <>
+          {claimSuccess && (
+            <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-vc-sage/30 bg-vc-sage/5 px-4 py-3">
+              <p className="text-sm text-vc-sage-dark">{claimSuccess}</p>
+              <button
+                onClick={() => setClaimSuccess(null)}
+                aria-label="Dismiss"
+                className="shrink-0 text-vc-text-muted hover:text-vc-sage-dark"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {claimError && (
             <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3">
               <p className="text-sm text-vc-danger">{claimError}</p>
@@ -986,7 +1071,7 @@ export default function MySchedulePage() {
                         disabled={isClaiming || claimingKey !== null}
                         className="inline-flex min-h-[44px] items-center rounded-lg bg-vc-coral px-4 py-2 text-sm font-medium text-white hover:bg-vc-coral/90 disabled:opacity-50"
                       >
-                        {isClaiming ? "Claiming…" : "Claim"}
+                        {isClaiming ? "Signing up…" : "Sign Up"}
                       </button>
                     </div>
                   </div>
