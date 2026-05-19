@@ -225,7 +225,10 @@ export function Sidebar({
     const baseClass = "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors";
     const activeClass = "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo";
     const idleClass = "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo";
-    const lockedClass = "text-vc-text-muted/70 cursor-not-allowed";
+    // Locked: muted, not-allowed cursor, AND a visible focus ring + hoverable
+    // tooltip below the row that also shows on keyboard focus-visible
+    // (Codex Phase 1 Finding 3).
+    const lockedClass = "text-vc-text-muted/70 cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vc-coral/40 hover:bg-vc-sand/10";
 
     const content = (
       <>
@@ -257,17 +260,26 @@ export function Sidebar({
     if (locked) {
       // Tooltip-on-focus pattern; aria-disabled keeps it tab-focusable
       // for keyboard-discoverable upgrade info (per Codex review note).
+      // Tooltip is a child popover that appears on group-hover AND
+      // group-focus-visible so keyboard users see the upgrade hint too.
+      const tierName = gate?.tierRequired ?? "";
+      const upgradeText = `Available on ${tierName.charAt(0).toUpperCase()}${tierName.slice(1)}. Upgrade in Settings.`;
       return (
         <div
           key={item.href}
           tabIndex={0}
           role="link"
           aria-disabled="true"
-          aria-label={`${item.label} — locked. Available on ${gate?.tierRequired ?? ""}. Upgrade in Settings.`}
+          aria-label={`${item.label} — locked. ${upgradeText}`}
           className={`${baseClass} ${lockedClass} group relative`}
-          title={`Available on ${gate?.tierRequired ?? ""}. Upgrade in Settings.`}
         >
           {content}
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-full top-0 z-50 ml-2 hidden whitespace-nowrap rounded-md bg-vc-indigo px-2 py-1 text-xs font-normal text-white shadow-lg group-hover:block group-focus-visible:block"
+          >
+            {upgradeText}
+          </span>
         </div>
       );
     }

@@ -15,7 +15,15 @@ export interface MoreMenuProps {
   onClose: () => void;
   subscriptionTier: SubscriptionTier;
   hasUnreadNotifications: boolean;
+  /** Admin OR scheduler — sees operational modules (Service Day, Schedules,
+   *  People, Rooms, Check-In, Worship Prep) and their workbenches. */
+  isAdminShell: boolean;
+  /** Owner/admin only — sees Settings module + Settings workbench + admin-
+   *  only sub-pages like Feedback Triage, Onboarding, Retention. */
   isAdmin: boolean;
+  /** Tier-enabled AND role-permitted for Check-In; mirrors the desktop
+   *  sidebar's canAccessCheckin gate. */
+  canAccessCheckin: boolean;
   hasPrerequisites: boolean;
   onSignOut: () => Promise<void>;
 }
@@ -101,17 +109,29 @@ function ModuleRow({
   tierName?: string;
 }) {
   if (locked) {
+    // Visible focus ring + hover/focus tooltip so keyboard users on mobile
+    // discover the upgrade hint (Codex Phase 1 Finding 3).
+    const tierPretty = tierName
+      ? tierName.charAt(0).toUpperCase() + tierName.slice(1)
+      : "";
+    const upgradeText = tierPretty ? `Available on ${tierPretty}.` : "Locked.";
     return (
       <div
         tabIndex={0}
         role="link"
         aria-disabled="true"
-        aria-label={`${label} — locked. Available on ${tierName ?? ""}.`}
-        className="flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-muted/70"
+        aria-label={`${label} — locked. ${upgradeText}`}
+        className="group relative flex items-center gap-3 px-5 py-3.5 text-sm font-medium text-vc-text-muted/70 focus-visible:outline-none focus-visible:bg-vc-sand/20"
       >
         <Icon d={iconPath} className="h-5 w-5 text-vc-text-muted/70" />
         <span className="flex-1 text-left">{label}</span>
         {tierLabel && <TierLockBadge tierLabel={tierLabel} />}
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute right-5 top-full z-50 mt-1 hidden whitespace-nowrap rounded-md bg-vc-indigo px-2 py-1 text-xs font-normal text-white shadow-lg group-hover:block group-focus-visible:block"
+        >
+          {upgradeText}
+        </span>
       </div>
     );
   }
@@ -161,7 +181,9 @@ export function MoreMenu({
   onClose,
   subscriptionTier,
   hasUnreadNotifications,
+  isAdminShell,
   isAdmin,
+  canAccessCheckin,
   hasPrerequisites,
   onSignOut,
 }: MoreMenuProps) {
@@ -212,7 +234,7 @@ export function MoreMenu({
         {/* PRIMARY MODULES — mirrors desktop sidebar */}
         <SectionHeading>Primary modules</SectionHeading>
         <ModuleRow href="/dashboard" label="Home" iconPath={ICON.home} onClose={onClose} />
-        {isAdmin && (
+        {isAdminShell && (
           <ModuleRow
             href="/dashboard/scheduling-dashboard"
             label="Service Day"
@@ -220,7 +242,7 @@ export function MoreMenu({
             onClose={onClose}
           />
         )}
-        {isAdmin && (
+        {isAdminShell && (
           <ModuleRow
             href="/dashboard/schedules"
             label="Schedules"
@@ -228,7 +250,7 @@ export function MoreMenu({
             onClose={onClose}
           />
         )}
-        {isAdmin && (
+        {isAdminShell && (
           <ModuleRow
             href="/dashboard/people"
             label="People"
@@ -236,7 +258,7 @@ export function MoreMenu({
             onClose={onClose}
           />
         )}
-        {isAdmin && (
+        {isAdminShell && (
           <ModuleRow
             href="/dashboard/rooms"
             label="Rooms"
@@ -247,7 +269,10 @@ export function MoreMenu({
             tierName={roomsGate.tierRequired}
           />
         )}
-        {isAdmin && (
+        {/* Check-In primary row — visible only if the user has check-in role
+            (tier lock can still apply for showing the badge to admins who
+            DO have the role but are on a tier that gates it). */}
+        {isAdminShell && canAccessCheckin && (
           <ModuleRow
             href="/dashboard/checkin"
             label="Check-In"
@@ -258,7 +283,7 @@ export function MoreMenu({
             tierName={checkinGate.tierRequired}
           />
         )}
-        {isAdmin && (
+        {isAdminShell && (
           <ModuleRow
             href="/dashboard/worship/plans"
             label="Worship Prep"
@@ -269,6 +294,7 @@ export function MoreMenu({
             tierName={worshipGate.tierRequired}
           />
         )}
+        {/* Settings is admin-only (schedulers cannot edit org config). */}
         {isAdmin && (
           <ModuleRow
             href="/dashboard/settings"
@@ -278,22 +304,27 @@ export function MoreMenu({
           />
         )}
 
-        {/* People workbench (admin only — sub-pages of People module) */}
-        {isAdmin && (
+        {/* People workbench — schedulers see operational sub-pages; admin
+            sub-items (Onboarding, Retention, Feedback Triage) further gated. */}
+        {isAdminShell && (
           <>
             <SectionHeading>People workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/people" label="Roster" onClose={onClose} />
             <WorkbenchLink href="/dashboard/org/teams" label="Teams" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/onboarding" label="Onboarding" onClose={onClose} />
             <WorkbenchLink href="/dashboard/training-sessions" label="Training Sessions" onClose={onClose} />
             <WorkbenchLink href="/dashboard/volunteer-health" label="Health" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/retention" label="Retention" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/admin/feedback" label="Feedback Triage" onClose={onClose} />
+            {isAdmin && (
+              <>
+                <WorkbenchLink href="/dashboard/onboarding" label="Onboarding" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/retention" label="Retention" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/admin/feedback" label="Feedback Triage" onClose={onClose} />
+              </>
+            )}
           </>
         )}
 
         {/* Rooms workbench */}
-        {isAdmin && roomsGate.enabled && (
+        {isAdminShell && roomsGate.enabled && (
           <>
             <SectionHeading>Rooms workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/rooms" label="Bookings" onClose={onClose} />
@@ -301,19 +332,21 @@ export function MoreMenu({
           </>
         )}
 
-        {/* Check-In workbench */}
-        {isAdmin && checkinGate.enabled && (
+        {/* Check-In workbench — requires role permission AND tier */}
+        {isAdminShell && checkinGate.enabled && canAccessCheckin && (
           <>
             <SectionHeading>Check-In workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/checkin" label="Today" onClose={onClose} />
             <WorkbenchLink href="/dashboard/checkin/households" label="Households" onClose={onClose} />
             <WorkbenchLink href="/dashboard/checkin/reports" label="Reports" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/checkin/import" label="Import" onClose={onClose} />
+            {isAdmin && (
+              <WorkbenchLink href="/dashboard/checkin/import" label="Import" onClose={onClose} />
+            )}
           </>
         )}
 
         {/* Worship workbench */}
-        {isAdmin && worshipGate.enabled && (
+        {isAdminShell && worshipGate.enabled && (
           <>
             <SectionHeading>Worship workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/worship/plans" label="Service Plans" onClose={onClose} />
@@ -322,7 +355,7 @@ export function MoreMenu({
           </>
         )}
 
-        {/* Settings workbench (admin only) */}
+        {/* Settings workbench (admin only — schedulers cannot edit org config) */}
         {isAdmin && (
           <>
             <SectionHeading>Settings workbench</SectionHeading>
