@@ -24,7 +24,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Redirect once auth confirms user is signed in
+  // Already-signed-in case: if the user lands here with valid auth, send them along.
   useEffect(() => {
     if (!loading && user) {
       router.replace(redirectTo || "/dashboard");
@@ -35,7 +35,17 @@ function LoginForm() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await signIn(email, password);
+      // Eager-navigate using the Firebase User returned directly by signIn,
+      // instead of waiting for the auth context's onAuthStateChanged listener
+      // to fire. The listener is unreliable on Safari (background-tab throttling
+      // + slow Firestore profile/membership fetches), which caused users to
+      // sit on the login form until they refreshed. The dashboard layout's
+      // spinner absorbs the brief window while the auth context catches up.
+      const signedInUser = await signIn(email, password);
+      if (signedInUser) {
+        router.replace(redirectTo || "/dashboard");
+        return;
+      }
       setSubmitting(false);
     } catch {
       // error is set in context

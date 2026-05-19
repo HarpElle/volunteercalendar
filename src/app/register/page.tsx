@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef, type FormEvent } from "react";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
@@ -31,11 +31,10 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [localError, setLocalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const pendingRedirect = useRef(false);
 
-  // Navigate only after auth context confirms the user is set
+  // Already-signed-in case: if the user lands here with valid auth, send them along.
   useEffect(() => {
-    if (pendingRedirect.current && !loading && user) {
+    if (!loading && user) {
       router.replace(redirectTo || "/dashboard");
     }
   }, [user, loading, redirectTo, router]);
@@ -55,7 +54,10 @@ function RegisterForm() {
 
     setSubmitting(true);
     try {
-      await signUp(email, password, name, phone ? normalizePhone(phone) : undefined);
+      // Eager-navigate using the Firebase User returned directly by signUp.
+      // See auth-context.tsx + login/page.tsx for the rationale (Safari race
+      // where onAuthStateChanged is delayed; refresh required to recover).
+      const newUser = await signUp(email, password, name, phone ? normalizePhone(phone) : undefined);
       // Fire-and-forget welcome email (skip admin setup guide if joining via link).
       // Authenticated: send Firebase ID token so the server can verify
       // the destination email matches the freshly-registered user.
@@ -72,7 +74,10 @@ function RegisterForm() {
           }),
         )
         .catch(() => {});
-      pendingRedirect.current = true;
+      if (newUser) {
+        router.replace(redirectTo || "/dashboard");
+        return;
+      }
       setSubmitting(false);
     } catch {
       // error is set in context

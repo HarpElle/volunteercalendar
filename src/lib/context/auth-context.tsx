@@ -95,8 +95,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 // --- Context ---
 
 interface AuthContextValue extends AuthState {
-  signUp: (email: string, password: string, displayName: string, phone?: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string, phone?: string) => Promise<User>;
+  signIn: (email: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   clearError: () => void;
@@ -249,8 +249,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signUp(email: string, password: string, displayName: string, phone?: string) {
     dispatch({ type: "CLEAR_ERROR" });
     try {
-      await fbSignUp(email, password, displayName, phone);
-      // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
+      // Return the Firebase User so callers can eager-navigate without waiting
+      // for the onAuthChange listener to dispatch AUTH_STATE_CHANGED. The
+      // listener still fires asynchronously to populate profile + memberships;
+      // the dashboard layout's loading spinner absorbs that window.
+      return await fbSignUp(email, password, displayName, phone);
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;
@@ -260,8 +263,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     dispatch({ type: "CLEAR_ERROR" });
     try {
-      await fbSignIn(email, password);
-      // onAuthChange listener will handle loading → false via AUTH_STATE_CHANGED
+      // Return the Firebase User so callers can eager-navigate without waiting
+      // for the onAuthChange listener to dispatch AUTH_STATE_CHANGED. Fixes a
+      // Safari-prone race where the listener was delayed/throttled and the
+      // login page sat idle until the user refreshed.
+      return await fbSignIn(email, password);
     } catch (err) {
       dispatch({ type: "SET_ERROR", error: firebaseErrorMessage(err) });
       throw err;
