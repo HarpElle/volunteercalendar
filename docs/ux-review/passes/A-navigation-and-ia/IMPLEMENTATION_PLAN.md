@@ -6,16 +6,22 @@
 
 ## 0. Decisions baked in
 
-From SYNTHESIS §"Jason Decisions" + the framework's binding constraints:
+From SYNTHESIS §"Jason Decisions" + the framework's binding constraints + Jason's resolution of the §10 open questions (2026-05-19):
 
 | Decision | Bound to |
 |---|---|
 | One product shell with role-aware ordering (Move A) | sidebar + mobile parity |
-| Live operational surface label | **Service Day** (desktop) / **Today** (mobile bottom-nav, same destination) |
+| Live operational surface label | **Service Day** on BOTH desktop sidebar and mobile bottom nav. Fall back to "Today" only if real-device testing in Phase 1 shows sizing issues. |
 | Settings visibility | **Primary nav item** with cog icon |
-| Tier-locked modules | **Show with lock badges + disabled state** (do not hide) |
+| Tier-locked modules | **Show with lock badges + disabled state** (do not hide); Option A click behavior (tooltip, no nav) |
 | Top-level people language | **People** |
 | Worship module label | **Worship Prep** |
+| Feedback Triage home | **People** module |
+| Module subnav placement | **Vercel/Stripe/WorshipTools pattern** — tab strip at top of content area, sticky on scroll, no large module-name H1 above it. The active tab is the page identity. (See §4 intro for detail.) |
+| `/dashboard/feedback` canonical | Yes — the page is named `MyFeedbackPage`. No `/dashboard/my-feedback` route exists. |
+| `/dashboard/admin` stub | Real page (platform-admin tier override) currently orphaned. Move to `/dashboard/platform/tier-override` in Phase 3; out of Pass A primary scope. |
+| `/dashboard/organization` stub | Pure `?tab=X` redirect handler. Update its TAB_REDIRECTS in Phase 3 to point at new module routes. |
+| Phasing | **5 PRs** over ~2 weeks |
 | Backward-compat / muscle memory | **Not a concern** (Jason 2026-05-18); rename routes freely |
 | Strategic lane | Ministry operations only — Schedules / Service Day / People / Rooms / Check-In / Worship Prep. Don't drift into CRM/giving/CMS. |
 
@@ -106,21 +112,21 @@ The same sidebar component renders differently based on role:
 ### Bottom nav (always-visible 5 tabs)
 
 ```
-┌────┬────┬────┬────┬────┐
-│ ⌂  │ ☀  │ 👥 │ ✓  │ ≡  │
-│Home│Tdy │Peo │Chk │More│
-└────┴────┴────┴────┴────┘
+┌────────┬────────┬────────┬────────┬────────┐
+│   ⌂    │   ☀    │   👥   │   ✓    │   ≡    │
+│  Home  │Svc Day │ People │ Check  │  More  │
+└────────┴────────┴────────┴────────┴────────┘
 ```
 
 | Tab | Label | Route | Tier-gating |
 |---|---|---|---|
 | 1 | **Home** | `/dashboard` | always |
-| 2 | **Today** | `/dashboard/service-day` | always (same surface as desktop "Service Day"; short label for thumb-reach) |
+| 2 | **Service Day** | `/dashboard/service-day` | always (same label as desktop sidebar) |
 | 3 | **People** | `/dashboard/people` | always |
 | 4 | **Check-In** | `/dashboard/checkin` | tier-gated; if not enabled, replaced with **Schedules** |
 | 5 | **More** | sheet | always |
 
-**Why "Today" on mobile and "Service Day" on desktop:** "Service Day" is 11 characters; tight under a phone bottom-tab icon. "Today" reads naturally on a phone (the use case IS "what's happening today"). Both go to `/dashboard/service-day`. Codex pilot-tested "Today" on the bottom-tab in their Pass A and it worked. Flag for synthesis if this dual labeling is unacceptable.
+**Labeling rule (resolved):** "Service Day" on BOTH desktop sidebar and mobile bottom nav. Jason resolved this 2026-05-19. The label is 11 characters — comfortably within the existing 12-char "Availability" precedent already in the volunteer bottom nav. Codex pilot-tested "Today" on the mobile tab and it worked, but the asymmetry between desktop ("Service Day") and mobile ("Today") was undesirable. Fall back to "Today" only if real-device testing in Phase 1 shows the label wraps or truncates on the smallest target viewport (iPhone SE 1st gen / 320 px). The icon row above the label gives a fallback affordance.
 
 ### More menu (exhaustive, scrollable bottom sheet)
 
@@ -131,7 +137,7 @@ The current More menu has gaps (Sunday Ops, Volunteer Health, Onboarding, Traini
 
 PRIMARY MODULES  (mirrors desktop sidebar)
   ⌂  Home
-  ☀  Service Day                       ← same as bottom-nav "Today"
+  ☀  Service Day                       ← same surface as bottom-nav "Service Day"
   📅 Schedules
   👥 People
   🚪 Rooms        🔒 (when locked)
@@ -205,10 +211,26 @@ Per the synthesis, volunteer mobile shell is "mostly right" — keep it. Account
 
 ## 4. Contextual subnav per module
 
-Each module is now a **module landing page with a tab strip at the top**. The strip is horizontal on desktop and scrollable-horizontal on mobile (similar to GitHub's tab pattern). Active tab is underlined in `vc-coral`.
+Each module is now a **module landing page whose identity IS the active tab**. There is no large module-name H1 above the tab strip — the active tab in the strip is the page identity. This is the Vercel / Stripe / WorshipTools pattern (Jason's resolved preference, 2026-05-19).
+
+### Pattern spec
+
+- **Sticky tab strip** at the top of the content area, immediately below the global page chrome (sidebar + top bar). On scroll, the strip pins to the viewport top so the user always knows which module and which tab they're in.
+- **Small module identifier** to the LEFT of the strip — module icon + module name in `vc-text-muted` at body size, NOT a full H1. e.g. `🚪 Rooms  · Bookings · Requests · Facility Groups · Public Calendar · Settings`. (The icon+name is the breadcrumb; the tabs are the navigation; the page content is what the user came for.)
+- **Tabs** are inline, horizontal on desktop, scrollable-horizontal on mobile (overflow-x with a snap behavior). Active tab has the `vc-coral` underline indicator. Inactive tabs are `vc-text-muted`; hover lightens to `vc-text`.
+- **No subtitle / no description text** above the strip. The module's name + the active tab tells the user what they're looking at; the content tells them what they can do.
+- **Page-level actions** (Create, Filter, Export) live in a `vc-flex-end` row to the RIGHT of the tab strip on desktop. On mobile they collapse into a `⋯` overflow menu or move to a sticky bottom action bar — per-page call.
+- **Same horizontal rule** (`vc-border-subtle`) underlines the entire strip so it visually divides the chrome from the content.
+
+### Anti-patterns explicitly avoided
+
+- ❌ Big "ROOMS" all-caps H1 above the tabs (looks like Phase 1 admin chrome from 2024, eats vertical space)
+- ❌ Tabs that scroll AWAY with the page on long content (loses context on Worship Service Plans, where the user might scroll 8 screens)
+- ❌ Page subtitle paragraph between H1 and tabs ("Manage your rooms, bookings, and facility groups…" — the tabs do that job)
+- ❌ Vertical secondary sidebar inside a module (overloads the rail; admin sidebar already does navigation)
 
 ### 4.1 Home (`/dashboard`)
-**No tabs.** Single-page dashboard. Continues to be the cross-org/cross-module welcome surface (greeting, stats cards, "next actions" prompts).
+**No tabs.** Single-page dashboard — Home is not a "module," so it doesn't follow the tab pattern; it gets a normal page treatment (greeting + cards). It continues to be the cross-org/cross-module welcome surface (greeting, stats cards, "next actions" prompts).
 **Renamed from** "Overview" → "Home".
 
 ### 4.2 Service Day (`/dashboard/service-day`)
@@ -352,8 +374,9 @@ Format: **current route** | **current label** | **proposed route** | **proposed 
 | `/dashboard/account` | Account | `/dashboard/account` | (account popover) Account | **stays** |
 | `/dashboard/my-orgs` | My Organizations | `/dashboard/my-orgs` | (account popover) My Organizations | **stays** (defer "keep as page or fold into popover" call to Pass E per A-10) |
 | `/dashboard/help` | Help | `/dashboard/help` | Help | **stays** |
-| `/dashboard/admin` | (?) | (audit needed — likely deprecate or redirect to /dashboard) | | **review** |
-| `/dashboard/organization` | (?) | (audit needed — likely deprecate or redirect to /dashboard/settings) | | **review** |
+| `/dashboard/admin` | Platform-Admin Tier Override (no sidebar entry today) | `/dashboard/platform/tier-override` | (admin-only utility, no sidebar entry) | **route move + alias** (Phase 3); audit confirmed it's a real page wired to platform-admin tier override, not a stub |
+| `/dashboard/organization` | (stub — pure `?tab=X` redirect handler) | (delete file) | n/a | **delete** in Phase 3 after updating the existing `TAB_REDIRECTS` table in this file to point at the new module routes (`teams` → `/dashboard/people/teams`, `campuses` → `/dashboard/rooms/facility`, `checkin` → `/dashboard/checkin/settings`, `billing` → `/dashboard/settings/billing`); any inbound links from emails/docs that pointed at `/dashboard/organization?tab=X` get the new destinations transparently |
+| `/dashboard/feedback` | (canonical page — `MyFeedbackPage` component) | `/dashboard/feedback` | (account popover) My Feedback | **stays** — confirmed canonical via audit; sidebar at `sidebar.tsx:131` already points here; no `/dashboard/my-feedback` route exists |
 | `/dashboard/platform/*` | Platform admin (super-admin only) | `/dashboard/platform/*` | unchanged | **stays** (super-admin shell, out of Pass A scope) |
 
 ### Public + auxiliary routes (unchanged, listed for completeness)
@@ -368,8 +391,8 @@ Per the framework (no backward-compat concern), we COULD rename everything in pl
 ### 6.1 Label-only changes (no route change, no risk)
 Pure string changes in `sidebar.tsx` / `bottom-nav.tsx` / page headers:
 - "Overview" → "Home"
-- "Dashboard" (SCHEDULING group) → "Service Day" (rail) / "Today" (mobile tab)
-- "Dashboard" (CHILDREN'S CHECK-IN) → "Today" (module sub-tab)
+- "Dashboard" (SCHEDULING group) → "Service Day" (both desktop rail AND mobile bottom tab)
+- "Dashboard" (CHILDREN'S CHECK-IN) → "Today" (module sub-tab inside Check-In; distinct from the global Service Day surface)
 - "Volunteers" (rail) → "People" (rail) — page header for `/dashboard/people` can become "Roster" since it's now a tab
 - "Volunteer Health" → "Health"
 - "Team Health" → "Health"
@@ -408,10 +431,13 @@ Reserved for routes that have zero current usage outside the codebase. None in t
 - `/dashboard/worship/page.tsx` — currently nothing; need module landing
 - `/dashboard/people/page.tsx` — currently the Roster page; needs to become a tabbed module landing (the Roster tab is the current page content)
 
-### 6.5 Routes to audit + possibly deprecate
-- `/dashboard/admin` — purpose unclear; check what's there + decide
-- `/dashboard/organization` — likely a stub; likely redirect to `/dashboard/settings`
-- `/dashboard/feedback` and `/dashboard/my-feedback` — figure out which is canonical; one redirects to the other
+### 6.5 Audit results (folded in)
+
+All three of the audit-needed routes have been resolved. Findings:
+
+- `/dashboard/admin` → **real page** (Platform-Admin Tier Override utility used by super-admins to flip a church's tier for testing). Currently orphaned from the sidebar — only super-admins know it exists. Move to `/dashboard/platform/tier-override` in Phase 3 to make the URL self-documenting; no sidebar entry needed (platform admin has its own shell at `/dashboard/platform/*`).
+- `/dashboard/organization` → **pure stub** containing a single `TAB_REDIRECTS` lookup that maps `?tab=teams|campuses|checkin|rooms|billing` to old `/dashboard/org/*` routes. Phase 3 either (a) deletes the file entirely after all sub-pages move, or (b) keeps the stub but updates `TAB_REDIRECTS` to point at the new module routes. Prefer (b) for one release cycle to absorb stale email-link traffic, then delete in Phase 4.
+- `/dashboard/feedback` vs `/dashboard/my-feedback` → **canonical is `/dashboard/feedback`**. The page component is named `MyFeedbackPage` (legacy of the rename); the sidebar already links here at `src/components/dashboard/sidebar.tsx:131`. No `/dashboard/my-feedback` route exists in the codebase. No alias needed.
 
 ---
 
@@ -444,7 +470,7 @@ Three options to choose during implementation:
 
 ### 7.3 Mobile bottom nav
 
-If a tier-locked module would have been one of the 5 bottom tabs (e.g. Check-In on a Free tier where Check-In is gated), the slot replaces with the next-highest-priority always-available module (Schedules). The Pro-tier bottom nav is always Home / Today / People / Check-In / More; Free-tier becomes Home / Today / People / Schedules / More.
+If a tier-locked module would have been one of the 5 bottom tabs (e.g. Check-In on a Free tier where Check-In is gated), the slot replaces with the next-highest-priority always-available module (Schedules). The Pro-tier bottom nav is always Home / Service Day / People / Check-In / More; Free-tier becomes Home / Service Day / People / Schedules / More.
 
 ### 7.4 More menu
 
@@ -483,7 +509,7 @@ Five PRs over ~2 weeks. Each independently shippable + reviewable. Each gets the
 **Scope:**
 - Replace `getNavSections()` in `sidebar.tsx` with the §1 shape — 7 modules + Settings + Help. No collapsibles. Pure role-aware ordering.
 - All current routes preserved (Phase 1 does NOT move any pages); sidebar links point to current routes.
-- Mobile bottom nav update to `Home / Today / People / Check-In / More` (still pointing at current routes).
+- Mobile bottom nav update to `Home / Service Day / People / Check-In / More` (still pointing at current routes). Real-device label check on iPhone SE 1st gen / 320 px — fall back to "Today" only if "Service Day" truncates or wraps unacceptably.
 - Mobile More menu cleanup: remove the "Organization" expandable; add the missing modules; add Workbench sections for the modules whose sub-tabs already exist. (Workbenches that depend on Phase 2's new tabs ship in Phase 2.)
 - `<TierLock />` component + `useTierGate` hook. Tier-locked modules show the badge.
 - Label renames: "Overview" → "Home" (page header AND sidebar), "Scheduling Dashboard" → "Service Day", "Volunteers" sidebar entry → "People", "WORSHIP" → "Worship Prep", "Bookings" stays as a tab inside Rooms (rail says "Rooms"), etc.
@@ -581,17 +607,19 @@ After each phase ships to production (Vercel preview is enough for most), Codex 
 ### After Phase 1
 - Sign in as Sarah (admin) → desktop sidebar shows 7 modules + Settings + Help in the §1 order; no collapsibles; account widget at bottom; multi-org context line under brand mark
 - Sign in as Alex (volunteer) → desktop sidebar shows 4 items + Help; no admin chrome
-- Resize to mobile → admin bottom nav shows Home / Today / People / Check-In / More
-- Tier-lock: switch a test org to Free tier; verify Worship Prep / Check-In / Rooms render with 🔒 PRO badge + disabled state; click does nothing (or shows tooltip)
+- Resize to mobile → admin bottom nav shows Home / Service Day / People / Check-In / More (label is "Service Day" matching desktop sidebar; flag if it truncates on iPhone SE 1st gen / 320 px)
+- Tier-lock: switch a test org to Free tier; verify Worship Prep / Check-In / Rooms render with 🔒 PRO badge + disabled state; click shows tooltip and does not navigate (Option A)
 - Click every sidebar entry → lands on a current route (no 404s)
 - Capture screenshots of: admin desktop sidebar, volunteer desktop sidebar, admin mobile bottom nav, More menu open
 
 ### After Phase 2
-- Each module landing page has a tab strip
+- Each module landing page has a sticky tab strip at the top of the content area (Vercel/Stripe/WT pattern)
+- NO big H1 above the strip — module icon + name appears at body size to the LEFT of the tabs as a breadcrumb
 - Tabs reflect §4 spec
-- Active tab is highlighted; clicking a non-active tab navigates
+- Active tab is highlighted (`vc-coral` underline); clicking a non-active tab navigates without losing scroll context
 - Default tab matches §4 spec
-- Mobile: tabs scroll horizontally if overflow
+- Mobile: tabs scroll horizontally if overflow; active tab snaps into view
+- Strip stays pinned to viewport top on long-content pages (Worship Service Plans is the stress test)
 
 ### After Phase 3
 - Visit every OLD route in the §5 table → confirms redirect to new path
@@ -611,7 +639,7 @@ After each phase ships to production (Vercel preview is enough for most), Codex 
 | 3 | Click each module's tabs | Sub-page loads at the new URL |
 | 4 | Switch org via account popover | Sidebar reflects new org; active-org line updates |
 | 5 | Sign out → log in as Alex | Volunteer sidebar (4 items + Help); no admin chrome leaks |
-| 6 | Mobile (DevTools iPhone 13 width) | Admin: Today / Schedule / People / Check-In / More tabs; volunteer: Schedule / Availability / Inbox / Account |
+| 6 | Mobile (DevTools iPhone 13 + iPhone SE widths) | Admin: Home / Service Day / People / Check-In / More tabs (Service Day matches desktop label); volunteer: Schedule / Availability / Inbox / Account. Flag if "Service Day" truncates on iPhone SE 1st gen 320 px |
 | 7 | Open More menu on mobile | Exhaustive — every admin module visible; tier-locked items show 🔒; sub-tabs accessible via Workbench sections |
 | 8 | Visit `/dashboard/scheduling-dashboard` directly | Redirects to `/dashboard/service-day` |
 | 9 | Visit `/dashboard/org/billing` directly | Redirects to `/dashboard/settings/billing` |
@@ -620,31 +648,26 @@ After each phase ships to production (Vercel preview is enough for most), Codex 
 | 12 | Persona check: count clicks for Sarah's top 5 tasks | Each ≤ 2 clicks from sidebar |
 | 13 | Persona check: Alex finds his next assignment | 1 click from any landing |
 | 14 | Regression: existing automated tests (152 unit + 25 rules + 55 integration = 237) | All green |
-| 15 | Regression: CI smoke pin grep for "Open Slots", "Sign Up", "Training Sessions", "Service Day", "Worship Prep", "Today" | All present in built bundle |
+| 15 | Regression: CI smoke pin grep for "Open Slots", "Sign Up", "Training Sessions", "Service Day", "Worship Prep", "Home", "People" | All present in built bundle |
 
 Codex also re-runs the **Phase 1 surface inventory script** to capture refreshed screenshots for the pre-Pass-B baseline.
 
 ---
 
-## 10. Open questions before implementation begins
+## 10. Resolved decisions (Jason 2026-05-19)
 
-These need a Jason yes/no before Phase 1 starts. Most are small.
+All eight pre-implementation questions have been resolved. The plan above already incorporates these decisions; this section records the resolutions for traceability + future passes.
 
-1. **Mobile "Today" label vs desktop "Service Day" label** for the same destination (`/dashboard/service-day`). Defensible asymmetry (mobile thumb-reach) but worth confirming. Alternative: "Service Day" on both, accept the slight crowding on mobile.
-
-2. **Feedback Triage placement** — under People (consolidates volunteer-feedback workflows) or under Settings (it's admin triage)? I lean People; either works.
-
-3. **Tier-lock click behavior** — Option A (tooltip, no nav) is the recommended Phase 1 default. OK to defer Options B/C to a marketing conversation?
-
-4. **`/dashboard/admin` and `/dashboard/organization`** route stubs — audit-and-handle in Phase 1 or Phase 3? I lean Phase 1 since they're already deprecated-feeling.
-
-5. **`/dashboard/my-feedback`** vs `/dashboard/feedback` — which is canonical? (Both appear referenced; one redirects to the other today, I believe.) Pick a canonical one + redirect the other.
-
-6. **Module subnav placement on small viewports** — Tab strip below page header (current GitHub pattern) or sticky-top (current Vercel pattern)? Implementation detail, but worth deciding once so all modules follow the same rule.
-
-7. **`/dashboard/admin/feedback/insights`** is a sub-detail under Feedback Triage. Stays nested under whichever home Feedback Triage lands at (People or Settings)?
-
-8. **Phase sequencing** — five PRs over ~2 weeks is the recommended cadence. Want to compress (one larger PR) or expand (more granular)? My recommendation stands at 5.
+| # | Question | Decision | Where it shows up in the plan |
+|---|---|---|---|
+| 1 | Mobile "Today" label vs desktop "Service Day" label for `/dashboard/service-day` | **"Service Day" on both** desktop sidebar and mobile bottom nav. Fall back to "Today" only if real-device testing in Phase 1 shows truncation on iPhone SE 1st gen / 320 px | §0, §3 bottom-nav table, §6.1, §8.2 Phase 1, §9 retest |
+| 2 | Feedback Triage placement (People vs Settings) | **People** module — consolidates volunteer-feedback workflows in the lifecycle module | §4.4, §5 route table |
+| 3 | Tier-lock click behavior | **Option A** (tooltip, no nav). Options B/C deferred to marketing/sales conversation later | §7.2, §9 Phase 1 retest |
+| 4 | `/dashboard/admin` + `/dashboard/organization` stubs — audit in Phase 1 or Phase 3? | **Audit done now; route changes happen in Phase 3** alongside other module-route moves. `/dashboard/admin` is a real platform-admin page (Tier Override utility) that moves to `/dashboard/platform/tier-override`; `/dashboard/organization` is a pure stub whose `TAB_REDIRECTS` get updated in Phase 3 | §5 route table, §6.5 audit results |
+| 5 | `/dashboard/my-feedback` vs `/dashboard/feedback` canonical | **`/dashboard/feedback` is canonical** — confirmed via codebase audit. The component is named `MyFeedbackPage` (legacy), the sidebar at `src/components/dashboard/sidebar.tsx:131` already links to `/dashboard/feedback`, and no `/dashboard/my-feedback` route exists. No alias needed | §5 route table, §6.5 audit results |
+| 6 | Module subnav placement on small viewports | **Vercel/Stripe/WorshipTools pattern** — sticky tab strip at the top of the content area, no large module-name H1 above it. The active tab IS the page identity. Module icon + name appears at body size to the LEFT of the tabs as a breadcrumb | §4 intro (full pattern spec + anti-patterns), §9 Phase 2 retest |
+| 7 | `/dashboard/admin/feedback/insights` placement | **Stays nested under Feedback Triage** wherever that lands. Since Feedback Triage → People (decision #2), insights → `/dashboard/people/feedback/insights` | §5 route table |
+| 8 | Phase sequencing — compress (one PR) or expand (more granular)? | **5 PRs over ~2 weeks** (recommended cadence stands). Each independently shippable + reviewable + CI-green-gated | §8.2 |
 
 ---
 
@@ -662,4 +685,4 @@ This plan is directional. The engineer doing the actual work makes per-file impl
 
 ---
 
-**Awaiting Jason sign-off on §10 open questions before Phase 1 PR begins.**
+**Status:** All §10 questions resolved 2026-05-19. Plan is ready for Codex concur-or-object review, then Phase 1 PR begins after Codex sign-off.
