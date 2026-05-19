@@ -95,9 +95,10 @@ export default function DashboardLayout({
     });
   }, [user]);
 
+  // BottomNav still consumes these flags directly; Sidebar/MoreMenu derive
+  // their gates from subscriptionTier via useTierGate.
   const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
   const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
-  const roomsEnabled = TIER_LIMITS[subscriptionTier]?.rooms_enabled ?? false;
 
   // Role checks
   const userIsAdmin = isAdmin(activeMembership);
@@ -140,9 +141,7 @@ export default function DashboardLayout({
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar
         activeMembership={activeMembership}
-        worshipEnabled={worshipEnabled}
-        checkinEnabled={checkinEnabled}
-        roomsEnabled={roomsEnabled}
+        subscriptionTier={subscriptionTier}
         showGuideDot={showGuideDot}
         hasUnreadNotifications={hasUnread}
         churchName={churchName}
@@ -187,11 +186,10 @@ export default function DashboardLayout({
       <MoreMenu
         open={moreMenuOpen}
         onClose={() => setMoreMenuOpen(false)}
-        checkinEnabled={checkinEnabled}
-        roomsEnabled={roomsEnabled}
-        worshipEnabled={worshipEnabled}
+        subscriptionTier={subscriptionTier}
         hasUnreadNotifications={hasUnread}
         isAdmin={userIsAdmin}
+        hasPrerequisites={hasPrerequisites}
         onSignOut={handleSignOut}
       />
     </div>
