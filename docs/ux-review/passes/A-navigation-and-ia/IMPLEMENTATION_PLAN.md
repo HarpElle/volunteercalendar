@@ -57,10 +57,12 @@ From SYNTHESIS §"Jason Decisions" + the framework's binding constraints + Jason
 - **No collapsible groups.** Module-internal navigation lives inside each module page as a tab strip.
 - **No "VOLUNTEERS" / "SCHEDULING" / "ORGANIZATION" group headers.** Modules speak for themselves.
 - **Personal items removed from the admin global nav.** An admin who's also a volunteer accesses their personal Schedule via the **Me** zone in the account popover (see §5.4) or via the auto-switch when they're acting in volunteer capacity. (Synthesis Move A.)
-- **Tier-locked modules stay visible with a 🔒 badge.** Click goes to a tooltip/inline upgrade prompt (see §7).
+- **Me zone in the account popover is explicit and exhaustive** — when an admin opens the account popover (top-right account widget), the popover panel includes a labeled "Me" section listing: `My Schedule`, `My Availability`, `Inbox`, `My Feedback`, `My Organizations` (multi-org only), and `Account`. These are the items that used to live in the admin rail; surfacing them in the popover panel keeps them one click away without re-cluttering the global nav. (Codex review note — prevents the Me zone from feeling like an Easter egg.)
+- **Tier-locked modules stay visible with a 🔒 badge.** Click goes to a tooltip/inline upgrade prompt (see §7). The badge shows the *actual* required tier per module (e.g. Rooms → STARTER, Check-In → PRO, Worship Prep → PRO) based on `TIER_LIMITS`, NOT a generic "PRO" badge.
 - **Settings is a top-level primary nav item**, not nested under an "Organization" group. Per Jason's decision.
 - **Help stays sidebar-bottom** above the account widget (conventional desktop SaaS pattern; deferred polish per A-09).
 - **Active org context** for multi-org users is promoted out of the account popover into the sidebar header — small "TESTER — Codex 2 ▾" line below the brand mark when `activeMemberships.length > 1`. (Addresses Synthesis divergence #2.)
+- **Phase 1 transition note:** `Worship Prep` rail item links to `/dashboard/worship/plans` until Phase 2 creates the `/dashboard/worship` module landing. Same pattern for `People` (links to current `/dashboard/people` Roster page) and `Schedules` (links to current `/dashboard/schedules`). Phase 2 swaps these in place when the module landings exist. (Codex review note — Phase 1 must not link to routes that don't yet exist.)
 
 ### Role-aware ordering (Move A)
 
@@ -101,7 +103,7 @@ The same sidebar component renders differently based on role:
 
 - **No admin chrome leaks** — gated entirely by membership role.
 - **My Journey** is conditional on prereqs being configured for the org. When absent, the rail is just 3 + Help + account.
-- **My Feedback** moves behind the account popover. It's not high-frequency enough to warrant rail space.
+- **My Feedback** moves behind the account popover — it's not high-frequency enough to warrant rail space, but it MUST be a labeled entry in both the desktop account popover AND the mobile Account tab (not collapsed under a generic "more options" submenu). Codex review note: Alex must keep his existing support/feedback path. Treat this as a load-bearing requirement, not a polish item.
 - **Open Slots** does NOT get a separate rail entry — it stays as a tab inside My Schedule (per current PR #35 implementation).
 - **Same brand mark + footer** as the admin shell. The shell is one component; the *items* differ by role.
 
@@ -199,6 +201,15 @@ ME
 - **ME** zone gathers the personal volunteer pages an admin might also need — keeps them off the primary nav but findable.
 - Help + Sign Out stay last (convention).
 
+**Anti-junk-drawer discipline (Codex review note):** The More sheet is intentionally exhaustive, which is the whole point — but exhaustiveness without visual hierarchy IS the ORGANIZATION group's failure mode warmed over. The implementation MUST:
+
+- **Section headings** are bold/uppercase with `vc-text-muted` color and adequate vertical breathing room above each section (~24 px). PRIMARY MODULES / PEOPLE WORKBENCH / ROOMS WORKBENCH / etc. are visually distinct buckets, not a flat list.
+- **Scroll affordance** — if the sheet content exceeds the viewport on the smallest target device, the bottom edge of the sheet shows a subtle gradient fade so it's obvious there's more below. The drag handle at the top affords expansion to full-height.
+- **Collapse the workbench sections by default on first open** for any user whose org has all four tier-gated modules (Rooms + Check-In + Worship Prep + People workbench = a lot). PRIMARY MODULES + ME stay always-expanded. Decide during implementation; defer if not needed.
+- **Search/jump-to box** at top of the sheet if the total entry count exceeds ~15 on the active tier. Defer to Phase 5 unless real users complain in Phase 1.
+
+If the sheet feels like a second junk drawer in Codex's Phase 1 retest, it failed — fix before Phase 2.
+
 ### Volunteer mobile bottom nav (no change from today)
 
 Current implementation in `src/components/dashboard/bottom-nav.tsx:41-65`:
@@ -228,6 +239,16 @@ Each module is now a **module landing page whose identity IS the active tab**. T
 - ❌ Tabs that scroll AWAY with the page on long content (loses context on Worship Service Plans, where the user might scroll 8 screens)
 - ❌ Page subtitle paragraph between H1 and tabs ("Manage your rooms, bookings, and facility groups…" — the tabs do that job)
 - ❌ Vertical secondary sidebar inside a module (overloads the rail; admin sidebar already does navigation)
+
+### Accessibility — semantic page identity (Codex review note)
+
+Removing the visual H1 does NOT remove the *semantic* need for a page-level landmark. Each module landing + each sub-tab page MUST provide one of:
+
+- An `<h1>` that is **visually hidden** (`sr-only` Tailwind utility) but present in the DOM, e.g. `<h1 className="sr-only">Rooms — Bookings</h1>`. Screen readers announce it; visually it's invisible.
+- OR `aria-labelledby` on the page `<main>` element pointing to the active tab's text, so the active tab text becomes the page's accessible name.
+- OR a `<nav aria-label="Rooms tabs">` wrapper around the tab strip plus a `<section aria-labelledby="active-tab-id">` for content, so the landmark structure is unambiguous.
+
+Pick one approach and use it consistently. Codex's Phase 1 retest will include a screen-reader smoke (VoiceOver on macOS, NVDA on Windows) to verify the module + active tab are announced as the page identity.
 
 ### 4.1 Home (`/dashboard`)
 **No tabs.** Single-page dashboard — Home is not a "module," so it doesn't follow the tab pattern; it gets a normal page treatment (greeting + cards). It continues to be the cross-org/cross-module welcome surface (greeting, stats cards, "next actions" prompts).
@@ -260,7 +281,7 @@ Module landing with tabs (most consolidated module — addresses Findings A-04 +
 | **Retention** | `/dashboard/retention` (current, admin-only) | |
 | **Feedback** | `/dashboard/admin/feedback` (current, admin-only) | |
 
-7 tabs is at the upper end of the "manageable tab strip" range. If horizontal space is tight, **Feedback** could move to Settings (admin-feedback-triage is settings-y). Decide during implementation.
+7 tabs is at the upper end of the "manageable tab strip" range, but Jason resolved Feedback Triage → People (not Settings). Hold the line: if the strip wraps on mid-width desktops (≤ 1280 px), use horizontal scroll with snap behavior — do NOT split Feedback off into Settings as a secondary fallback.
 
 Role-gating per tab: Roster + Teams + Training visible to schedulers+; Onboarding + Health + Retention + Feedback admin-only.
 
@@ -271,11 +292,13 @@ Module landing with tabs:
 |---|---|---|
 | **Bookings** | `/dashboard/rooms` (current) | ✓ |
 | **Requests** | `/dashboard/rooms/requests` (current) | |
-| **Facility Groups** | `/dashboard/rooms/facility/[groupId]` + `/dashboard/org/campuses` (current) | |
-| **Public Calendar** | `/calendar` (current) | |
-| **Settings** | `/dashboard/rooms/settings` (current) | (admin-only) |
+| **Facility Groups** | `/dashboard/rooms/facility/[groupId]` + (subset of) `/dashboard/org/campuses` (current) | |
+| **Calendar** | `/calendar` (admin-facing — current) | |
+| **Settings** | `/dashboard/rooms/settings` (current) + (subset of) `/dashboard/org/campuses` | (admin-only) |
 
-The public calendar `/calendar/public?token=…` (unauthenticated) stays as a standalone public URL — only the admin-facing `/calendar` view moves into the Rooms tabs.
+**Naming + scope (Codex review note):** The tab is labeled **Calendar** — NOT "Public Calendar." `/calendar` is the admin-facing authenticated room calendar view; `/calendar/public?token=…` is the separate public token-protected surface. The admin tab shows the room calendar + the controls for *managing* the public feed (toggle on/off, regenerate token), but is itself not public. The unauthenticated `/calendar/public` URL stays put — no nav change.
+
+**`/dashboard/org/campuses` is not a wholesale move.** It currently mixes three concepts: (a) campus/setup configuration, (b) public-calendar feed settings, and (c) facility-sharing/group setup. Phase 3 splits these intentionally: facility-sharing/group setup → Rooms → Facility Groups; campus/setup config → Settings → General (or a dedicated Campuses tab if real-estate justifies); public-calendar settings → the Calendar tab's settings drawer. Do NOT migrate the page as one redirect.
 
 ### 4.6 Check-In (`/dashboard/checkin`)
 Module landing with tabs:
@@ -334,7 +357,7 @@ Format: **current route** | **current label** | **proposed route** | **proposed 
 | `/dashboard/onboarding` | Onboarding | `/dashboard/people/onboarding` | People → Onboarding | **route move + alias** |
 | `/dashboard/training-sessions` | Training Sessions | `/dashboard/people/training` | People → Training | **route move + alias** |
 | `/dashboard/training-sessions/[id]` | (detail) | `/dashboard/people/training/[id]` | (detail) | **route move + alias** |
-| `/dashboard/admin/feedback` | Feedback Triage | `/dashboard/people/feedback` | People → Feedback | **route move + alias** (could also live under Settings — decide in impl) |
+| `/dashboard/admin/feedback` | Feedback Triage | `/dashboard/people/feedback` | People → Feedback | **route move + alias** |
 | `/dashboard/admin/feedback/insights` | (detail) | `/dashboard/people/feedback/insights` | (detail) | **route move + alias** |
 | `/dashboard/org/teams` | Teams | `/dashboard/people/teams` | People → Teams | **route move + alias** |
 | `/dashboard/rooms` | Bookings | `/dashboard/rooms` (default tab Bookings) | Rooms → Bookings | **label change** |
@@ -342,8 +365,8 @@ Format: **current route** | **current label** | **proposed route** | **proposed 
 | `/dashboard/rooms/facility/[groupId]` | (facility view) | `/dashboard/rooms/facility/[groupId]` | Rooms → Facility Groups | **stays** |
 | `/dashboard/rooms/settings` | (settings) | `/dashboard/rooms/settings` | Rooms → Settings | **stays** |
 | `/dashboard/rooms/[roomId]` | (detail) | `/dashboard/rooms/[roomId]` | (detail) | **stays** |
-| `/dashboard/org/campuses` | Campuses | `/dashboard/rooms/facility` | Rooms → Facility Groups | **route move + alias** |
-| `/calendar` | (admin-facing) | `/dashboard/rooms/calendar` | Rooms → Public Calendar | **route move + alias** |
+| `/dashboard/org/campuses` | Campuses | **split** between `/dashboard/rooms/facility` (facility-sharing/groups), `/dashboard/settings/general` (campus config), and `/dashboard/rooms/calendar` (public-feed settings) | Rooms → Facility Groups + Settings → General + Rooms → Calendar | **route split + multiple aliases**: the old URL redirects to the highest-frequency landing (Facility Groups). The other two slices migrate separately. See §6.5 split detail |
+| `/calendar` | (admin-facing) | `/dashboard/rooms/calendar` | Rooms → Calendar | **route move + alias** |
 | `/calendar/public` | (public token-protected) | `/calendar/public` | (no change) | **stays** (public-only surface) |
 | `/dashboard/checkin` | Dashboard (inside CHILDREN'S CHECK-IN) | `/dashboard/checkin` (default tab Today) | Check-In → Today | **label change** |
 | `/dashboard/checkin/households` | Households | `/dashboard/checkin/households` | Check-In → Households | **stays** |
@@ -351,8 +374,8 @@ Format: **current route** | **current label** | **proposed route** | **proposed 
 | `/dashboard/checkin/reports` | Reports | `/dashboard/checkin/reports` | Check-In → Reports | **stays** |
 | `/dashboard/checkin/rooms` | (rooms config) | `/dashboard/checkin/rooms` | Check-In → Room Setup | **label change** |
 | `/dashboard/checkin/import` | Import | `/dashboard/checkin/import` | Check-In → Import | **stays** |
-| `/dashboard/checkin/settings` | (settings) | `/dashboard/checkin/settings` | Check-In → Settings | **stays** |
-| `/dashboard/org/check-ins` | Check-Ins (under ORGANIZATION) | `/dashboard/checkin/settings` | Check-In → Settings | **route move + alias** (merges with `/dashboard/checkin/settings` — same destination) |
+| `/dashboard/checkin/settings` | (settings — currently redirects to `/dashboard/org/check-ins`) | `/dashboard/checkin/settings` (real surface, not a redirect) | Check-In → Settings | **convert from redirect to real page in Phase 3** before reversing the alias. Codex review note: `/dashboard/checkin/settings` is currently a redirect *to* `/dashboard/org/check-ins`; Phase 3 must (a) move the settings UI into `/dashboard/checkin/settings`, (b) verify the page loads with full settings content, THEN (c) point `/dashboard/org/check-ins` back at the new home. Do these in that order to avoid a redirect loop |
+| `/dashboard/org/check-ins` | Check-Ins (under ORGANIZATION) | `/dashboard/checkin/settings` | Check-In → Settings | **route move + alias** (see Phase 3 ordering note above) |
 | `/dashboard/worship/plans` | Service Plans | `/dashboard/worship/plans` | Worship Prep → Service Plans | **label change** |
 | `/dashboard/worship/plans/[id]` | (detail) | `/dashboard/worship/plans/[id]` | (detail) | **stays** |
 | `/dashboard/worship/songs` | Songs | `/dashboard/worship/songs` | Worship Prep → Songs | **stays** |
@@ -370,7 +393,6 @@ Format: **current route** | **current label** | **proposed route** | **proposed 
 | `/dashboard/my-availability` | My Availability | `/dashboard/my-availability` | (volunteer shell) Availability | **label change** |
 | `/dashboard/inbox` | Inbox | `/dashboard/inbox` | (volunteer shell) Inbox | **stays** |
 | `/dashboard/my-journey` | My Journey | `/dashboard/my-journey` | (volunteer shell) My Journey | **stays** |
-| `/dashboard/my-feedback` (alias for `/dashboard/feedback`) | My Feedback | `/dashboard/feedback` | (account popover) My Feedback | **leaves rail** |
 | `/dashboard/account` | Account | `/dashboard/account` | (account popover) Account | **stays** |
 | `/dashboard/my-orgs` | My Organizations | `/dashboard/my-orgs` | (account popover) My Organizations | **stays** (defer "keep as page or fold into popover" call to Pass E per A-10) |
 | `/dashboard/help` | Help | `/dashboard/help` | Help | **stays** |
@@ -402,7 +424,9 @@ Pure string changes in `sidebar.tsx` / `bottom-nav.tsx` / page headers:
 **Cost:** zero risk. Ship as fast as you can change a string.
 
 ### 6.2 Route renames WITH alias (route move + old URL redirects to new)
-For routes that move into a module's sub-path. The alias is a Next.js `middleware.ts` rewrite OR a tiny `page.tsx` that calls `redirect()` server-side:
+For routes that move into a module's sub-path. **Prefer a tiny `page.tsx` that calls `redirect()` server-side** over a `middleware.ts` rewrite (Codex review note) — route-level redirects are explicit per-file, won't accidentally affect adjacent routes, are easier to grep and reason about, and don't add per-request work to auth-routing middleware that runs on every dashboard page. Only use `middleware.ts` when a single rule covers many routes AND the rule clearly reduces churn (e.g. `/dashboard/old-prefix/*` → `/dashboard/new-prefix/*` for a whole subtree).
+
+Routes to alias:
 
 - `/dashboard/scheduling-dashboard` → `/dashboard/service-day`
 - `/dashboard/services-events` → `/dashboard/schedules/services-events` (or `?tab=services-events`)
@@ -436,8 +460,29 @@ Reserved for routes that have zero current usage outside the codebase. None in t
 All three of the audit-needed routes have been resolved. Findings:
 
 - `/dashboard/admin` → **real page** (Platform-Admin Tier Override utility used by super-admins to flip a church's tier for testing). Currently orphaned from the sidebar — only super-admins know it exists. Move to `/dashboard/platform/tier-override` in Phase 3 to make the URL self-documenting; no sidebar entry needed (platform admin has its own shell at `/dashboard/platform/*`).
-- `/dashboard/organization` → **pure stub** containing a single `TAB_REDIRECTS` lookup that maps `?tab=teams|campuses|checkin|rooms|billing` to old `/dashboard/org/*` routes. Phase 3 either (a) deletes the file entirely after all sub-pages move, or (b) keeps the stub but updates `TAB_REDIRECTS` to point at the new module routes. Prefer (b) for one release cycle to absorb stale email-link traffic, then delete in Phase 4.
+- `/dashboard/organization` → **pure stub** containing a single `TAB_REDIRECTS` lookup that maps `?tab=teams|campuses|checkin|rooms|billing` to old `/dashboard/org/*` routes. Phase 3 updates `TAB_REDIRECTS` to point at the new module routes (`teams` → `/dashboard/people/teams`, `campuses` → `/dashboard/rooms/facility`, `checkin` → `/dashboard/checkin/settings`, `billing` → `/dashboard/settings/billing`). **Keep the stub alive for at least one release cycle past Phase 3** (Codex review note) to absorb stale email/doc traffic; delete in a later cleanup PR only after verifying no traffic via Vercel analytics or server logs.
 - `/dashboard/feedback` vs `/dashboard/my-feedback` → **canonical is `/dashboard/feedback`**. The page component is named `MyFeedbackPage` (legacy of the rename); the sidebar already links here at `src/components/dashboard/sidebar.tsx:131`. No `/dashboard/my-feedback` route exists in the codebase. No alias needed.
+
+### 6.6 Campuses split (Codex review note)
+
+`/dashboard/org/campuses` is the only route in the migration that cannot be moved wholesale — it mixes three concerns that should each land at different destinations. Phase 3 splits as follows:
+
+| Slice of /dashboard/org/campuses | New home | Phase | Notes |
+|---|---|---|---|
+| **Facility-sharing / Facility Groups setup** (cross-org room sharing, member orgs of a facility group) | `/dashboard/rooms/facility` (Rooms → Facility Groups tab) | Phase 3 | Highest-frequency slice; `/dashboard/org/campuses` redirects HERE by default |
+| **Campus configuration** (campus list, primary campus, multi-site routing) | `/dashboard/settings/general` or a dedicated `/dashboard/settings/campuses` tab if Jason's data shows multi-campus orgs are common | Phase 3-4 | Settings-level concern; small UI extraction |
+| **Public room calendar feed settings** (toggle public feed, regenerate token, embed snippet) | Rooms → Calendar tab → settings drawer | Phase 3 | Stays adjacent to the calendar surface it configures |
+
+Process: extract each slice into the new home with its own commit *within Phase 3's PR* (or split Phase 3 into 3a/3b/3c per §8.2 sub-bullet); leave `/dashboard/org/campuses` as a redirect to `/dashboard/rooms/facility` (the highest-frequency landing). Code-review verification: grep `/dashboard/org/campuses` references — any `?tab=X` query string in those references tells you which slice the caller actually wanted.
+
+### 6.7 Email-template URL sweep (Codex review note)
+
+In addition to in-app links, Phase 3 MUST sweep email-template source for old route references. Known instances:
+
+- Absence/self-removal alert emails currently link to `/dashboard/scheduling-dashboard` → must update to `/dashboard/service-day`.
+- Any email under `src/lib/utils/emails/*.ts` that references `/dashboard/org/billing`, `/dashboard/org/teams`, etc.
+
+**Verification method:** `grep -r "/dashboard/scheduling-dashboard\|/dashboard/org/\|/dashboard/onboarding\|/dashboard/training-sessions\|/dashboard/volunteer-health\|/dashboard/retention\|/dashboard/short-links\|/dashboard/reminders\|/dashboard/admin/feedback\|/calendar[^/]" src/lib/utils/emails/ src/app/api/` should return zero matches after Phase 3 ships. Aliases will still work for legacy emails already in inboxes, but new emails should send the canonical URLs.
 
 ---
 
@@ -448,11 +493,14 @@ Per Jason's decision: **show locked modules with lock badges + disabled state.**
 ### 7.1 Visual treatment
 
 ```
-🚪  Rooms                              🔒 PRO
+🚪  Rooms                              🔒 STARTER
+✓  Check-In                            🔒 PRO
+🎵  Worship Prep                       🔒 PRO
 ```
 
 - **Lock icon** to the right of the item label (replaces the chevron/indicator on other items)
-- **Tier tag** ("PRO", "GROWTH", whatever the gate is) in a small badge in `vc-sand-dark` text on `vc-sand/30` background
+- **Tier tag is per-module, NOT generic** (Codex review note) — the badge shows the actual `tier_required` for THIS module from `TIER_LIMITS`, e.g. Rooms may be STARTER while Check-In and Worship Prep are PRO. Never display a one-size "PRO" badge across all locked modules
+- Tier-tag badge styling: small uppercase text in `vc-sand-dark` on `vc-sand/30` background
 - **Disabled state:** `opacity-50`, no hover background, cursor `not-allowed`, `aria-disabled="true"`
 - **Icon and label** stay in `vc-text-muted` (not the bright `vc-coral` active treatment)
 
@@ -468,17 +516,27 @@ Three options to choose during implementation:
 
 **Recommendation:** Option A for Phase 1 (lowest cost, defensible). Option C is a marketing/sales decision worth its own conversation later.
 
+### 7.2a Accessibility for locked items (Codex review note)
+
+Disabled-looking items must remain **keyboard-discoverable** so non-mouse users can learn what they need to upgrade. Implementation requirements:
+
+- Locked item is `aria-disabled="true"` (NOT `disabled` — disabled removes from tab order). It IS focusable via Tab.
+- On focus, an accessible description appears via `aria-describedby` pointing to the tooltip content (or via an `aria-label` that includes "Locked. Available on STARTER. Open Settings to upgrade.").
+- The tooltip itself is rendered into the DOM at all times (not just on hover), with `role="tooltip"`. The visual show/hide is CSS-driven on hover/focus.
+- Pressing Enter or Space on the focused locked item moves focus to the in-tooltip "Upgrade in Settings →" link (or, if Option A strictness is enforced, the press is a no-op and the tooltip remains visible).
+- Verified in Codex's Phase 1 retest with keyboard-only navigation (Tab through the sidebar; confirm locked items are reached, focused, and their tier info is announced).
+
 ### 7.3 Mobile bottom nav
 
 If a tier-locked module would have been one of the 5 bottom tabs (e.g. Check-In on a Free tier where Check-In is gated), the slot replaces with the next-highest-priority always-available module (Schedules). The Pro-tier bottom nav is always Home / Service Day / People / Check-In / More; Free-tier becomes Home / Service Day / People / Schedules / More.
 
 ### 7.4 More menu
 
-Locked modules appear in the PRIMARY MODULES section of More with the 🔒 PRO badge. Their workbench sections (sub-tabs) are hidden because none of the sub-pages are reachable.
+Locked modules appear in the PRIMARY MODULES section of More with the per-module tier badge (🔒 STARTER, 🔒 PRO, etc. — never a generic "PRO" across all locked items). Their workbench sections (sub-tabs) are hidden because none of the sub-pages are reachable.
 
 ### 7.5 Implementation note
 
-A small `<TierLock />` badge component + a `useTierGate(moduleId)` hook that returns `{ enabled, tier_required, lock_reason }` would centralize the logic. The check itself reuses `TIER_LIMITS[tier]` from `src/lib/constants/index.ts`.
+A small `<TierLock />` badge component + a `useTierGate(moduleId)` hook that returns `{ enabled, tier_required, lock_reason }` would centralize the logic. The check itself reuses `TIER_LIMITS[tier]` from `src/lib/constants/index.ts`. The hook returns `tier_required` per-module so the badge component renders the correct tier label dynamically.
 
 ---
 
@@ -510,7 +568,7 @@ Five PRs over ~2 weeks. Each independently shippable + reviewable. Each gets the
 - Replace `getNavSections()` in `sidebar.tsx` with the §1 shape — 7 modules + Settings + Help. No collapsibles. Pure role-aware ordering.
 - All current routes preserved (Phase 1 does NOT move any pages); sidebar links point to current routes.
 - Mobile bottom nav update to `Home / Service Day / People / Check-In / More` (still pointing at current routes). Real-device label check on iPhone SE 1st gen / 320 px — fall back to "Today" only if "Service Day" truncates or wraps unacceptably.
-- Mobile More menu cleanup: remove the "Organization" expandable; add the missing modules; add Workbench sections for the modules whose sub-tabs already exist. (Workbenches that depend on Phase 2's new tabs ship in Phase 2.)
+- Mobile More menu cleanup: remove the "Organization" expandable; add the missing modules; add Workbench sections for the modules whose sub-tabs already exist. **All More-menu links in Phase 1 point at CURRENT routes** (Codex review note) — e.g. PEOPLE WORKBENCH → Onboarding links to `/dashboard/onboarding`, NOT `/dashboard/people/onboarding`. Workbenches that depend on Phase 2's new tabs ship in Phase 2; Phase 3 swaps the deep-links to the new URLs once they exist.
 - `<TierLock />` component + `useTierGate` hook. Tier-locked modules show the badge.
 - Label renames: "Overview" → "Home" (page header AND sidebar), "Scheduling Dashboard" → "Service Day", "Volunteers" sidebar entry → "People", "WORSHIP" → "Worship Prep", "Bookings" stays as a tab inside Rooms (rail says "Rooms"), etc.
 - Active-org context in sidebar header for multi-org users (small "TESTER — Codex 2 ▾" line below brand mark).
@@ -537,31 +595,26 @@ Five PRs over ~2 weeks. Each independently shippable + reviewable. Each gets the
 
 #### Phase 3 — Sub-page route migration with aliases
 **Estimated PR size:** large (touches many files but mostly redirects + import-path updates)
-**Scope:**
-- Move sub-pages into module sub-routes per §5:
-  - `/dashboard/onboarding` → `/dashboard/people/onboarding`
-  - `/dashboard/training-sessions` → `/dashboard/people/training`
-  - `/dashboard/volunteer-health` → `/dashboard/people/health`
-  - `/dashboard/retention` → `/dashboard/people/retention`
-  - `/dashboard/admin/feedback` → `/dashboard/people/feedback`
-  - `/dashboard/org/teams` → `/dashboard/people/teams`
-  - `/dashboard/org/billing` → `/dashboard/settings/billing`
-  - `/dashboard/org/activity` → `/dashboard/settings/activity`
-  - `/dashboard/short-links` → `/dashboard/settings/short-links`
-  - `/dashboard/reminders` → `/dashboard/settings/reminders`
-  - `/dashboard/setup` → `/dashboard/settings/setup`
-  - `/dashboard/org/campuses` → `/dashboard/rooms/facility`
-  - `/dashboard/org/check-ins` → `/dashboard/checkin/settings` (merge)
-  - `/dashboard/services-events` → `/dashboard/schedules/services-events`
-  - `/calendar` → `/dashboard/rooms/calendar` (the admin-facing /calendar)
-  - `/dashboard/scheduling-dashboard` → `/dashboard/service-day`
-- For each move: leave a tiny `page.tsx` at the old location that calls `redirect()` to the new path (or use `middleware.ts` rewrites). Aliases stay indefinitely.
-- Update internal links in sidebar, bottom nav, More menu, page headers, breadcrumbs, email templates, README, docs to point to the new URLs.
-- Audit + handle `/dashboard/admin` and `/dashboard/organization` stubs.
+
+**Sub-phasing option (Codex review note):** If Phase 3's PR is touching too many files at once (rough threshold: > 40 changed files or > 800 line delta), split into independently shippable sub-phases. Each can be its own PR with its own CI green gate and Codex slice retest:
+
+- **Phase 3a — People moves:** `/dashboard/onboarding`, `/dashboard/training-sessions`, `/dashboard/volunteer-health`, `/dashboard/retention`, `/dashboard/admin/feedback`, `/dashboard/org/teams` → `/dashboard/people/*`
+- **Phase 3b — Settings moves:** `/dashboard/org/billing`, `/dashboard/org/activity`, `/dashboard/short-links`, `/dashboard/reminders`, `/dashboard/setup` → `/dashboard/settings/*`
+- **Phase 3c — Rooms / Calendar moves:** `/dashboard/org/campuses` (split per §6.6), `/calendar` → `/dashboard/rooms/calendar`, `/dashboard/checkin/settings` real-page-then-reverse-alias from `/dashboard/org/check-ins`
+- **Phase 3d — Schedules / Service Day moves:** `/dashboard/services-events` → `/dashboard/schedules/services-events`, `/dashboard/scheduling-dashboard` → `/dashboard/service-day`, `/dashboard/admin` → `/dashboard/platform/tier-override`
+
+If file/line counts come in below threshold, ship Phase 3 as a single PR — the sub-phase grouping is a fallback to keep review tractable.
+
+**Scope (combined):**
+- Move sub-pages into module sub-routes per §5.
+- For each move: leave a tiny `page.tsx` at the old location that calls `redirect()` to the new path (route-level redirects preferred over middleware per §6.2). Aliases stay indefinitely.
+- Update internal links in sidebar, bottom nav, More menu, page headers, breadcrumbs, **email templates** (per §6.7 sweep), README, docs to point to the new URLs.
+- Handle `/dashboard/admin` (move to `/dashboard/platform/tier-override`) and `/dashboard/organization` (update `TAB_REDIRECTS`, keep alive for ≥1 release cycle).
+- Special ordering: `/dashboard/checkin/settings` is currently a redirect TO `/dashboard/org/check-ins`. Convert it to a real page BEFORE reversing the alias direction (§5 row + §6.6).
 
 **Risk:** large — many file moves; every internal link is a potential broken-link bug. The CI integration tests catch backend-API breakages; sidebar tests catch link breakages.
 
-**Test:** every alias redirects to the new path; every sub-page loads at its new URL; sidebar tabs all navigate correctly; mobile workbenches all navigate correctly.
+**Test:** every alias redirects to the new path; every sub-page loads at its new URL; sidebar tabs all navigate correctly; mobile workbenches all navigate correctly; `grep -r "/dashboard/scheduling-dashboard\|/dashboard/org/" src/lib/utils/emails/ src/app/api/` returns zero matches.
 
 #### Phase 4 — Settings consolidation + dissolve ORGANIZATION group
 **Estimated PR size:** medium
@@ -624,7 +677,7 @@ After each phase ships to production (Vercel preview is enough for most), Codex 
 ### After Phase 3
 - Visit every OLD route in the §5 table → confirms redirect to new path
 - Visit every NEW route → confirms page loads + correct content
-- Old emails referencing old routes still land at the right page (alias works)
+- **Email-template URL audit (Codex review note — practical proxy for "old emails still land at the right page"):** run `grep -r "/dashboard/scheduling-dashboard\|/dashboard/org/\|/dashboard/onboarding\|/dashboard/training-sessions\|/dashboard/volunteer-health\|/dashboard/retention\|/dashboard/short-links\|/dashboard/reminders\|/dashboard/admin/feedback" src/lib/utils/emails/ src/app/api/` and confirm zero matches. Aliases catch in-flight legacy emails; this grep catches newly-sent emails that should use canonical URLs
 
 ### After Phase 4
 - `/dashboard/org/*` is empty or removed
@@ -644,11 +697,12 @@ After each phase ships to production (Vercel preview is enough for most), Codex 
 | 8 | Visit `/dashboard/scheduling-dashboard` directly | Redirects to `/dashboard/service-day` |
 | 9 | Visit `/dashboard/org/billing` directly | Redirects to `/dashboard/settings/billing` |
 | 10 | Visit `/dashboard/onboarding` directly | Redirects to `/dashboard/people/onboarding` |
-| 11 | (Free-tier org) Visit `/dashboard/worship` directly | Hits the tier-gate (tooltip or redirect to settings/billing upgrade prompt) |
+| 11 | (Free-tier org) Visit `/dashboard/worship` directly | Tier-gate behavior is acceptable in any of three forms: (a) redirect to a settings/billing upgrade prompt, (b) render a module-level locked-state page with an upgrade CTA, or (c) render the upgrade-prompt tooltip behavior. **What matters:** no usable locked feature is reachable AND no crash/404 (Codex review note — implementations vary, the smoke check is for behavior not exact UI) |
 | 12 | Persona check: count clicks for Sarah's top 5 tasks | Each ≤ 2 clicks from sidebar |
 | 13 | Persona check: Alex finds his next assignment | 1 click from any landing |
-| 14 | Regression: existing automated tests (152 unit + 25 rules + 55 integration = 237) | All green |
+| 14 | Regression: automated test suites pass | `npm run test:unit` green, `npm run test:rules` green, integration/smoke suite green. (De-pinned from hard counts per Codex review note — test counts change throughout testing; the assertion is the suites pass, not a specific number) |
 | 15 | Regression: CI smoke pin grep for "Open Slots", "Sign Up", "Training Sessions", "Service Day", "Worship Prep", "Home", "People" | All present in built bundle |
+| 16 | Accessibility: VoiceOver/NVDA pass on module landings | Active tab is announced as the page identity; locked sidebar items are keyboard-focusable and announce their tier requirement (per §4 a11y note + §7.2a) |
 
 Codex also re-runs the **Phase 1 surface inventory script** to capture refreshed screenshots for the pre-Pass-B baseline.
 
@@ -669,6 +723,35 @@ All eight pre-implementation questions have been resolved. The plan above alread
 | 7 | `/dashboard/admin/feedback/insights` placement | **Stays nested under Feedback Triage** wherever that lands. Since Feedback Triage → People (decision #2), insights → `/dashboard/people/feedback/insights` | §5 route table |
 | 8 | Phase sequencing — compress (one PR) or expand (more granular)? | **5 PRs over ~2 weeks** (recommended cadence stands). Each independently shippable + reviewable + CI-green-gated | §8.2 |
 
+## 10.5 Codex review notes folded in (2026-05-19)
+
+Codex reviewed `IMPLEMENTATION_PLAN.md` (`CODEX_PLAN_REVIEW.md`, 2026-05-19) and returned **CONCUR WITH NOTES** — no Severity 4-5 objections, no synthesis re-open. All notes are Severity 1-3 implementation tightenings. Each is folded into the plan; nothing is deferred.
+
+| Section | Codex note | Where folded |
+|---|---|---|
+| §1 | Worship Prep rail must link to existing `/dashboard/worship/plans` in Phase 1 until module landing exists in Phase 2 | §1 Principles enforced — "Phase 1 transition note" bullet |
+| §1 | Me zone in account popover must be explicit (not Easter egg) — must list My Schedule / My Availability / Inbox / My Feedback / My Organizations | §1 Principles enforced — "Me zone in the account popover is explicit and exhaustive" bullet |
+| §2 | My Feedback must remain visible from account popover AND mobile Account, not feel like an Easter egg | §2 Principles enforced — "My Feedback moves behind the account popover" bullet expanded |
+| §3 | More menu structure must avoid being a second junk drawer — section headings, scrolling affordance, optional collapse-by-default | §3 Anti-junk-drawer discipline subsection |
+| §4 | Accessibility — removing visual H1 doesn't remove semantic page identity; need `sr-only h1` or `aria-labelledby` or `nav aria-label` | §4 Accessibility — semantic page identity subsection |
+| §4 | Drop the "Feedback could move to Settings" hedge in §4.4 — Jason resolved Feedback Triage → People | §4.4 7-tab rationale paragraph rewritten |
+| §4 | `/calendar` is admin-facing room calendar view; `/calendar/public` is the public token surface. Don't overpromise tab name "Public Calendar" | §4.5 Rooms tab renamed to "Calendar" + Naming + scope note |
+| §5 | Drop the `/dashboard/my-feedback` row — no such route exists | Row deleted from §5 route table |
+| §5 | `/dashboard/org/campuses` mixes 3 concerns (facility-sharing, campus config, public-calendar settings) — don't move wholesale | §5 row rewritten + §6.6 Campuses split detail |
+| §5 | `/dashboard/checkin/settings` currently redirects to `/dashboard/org/check-ins` — convert to real page BEFORE reversing alias | §5 row rewritten with Phase 3 ordering note |
+| §5 | Include email-template URLs in migration sweep — absence/self-removal emails point to `/dashboard/scheduling-dashboard` | §6.7 Email-template URL sweep subsection + §9 Phase 3 retest grep |
+| §6 | Prefer route-level `redirect()` over `middleware.ts` rewrites | §6.2 intro paragraph rewritten |
+| §6 | Keep `/dashboard/organization?tab=X` redirect compat for ≥1 release cycle past Phase 3 | §6.5 audit results — `/dashboard/organization` bullet updated |
+| §7 | Lock badge must show per-module tier (STARTER / PRO / GROWTH per TIER_LIMITS), not generic "PRO" | §7.1 Visual treatment updated + §7.4 More menu note + §7.5 implementation note |
+| §7 | Accessibility — locked items must be keyboard-discoverable; `aria-disabled` + focusable tooltip, not truly inert | §7.2a new subsection |
+| §8 | Phase 3 can be split by module (People / Settings / Rooms-Calendar / Schedules-ServiceDay) if PR is too big | §8.2 Phase 3 sub-phasing option (3a/3b/3c/3d) |
+| §8 | Phase 1's More menu rebuild must point at CURRENT routes (no Phase 2/3 route dependencies) | §8.2 Phase 1 scope updated |
+| §9 | De-pin automated-test counts (237 changes) — assert suites pass, not specific numbers | §9 Phase 5 retest row 14 updated |
+| §9 | "Old emails referencing old routes" is hard to test as live corpus — use URL aliases + email-template source grep as proxy | §9 Phase 3 retest bullet updated |
+| §9 | Tier-lock direct-URL behavior may be redirect, upgrade state, or module gate — what matters is no usable locked feature + no crash/404 | §9 Phase 5 retest row 11 updated |
+
+**Nothing deferred.** Every Codex note is in the plan. Phase 1 PR can begin.
+
 ---
 
 ## 11. Summary
@@ -685,4 +768,4 @@ This plan is directional. The engineer doing the actual work makes per-file impl
 
 ---
 
-**Status:** All §10 questions resolved 2026-05-19. Plan is ready for Codex concur-or-object review, then Phase 1 PR begins after Codex sign-off.
+**Status:** All §10 questions resolved 2026-05-19. Codex returned CONCUR WITH NOTES (no Severity 4-5); all notes folded into the plan per §10.5 on 2026-05-19. Phase 1 PR is cleared to begin.
