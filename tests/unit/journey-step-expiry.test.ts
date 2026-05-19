@@ -27,10 +27,13 @@ import type {
 } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 
+// Pinned past + far-future dates so the wall clock can't make these
+// boundary cases flaky. Originally written with "tomorrow" = 2026-05-19,
+// which the system clock crossed before all tests had a chance to run.
 const TODAY = "2026-05-18";
 const YESTERDAY_T0 = "2026-05-17T23:00:00.000Z";
-const TOMORROW_T0 = "2026-05-19T00:00:00.000Z";
-const ONE_YEAR_OUT = "2027-05-18T15:00:00.000Z";
+const TOMORROW_T0 = "2099-12-31T00:00:00.000Z";
+const ONE_YEAR_OUT = "2099-12-31T15:00:00.000Z";
 const COMPLETED_AT = "2026-05-18T15:00:00.000Z";
 
 function step(overrides: Partial<VolunteerJourneyStep> = {}): VolunteerJourneyStep {
