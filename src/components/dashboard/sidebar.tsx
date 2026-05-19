@@ -6,7 +6,8 @@ import Link from "next/link";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { canAccessCheckin } from "@/lib/utils/checkin-permissions";
 import { Avatar } from "@/components/ui/avatar";
-import type { Membership } from "@/lib/types";
+import { TierLockBadge, useTierGate, type ModuleId } from "@/components/dashboard/tier-lock";
+import type { Membership, SubscriptionTier } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /*  Icon helpers                                                       */
@@ -25,370 +26,92 @@ const Icon = ({ d, className }: { d: string; className?: string }) => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Nav structure                                                      */
+/*  Nav item type                                                      */
 /* ------------------------------------------------------------------ */
 
 interface NavItem {
   label: string;
   href: string;
   iconPath: string;
-  gate?: (m: Membership | null) => boolean;
   /** Show a notification dot on the icon */
   badge?: boolean;
+  /** Tier-gated module ID (sidebar shows lock badge + disabled state when not enabled) */
+  tierModule?: ModuleId;
 }
 
-interface NavSection {
-  label: string | null;
-  items: NavItem[];
-  gate?: (m: Membership | null) => boolean;
-  /** Sections that collapse by default (Check-In, Rooms) */
-  collapsible?: boolean;
-  /** localStorage key for persisting collapsed state */
-  collapseKey?: string;
-  /** Clicking the section header label navigates here (and expands) */
-  primaryHref?: string;
-}
+/* ------------------------------------------------------------------ */
+/*  Icon paths (constants — pulled out of getter for clarity)          */
+/* ------------------------------------------------------------------ */
 
-function getNavSections(
-  worshipEnabled: boolean,
-  checkinEnabled: boolean,
-  roomsEnabled: boolean,
-  hasPrerequisites: boolean,
-  hasUnreadNotifications: boolean,
-  isPlatformAdmin: boolean,
-): NavSection[] {
+const ICON = {
+  home: "m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25",
+  serviceDay:
+    "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  schedules:
+    "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5",
+  people:
+    "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z",
+  rooms:
+    "M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21",
+  checkin:
+    "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
+  worship:
+    "m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z",
+  settings:
+    "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z",
+  help: "M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z",
+  inbox:
+    "M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0",
+  myAvailability:
+    "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  myJourney:
+    "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
+  myFeedback:
+    "M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
+  myOrgs:
+    "M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z",
+  account:
+    "M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z",
+  signOut:
+    "M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9",
+  platform:
+    "M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6",
+} as const;
+
+/* ------------------------------------------------------------------ */
+/*  Item builders                                                      */
+/* ------------------------------------------------------------------ */
+
+function getAdminItems(): NavItem[] {
+  // Phase 1 transition: links point at current routes. Phase 2/3 update the targets.
   return [
-    /* ── Platform (superadmin only) ── */
-    ...(isPlatformAdmin
-      ? [
-          {
-            label: "PLATFORM",
-            items: [
-              {
-                label: "Overview",
-                href: "/dashboard/platform",
-                iconPath:
-                  "M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6",
-              },
-              {
-                label: "Feedback",
-                href: "/dashboard/platform/feedback",
-                iconPath:
-                  "M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
-              },
-              {
-                label: "Organizations",
-                href: "/dashboard/platform/orgs",
-                iconPath:
-                  "M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z",
-              },
-            ],
-          },
-        ]
-      : []),
-    /* ── Home ── */
-    {
-      label: "HOME",
-      items: [
-        {
-          label: "My Schedule",
-          href: "/dashboard/my-schedule",
-          iconPath:
-            "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z",
-        },
-        {
-          label: "Inbox",
-          href: "/dashboard/inbox",
-          iconPath:
-            "M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0",
-          badge: hasUnreadNotifications,
-        },
-        {
-          label: "My Availability",
-          href: "/dashboard/my-availability",
-          iconPath:
-            "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
-        },
-        {
-          label: "Overview",
-          href: "/dashboard",
-          iconPath:
-            "m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25",
-          gate: (m) => isAdmin(m),
-        },
-        ...(hasPrerequisites
-          ? [
-              {
-                label: "My Journey",
-                href: "/dashboard/my-journey",
-                iconPath:
-                  "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
-              },
-            ]
-          : []),
-        {
-          label: "My Feedback",
-          href: "/dashboard/feedback",
-          iconPath:
-            "M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
-        },
-      ],
-    },
+    { label: "Home", href: "/dashboard", iconPath: ICON.home },
+    { label: "Service Day", href: "/dashboard/scheduling-dashboard", iconPath: ICON.serviceDay },
+    { label: "Schedules", href: "/dashboard/schedules", iconPath: ICON.schedules },
+    { label: "People", href: "/dashboard/people", iconPath: ICON.people },
+    { label: "Rooms", href: "/dashboard/rooms", iconPath: ICON.rooms, tierModule: "rooms" },
+    { label: "Check-In", href: "/dashboard/checkin", iconPath: ICON.checkin, tierModule: "checkin" },
+    { label: "Worship Prep", href: "/dashboard/worship/plans", iconPath: ICON.worship, tierModule: "worship" },
+  ];
+}
 
-    /* ── Volunteers ── */
-    {
-      label: "VOLUNTEERS",
-      gate: (m) => isScheduler(m),
-      collapsible: true,
-      collapseKey: "vc_sidebar_people",
-      primaryHref: "/dashboard/people",
-      items: [
-        {
-          label: "Team Health",
-          href: "/dashboard/volunteer-health",
-          iconPath:
-            "M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Retention",
-          href: "/dashboard/retention",
-          iconPath:
-            "M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941",
-          gate: (m) => isAdmin(m),
-        },
-        {
-          label: "Feedback Triage",
-          href: "/dashboard/admin/feedback",
-          iconPath:
-            "M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
-          gate: (m) => isAdmin(m),
-        },
-        {
-          label: "Volunteers",
-          href: "/dashboard/people",
-          iconPath:
-            "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Onboarding",
-          href: "/dashboard/onboarding",
-          iconPath:
-            "M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342",
-          gate: (m) => isAdmin(m),
-        },
-        {
-          // PR #38: admin entry point for training sessions (creates +
-          // invites + mark-complete + auto-complete prereq).
-          label: "Training Sessions",
-          href: "/dashboard/training-sessions",
-          iconPath:
-            "M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222",
-          gate: (m) => isScheduler(m),
-        },
-      ],
-    },
+function getVolunteerItems(hasPrerequisites: boolean, hasUnread: boolean): NavItem[] {
+  const items: NavItem[] = [
+    { label: "Schedule", href: "/dashboard/my-schedule", iconPath: ICON.schedules },
+    { label: "Availability", href: "/dashboard/my-availability", iconPath: ICON.myAvailability },
+    { label: "Inbox", href: "/dashboard/inbox", iconPath: ICON.inbox, badge: hasUnread },
+  ];
+  if (hasPrerequisites) {
+    items.push({ label: "My Journey", href: "/dashboard/my-journey", iconPath: ICON.myJourney });
+  }
+  return items;
+}
 
-    /* ── Scheduling ── */
-    {
-      label: "SCHEDULING",
-      gate: (m) => isScheduler(m),
-      collapsible: true,
-      collapseKey: "vc_sidebar_scheduling",
-      primaryHref: "/dashboard/scheduling-dashboard",
-      items: [
-        {
-          label: "Dashboard",
-          href: "/dashboard/scheduling-dashboard",
-          iconPath:
-            "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Schedules",
-          href: "/dashboard/schedules",
-          iconPath:
-            "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5",
-          gate: (m) => isScheduler(m),
-        },
-        {
-          label: "Services & Events",
-          href: "/dashboard/services-events",
-          iconPath:
-            "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
-          gate: (m) => isAdmin(m),
-        },
-      ],
-    },
-
-    /* ── Worship (tier-gated) ── */
-    ...(worshipEnabled
-      ? [
-          {
-            label: "WORSHIP",
-            gate: (m: Membership | null) => isAdmin(m),
-            collapsible: true,
-            collapseKey: "vc_sidebar_worship",
-            primaryHref: "/dashboard/worship/plans",
-            items: [
-              {
-                label: "Service Plans",
-                href: "/dashboard/worship/plans",
-                iconPath:
-                  "M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-              {
-                label: "Songs",
-                href: "/dashboard/worship/songs",
-                iconPath:
-                  "m9 9 10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 0 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-              {
-                label: "Reports",
-                href: "/dashboard/worship/reports",
-                iconPath:
-                  "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-            ],
-          },
-        ]
-      : []),
-
-    /* ── Check-In (tier-gated, collapsible) ── */
-    ...(checkinEnabled
-      ? [
-          {
-            label: "CHILDREN'S CHECK-IN",
-            gate: (m: Membership | null) => !!m && canAccessCheckin(m),
-            collapsible: true,
-            collapseKey: "vc_sidebar_checkin",
-            primaryHref: "/dashboard/checkin",
-            items: [
-              {
-                label: "Dashboard",
-                href: "/dashboard/checkin",
-                iconPath:
-                  "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
-                gate: (m: Membership | null) => !!m && canAccessCheckin(m),
-              },
-              {
-                label: "Households",
-                href: "/dashboard/checkin/households",
-                iconPath:
-                  "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z",
-                gate: (m: Membership | null) => !!m && canAccessCheckin(m),
-              },
-              {
-                label: "Reports",
-                href: "/dashboard/checkin/reports",
-                iconPath:
-                  "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
-                gate: (m: Membership | null) => !!m && canAccessCheckin(m),
-              },
-              {
-                label: "Import",
-                href: "/dashboard/checkin/import",
-                iconPath:
-                  "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-            ],
-          },
-        ]
-      : []),
-
-    /* ── Rooms (tier-gated, collapsible) ── */
-    ...(roomsEnabled
-      ? [
-          {
-            label: "ROOMS",
-            gate: (m: Membership | null) => isScheduler(m),
-            collapsible: true,
-            collapseKey: "vc_sidebar_rooms",
-            primaryHref: "/dashboard/rooms",
-            items: [
-              {
-                label: "Bookings",
-                href: "/dashboard/rooms",
-                iconPath:
-                  "M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21",
-                gate: (m: Membership | null) => isScheduler(m),
-              },
-              {
-                label: "Requests",
-                href: "/dashboard/rooms/requests",
-                iconPath:
-                  "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
-                gate: (m: Membership | null) => isAdmin(m),
-              },
-            ],
-          },
-        ]
-      : []),
-
-    /* ── Organization (admin-gated, collapsible) ── */
-    {
-      label: "ORGANIZATION",
-      gate: (m: Membership | null) => isAdmin(m),
-      collapsible: true,
-      collapseKey: "vc_sidebar_org",
-      primaryHref: "/dashboard/settings",
-      items: [
-        {
-          label: "Teams",
-          href: "/dashboard/org/teams",
-          iconPath:
-            "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Check-Ins",
-          href: "/dashboard/org/check-ins",
-          iconPath:
-            "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Campuses",
-          href: "/dashboard/org/campuses",
-          iconPath:
-            "M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Billing",
-          href: "/dashboard/org/billing",
-          iconPath:
-            "M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Activity",
-          href: "/dashboard/org/activity",
-          iconPath:
-            "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Settings",
-          href: "/dashboard/settings",
-          iconPath:
-            "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-        {
-          label: "Short Links",
-          href: "/dashboard/short-links",
-          iconPath:
-            "M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244",
-          gate: (m: Membership | null) => isAdmin(m),
-        },
-      ],
-    },
+function getPlatformItems(): NavItem[] {
+  return [
+    { label: "Overview", href: "/dashboard/platform", iconPath: ICON.platform },
+    { label: "Feedback", href: "/dashboard/platform/feedback", iconPath: ICON.myFeedback },
+    { label: "Organizations", href: "/dashboard/platform/orgs", iconPath: ICON.myOrgs },
   ];
 }
 
@@ -398,9 +121,7 @@ function getNavSections(
 
 export interface SidebarProps {
   activeMembership: Membership | null;
-  worshipEnabled: boolean;
-  checkinEnabled: boolean;
-  roomsEnabled: boolean;
+  subscriptionTier: SubscriptionTier;
   showGuideDot: boolean;
   hasUnreadNotifications?: boolean;
   // Org data
@@ -419,114 +140,12 @@ export interface SidebarProps {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Collapsible Section                                                */
-/* ------------------------------------------------------------------ */
-
-function CollapsibleSection({
-  label,
-  collapseKey,
-  children,
-  pathname,
-  sectionHrefs,
-  primaryHref,
-}: {
-  label: string;
-  collapseKey: string;
-  children: React.ReactNode;
-  pathname: string;
-  sectionHrefs: string[];
-  primaryHref?: string;
-}) {
-  // Auto-expand if the current route is inside this section
-  const isInSection = sectionHrefs.some(
-    (href) => pathname === href || pathname.startsWith(href + "/"),
-  );
-
-  const [expanded, setExpanded] = useState(() => {
-    if (isInSection) return true;
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(collapseKey) === "1";
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    if (isInSection && !expanded) setExpanded(true);
-  }, [isInSection]);
-
-  function toggle() {
-    const next = !expanded;
-    setExpanded(next);
-    localStorage.setItem(collapseKey, next ? "1" : "0");
-  }
-
-  function handleLabelClick() {
-    // Always expand when clicking the label
-    if (!expanded) {
-      setExpanded(true);
-      localStorage.setItem(collapseKey, "1");
-    }
-  }
-
-  return (
-    <div>
-      <div className="flex w-full items-center justify-between px-3 pt-5 pb-1.5">
-        {primaryHref ? (
-          <Link
-            href={primaryHref}
-            onClick={handleLabelClick}
-            className="text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted hover:text-vc-indigo transition-colors"
-          >
-            {label}
-          </Link>
-        ) : (
-          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted">
-            {label}
-          </span>
-        )}
-        <button
-          onClick={toggle}
-          className="flex h-[44px] w-[44px] items-center justify-center -mr-3"
-          aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
-          aria-expanded={expanded}
-        >
-          <svg
-            className={`h-3.5 w-3.5 text-vc-text-muted transition-transform duration-200 ${
-              expanded ? "rotate-180" : ""
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="m19.5 8.25-7.5 7.5-7.5-7.5"
-            />
-          </svg>
-        </button>
-      </div>
-      <div
-        className={`overflow-hidden transition-all duration-200 ${
-          expanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        <div className="space-y-1 pt-1">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export function Sidebar({
   activeMembership,
-  worshipEnabled,
-  checkinEnabled,
-  roomsEnabled,
+  subscriptionTier,
   showGuideDot,
   hasUnreadNotifications,
   churchName,
@@ -546,8 +165,23 @@ export function Sidebar({
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
   const hasMultipleOrgs = activeMemberships.length > 1;
+  const userIsAdmin = isAdmin(activeMembership);
+  const userIsScheduler = isScheduler(activeMembership);
+  const userCanAccessCheckin = !!activeMembership && canAccessCheckin(activeMembership);
 
-  // Close menu when clicking outside
+  // Tier gates per module
+  const roomsGate = useTierGate("rooms", subscriptionTier);
+  const checkinGate = useTierGate("checkin", subscriptionTier);
+  const worshipGate = useTierGate("worship", subscriptionTier);
+
+  function tierGateFor(moduleId: ModuleId | undefined) {
+    if (moduleId === "rooms") return roomsGate;
+    if (moduleId === "checkin") return checkinGate;
+    if (moduleId === "worship") return worshipGate;
+    return null;
+  }
+
+  // Close popover on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -563,43 +197,41 @@ export function Sidebar({
     }
   }, [accountMenuOpen]);
 
-  // Build and filter nav sections
-  const navSections = getNavSections(worshipEnabled, checkinEnabled, roomsEnabled, !!hasPrerequisites, !!hasUnreadNotifications, !!isPlatformAdmin);
-  const visibleSections = navSections
-    .map((section) => {
-      if (section.gate && !section.gate(activeMembership)) return null;
-      const visibleItems = section.items.filter(
-        (item) => !item.gate || item.gate(activeMembership),
-      );
-      if (visibleItems.length === 0) return null;
-      return { ...section, items: visibleItems };
-    })
-    .filter(Boolean) as NavSection[];
-
-  // Separate primary sections from collapsible ones
-  const primarySections = visibleSections.filter((s) => !s.collapsible);
-  const collapsibleSections = visibleSections.filter((s) => s.collapsible);
-
   async function handleSignOut() {
     setAccountMenuOpen(false);
     await signOut();
   }
 
-  function renderNavItem(item: NavItem) {
-    const isActive =
-      pathname === item.href ||
-      (item.href !== "/dashboard" && pathname.startsWith(item.href));
+  // Decide which item list to render
+  const isVolunteerOnly = !!activeMembership && !userIsScheduler;
+  const primaryItems = isVolunteerOnly
+    ? getVolunteerItems(!!hasPrerequisites, !!hasUnreadNotifications)
+    : getAdminItems();
 
-    return (
-      <Link
-        key={item.href}
-        href={item.href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          isActive
-            ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-            : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-        }`}
-      >
+  function renderNavItem(item: NavItem) {
+    const gate = tierGateFor(item.tierModule);
+    const locked = gate ? !gate.enabled : false;
+
+    // Check-In is also role-gated (only members with check-in role/admin)
+    if (item.tierModule === "checkin" && !userCanAccessCheckin) {
+      return null;
+    }
+
+    const isActive = !locked && (
+      pathname === item.href ||
+      (item.href !== "/dashboard" && pathname.startsWith(item.href))
+    );
+
+    const baseClass = "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors";
+    const activeClass = "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo";
+    const idleClass = "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo";
+    // Locked: muted, not-allowed cursor, AND a visible focus ring + hoverable
+    // tooltip below the row that also shows on keyboard focus-visible
+    // (Codex Phase 1 Finding 3).
+    const lockedClass = "text-vc-text-muted/70 cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vc-coral/40 hover:bg-vc-sand/10";
+
+    const content = (
+      <>
         {item.badge ? (
           <span className="relative">
             <Icon
@@ -614,13 +246,51 @@ export function Sidebar({
             className={`h-5 w-5 ${isActive ? "text-vc-indigo" : "text-vc-text-muted"}`}
           />
         )}
-        {item.label}
-        {item.href === "/dashboard" && showGuideDot && (
+        <span>{item.label}</span>
+        {item.href === "/dashboard" && showGuideDot && !locked && (
           <span
             className="ml-auto h-2 w-2 rounded-full bg-vc-coral"
             title="Setup guide available"
           />
         )}
+        {locked && gate && <TierLockBadge tierLabel={gate.badgeLabel} />}
+      </>
+    );
+
+    if (locked) {
+      // Tooltip-on-focus pattern; aria-disabled keeps it tab-focusable
+      // for keyboard-discoverable upgrade info (per Codex review note).
+      // Tooltip is a child popover that appears on group-hover AND
+      // group-focus-visible so keyboard users see the upgrade hint too.
+      const tierName = gate?.tierRequired ?? "";
+      const upgradeText = `Available on ${tierName.charAt(0).toUpperCase()}${tierName.slice(1)}. Upgrade in Settings.`;
+      return (
+        <div
+          key={item.href}
+          tabIndex={0}
+          role="link"
+          aria-disabled="true"
+          aria-label={`${item.label} — locked. ${upgradeText}`}
+          className={`${baseClass} ${lockedClass} group relative`}
+        >
+          {content}
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-full top-0 z-50 ml-2 hidden whitespace-nowrap rounded-md bg-vc-indigo px-2 py-1 text-xs font-normal text-white shadow-lg group-hover:block group-focus-visible:block"
+          >
+            {upgradeText}
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`${baseClass} ${isActive ? activeClass : idleClass}`}
+      >
+        {content}
       </Link>
     );
   }
@@ -649,87 +319,77 @@ export function Sidebar({
             Volunteer<span className="text-vc-coral">Cal</span>
           </span>
         </div>
+        {/* Active-org context line for multi-org users */}
+        {hasMultipleOrgs && churchName && (
+          <button
+            onClick={() => setAccountMenuOpen(true)}
+            className="mt-2 flex w-full items-center gap-1 truncate text-left text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+            aria-label="Switch organization"
+          >
+            <span className="truncate">{churchName}</span>
+            <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Nav sections */}
+      {/* Nav items */}
       <nav
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
         aria-label="Dashboard navigation"
       >
-        {/* HOME section (non-collapsible) */}
-        {primarySections.map((section, sIdx) => (
-          <div key={sIdx}>
-            {section.label && (
-              <p className="px-3 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted">
-                {section.label}
-              </p>
-            )}
-            <div className="space-y-1">
-              {section.items.map(renderNavItem)}
-            </div>
-          </div>
-        ))}
-
-        {/* Divider before collapsible sections */}
-        {collapsibleSections.length > 0 && (
-          <div className="mx-3 mt-4 border-t border-vc-border-light" />
+        {/* Platform section (super-admin only) */}
+        {isPlatformAdmin && (
+          <>
+            <p className="px-3 pt-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-vc-text-muted">
+              Platform
+            </p>
+            <div className="space-y-1">{getPlatformItems().map(renderNavItem)}</div>
+            <div className="mx-3 my-3 border-t border-vc-border-light" />
+          </>
         )}
 
-        {/* Collapsible sections */}
-        {collapsibleSections.map((section) => (
-          <CollapsibleSection
-            key={section.label}
-            label={section.label!}
-            collapseKey={section.collapseKey!}
-            pathname={pathname}
-            sectionHrefs={section.items.map((i) => i.href)}
-            primaryHref={section.primaryHref}
-          >
-            {section.items.map(renderNavItem)}
-          </CollapsibleSection>
-        ))}
+        {/* Primary modules — flat list, no group label, no collapsibles */}
+        <div className="space-y-1 pt-2">{primaryItems.map(renderNavItem)}</div>
 
-        {/* Divider before Help */}
+        {/* Divider before Settings + Help */}
         <div className="mx-3 mt-4 border-t border-vc-border-light" />
 
+        {/* Settings (admin only) */}
+        {userIsAdmin && (
+          <div className="mt-3 space-y-1">
+            {renderNavItem({
+              label: "Settings",
+              href: "/dashboard/settings",
+              iconPath: ICON.settings,
+            })}
+          </div>
+        )}
+
         {/* Help */}
-        <div className="mt-3 space-y-1">
-          <Link
-            href="/dashboard/help"
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/dashboard/help")
-                ? "border-l-[3px] border-vc-coral bg-vc-coral/8 pl-[9px] text-vc-indigo"
-                : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
-            }`}
-          >
-            <Icon
-              d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
-              className={`h-5 w-5 ${
-                pathname.startsWith("/dashboard/help")
-                  ? "text-vc-indigo"
-                  : "text-vc-text-muted"
-              }`}
-            />
-            Help
-          </Link>
+        <div className={userIsAdmin ? "space-y-1" : "mt-3 space-y-1"}>
+          {renderNavItem({
+            label: "Help",
+            href: "/dashboard/help",
+            iconPath: ICON.help,
+          })}
         </div>
       </nav>
 
-      {/* Bottom pinned area — merged account card */}
+      {/* Bottom pinned area — account widget */}
       <div className="mt-auto shrink-0">
         <div className="relative border-t border-vc-border-light px-3 py-3" ref={accountMenuRef}>
-          {/* Merged popover */}
+          {/* Popover panel */}
           {accountMenuOpen && (
             <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-vc-border-light bg-white shadow-lg">
-              {/* Header: name + email */}
+              {/* Header */}
               <div className="border-b border-vc-border-light px-4 py-3">
-                <p className="truncate text-sm font-medium text-vc-indigo">
-                  {displayName}
-                </p>
+                <p className="truncate text-sm font-medium text-vc-indigo">{displayName}</p>
                 <p className="truncate text-xs text-vc-text-muted">{email}</p>
               </div>
 
-              {/* Org switcher (multi-org only) */}
+              {/* Org switcher */}
               {hasMultipleOrgs && (
                 <div className="border-b border-vc-border-light py-1">
                   <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
@@ -755,7 +415,7 @@ export function Sidebar({
                         }`}
                       >
                         <span className="truncate">{name}</span>
-                        {isCurrent && (
+                        {isCurrent ? (
                           <svg
                             className="ml-auto h-4 w-4 shrink-0 text-vc-coral"
                             fill="none"
@@ -763,17 +423,10 @@ export function Sidebar({
                             strokeWidth={2}
                             stroke="currentColor"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="m4.5 12.75 6 6 9-13.5"
-                            />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                           </svg>
-                        )}
-                        {!isCurrent && (
-                          <span className="ml-auto text-xs capitalize text-vc-text-muted">
-                            {m.role}
-                          </span>
+                        ) : (
+                          <span className="ml-auto text-xs capitalize text-vc-text-muted">{m.role}</span>
                         )}
                       </button>
                     );
@@ -781,17 +434,74 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* Links */}
+              {/* Me zone — admins reach personal pages here; volunteers see the same shortcuts */}
+              {!isVolunteerOnly && (
+                <div className="border-b border-vc-border-light py-1">
+                  <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-vc-text-muted">
+                    Me
+                  </p>
+                  <Link
+                    href="/dashboard/my-schedule"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  >
+                    <Icon d={ICON.schedules} className="h-4 w-4" />
+                    My Schedule
+                  </Link>
+                  <Link
+                    href="/dashboard/my-availability"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  >
+                    <Icon d={ICON.myAvailability} className="h-4 w-4" />
+                    My Availability
+                  </Link>
+                  <Link
+                    href="/dashboard/inbox"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  >
+                    <span className="relative">
+                      <Icon d={ICON.inbox} className="h-4 w-4" />
+                      {hasUnreadNotifications && (
+                        <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-vc-coral" />
+                      )}
+                    </span>
+                    Inbox
+                  </Link>
+                  <Link
+                    href="/dashboard/feedback"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  >
+                    <Icon d={ICON.myFeedback} className="h-4 w-4" />
+                    My Feedback
+                  </Link>
+                </div>
+              )}
+
+              {/* Volunteer-only popover also gets My Feedback */}
+              {isVolunteerOnly && (
+                <div className="border-b border-vc-border-light py-1">
+                  <Link
+                    href="/dashboard/feedback"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                  >
+                    <Icon d={ICON.myFeedback} className="h-4 w-4" />
+                    My Feedback
+                  </Link>
+                </div>
+              )}
+
+              {/* Account + My Organizations */}
               <div className="py-1">
                 <Link
                   href="/dashboard/account"
                   onClick={() => setAccountMenuOpen(false)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
                 >
-                  <Icon
-                    d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
-                    className="h-4 w-4"
-                  />
+                  <Icon d={ICON.account} className="h-4 w-4" />
                   Account Settings
                 </Link>
                 <Link
@@ -799,10 +509,7 @@ export function Sidebar({
                   onClick={() => setAccountMenuOpen(false)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
                 >
-                  <Icon
-                    d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"
-                    className="h-4 w-4"
-                  />
+                  <Icon d={ICON.myOrgs} className="h-4 w-4" />
                   My Organizations
                 </Link>
               </div>
@@ -813,33 +520,22 @@ export function Sidebar({
                   onClick={handleSignOut}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-vc-text-secondary transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
                 >
-                  <Icon
-                    d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"
-                    className="h-4 w-4"
-                  />
+                  <Icon d={ICON.signOut} className="h-4 w-4" />
                   Sign out
                 </button>
               </div>
             </div>
           )}
 
-          {/* Merged trigger button */}
+          {/* Trigger */}
           <button
             onClick={() => setAccountMenuOpen(!accountMenuOpen)}
             className="flex w-full items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-vc-sand/20"
           >
-            <Avatar
-              name={displayName || email || "?"}
-              photoUrl={userPhotoUrl}
-              size="sm"
-            />
+            <Avatar name={displayName || email || "?"} photoUrl={userPhotoUrl} size="sm" />
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-medium text-vc-indigo">
-                {displayName}
-              </p>
-              <p className="truncate text-xs text-vc-text-muted">
-                {churchName || "No Organization"}
-              </p>
+              <p className="truncate text-sm font-medium text-vc-indigo">{displayName}</p>
+              <p className="truncate text-xs text-vc-text-muted">{churchName || "No Organization"}</p>
               {activeMembership?.role && (
                 <p className="truncate text-xs text-vc-text-muted/70">
                   {activeMembership.role.charAt(0).toUpperCase() + activeMembership.role.slice(1)}
@@ -855,19 +551,13 @@ export function Sidebar({
               strokeWidth={1.5}
               stroke="currentColor"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
             </svg>
           </button>
         </div>
 
         {/* HarpElle sub-brand attribution */}
-        <p className="py-2 text-center text-[11px] text-vc-text-muted">
-          a HarpElle app
-        </p>
+        <p className="py-2 text-center text-[11px] text-vc-text-muted">a HarpElle app</p>
       </div>
     </aside>
   );

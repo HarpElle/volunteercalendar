@@ -27,7 +27,11 @@ type Tab = TabItem | MoreTabItem;
 export interface BottomNavProps {
   isAdmin: boolean;
   worshipEnabled: boolean;
-  checkinEnabled: boolean;
+  /** True when Check-In is tier-enabled AND the user's role permits access.
+   *  Mobile Check-In tab must respect role gating as well as tier gating —
+   *  schedulers without check-in permission should not see the Check-In tab
+   *  even on Growth/Pro tiers (Codex Phase 1 Finding 1). */
+  canShowCheckin: boolean;
   hasUnreadNotifications: boolean;
   onMoreOpen: () => void;
 }
@@ -63,7 +67,11 @@ const VOLUNTEER_TABS: TabItem[] = [
   },
 ];
 
-function getAdminTabs(worshipEnabled: boolean, checkinEnabled: boolean): Tab[] {
+function getAdminTabs(_worshipEnabled: boolean, canShowCheckin: boolean): Tab[] {
+  // Slot 4 swaps: Check-In when tier-enabled AND role-permitted; otherwise
+  // Schedules (Free-tier OR no-role-access fallback). Labels match desktop
+  // sidebar where reasonable; "Service Day" is the live operational surface
+  // (currently /dashboard/scheduling-dashboard).
   const tabs: Tab[] = [
     {
       label: "Home",
@@ -72,10 +80,10 @@ function getAdminTabs(worshipEnabled: boolean, checkinEnabled: boolean): Tab[] {
         "m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25",
     },
     {
-      label: "Schedule",
-      href: "/dashboard/schedules",
+      label: "Service Day",
+      href: "/dashboard/scheduling-dashboard",
       iconPath:
-        "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5",
+        "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
     },
     {
       label: "People",
@@ -85,13 +93,20 @@ function getAdminTabs(worshipEnabled: boolean, checkinEnabled: boolean): Tab[] {
     },
   ];
 
-  // Prioritize Check-In on bottom nav when enabled; Worship accessible via More menu
-  if (checkinEnabled) {
+  if (canShowCheckin) {
     tabs.push({
       label: "Check-In",
       href: "/dashboard/checkin",
       iconPath:
         "M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z",
+    });
+  } else {
+    // Free-tier OR role-hidden fallback
+    tabs.push({
+      label: "Schedules",
+      href: "/dashboard/schedules",
+      iconPath:
+        "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5",
     });
   }
 
@@ -125,12 +140,12 @@ function isTabActive(href: string, pathname: string): boolean {
 export function BottomNav({
   isAdmin,
   worshipEnabled,
-  checkinEnabled,
+  canShowCheckin,
   hasUnreadNotifications,
   onMoreOpen,
 }: BottomNavProps) {
   const pathname = usePathname();
-  const tabs: Tab[] = isAdmin ? getAdminTabs(worshipEnabled, checkinEnabled) : VOLUNTEER_TABS;
+  const tabs: Tab[] = isAdmin ? getAdminTabs(worshipEnabled, canShowCheckin) : VOLUNTEER_TABS;
 
   return (
     <nav

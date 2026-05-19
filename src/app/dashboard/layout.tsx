@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { canAccessCheckin } from "@/lib/utils/checkin-permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
@@ -95,14 +96,17 @@ export default function DashboardLayout({
     });
   }, [user]);
 
-  const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
-  const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
-  const roomsEnabled = TIER_LIMITS[subscriptionTier]?.rooms_enabled ?? false;
-
   // Role checks
   const userIsAdmin = isAdmin(activeMembership);
   const userIsScheduler = isScheduler(activeMembership);
   const isVolunteerOnly = activeMembership && !userIsScheduler;
+  const userCanAccessCheckin = !!activeMembership && canAccessCheckin(activeMembership);
+
+  // Tier flags drive sidebar lock badges; mobile entry points additionally
+  // require the user's role to permit access (Codex Phase 1 Finding 1).
+  const worshipEnabled = TIER_LIMITS[subscriptionTier]?.worship_enabled ?? false;
+  const checkinEnabled = TIER_LIMITS[subscriptionTier]?.checkin_enabled ?? false;
+  const canShowCheckin = checkinEnabled && userCanAccessCheckin;
 
   // Redirect logged-out visitors to /login (not the landing page) so the
   // intent is clear. Codex QA 2026-05-15: previously redirected to "/"
@@ -140,9 +144,7 @@ export default function DashboardLayout({
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar
         activeMembership={activeMembership}
-        worshipEnabled={worshipEnabled}
-        checkinEnabled={checkinEnabled}
-        roomsEnabled={roomsEnabled}
+        subscriptionTier={subscriptionTier}
         showGuideDot={showGuideDot}
         hasUnreadNotifications={hasUnread}
         churchName={churchName}
@@ -175,7 +177,7 @@ export default function DashboardLayout({
       <BottomNav
         isAdmin={userIsAdmin || userIsScheduler}
         worshipEnabled={worshipEnabled}
-        checkinEnabled={checkinEnabled}
+        canShowCheckin={canShowCheckin}
         hasUnreadNotifications={hasUnread}
         onMoreOpen={() => setMoreMenuOpen(true)}
       />
@@ -187,11 +189,12 @@ export default function DashboardLayout({
       <MoreMenu
         open={moreMenuOpen}
         onClose={() => setMoreMenuOpen(false)}
-        checkinEnabled={checkinEnabled}
-        roomsEnabled={roomsEnabled}
-        worshipEnabled={worshipEnabled}
+        subscriptionTier={subscriptionTier}
         hasUnreadNotifications={hasUnread}
+        isAdminShell={userIsAdmin || userIsScheduler}
         isAdmin={userIsAdmin}
+        canAccessCheckin={userCanAccessCheckin}
+        hasPrerequisites={hasPrerequisites}
         onSignOut={handleSignOut}
       />
     </div>
