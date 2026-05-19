@@ -844,8 +844,18 @@ export default function MySchedulePage() {
         ))}
       </div>
 
-      {/* Availability campaign banner (Codex Run 3 retest 2026-05-17) */}
-      {availabilityRequests.map((notif) => {
+      {/* Availability campaign banner (Codex Run 3 retest 2026-05-17).
+          PR #40 polish: silently drop banners whose due_date has already
+          passed — the campaign action is moot once the deadline is gone.
+          The notification stays in the inbox for history; the banner
+          just doesn't render. */}
+      {availabilityRequests
+        .filter((notif) => {
+          const dueDate = notif.metadata?.due_date;
+          if (!dueDate) return true; // no deadline → always show
+          return dueDate >= today;   // future or today → show; past → hide
+        })
+        .map((notif) => {
         const dueDate = notif.metadata?.due_date || null;
         return (
           <div

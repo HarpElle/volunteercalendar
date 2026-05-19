@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   addChurchDocument,
@@ -680,6 +680,43 @@ export default function SchedulesPage() {
   const activeSchedule = schedules.find((s) => s.id === activeScheduleId);
   const canGenerate = services.length > 0 && volunteers.length > 0;
 
+  /**
+   * Live-derived stats for the top stats bar. PR #40 polish: when an
+   * admin flips an assignment to Trainee from the matrix chip menu, the
+   * per-role "N× needed" chip updates (PR #27 handled that), but the
+   * top bar's filled_slots / fill_rate / unfilled stayed at the
+   * generation-time count because activeStats is state. Now derived
+   * from activeAssignments so any mutation (trainee toggle, reassign,
+   * unassign) reflows naturally.
+   *
+   * Trainees are excluded from `filled` per the matrix convention —
+   * they shadow the slot, they don't fill it.
+   *
+   * total_slots stays sourced from activeStats (computed once from the
+   * services × date range at generation/view time; not affected by
+   * post-load assignment mutations).
+   */
+  const liveStats = useMemo(() => {
+    if (!activeStats) return null;
+    const filled = activeAssignments.filter(
+      (a) => (a.assignment_type ?? "regular") !== "trainee",
+    ).length;
+    const totalSlots = activeStats.total_slots;
+    return {
+      total_slots: totalSlots,
+      filled_slots: filled,
+      unfilled_slots: Math.max(0, totalSlots - filled),
+      fill_rate: totalSlots > 0 ? Math.round((filled / totalSlots) * 100) : 0,
+      fairness_score: activeStats.fairness_score, // gen-time only; safe to keep
+      unique_volunteers: new Set(activeAssignments.map((a) => a.volunteer_id)).size,
+      by_status: {
+        confirmed: activeAssignments.filter((a) => a.status === "confirmed").length,
+        pending: activeAssignments.filter((a) => a.status === "draft").length,
+        declined: activeAssignments.filter((a) => a.status === "declined").length,
+      },
+    };
+  }, [activeStats, activeAssignments]);
+
   const statusColors: Record<string, string> = {
     draft: "default",
     in_review: "warning",
@@ -957,43 +994,44 @@ export default function SchedulesPage() {
             <span>Published</span>
           </div>
 
-          {/* Stats bar */}
-          {activeStats && (
+          {/* Stats bar — uses liveStats (PR #40) so trainee toggles +
+              reassigns + unassigns reflow without a page reload. */}
+          {liveStats && (
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
                 <p className="text-xs font-medium text-vc-text-muted">Slots</p>
                 <p className="text-xl font-semibold text-vc-indigo">
-                  {activeStats.filled_slots} / {activeStats.total_slots}
+                  {liveStats.filled_slots} / {liveStats.total_slots}
                 </p>
               </div>
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
                 <p className="text-xs font-medium text-vc-text-muted">Fill Rate</p>
-                <p className={`text-xl font-semibold ${activeStats.fill_rate >= 80 ? "text-vc-sage" : activeStats.fill_rate >= 50 ? "text-vc-sand-dark" : "text-vc-danger"}`}>
-                  {activeStats.fill_rate}%
+                <p className={`text-xl font-semibold ${liveStats.fill_rate >= 80 ? "text-vc-sage" : liveStats.fill_rate >= 50 ? "text-vc-sand-dark" : "text-vc-danger"}`}>
+                  {liveStats.fill_rate}%
                 </p>
               </div>
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
                 <p className="text-xs font-medium text-vc-text-muted">Volunteers</p>
-                <p className="text-xl font-semibold text-vc-indigo">{activeStats.unique_volunteers}</p>
+                <p className="text-xl font-semibold text-vc-indigo">{liveStats.unique_volunteers}</p>
               </div>
               <div className="rounded-lg bg-white border border-vc-border-light px-4 py-3">
                 <p className="text-xs font-medium text-vc-text-muted">Status</p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  {activeStats.by_status.confirmed > 0 && (
-                    <span className="text-sm font-medium text-vc-sage">{activeStats.by_status.confirmed} confirmed</span>
+                  {liveStats.by_status.confirmed > 0 && (
+                    <span className="text-sm font-medium text-vc-sage">{liveStats.by_status.confirmed} confirmed</span>
                   )}
-                  {activeStats.by_status.pending > 0 && (
-                    <span className="text-sm font-medium text-vc-sand-dark">{activeStats.by_status.pending} pending</span>
+                  {liveStats.by_status.pending > 0 && (
+                    <span className="text-sm font-medium text-vc-sand-dark">{liveStats.by_status.pending} pending</span>
                   )}
-                  {activeStats.by_status.declined > 0 && (
-                    <span className="text-sm font-medium text-vc-danger">{activeStats.by_status.declined} declined</span>
+                  {liveStats.by_status.declined > 0 && (
+                    <span className="text-sm font-medium text-vc-danger">{liveStats.by_status.declined} declined</span>
                   )}
                 </div>
               </div>
-              {activeStats.unfilled_slots > 0 && (
+              {liveStats.unfilled_slots > 0 && (
                 <div className="rounded-lg bg-white border border-vc-danger/20 px-4 py-3">
                   <p className="text-xs font-medium text-vc-text-muted">Unfilled</p>
-                  <p className="text-xl font-semibold text-vc-danger">{activeStats.unfilled_slots}</p>
+                  <p className="text-xl font-semibold text-vc-danger">{liveStats.unfilled_slots}</p>
                 </div>
               )}
             </div>
