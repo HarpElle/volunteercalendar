@@ -785,7 +785,7 @@ export default function SchedulesPage() {
       <SchedulesShell
         actions={
           !showCreate && !activeScheduleId ? (
-            <Button onClick={() => setShowCreate(true)} disabled={!canGenerate}>
+            <Button size="sm" onClick={() => setShowCreate(true)} disabled={!canGenerate}>
               New Schedule
             </Button>
           ) : null

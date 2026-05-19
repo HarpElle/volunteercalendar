@@ -69,32 +69,45 @@ export function ModuleTabs({
     return bestId ?? tabs[0]?.id;
   })();
 
+  // Module breadcrumb links to the default (first) tab as a "module home" affordance.
+  const defaultTabHref = tabs[0]?.href;
+
   return (
-    <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-vc-border-light bg-vc-bg/95 px-4 backdrop-blur-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-8 xl:-mx-10 xl:px-10">
-      <div className="flex items-end justify-between gap-4">
+    <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-vc-border-light bg-vc-bg/95 px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] backdrop-blur-sm sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-8 xl:-mx-10 xl:px-10">
+      {/* min-h locks the strip's height so it stays consistent across pages
+          regardless of whether actions are present and what size they are.
+          items-stretch + tab padding fills the vertical space. */}
+      <div className="flex min-h-[52px] items-stretch justify-between gap-4">
         <nav
           aria-label={`${moduleLabel} tabs`}
-          className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto"
+          className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {/* Module identifier breadcrumb — body-sized, NOT an H1 */}
-          <div className="flex shrink-0 items-center gap-1.5 pb-3 pr-3 text-sm font-medium text-vc-text-muted">
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              aria-hidden="true"
+          {/* Module identifier breadcrumb — body-sized, NOT an H1. Clickable
+              link to the default tab (module home affordance). */}
+          {defaultTabHref && (
+            <Link
+              href={defaultTabHref}
+              aria-label={`${moduleLabel} module`}
+              className="group flex shrink-0 items-center gap-1.5 pr-3 text-sm font-medium text-vc-text-muted transition-colors hover:text-vc-indigo"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d={moduleIconPath}
-              />
-            </svg>
-            <span>{moduleLabel}</span>
-            <span className="text-vc-text-muted/50">·</span>
-          </div>
+              <svg
+                className="h-4 w-4 transition-colors group-hover:text-vc-indigo"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d={moduleIconPath}
+                />
+              </svg>
+              <span>{moduleLabel}</span>
+              <span className="text-vc-text-muted/50">·</span>
+            </Link>
+          )}
 
           {/* Tabs */}
           {tabs.map((tab) => {
@@ -104,10 +117,10 @@ export function ModuleTabs({
                 key={tab.id}
                 href={tab.href}
                 aria-current={isActive ? "page" : undefined}
-                className={`group relative flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-3 text-sm font-medium transition-colors ${
+                className={`group relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t px-3 text-sm font-medium transition-colors ${
                   isActive
-                    ? "text-vc-indigo"
-                    : "text-vc-text-secondary hover:text-vc-indigo"
+                    ? "bg-vc-coral/5 text-vc-indigo"
+                    : "text-vc-text-secondary hover:bg-vc-sand/20 hover:text-vc-indigo"
                 }`}
               >
                 <span>{tab.label}</span>
@@ -125,12 +138,13 @@ export function ModuleTabs({
           })}
         </nav>
 
-        {/* Page-level actions (Create, Filter, Export) — desktop only */}
-        {actions && (
-          <div className="hidden shrink-0 items-center gap-2 pb-2 lg:flex">
-            {actions}
-          </div>
-        )}
+        {/* Page-level actions slot — reserved even when empty so the strip
+            height stays locked. Desktop only; mobile pages handle their
+            primary action below the strip. Compact sizing recommended
+            (size="sm" buttons / icon links / 28-36px controls). */}
+        <div className="hidden shrink-0 items-center gap-2 lg:flex">
+          {actions}
+        </div>
       </div>
     </div>
   );

@@ -137,7 +137,7 @@ export default function TrainingSessionsPage() {
     <div>
       <PeopleShell
         actions={
-          <Button onClick={() => setShowCreate(true)} size="md">
+          <Button onClick={() => setShowCreate(true)} size="sm">
             + New Session
           </Button>
         }
