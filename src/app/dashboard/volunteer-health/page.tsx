@@ -7,6 +7,7 @@ import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import type { Assignment, Person } from "@/lib/types";
 
 // --- Helpers ---
@@ -232,16 +233,11 @@ export default function VolunteerHealthPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2">
-          <h1 className="font-display text-3xl text-vc-indigo">Volunteer Health</h1>
+      <PeopleShell
+        actions={
           <InfoTooltip text="Health classifications are based on scheduling frequency, decline patterns, no-shows, and time since last service. Categories update automatically." />
-        </div>
-        <p className="mt-1 text-vc-text-secondary">
-          Monitor engagement, identify burnout risk, and keep your team thriving.
-        </p>
-      </div>
+        }
+      />
 
       {/* Stat Cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

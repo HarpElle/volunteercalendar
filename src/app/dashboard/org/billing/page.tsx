@@ -12,6 +12,7 @@ import { doc, getDoc } from "firebase/firestore";
 import type { Church, Ministry, Person } from "@/lib/types";
 import { BillingSettings } from "@/components/settings/billing-settings";
 import { AccessDenied } from "@/components/ui/access-denied";
+import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 export default function BillingPage() {
   return (
@@ -89,12 +90,7 @@ function BillingContent() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Billing</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage your subscription plan and usage.
-        </p>
-      </div>
+      <SettingsShell />
 
       {mutationError && (
         <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">

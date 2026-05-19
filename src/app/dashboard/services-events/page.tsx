@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { TabBar } from "@/components/ui/tab-bar";
+import { SchedulesShell } from "@/components/dashboard/schedules-shell";
 import { ServicesList } from "@/components/services/services-list";
 import { EventList } from "@/components/services/event-list";
 import type { Ministry } from "@/lib/types";
@@ -57,15 +58,9 @@ function ServicesEventsContent() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Services & Events</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Configure recurring services and create events that need volunteers.
-        </p>
-      </div>
+      <SchedulesShell />
 
-      {/* Tabs */}
+      {/* Inner tabs (Services vs Events) inside the Services & Events module tab */}
       <TabBar
         tabs={[
           { key: "services" as const, label: "Services" },

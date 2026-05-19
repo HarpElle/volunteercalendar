@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import type { SentNotification } from "@/lib/types";
+import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 type Tab = "history" | "send";
 
@@ -137,16 +138,9 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Reminders</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Send reminders to volunteers and view delivery history.
-          </p>
-        </div>
-      </div>
+      <SettingsShell />
 
-      {/* Tab buttons */}
+      {/* Inner tab buttons (Send vs History) inside the Reminders module tab */}
       <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
         {([
           { key: "send" as Tab, label: "Send Reminders" },

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
+import { RoomsShell } from "@/components/dashboard/rooms-shell";
 
 interface EmbeddedReservation {
   id: string;
@@ -166,14 +167,7 @@ export default function RoomRequestsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-vc-indigo font-display">
-          Reservation Requests
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Review and approve pending room reservation requests
-        </p>
-      </div>
+      <RoomsShell />
 
       {loadError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

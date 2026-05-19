@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { RoomBookingForm } from "@/components/rooms/room-booking-form";
+import { RoomsShell } from "@/components/dashboard/rooms-shell";
 import { TIER_LIMITS } from "@/lib/constants";
 import type { SubscriptionTier } from "@/lib/types";
 import Link from "next/link";
@@ -169,16 +170,8 @@ export default function RoomsPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-vc-indigo font-display">
-            Rooms
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage rooms and spaces for booking
-          </p>
-        </div>
+      <RoomsShell />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end mb-6 gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           {rooms.length > 0 && (
             <button

@@ -12,6 +12,7 @@ import { doc, getDoc } from "firebase/firestore";
 import type { Ministry, Church } from "@/lib/types";
 import { TeamsSettings } from "@/components/settings/teams-settings";
 import { AccessDenied } from "@/components/ui/access-denied";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 
 export default function TeamsPage() {
   const { user, profile, activeMembership } = useAuth();
@@ -64,12 +65,7 @@ export default function TeamsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Teams</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage your {terms.pluralLower} and volunteer groups.
-        </p>
-      </div>
+      <PeopleShell />
 
       {mutationError && (
         <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
