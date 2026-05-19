@@ -3,6 +3,8 @@
 > Independent findings from the systematic / codebase-grounded lens.
 > See UX_REVIEW_FRAMEWORK.md for rubric + citation codes.
 > Cross-read with `CODEX.md` (forthcoming) before the SYNTHESIS step.
+>
+> **Binding constraint (Jason, mid-Pass A):** the current user base is the three of us + a few of Jason's work team members under direct supervision who know things will change. Backward-compat / muscle-memory concerns DO NOT apply. There will never be fewer people affected by a rename than today. Sever any finding that was downgraded for "we'd break testers" reasoning.
 
 ## 0. Phase 1 evidence — sufficient
 
@@ -63,7 +65,7 @@ The route `/dashboard` is the **admin home dashboard** — it greets the user by
 
 Compounding: there are at least **three** pages in the app currently labeled with home/dashboard-adjacent language — `/dashboard` ("Overview"), `/dashboard/scheduling-dashboard` ("Dashboard" inside SCHEDULING group), `/dashboard/checkin` ("Dashboard" inside CHILDREN'S CHECK-IN group). NN-4 (consistency) violation: the same word means different things by context, and the admin's actual home is the one *not* called Dashboard.
 
-**Proposed direction:** rename `/dashboard` → "Home" (matches PCO; warmer than "Dashboard"; clearly distinct from module-level dashboards). Per-module dashboards keep their names because they're sub-views of a module.
+**Proposed direction:** rename `/dashboard` → "Home" (matches PCO; warmer than "Dashboard"; clearly distinct from module-level dashboards). Per-module dashboards keep their names because they're sub-views of a module. Route rename (`/dashboard` URL itself) is optional and incurs no real cost given the user-base constraint.
 
 ---
 
@@ -279,7 +281,7 @@ These are the calls that benefit from your input rather than us debating in synt
 
 3. **Settings dissolution:** the recommendation moves Org Settings behind the avatar popover (or a single bottom-pinned Settings entry). The cost is making Settings less discoverable for net-new admins who don't know to click their avatar. The benefit is removing the ORGANIZATION junk drawer and matching the dominant SaaS pattern. **Tolerable, or do we keep a top-level Settings entry?**
 
-4. **Renaming proposal:** "Overview" → "Home". Three "Dashboard"-named pages → distinct names. Conceptually clean but breaks muscle memory for existing users (Codex has been hitting "Overview" in tests). **Ship in this UX phase or defer rename until we have other reasons to touch those pages?**
+4. ~~**Renaming proposal:** Ship in this UX phase or defer rename until we have other reasons to touch those pages?~~ **Resolved by Jason mid-pass:** muscle-memory concern doesn't apply. Rename freely.
 
 5. **Tier-gated module groups (A-08):** hide-when-locked (today) or show-with-lock-badge? Trades learnability across orgs vs visible promo surface. Your call as product owner.
 
@@ -295,7 +297,7 @@ Calling out my own bets up front. These are the places where Codex's experientia
 |---|---|---|
 | "The current 'Volunteers' / 'Scheduling' / 'Worship' grouping IS the mental model for church admins — don't flatten it." | Group names are fine; the problem is *collapsing them by default* + putting *one item per group above the fold for admin priorities*. A flattened module list with sub-tabs preserves the grouping inside each module. | Codex shows session telemetry that admins frequently switch between, say, Schedules and Services & Events such that tabbing within a module would add friction the current expanded-group flow avoids. |
 | "Move A vs Move B — admins want everything visible because they switch hats constantly." | Move A keeps everything available; it just reorders so admin priorities are above the fold. Move B is the contested call. | Codex's persona walkthroughs ("Sarah Pastor at 9am Saturday on her laptop") show ordering matters less than I'm claiming. |
-| "Don't rename 'Overview' to 'Home' — it'll confuse existing testers." | Test-org muscle memory shouldn't drive a product decision; if we don't rename now we'll have to rename later for the same reason. | Codex shows >2 existing testers using "Overview" as a vocabulary anchor in their own writing such that the rename actively damages comprehension. |
+| ~~"Don't rename 'Overview' to 'Home' — it'll confuse existing testers."~~ | **Resolved by Jason's constraint update — muscle-memory is not a factor.** | n/a |
 | "Settings behind the avatar isn't discoverable for new admins." | True risk. Mitigation: setup wizard surfaces Settings explicitly + the FTUE pass adds a small "Set up your org" prompt that links. | Codex's FTUE walkthrough (Pass B) finds that 2/3 of test admins look for Settings as a top-level nav item before checking the avatar. |
 | "Three dashboards is fine because each lives in a distinct module." | Conventional naming wins. Sunday Ops + Check-In Today + Home read better than three Dashboards. | Codex shows that church admins use the word "dashboard" as a generic noun and don't expect distinct names per module. |
 
