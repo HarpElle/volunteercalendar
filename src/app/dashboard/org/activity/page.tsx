@@ -181,10 +181,10 @@ export default function ActivityPage() {
   if (!isAdmin(activeMembership)) return <AccessDenied requiredRole="Admin" />;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <>
       <SettingsShell />
-
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-4 flex flex-wrap gap-2">
         {ACTION_CATEGORIES.map((c) => (
           <button
             key={c.label}
@@ -271,6 +271,7 @@ export default function ActivityPage() {
         the &ldquo;what&rdquo; — for the &ldquo;who&rdquo; behind a kiosk
         action, contact your church&apos;s VolunteerCal admin.
       </p>
-    </div>
+      </div>
+    </>
   );
 }

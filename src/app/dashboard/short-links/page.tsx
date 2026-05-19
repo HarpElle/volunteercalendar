@@ -182,10 +182,10 @@ export default function ShortLinksPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <SettingsShell />
-
-      <div className="rounded-xl border border-vc-border-light bg-white p-6">
+      <div className="mx-auto max-w-5xl">
+        <div className="rounded-xl border border-vc-border-light bg-white p-6">
         {/* Usage meter */}
         <div className="mb-5 flex items-center justify-between">
           <div>
@@ -373,6 +373,7 @@ export default function ShortLinksPage() {
           </details>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

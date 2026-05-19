@@ -137,10 +137,10 @@ export default function NotificationsPage() {
   const failedCount = notifications.filter((n) => n.status === "failed" || n.status === "bounced").length;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <>
       <SettingsShell />
-
-      {/* Inner tab buttons (Send vs History) inside the Reminders module tab */}
+      <div className="mx-auto max-w-4xl">
+        {/* Inner tab buttons (Send vs History) inside the Reminders module tab */}
       <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
         {([
           { key: "send" as Tab, label: "Send Reminders" },
@@ -359,6 +359,7 @@ export default function NotificationsPage() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

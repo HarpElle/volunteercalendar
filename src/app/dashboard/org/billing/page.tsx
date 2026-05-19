@@ -89,31 +89,32 @@ function BillingContent() {
   if (!church) return null;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <SettingsShell />
+      <div className="mx-auto max-w-5xl">
+        {mutationError && (
+          <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
+            {mutationError}
+          </div>
+        )}
 
-      {mutationError && (
-        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
-          {mutationError}
-        </div>
-      )}
-
-      <BillingSettings
-        churchId={churchId!}
-        church={church}
-        setChurch={setChurch}
-        currentTier={currentTier}
-        volunteerCount={volunteerCount}
-        activeEventCount={activeEventCount}
-        ministriesCount={ministriesCount}
-        terms={terms}
-        isPlatformSuperadmin={isPlatformSuperadmin}
-        mutationError={mutationError}
-        setMutationError={setMutationError}
-        activeMembership={activeMembership}
-        billingSuccess={billingSuccess}
-        billingCanceled={billingCanceled}
-      />
-    </div>
+        <BillingSettings
+          churchId={churchId!}
+          church={church}
+          setChurch={setChurch}
+          currentTier={currentTier}
+          volunteerCount={volunteerCount}
+          activeEventCount={activeEventCount}
+          ministriesCount={ministriesCount}
+          terms={terms}
+          isPlatformSuperadmin={isPlatformSuperadmin}
+          mutationError={mutationError}
+          setMutationError={setMutationError}
+          activeMembership={activeMembership}
+          billingSuccess={billingSuccess}
+          billingCanceled={billingCanceled}
+        />
+      </div>
+    </>
   );
 }

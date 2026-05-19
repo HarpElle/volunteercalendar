@@ -64,29 +64,30 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <PeopleShell />
+      <div className="mx-auto max-w-5xl">
+        {mutationError && (
+          <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
+            {mutationError}
+          </div>
+        )}
 
-      {mutationError && (
-        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
-          {mutationError}
-        </div>
-      )}
-
-      <TeamsSettings
-        churchId={churchId!}
-        ministries={ministries}
-        setMinistries={setMinistries}
-        ministryLimitReached={ministryLimitReached}
-        terms={terms}
-        currentTier={currentTier}
-        shortLinksLimit={0}
-        hideShortLinks
-        mutationError={mutationError}
-        setMutationError={setMutationError}
-        user={user}
-        activeMembership={activeMembership}
-      />
-    </div>
+        <TeamsSettings
+          churchId={churchId!}
+          ministries={ministries}
+          setMinistries={setMinistries}
+          ministryLimitReached={ministryLimitReached}
+          terms={terms}
+          currentTier={currentTier}
+          shortLinksLimit={0}
+          hideShortLinks
+          mutationError={mutationError}
+          setMutationError={setMutationError}
+          user={user}
+          activeMembership={activeMembership}
+        />
+      </div>
+    </>
   );
 }

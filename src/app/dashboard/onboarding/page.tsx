@@ -288,14 +288,14 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <PeopleShell
         actions={
           <InfoTooltip text="Track prerequisite steps — like background checks, training, or orientation — that volunteers complete before being scheduled for a team." />
         }
       />
-
-      {/* Tabs */}
+      <div className="mx-auto max-w-5xl">
+        {/* Tabs */}
       {canManage && (
         <div className="mb-6 flex gap-1 rounded-lg bg-vc-bg-warm p-1">
           <button
@@ -833,6 +833,7 @@ export default function OnboardingPage() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

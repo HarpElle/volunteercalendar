@@ -77,14 +77,14 @@ function CampusesContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <RoomsShell />
-
-      {mutationError && (
-        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
-          {mutationError}
-        </div>
-      )}
+      <div className="mx-auto max-w-5xl">
+        {mutationError && (
+          <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
+            {mutationError}
+          </div>
+        )}
 
       <CampusesSettings
         churchId={churchId!}
@@ -110,7 +110,8 @@ function CampusesContent() {
         churchId={churchId!}
         tierLimits={limits}
       />
-    </div>
+      </div>
+    </>
   );
 }
 

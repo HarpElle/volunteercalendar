@@ -57,11 +57,13 @@ function ServicesEventsContent() {
   }, [churchId]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
+      {/* Shell rendered OUTSIDE the max-w container so the sticky strip
+          spans the dashboard main width (matches sister routes). */}
       <SchedulesShell />
-
-      {/* Inner tabs (Services vs Events) inside the Services & Events module tab */}
-      <TabBar
+      <div className="mx-auto max-w-5xl">
+        {/* Inner tabs (Services vs Events) inside the Services & Events module tab */}
+        <TabBar
         tabs={[
           { key: "services" as const, label: "Services" },
           { key: "events" as const, label: "Events" },
@@ -91,6 +93,7 @@ function ServicesEventsContent() {
           loading={loading}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }

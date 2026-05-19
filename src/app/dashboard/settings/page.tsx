@@ -103,25 +103,26 @@ function SettingsContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <>
       <SettingsShell />
-
-      {church && (
-        <GeneralSettings
-          churchId={churchId!}
-          church={church}
-          setChurch={setChurch}
-          orgName={orgName}
-          setOrgName={setOrgName}
-          orgType={orgType}
-          setOrgType={setOrgType}
-          orgTimezone={orgTimezone}
-          setOrgTimezone={setOrgTimezone}
-          orgWorkflowMode={orgWorkflowMode}
-          user={user}
-          activeMembership={activeMembership}
-        />
-      )}
-    </div>
+      <div className="mx-auto max-w-5xl">
+        {church && (
+          <GeneralSettings
+            churchId={churchId!}
+            church={church}
+            setChurch={setChurch}
+            orgName={orgName}
+            setOrgName={setOrgName}
+            orgType={orgType}
+            setOrgType={setOrgType}
+            orgTimezone={orgTimezone}
+            setOrgTimezone={setOrgTimezone}
+            orgWorkflowMode={orgWorkflowMode}
+            user={user}
+            activeMembership={activeMembership}
+          />
+        )}
+      </div>
+    </>
   );
 }
