@@ -17,6 +17,7 @@ import { MobileHeader } from "@/components/dashboard/mobile-header";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { MoreMenu } from "@/components/dashboard/more-menu";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
+import { SWRConfig } from "swr";
 import type { SubscriptionTier } from "@/lib/types";
 import { TIER_LIMITS } from "@/lib/constants";
 
@@ -144,6 +145,18 @@ export default function DashboardLayout({
   }
 
   return (
+    <SWRConfig
+      value={{
+        // Re-fetch when the tab refocuses (cheap + keeps data fresh)
+        revalidateOnFocus: true,
+        // Don't refetch on every reconnect (network blip noise)
+        revalidateOnReconnect: false,
+        // Dedup identical requests fired within this window
+        dedupingInterval: 5_000,
+        // Don't auto-retry on error (we'll let pages handle their own retry UX)
+        shouldRetryOnError: false,
+      }}
+    >
     <div className="flex min-h-screen bg-vc-bg">
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar
@@ -224,5 +237,6 @@ export default function DashboardLayout({
         onSignOut={handleSignOut}
       />
     </div>
+    </SWRConfig>
   );
 }

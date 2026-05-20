@@ -2,6 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import useSWR from "swr";
+import { authedFetcher } from "@/lib/swr/fetcher";
 import { useAuth } from "@/lib/context/auth-context";
 import {
   addChurchDocument,
@@ -125,48 +127,62 @@ function PeopleContent() {
     setQueueItems(pending);
   }
 
+  // SWR-cached fetch of /api/people-data. Subsequent visits to this page
+  // return cached data instantly while a background revalidation refreshes
+  // it. After local mutations (invite/edit/archive), call `mutatePeopleData()`
+  // to invalidate the cache and trigger a refetch.
+  type PeopleData = {
+    volunteers: Person[];
+    ministries: Ministry[];
+    services: Service[];
+    households: Household[];
+    memberships: Membership[];
+    queueItems: InviteQueueItem[];
+    pendingInvites: unknown[];
+    church?: {
+      name?: string;
+      subscription_tier?: string;
+      org_type?: OrgType;
+      org_prerequisites?: OnboardingStep[];
+    };
+  };
+  const { data: peopleData, error: peopleDataError, mutate: mutatePeopleData } = useSWR<PeopleData>(
+    churchId ? `/api/people-data?church_id=${encodeURIComponent(churchId)}` : null,
+    authedFetcher,
+  );
+
+  // Push SWR data into existing local state so the rest of the page
+  // continues to use setVolunteers / setMinistries / etc. for in-place
+  // mutations (no downstream refactor needed). The shallow comparison on
+  // SWR keys handles dedup; this useEffect just syncs on data arrival.
   useEffect(() => {
-    if (!churchId) return;
-    async function load() {
-      try {
-        // Fetch ALL People page data via server-side API (Admin SDK bypasses
-        // Firestore security-rule limitations on client-side queries)
-        const token = await getAuth().currentUser?.getIdToken();
-        const res = await fetch(`/api/people-data?church_id=${encodeURIComponent(churchId!)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `API returned ${res.status}`);
-        }
-        const data = await res.json();
-        setVolunteers(data.volunteers as Person[]);
-        setMinistries(data.ministries as Ministry[]);
-        setServices(data.services as Service[]);
-        setHouseholds(data.households as Household[]);
-        setMemberships(data.memberships as Membership[]);
-        setQueueItems(
-          (data.queueItems as InviteQueueItem[]).filter(
-            (i) => i.status === "pending_review" || i.status === "approved",
-          ),
-        );
-        setPendingInviteCount(
-          Array.isArray(data.pendingInvites) ? data.pendingInvites.length : 0,
-        );
-        if (data.church) {
-          setChurchName(data.church.name || "");
-          setChurchTier(data.church.subscription_tier || "free");
-          setOrgType(data.church.org_type as OrgType);
-          setOrgPrereqs((data.church.org_prerequisites as OnboardingStep[]) || []);
-        }
-      } catch (err) {
-        console.error("[People] Failed to load:", err);
-      } finally {
-        setLoading(false);
-      }
+    if (peopleDataError) {
+      console.error("[People] Failed to load:", peopleDataError);
+      setLoading(false);
+      return;
     }
-    load();
-  }, [churchId]);
+    if (!peopleData) return;
+    setVolunteers(peopleData.volunteers);
+    setMinistries(peopleData.ministries);
+    setServices(peopleData.services);
+    setHouseholds(peopleData.households);
+    setMemberships(peopleData.memberships);
+    setQueueItems(
+      peopleData.queueItems.filter(
+        (i) => i.status === "pending_review" || i.status === "approved",
+      ),
+    );
+    setPendingInviteCount(
+      Array.isArray(peopleData.pendingInvites) ? peopleData.pendingInvites.length : 0,
+    );
+    if (peopleData.church) {
+      setChurchName(peopleData.church.name || "");
+      setChurchTier(peopleData.church.subscription_tier || "free");
+      setOrgType(peopleData.church.org_type as OrgType);
+      setOrgPrereqs((peopleData.church.org_prerequisites as OnboardingStep[]) || []);
+    }
+    setLoading(false);
+  }, [peopleData, peopleDataError]);
 
   // Fetch existing short link for the join URL (used by ShareMenu in header)
   useEffect(() => {
