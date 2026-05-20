@@ -140,7 +140,7 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
             Check Service Role Definitions
           </a>
         )}
-        <a href="/dashboard/org/teams" className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-white px-4 py-2.5 text-sm font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm">
+        <a href="/dashboard/people/teams" className="inline-flex items-center gap-1.5 rounded-lg border border-vc-border-light bg-white px-4 py-2.5 text-sm font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm">
           Manage Teams
         </a>
       </div>

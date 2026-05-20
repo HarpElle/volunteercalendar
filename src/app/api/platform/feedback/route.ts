@@ -210,7 +210,7 @@ export async function PATCH(req: NextRequest) {
                     <blockquote style="border-left:3px solid #ccc;padding-left:12px;margin:12px 0;">
                       ${platform_response}
                     </blockquote>
-                    <p><a href="${getBaseUrl(req)}/dashboard/admin/feedback">View in Dashboard</a></p>
+                    <p><a href="${getBaseUrl(req)}/dashboard/people/feedback">View in Dashboard</a></p>
                   `,
                   text: `Product Team Response\n\nRegarding: ${title}\n\n${platform_response}`,
                 });

@@ -4,8 +4,11 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+// Phase 3a: teams moved to /dashboard/people/teams. Other routes remain
+// at their /dashboard/org/* locations until subsequent Phase 3 sub-phases
+// migrate them too.
 const TAB_REDIRECTS: Record<string, string> = {
-  teams: "/dashboard/org/teams",
+  teams: "/dashboard/people/teams",
   campuses: "/dashboard/org/campuses",
   checkin: "/dashboard/org/check-ins",
   rooms: "/dashboard/org/campuses",

@@ -310,14 +310,14 @@ export function MoreMenu({
           <>
             <SectionHeading>People workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/people" label="Roster" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/org/teams" label="Teams" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/training-sessions" label="Training Sessions" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/volunteer-health" label="Health" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/people/teams" label="Teams" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/people/training" label="Training Sessions" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/people/health" label="Health" onClose={onClose} />
             {isAdmin && (
               <>
-                <WorkbenchLink href="/dashboard/onboarding" label="Onboarding" onClose={onClose} />
-                <WorkbenchLink href="/dashboard/retention" label="Retention" onClose={onClose} />
-                <WorkbenchLink href="/dashboard/admin/feedback" label="Feedback Triage" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/people/onboarding" label="Onboarding" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/people/retention" label="Retention" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/people/feedback" label="Feedback Triage" onClose={onClose} />
               </>
             )}
           </>
