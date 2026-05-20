@@ -175,8 +175,17 @@ export default function DashboardLayout({
             `overflow-y-auto`, CSS sticky inside main would bind to main
             as the scroll ancestor — but main never overflows because
             the outer can grow. Sticky elements would stay "pinned" to
-            a non-scrolling main and move with the window scroll. */}
-        <main id="main-content" className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
+            a non-scrolling main and move with the window scroll.
+
+            `overflow-x-hidden` IS here as a root-level guard: any wide
+            content inside a page (inner TabBar, FilterBar ministry pills,
+            etc.) would otherwise widen main → widen the column → widen
+            the document, producing a horizontal scrollbar on the whole
+            page. We clip horizontal overflow at the main boundary
+            instead. Components that legitimately need horizontal scroll
+            should manage their own `overflow-x-auto` so they get internal
+            scroll without leaking to the page. */}
+        <main id="main-content" className="flex-1 overflow-x-hidden p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
           <PwaInstallBanner />
           <SmartCheckInBanner />
           {children}
