@@ -191,7 +191,7 @@ export function CreateScheduleModal({
             {!workflowModesAll && (
               <p className="text-xs text-vc-text-muted">
                 Team-First, Hybrid, and Self-Service unlock on the Starter plan and above.{" "}
-                <a href="/dashboard/org/billing" className="text-vc-coral hover:underline">
+                <a href="/dashboard/settings/billing" className="text-vc-coral hover:underline">
                   See plans
                 </a>
               </p>

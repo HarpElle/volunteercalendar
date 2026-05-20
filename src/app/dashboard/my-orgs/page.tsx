@@ -285,7 +285,7 @@ export default function MyOrgsPage() {
 
       {/* Create New Organization */}
       <Link
-        href="/dashboard/setup?mode=new"
+        href="/dashboard/settings/setup?mode=new"
         className="mt-6 flex items-center gap-3 rounded-xl border border-dashed border-vc-coral/30 bg-vc-coral/5 p-5 text-vc-coral hover:bg-vc-coral/10 transition-colors"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

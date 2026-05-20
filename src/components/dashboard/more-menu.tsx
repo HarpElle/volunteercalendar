@@ -360,10 +360,10 @@ export function MoreMenu({
           <>
             <SectionHeading>Settings workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/settings" label="General" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/org/billing" label="Billing" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/org/activity" label="Activity" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/reminders" label="Reminders" onClose={onClose} />
-            <WorkbenchLink href="/dashboard/short-links" label="Short Links" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/settings/billing" label="Billing" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/settings/activity" label="Activity" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/settings/reminders" label="Reminders" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/settings/short-links" label="Short Links" onClose={onClose} />
           </>
         )}
 
