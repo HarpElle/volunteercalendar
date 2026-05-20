@@ -29,7 +29,10 @@ export async function authedFetcher<T = unknown>(url: string): Promise<T> {
       const err = new Error(body.error || `Request failed: ${res.status}`);
       (err as Error & { status?: number }).status = res.status;
       console.timeEnd(label);
-      console.error(`[swr] error ${res.status} for ${url}:`, body);
+      // Log the full response body so server-side error details (detail,
+      // stack, etc.) are visible to whoever's diagnosing.
+      console.error(`[swr] error ${res.status} for ${url}:`);
+      console.error(`[swr] response body:`, JSON.stringify(body, null, 2));
       throw err;
     }
     const json = (await res.json()) as T;

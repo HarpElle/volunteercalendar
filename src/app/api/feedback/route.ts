@@ -97,7 +97,12 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[GET /api/feedback]", error);
     return NextResponse.json(
-      { error: "Failed to load feedback", detail: error instanceof Error ? error.message : "Unknown error" },
+      {
+        error: "Failed to load feedback",
+        detail: error instanceof Error ? error.message : "Unknown error",
+        // Pre-launch diagnostic — strip in production launch hardening
+        stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
+      },
       { status: 500 },
     );
   }
