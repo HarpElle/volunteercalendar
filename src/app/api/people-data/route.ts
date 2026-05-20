@@ -226,15 +226,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("[API /people-data] Error:", err);
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        // Include diagnostic details in the response — pre-launch environment,
-        // no PII exposure concern. Strip in production launch hardening pass.
-        detail: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack?.split("\n").slice(0, 5).join("\n") : undefined,
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

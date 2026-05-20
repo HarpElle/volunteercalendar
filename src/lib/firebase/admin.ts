@@ -51,6 +51,23 @@ function getAdminApp(): App {
     return _app;
   }
 
+  // No explicit credentials available. On Vercel/serverless, Application
+  // Default Credentials cannot work — fail fast with a clear error instead
+  // of letting the SDK spend ~10s retrying Google Auth lookups before
+  // surfacing a generic "Could not load the default credentials" error.
+  // Local dev with `gcloud auth application-default login` will hit the
+  // VERCEL guard below and intentionally fall through to ADC.
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Firebase Admin SDK credentials are not configured. Set either " +
+        "FIREBASE_ADMIN_KEY (full service-account JSON) OR both " +
+        "FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY in the " +
+        "Vercel project's environment variables — and make sure the scope " +
+        "includes the environment where you're seeing this error (Preview / " +
+        "Production / both).",
+    );
+  }
+
   // Fallback: Application Default Credentials (local dev with gcloud CLI)
   _app = initializeApp({ projectId, storageBucket });
   return _app;
