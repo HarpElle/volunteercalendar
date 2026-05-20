@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Highest-level guard against horizontal page scroll. Wide components that
+   legitimately need to scroll (like a module tab strip) manage their own
+   overflow-x-auto and remain interactive; everything else stays clipped
+   to the viewport so a single oversized inline element can never cause
+   the whole page to shift sideways. `overflow-x: clip` is preferred over
+   `hidden` because it doesn't create a new scrolling formatting context
+   (so sticky/fixed positioning is unaffected). */
+html, body {
+  overflow-x: clip;
+}
+
 /* Balanced text wrapping — avoids orphaned words on last line */
 h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   text-wrap: balance;
