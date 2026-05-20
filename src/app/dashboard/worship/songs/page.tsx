@@ -229,14 +229,10 @@ export default function SongsPage() {
 
   return (
     <div className="min-h-screen bg-vc-bg px-4 py-6 sm:px-6 lg:px-8">
-      {/* Page header */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Song Library</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Manage your worship song catalog.
-          </p>
-        </div>
+      {/* Action buttons — page identity ("Songs") is now carried by the
+          Worship Prep tab strip's active tab. H1 + subtitle stripped per
+          Codex Phase 2 retest Finding 3. */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setImportModalOpen(true)}>
             Import Songs

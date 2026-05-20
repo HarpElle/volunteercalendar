@@ -152,14 +152,10 @@ export default function WorshipReportsPage() {
 
   return (
     <div className="min-h-screen bg-vc-bg px-4 py-6 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Song Usage Reports</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Track song usage for CCLI compliance and worship planning.
-          </p>
-        </div>
+      {/* Action button — page identity ("Reports") is now carried by the
+          Worship Prep tab strip's active tab. H1 + subtitle stripped per
+          Codex Phase 2 retest Finding 3. */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <Button
           variant="outline"
           onClick={handleExportCSV}

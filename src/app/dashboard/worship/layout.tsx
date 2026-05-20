@@ -10,12 +10,10 @@ const WORSHIP_TABS: ModuleTab[] = [
 ];
 
 export default function WorshipLayout({ children }: { children: React.ReactNode }) {
+  // sr-only h1 with active tab is rendered INSIDE <ModuleTabs> for an
+  // accessible page identity like "Worship Prep — Service Plans".
   return (
     <>
-      {/* Visually-hidden h1 gives screen readers + browser landmarks an
-          unambiguous page identity even though the visual identity IS the
-          active tab. The active tab text duplicates this for sighted users. */}
-      <h1 className="sr-only">Worship Prep</h1>
       <ModuleTabs
         moduleLabel="Worship Prep"
         moduleIconPath={WORSHIP_ICON}

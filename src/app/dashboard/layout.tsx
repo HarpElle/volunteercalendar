@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import { canAccessCheckin } from "@/lib/utils/checkin-permissions";
+import { shouldShowCheckinNav } from "@/lib/utils/checkin-permissions";
 import { useServiceWorker } from "@/lib/hooks/use-service-worker";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { PwaInstallBanner } from "@/components/ui/pwa-install-banner";
@@ -100,7 +100,11 @@ export default function DashboardLayout({
   const userIsAdmin = isAdmin(activeMembership);
   const userIsScheduler = isScheduler(activeMembership);
   const isVolunteerOnly = activeMembership && !userIsScheduler;
-  const userCanAccessCheckin = !!activeMembership && canAccessCheckin(activeMembership);
+  // Use shouldShowCheckinNav (stricter than canAccessCheckin): schedulers
+  // need the explicit checkin_volunteer flag to see Check-In in mobile
+  // bottom nav + More menu. Page-level access still uses canAccessCheckin
+  // (permissive) on the check-in routes themselves.
+  const userCanAccessCheckin = !!activeMembership && shouldShowCheckinNav(activeMembership);
 
   // Tier flags drive sidebar lock badges; mobile entry points additionally
   // require the user's role to permit access (Codex Phase 1 Finding 1).

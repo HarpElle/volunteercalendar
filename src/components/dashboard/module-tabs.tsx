@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -35,9 +36,21 @@ export interface ModuleTabsProps {
  * the page identity — there is no large module-name H1 above the strip.
  * Module icon + name appear at body size to the LEFT as a breadcrumb.
  *
- * Accessibility: each module page must ALSO render a visually-hidden `h1`
- * (sr-only) so screen readers and browser landmarks have an unambiguous
- * page identity. The tab strip is wrapped in `<nav aria-label="...">`.
+ * Accessibility:
+ *  - Renders an sr-only `<h1>` containing "Module — ActiveTab" so screen
+ *    readers and browser landmarks have an unambiguous page identity that
+ *    includes both the module and the active sub-page. Per Codex Phase 2
+ *    retest Finding 2.
+ *  - Tab strip wrapped in `<nav aria-label="…">`.
+ *  - Active tab has `aria-current="page"`.
+ *
+ * Mobile:
+ *  - Strip width is constrained to the viewport via `min-w-0` chain so
+ *    wide tab lists (e.g. People with 7 tabs) scroll horizontally INSIDE
+ *    the nav instead of overflowing the page. Per Codex Phase 2 retest
+ *    Finding 1.
+ *  - Active tab is auto-scrolled into view on mount and on route change
+ *    so far-right tabs (e.g. People → Feedback) land visible.
  *
  * Pattern spec: IMPLEMENTATION_PLAN.md §4.
  */
@@ -49,12 +62,12 @@ export function ModuleTabs({
   actions,
 }: ModuleTabsProps) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement | null>(null);
 
   // Derive active tab: prefer explicit prop; otherwise match the most
   // specific tab href that is a prefix of the current pathname.
   const derivedActive = (() => {
     if (activeTabId) return activeTabId;
-    // Longest matching href wins (so /dashboard/people/teams beats /dashboard/people)
     let bestId: string | null = null;
     let bestLength = -1;
     for (const tab of tabs) {
@@ -69,23 +82,47 @@ export function ModuleTabs({
     return bestId ?? tabs[0]?.id;
   })();
 
-  // Module breadcrumb links to the default (first) tab as a "module home" affordance.
+  const activeTab = tabs.find((t) => t.id === derivedActive);
   const defaultTabHref = tabs[0]?.href;
+
+  // Auto-scroll the active tab into view on mount and on route change so
+  // far-right tabs (e.g. People → Feedback at slot 7 on mobile) land
+  // visible instead of off-screen. Codex Phase 2 retest Finding 1.
+  useEffect(() => {
+    if (!navRef.current) return;
+    const activeEl = navRef.current.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!activeEl) return;
+    // `block: "nearest"` avoids vertical jumps; `inline: "center"` keeps
+    // the active tab visible regardless of scroll position.
+    activeEl.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+  }, [derivedActive]);
 
   // Sticky strip — fully opaque bg so content scrolling underneath is hidden.
   // Negative horizontal margins (-mx-N) escape the parent's horizontal padding
   // so the strip spans the full main-content width. NO negative margin-top:
   // the strip sits at the natural top of main's content area (below padding)
   // and slides smoothly up to viewport top via `sticky top-0` as the user
-  // scrolls. This avoids the overlap that negative-mt caused with the next
-  // sibling in `overflow-y-auto` parents.
+  // scrolls.
   return (
     <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-vc-border-light bg-vc-bg px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-10 xl:px-10">
-      {/* min-h locks the strip's height so it stays consistent across pages
-          regardless of whether actions are present and what size they are.
-          items-stretch + tab padding fills the vertical space. */}
-      <div className="flex min-h-[52px] items-stretch justify-between gap-4">
+      {/* Visually-hidden h1 = page identity for screen readers. Includes the
+          active tab text so navigating between tabs announces the new
+          identity (e.g. "People — Feedback"). The visual identity for
+          sighted users is the active tab in the strip below. */}
+      <h1 className="sr-only">
+        {moduleLabel}
+        {activeTab ? ` — ${activeTab.label}` : ""}
+      </h1>
+
+      {/* min-h locks the strip's height consistent across pages. min-w-0
+          on the inner flex container allows children (the nav) to shrink
+          below their content width so the nav's `overflow-x-auto` clips
+          and scrolls instead of pushing the strip wider than the viewport.
+          Without this, wide nav content was making the page itself wider
+          than the mobile viewport (Codex Phase 2 retest Finding 1). */}
+      <div className="flex min-h-[52px] min-w-0 items-stretch justify-between gap-4">
         <nav
+          ref={navRef}
           aria-label={`${moduleLabel} tabs`}
           className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >

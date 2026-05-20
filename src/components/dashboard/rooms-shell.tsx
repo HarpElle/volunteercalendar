@@ -18,15 +18,13 @@ const ROOMS_TABS: ModuleTab[] = [
 ];
 
 export function RoomsShell({ actions }: { actions?: React.ReactNode }) {
+  // sr-only h1 with active tab is rendered INSIDE <ModuleTabs>.
   return (
-    <>
-      <h1 className="sr-only">Rooms</h1>
-      <ModuleTabs
-        moduleLabel="Rooms"
-        moduleIconPath={ROOMS_ICON}
-        tabs={ROOMS_TABS}
-        actions={actions}
-      />
-    </>
+    <ModuleTabs
+      moduleLabel="Rooms"
+      moduleIconPath={ROOMS_ICON}
+      tabs={ROOMS_TABS}
+      actions={actions}
+    />
   );
 }
