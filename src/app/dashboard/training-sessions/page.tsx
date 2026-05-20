@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import useSWR from "swr";
+import { authedFetcher } from "@/lib/swr/fetcher";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
@@ -59,51 +61,52 @@ export default function TrainingSessionsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilter);
   const [showCreate, setShowCreate] = useState(false);
 
-  // Load sessions + ministries + church (for org prereqs) on mount.
+  // SWR-cached fetch of training sessions API. Subsequent visits return
+  // cached data instantly while a background revalidation refreshes.
+  const sessionsUrl = churchId && user
+    ? `/api/training-sessions?church_id=${encodeURIComponent(churchId)}`
+    : null;
+  const { data: sessionsData, error: sessionsError, mutate: mutateSessions } = useSWR<{
+    sessions?: TrainingSession[];
+  }>(sessionsUrl, authedFetcher);
+
+  // Sync SWR data into existing local state
   useEffect(() => {
-    if (!churchId || !user) return;
-    async function load() {
+    if (sessionsError) {
+      setError("Failed to load training sessions.");
+      setLoading(false);
+      return;
+    }
+    if (sessionsData) {
+      setSessions(sessionsData.sessions || []);
+      setLoading(false);
       setError(null);
-      try {
-        const token = await user!.getIdToken();
-        const [sessRes, mins, churchSnap] = await Promise.all([
-          fetch(`/api/training-sessions?church_id=${encodeURIComponent(churchId!)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          getChurchDocuments(churchId!, "ministries") as Promise<unknown[]>,
-          getDoc(doc(db, "churches", churchId!)),
-        ]);
-        if (!sessRes.ok) {
-          const data = await sessRes.json().catch(() => ({}));
-          setError(data.error || `Failed to load (${sessRes.status})`);
-        } else {
-          const data = await sessRes.json();
-          setSessions((data.sessions as TrainingSession[]) || []);
-        }
+    }
+  }, [sessionsData, sessionsError]);
+
+  // Load ministries + church doc client-side (Firebase persistent cache
+  // handles repeat visits). Separate from the SWR-cached sessions fetch.
+  useEffect(() => {
+    if (!churchId) return;
+    Promise.all([
+      getChurchDocuments(churchId, "ministries") as Promise<unknown[]>,
+      getDoc(doc(db, "churches", churchId)),
+    ])
+      .then(([mins, churchSnap]) => {
         setMinistries(mins as Ministry[]);
         if (churchSnap.exists()) {
           setOrgPrereqs((churchSnap.data().org_prerequisites as OnboardingStep[]) || []);
         }
-      } catch {
-        setError("Failed to load training sessions.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [churchId, user]);
+      })
+      .catch(() => {
+        // silent — sessions error is reported separately
+      });
+  }, [churchId]);
 
+  // Existing mutation handlers call refreshSessions() after creating/cancelling
+  // sessions. Route to SWR's mutate so the cache is invalidated for next visit.
   async function refreshSessions() {
-    if (!churchId || !user) return;
-    const token = await user.getIdToken();
-    const res = await fetch(
-      `/api/training-sessions?church_id=${encodeURIComponent(churchId)}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      setSessions((data.sessions as TrainingSession[]) || []);
-    }
+    await mutateSessions();
   }
 
   if (!canManage) {

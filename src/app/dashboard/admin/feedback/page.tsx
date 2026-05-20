@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import useSWR from "swr";
+import { authedFetcher } from "@/lib/swr/fetcher";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -74,30 +76,40 @@ export default function AdminFeedbackPage() {
   const [responseSent, setResponseSent] = useState(false);
   const [activities, setActivities] = useState<Array<{ id: string; type: string; actor_name: string; previous_value: string; new_value: string; created_at: string }>>([]);
 
-  const loadFeedback = useCallback(async () => {
-    if (!churchId || !user) return;
-    try {
-      const token = await user.getIdToken();
-      const params = new URLSearchParams({ church_id: churchId, scope: "all" });
-      if (filterStatus) params.set("status", filterStatus);
-      if (filterCategory) params.set("category", filterCategory);
-      const res = await fetch(`/api/feedback?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items as FeedbackItem[]);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  }, [churchId, user, filterStatus, filterCategory]);
+  // SWR-cached fetch of /api/feedback (keyed by filters so changing filters
+  // refetches automatically). Subsequent visits return cached data instantly.
+  // Call `mutateFeedback()` after writes to invalidate.
+  const feedbackUrl = (() => {
+    if (!churchId || !user) return null;
+    const params = new URLSearchParams({ church_id: churchId, scope: "all" });
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterCategory) params.set("category", filterCategory);
+    return `/api/feedback?${params}`;
+  })();
+  const { data: feedbackData, error: feedbackError, mutate: mutateFeedback } = useSWR<{ items: FeedbackItem[] }>(
+    feedbackUrl,
+    authedFetcher,
+  );
 
   useEffect(() => {
-    loadFeedback();
-  }, [loadFeedback]);
+    if (feedbackError) {
+      // Stop the infinite spinner on error; preserve any existing items so
+      // the UI doesn't blank out if a refetch fails. Errors are also logged
+      // by the fetcher itself.
+      console.error("[Feedback] SWR error:", feedbackError);
+      setLoading(false);
+      return;
+    }
+    if (!feedbackData) return;
+    setItems(feedbackData.items);
+    setLoading(false);
+  }, [feedbackData, feedbackError]);
+
+  // Compatibility shim for existing mutation handlers that called loadFeedback().
+  // They can keep using this name; it now triggers SWR revalidation.
+  const loadFeedback = useCallback(async () => {
+    await mutateFeedback();
+  }, [mutateFeedback]);
 
   const updateFeedback = useCallback(
     async (feedbackId: string, updates: Record<string, unknown>) => {
