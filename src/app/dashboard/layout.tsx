@@ -164,8 +164,17 @@ export default function DashboardLayout({
         isPlatformAdmin={isPlatformAdmin}
       />
 
-      {/* Main content */}
-      <div className="flex flex-1 flex-col">
+      {/* Main content column. `min-w-0` is critical: flex items default to
+          `min-width: auto`, which means a child won't shrink below its
+          content's min-content width. Without `min-w-0` on this column,
+          a single oversized inline element (a wide TabBar, a 7-tab module
+          strip with shrink-0 children) makes the column grow past the
+          viewport. The viewport-level overflow-x: clip would hide the
+          scrollbar but the layout calculations inside would still produce
+          oversized children, breaking internal overflow-x-auto on
+          ModuleTabs because the nav grows to fit its content instead of
+          being constrained and triggering its own scrollbar. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Slim mobile header — no hamburger, just branding */}
         <MobileHeader />
 
@@ -175,8 +184,15 @@ export default function DashboardLayout({
             `overflow-y-auto`, CSS sticky inside main would bind to main
             as the scroll ancestor — but main never overflows because
             the outer can grow. Sticky elements would stay "pinned" to
-            a non-scrolling main and move with the window scroll. */}
-        <main id="main-content" className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
+            a non-scrolling main and move with the window scroll.
+
+            `min-w-0 overflow-x-hidden` together force main to actually
+            shrink to its allocated cross-axis width (the column's width,
+            which is now also constrained via min-w-0) and clip anything
+            wider. With both set, the ModuleTabs nav becomes properly
+            narrower than its content and overflow-x-auto activates
+            internal horizontal scroll for the tab list. */}
+        <main id="main-content" className="min-w-0 flex-1 overflow-x-hidden p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
           <PwaInstallBanner />
           <SmartCheckInBanner />
           {children}
