@@ -13,6 +13,7 @@ import { generateDraftSchedule, computeTotalSlots } from "@/lib/services/schedul
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
+import { SchedulesShell } from "@/components/dashboard/schedules-shell";
 import { CreateScheduleModal, type CreateScheduleOptions } from "@/components/forms/create-schedule-modal";
 import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
@@ -781,19 +782,15 @@ export default function SchedulesPage() {
 
   return (
     <div>
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Schedules</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            Generate and manage volunteer schedules.
-          </p>
-        </div>
-        {!showCreate && !activeScheduleId && (
-          <Button onClick={() => setShowCreate(true)} disabled={!canGenerate}>
-            New Schedule
-          </Button>
-        )}
-      </div>
+      <SchedulesShell
+        actions={
+          !showCreate && !activeScheduleId ? (
+            <Button size="sm" onClick={() => setShowCreate(true)} disabled={!canGenerate}>
+              New Schedule
+            </Button>
+          ) : null
+        }
+      />
 
       {mutationError && (
         <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">

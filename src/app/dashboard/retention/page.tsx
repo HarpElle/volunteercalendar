@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import type { Assignment, Ministry, Person } from "@/lib/types";
 import {
   calculateBurnoutRisks,
@@ -97,16 +98,9 @@ export default function RetentionDashboardPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2">
-          <h1 className="font-display text-3xl text-vc-indigo">Retention Dashboard</h1>
-          <InfoTooltip text="Track volunteer health, identify burnout risk, and monitor team sustainability. Data updates daily." />
-        </div>
-        <p className="mt-1 text-vc-text-secondary">
-          Understand your team&apos;s health and keep volunteers engaged.
-        </p>
-      </div>
+      {/* InfoTooltip removed from strip actions in Phase 2 — clipped at viewport edge.
+          Per-tab tooltip descriptions are queued as a follow-up. */}
+      <PeopleShell />
 
       {/* Top-Level Stats */}
       <StatCardGrid className="mb-8">

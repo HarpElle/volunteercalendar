@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import type { Church } from "@/lib/types";
+import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 interface ShortLink {
   id: string;
@@ -181,15 +182,10 @@ export default function ShortLinksPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Short Links</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage shareable short links for events and volunteer signups.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-vc-border-light bg-white p-6">
+    <>
+      <SettingsShell />
+      <div className="mx-auto max-w-5xl">
+        <div className="rounded-xl border border-vc-border-light bg-white p-6">
         {/* Usage meter */}
         <div className="mb-5 flex items-center justify-between">
           <div>
@@ -377,6 +373,7 @@ export default function ShortLinksPage() {
           </details>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -18,6 +18,7 @@ import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import { InviteQueueDrawer } from "@/components/forms/invite-queue-drawer";
 import { getOrgTerms } from "@/lib/utils/org-terms";
 import { CSVImportModal } from "@/components/forms/csv-import-modal";
@@ -546,14 +547,12 @@ function PeopleContent() {
         </div>
       )}
 
-      {/* Header */}
+      {/* People module shell + Roster page actions */}
+      <PeopleShell />
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Volunteers</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
-          </p>
-        </div>
+        <p className="text-sm text-vc-text-muted">
+          {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
+        </p>
         <div className="flex items-center gap-2">
           {canManage && (
             <ShareMenu

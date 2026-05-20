@@ -165,8 +165,14 @@ export default function DashboardLayout({
         {/* Slim mobile header — no hamburger, just branding */}
         <MobileHeader />
 
-        {/* Page content — extra bottom padding on mobile for bottom nav */}
-        <main id="main-content" className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
+        {/* Page content — extra bottom padding on mobile for bottom nav.
+            NOTE: no `overflow-y-auto` here. The outer is `min-h-screen`
+            (grows with content) so the window scrolls. If main had
+            `overflow-y-auto`, CSS sticky inside main would bind to main
+            as the scroll ancestor — but main never overflows because
+            the outer can grow. Sticky elements would stay "pinned" to
+            a non-scrolling main and move with the window scroll. */}
+        <main id="main-content" className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 xl:p-10 xl:pb-10">
           <PwaInstallBanner />
           <SmartCheckInBanner />
           {children}

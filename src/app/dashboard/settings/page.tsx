@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import type { OrgType, WorkflowMode, Church } from "@/lib/types";
 
 import { GeneralSettings } from "@/components/settings/general-settings";
+import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 // ---------------------------------------------------------------------------
 // Redirect legacy tab URLs to their new standalone pages
@@ -102,33 +103,26 @@ function SettingsContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Settings</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage{" "}
-          {orgName ||
-            (orgType === "church" ? "your church" : "your organization")}{" "}
-          settings.
-        </p>
+    <>
+      <SettingsShell />
+      <div className="mx-auto max-w-5xl">
+        {church && (
+          <GeneralSettings
+            churchId={churchId!}
+            church={church}
+            setChurch={setChurch}
+            orgName={orgName}
+            setOrgName={setOrgName}
+            orgType={orgType}
+            setOrgType={setOrgType}
+            orgTimezone={orgTimezone}
+            setOrgTimezone={setOrgTimezone}
+            orgWorkflowMode={orgWorkflowMode}
+            user={user}
+            activeMembership={activeMembership}
+          />
+        )}
       </div>
-
-      {church && (
-        <GeneralSettings
-          churchId={churchId!}
-          church={church}
-          setChurch={setChurch}
-          orgName={orgName}
-          setOrgName={setOrgName}
-          orgType={orgType}
-          setOrgType={setOrgType}
-          orgTimezone={orgTimezone}
-          setOrgTimezone={setOrgTimezone}
-          orgWorkflowMode={orgWorkflowMode}
-          user={user}
-          activeMembership={activeMembership}
-        />
-      )}
-    </div>
+    </>
   );
 }

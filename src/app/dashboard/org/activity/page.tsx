@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { isAdmin } from "@/lib/utils/permissions";
+import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 interface AuditEntry {
   id: string;
@@ -180,16 +181,10 @@ export default function ActivityPage() {
   if (!isAdmin(activeMembership)) return <AccessDenied requiredRole="Admin" />;
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-vc-indigo">Activity</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          A record of significant events in your organization — schedule
-          publishes, role changes, billing events, kiosk activity, and more.
-        </p>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2">
+    <>
+      <SettingsShell />
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-4 flex flex-wrap gap-2">
         {ACTION_CATEGORIES.map((c) => (
           <button
             key={c.label}
@@ -276,6 +271,7 @@ export default function ActivityPage() {
         the &ldquo;what&rdquo; — for the &ldquo;who&rdquo; behind a kiosk
         action, contact your church&apos;s VolunteerCal admin.
       </p>
-    </div>
+      </div>
+    </>
   );
 }

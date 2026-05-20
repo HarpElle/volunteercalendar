@@ -91,7 +91,7 @@ function getAdminItems(): NavItem[] {
     { label: "People", href: "/dashboard/people", iconPath: ICON.people },
     { label: "Rooms", href: "/dashboard/rooms", iconPath: ICON.rooms, tierModule: "rooms" },
     { label: "Check-In", href: "/dashboard/checkin", iconPath: ICON.checkin, tierModule: "checkin" },
-    { label: "Worship Prep", href: "/dashboard/worship/plans", iconPath: ICON.worship, tierModule: "worship" },
+    { label: "Worship Prep", href: "/dashboard/worship", iconPath: ICON.worship, tierModule: "worship" },
   ];
 }
 

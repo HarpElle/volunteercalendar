@@ -18,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import { PrerequisiteEditor } from "@/components/ui/prerequisite-editor";
 import { getVolunteerStage, type EligibilityStage } from "@/lib/utils/eligibility";
 import { db } from "@/lib/firebase/config";
@@ -287,22 +288,13 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2">
-          <h1 className="font-display text-3xl text-vc-indigo">
-            Volunteer Onboarding
-          </h1>
-          <InfoTooltip text="Track prerequisite steps — like background checks, training, or orientation — that volunteers complete before being scheduled for a team." />
-        </div>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage prerequisites and track volunteer progress through onboarding
-          requirements.
-        </p>
-      </div>
-
-      {/* Tabs */}
+    <>
+      {/* InfoTooltip removed from strip actions in Phase 2 — its rightward
+          popover was clipping at the viewport edge. Per-tab tooltips with
+          descriptions are queued as a follow-up after Phase 2 ships. */}
+      <PeopleShell />
+      <div className="mx-auto max-w-5xl">
+        {/* Tabs */}
       {canManage && (
         <div className="mb-6 flex gap-1 rounded-lg bg-vc-bg-warm p-1">
           <button
@@ -840,6 +832,7 @@ export default function OnboardingPage() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

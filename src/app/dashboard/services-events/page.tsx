@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { TabBar } from "@/components/ui/tab-bar";
+import { SchedulesShell } from "@/components/dashboard/schedules-shell";
 import { ServicesList } from "@/components/services/services-list";
 import { EventList } from "@/components/services/event-list";
 import type { Ministry } from "@/lib/types";
@@ -56,17 +57,13 @@ function ServicesEventsContent() {
   }, [churchId]);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Services & Events</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Configure recurring services and create events that need volunteers.
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <TabBar
+    <>
+      {/* Shell rendered OUTSIDE the max-w container so the sticky strip
+          spans the dashboard main width (matches sister routes). */}
+      <SchedulesShell />
+      <div className="mx-auto max-w-5xl">
+        {/* Inner tabs (Services vs Events) inside the Services & Events module tab */}
+        <TabBar
         tabs={[
           { key: "services" as const, label: "Services" },
           { key: "events" as const, label: "Events" },
@@ -96,6 +93,7 @@ function ServicesEventsContent() {
           loading={loading}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }

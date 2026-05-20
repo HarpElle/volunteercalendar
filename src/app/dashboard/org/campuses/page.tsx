@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { isAdmin } from "@/lib/utils/permissions";
 import { TIER_LIMITS } from "@/lib/constants";
 import { db } from "@/lib/firebase/config";
+import { RoomsShell } from "@/components/dashboard/rooms-shell";
 import { doc, getDoc } from "firebase/firestore";
 import type { Church, Campus, FacilityGroup, FacilityGroupMember } from "@/lib/types";
 import { CampusesSettings } from "@/components/settings/campuses-settings";
@@ -76,19 +77,14 @@ function CampusesContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Campuses</h1>
-        <p className="mt-1 text-vc-text-secondary">
-          Manage campus locations and room settings.
-        </p>
-      </div>
-
-      {mutationError && (
-        <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
-          {mutationError}
-        </div>
-      )}
+    <>
+      <RoomsShell />
+      <div className="mx-auto max-w-5xl">
+        {mutationError && (
+          <div className="mb-6 rounded-xl border border-vc-danger/20 bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
+            {mutationError}
+          </div>
+        )}
 
       <CampusesSettings
         churchId={churchId!}
@@ -114,7 +110,8 @@ function CampusesContent() {
         churchId={churchId!}
         tierLimits={limits}
       />
-    </div>
+      </div>
+    </>
   );
 }
 

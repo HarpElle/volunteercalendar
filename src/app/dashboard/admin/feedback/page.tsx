@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import type {
   FeedbackItem,
   FeedbackCategory,
@@ -141,21 +142,19 @@ export default function AdminFeedbackPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Feedback Triage</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            {openCount} open &middot; {criticalCount > 0 ? `${criticalCount} critical` : "no critical items"}
-          </p>
-        </div>
-        <Link
-          href="/dashboard/admin/feedback/insights"
-          className="rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
-        >
-          Insights
-        </Link>
-      </div>
+      <PeopleShell
+        actions={
+          <Link
+            href="/dashboard/admin/feedback/insights"
+            className="rounded-lg border border-vc-border px-3 py-1.5 text-xs font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
+          >
+            Insights →
+          </Link>
+        }
+      />
+      <p className="mb-4 text-sm text-vc-text-muted">
+        {openCount} open &middot; {criticalCount > 0 ? `${criticalCount} critical` : "no critical items"}
+      </p>
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap gap-3">

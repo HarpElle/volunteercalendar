@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import { isScheduler } from "@/lib/utils/permissions";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
@@ -134,18 +135,13 @@ export default function TrainingSessionsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Training Sessions</h1>
-          <p className="mt-1 text-sm text-vc-text-secondary">
-            Schedule, invite, and mark complete the trainings that fulfill
-            volunteer prerequisites.
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(true)} size="md">
-          + New Session
-        </Button>
-      </div>
+      <PeopleShell
+        actions={
+          <Button onClick={() => setShowCreate(true)} size="sm">
+            + New Session
+          </Button>
+        }
+      />
 
       {/* Status filter */}
       <div className="mb-4 inline-flex rounded-lg border border-vc-border-light bg-white p-0.5">
