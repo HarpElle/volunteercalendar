@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import { isScheduler } from "@/lib/utils/permissions";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import type {
@@ -306,6 +307,11 @@ export default function TrainingSessionDetailPage() {
 
   return (
     <div>
+      {/* People module strip persists on deep detail pages so the user keeps
+          module context (active tab = Training) and can pivot to sibling
+          tabs. Codex Phase 3a retest Finding 1. */}
+      <PeopleShell />
+
       <Link
         href="/dashboard/people/training"
         className="text-sm text-vc-text-muted hover:text-vc-coral"

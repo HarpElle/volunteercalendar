@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import { PeopleShell } from "@/components/dashboard/people-shell";
 import Link from "next/link";
 import type { FeedbackItem, FeedbackCategory, FeedbackPriority, FeedbackStatus } from "@/lib/types";
 
@@ -119,14 +120,18 @@ export default function FeedbackInsightsPage() {
 
   return (
     <div>
-      {/* Header */}
+      {/* People module strip persists on deep pages so the user keeps module
+          context (active tab = Feedback) and can pivot to sibling tabs.
+          The "Triage Dashboard" link below is preserved but somewhat
+          redundant with the active Feedback tab — acceptable for now.
+          Codex Phase 3a retest Finding 1. */}
+      <PeopleShell />
+
+      {/* Page-specific header: subtitle + Triage Dashboard back link */}
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-vc-indigo">Feedback Insights</h1>
-          <p className="mt-1 text-vc-text-secondary">
-            {items.length} total items &middot; {openItems.length} open
-          </p>
-        </div>
+        <p className="text-sm text-vc-text-muted">
+          {items.length} total items &middot; {openItems.length} open
+        </p>
         <Link
           href="/dashboard/people/feedback"
           className="rounded-lg border border-vc-border px-4 py-2 text-sm font-medium text-vc-text-secondary hover:bg-vc-bg-warm transition-colors"
