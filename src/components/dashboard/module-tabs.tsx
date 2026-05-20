@@ -88,13 +88,26 @@ export function ModuleTabs({
   // Auto-scroll the active tab into view on mount and on route change so
   // far-right tabs (e.g. People → Feedback at slot 7 on mobile) land
   // visible instead of off-screen. Codex Phase 2 retest Finding 1.
+  //
+  // IMPORTANT: we set `nav.scrollLeft` directly instead of calling
+  // `element.scrollIntoView({ inline: "center" })`. scrollIntoView walks up
+  // the ancestor tree looking for the nearest horizontally-scrollable
+  // ancestor; if the nav's overflow-x-auto wasn't actually creating a
+  // scroll container at the time of the call (flex sizing edge case), the
+  // browser would shift the root document horizontally instead — making
+  // documentElement.scrollWidth grow beyond the viewport. Direct scrollLeft
+  // assignment only touches the nav. Codex hotfix retest Finding 1.
   useEffect(() => {
-    if (!navRef.current) return;
-    const activeEl = navRef.current.querySelector<HTMLElement>('[aria-current="page"]');
+    const nav = navRef.current;
+    if (!nav) return;
+    const activeEl = nav.querySelector<HTMLElement>('[aria-current="page"]');
     if (!activeEl) return;
-    // `block: "nearest"` avoids vertical jumps; `inline: "center"` keeps
-    // the active tab visible regardless of scroll position.
-    activeEl.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+    // Center the active tab within the nav's visible viewport.
+    const navRect = nav.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+    const activeLeftRelativeToNav = activeRect.left - navRect.left + nav.scrollLeft;
+    const target = activeLeftRelativeToNav - (nav.clientWidth - activeEl.offsetWidth) / 2;
+    nav.scrollLeft = Math.max(0, target);
   }, [derivedActive]);
 
   // Sticky strip — fully opaque bg so content scrolling underneath is hidden.
@@ -103,8 +116,15 @@ export function ModuleTabs({
   // the strip sits at the natural top of main's content area (below padding)
   // and slides smoothly up to viewport top via `sticky top-0` as the user
   // scrolls.
+  //
+  // `overflow-x-hidden` on the outer is a belt-and-suspenders root guard: if
+  // anything inside the strip somehow grows wider than the strip's box (e.g.
+  // a future flex-sizing regression in the nav), it gets clipped here and
+  // can never make documentElement.scrollWidth exceed the viewport. The
+  // nav's own overflow-x-auto still provides the user-facing horizontal
+  // scroll for the tab list. Codex hotfix retest Finding 1.
   return (
-    <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-vc-border-light bg-vc-bg px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-10 xl:px-10">
+    <div className="sticky top-0 z-30 -mx-4 mb-6 overflow-x-hidden border-b border-vc-border-light bg-vc-bg px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-10 xl:px-10">
       {/* Visually-hidden h1 = page identity for screen readers. Includes the
           active tab text so navigating between tabs announces the new
           identity (e.g. "People — Feedback"). The visual identity for
