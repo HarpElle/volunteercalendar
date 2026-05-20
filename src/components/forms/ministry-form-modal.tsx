@@ -263,7 +263,7 @@ export function MinistryFormModal({
           />
           <p className="text-xs text-vc-text-muted">
             You can also manage prerequisites and track volunteer progress from the{" "}
-            <Link href="/dashboard/onboarding" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
+            <Link href="/dashboard/people/onboarding" className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors">
               Onboarding
             </Link>{" "}
             page.

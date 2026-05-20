@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
                   <p><strong>Category:</strong> ${category} | <strong>Priority:</strong> ${feedbackData.priority}</p>
                   <p><strong>From:</strong> ${feedbackData.submitted_by_name} (${feedbackData.submitted_by_role})</p>
                   <p>${description.slice(0, 500)}${description.length > 500 ? "..." : ""}</p>
-                  <p><a href="${getBaseUrl(req)}/dashboard/admin/feedback">Open Triage Dashboard</a></p>
+                  <p><a href="${getBaseUrl(req)}/dashboard/people/feedback">Open Triage Dashboard</a></p>
                 `,
                 text: `${title}\nCategory: ${category} | Priority: ${feedbackData.priority}\nFrom: ${feedbackData.submitted_by_name}\n\n${description.slice(0, 500)}`,
               });

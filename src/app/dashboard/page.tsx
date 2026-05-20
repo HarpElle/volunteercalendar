@@ -252,7 +252,7 @@ export default function DashboardPage() {
   const setupSteps = stats ? [
     { step: "Set up your organization", desc: "Name, timezone, and scheduling preferences", href: "/dashboard/organization", done: true },
     { step: "Create a team", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/organization", done: (stats.ministries ?? 0) > 0 },
-    { step: "Set up onboarding prerequisites", desc: "Background checks, training, or other requirements before serving", href: "/dashboard/onboarding", done: stats.hasPrerequisites, optional: true },
+    { step: "Set up onboarding prerequisites", desc: "Background checks, training, or other requirements before serving", href: "/dashboard/people/onboarding", done: stats.hasPrerequisites, optional: true },
     { step: "Add your volunteers", desc: "CSV upload, ChMS import, or add manually", href: "/dashboard/people", done: (stats.volunteers ?? 0) > 0 },
     { step: "Set up a service or event", desc: "Recurring services with roles, or one-time events", href: "/dashboard/services-events", done: (stats.services ?? 0) > 0 },
     { step: "Share your join link", desc: "Invite volunteers to sign up on their own", href: "/dashboard/people", done: (stats.volunteers ?? 0) >= 3 },
@@ -403,7 +403,7 @@ export default function DashboardPage() {
                   <p className="text-sm font-semibold text-vc-sage">You&apos;re all set! Here&apos;s what to explore next:</p>
                   <ul className="mt-1.5 space-y-1 text-xs text-vc-text-muted">
                     <li>
-                      <Link href="/dashboard/volunteer-health" className="text-vc-coral hover:underline">Volunteer Health</Link>
+                      <Link href="/dashboard/people/health" className="text-vc-coral hover:underline">Volunteer Health</Link>
                       {" "}— monitor engagement and spot burnout early
                     </li>
                     <li>
@@ -569,7 +569,7 @@ export default function DashboardPage() {
           {retention && isAdmin(activeMembership) && stats.volunteers > 0 && (
             <div className="mt-6">
               <Link
-                href="/dashboard/retention"
+                href="/dashboard/people/retention"
                 className="block rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex items-center justify-between mb-3">
