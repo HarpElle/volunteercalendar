@@ -86,16 +86,24 @@ export default function AdminFeedbackPage() {
     if (filterCategory) params.set("category", filterCategory);
     return `/api/feedback?${params}`;
   })();
-  const { data: feedbackData, mutate: mutateFeedback } = useSWR<{ items: FeedbackItem[] }>(
+  const { data: feedbackData, error: feedbackError, mutate: mutateFeedback } = useSWR<{ items: FeedbackItem[] }>(
     feedbackUrl,
     authedFetcher,
   );
 
   useEffect(() => {
+    if (feedbackError) {
+      // Stop the infinite spinner on error; preserve any existing items so
+      // the UI doesn't blank out if a refetch fails. Errors are also logged
+      // by the fetcher itself.
+      console.error("[Feedback] SWR error:", feedbackError);
+      setLoading(false);
+      return;
+    }
     if (!feedbackData) return;
     setItems(feedbackData.items);
     setLoading(false);
-  }, [feedbackData]);
+  }, [feedbackData, feedbackError]);
 
   // Compatibility shim for existing mutation handlers that called loadFeedback().
   // They can keep using this name; it now triggers SWR revalidation.

@@ -155,6 +155,13 @@ export default function DashboardLayout({
         dedupingInterval: 5_000,
         // Don't auto-retry on error (we'll let pages handle their own retry UX)
         shouldRetryOnError: false,
+        // Surface every cache error to the console so silent failures don't
+        // hide behind an infinite spinner. Pages should also handle their
+        // own `error` from useSWR to display a user-facing message + clear
+        // their loading state.
+        onError: (err, key) => {
+          console.error(`[swr global error] ${key}:`, err);
+        },
       }}
     >
     <div className="flex min-h-screen bg-vc-bg">
