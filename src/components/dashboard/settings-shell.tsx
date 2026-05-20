@@ -15,15 +15,13 @@ const SETTINGS_TABS: ModuleTab[] = [
 ];
 
 export function SettingsShell({ actions }: { actions?: React.ReactNode }) {
+  // sr-only h1 with active tab is rendered INSIDE <ModuleTabs>.
   return (
-    <>
-      <h1 className="sr-only">Settings</h1>
-      <ModuleTabs
-        moduleLabel="Settings"
-        moduleIconPath={SETTINGS_ICON}
-        tabs={SETTINGS_TABS}
-        actions={actions}
-      />
-    </>
+    <ModuleTabs
+      moduleLabel="Settings"
+      moduleIconPath={SETTINGS_ICON}
+      tabs={SETTINGS_TABS}
+      actions={actions}
+    />
   );
 }

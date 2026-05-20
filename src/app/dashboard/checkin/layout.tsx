@@ -12,9 +12,9 @@ const CHECKIN_TABS: ModuleTab[] = [
 ];
 
 export default function CheckinLayout({ children }: { children: React.ReactNode }) {
+  // sr-only h1 with active tab is rendered INSIDE <ModuleTabs>.
   return (
     <>
-      <h1 className="sr-only">Check-In</h1>
       <ModuleTabs
         moduleLabel="Check-In"
         moduleIconPath={CHECKIN_ICON}

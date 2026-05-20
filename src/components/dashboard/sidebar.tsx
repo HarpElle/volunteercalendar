@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import { canAccessCheckin } from "@/lib/utils/checkin-permissions";
+import { shouldShowCheckinNav } from "@/lib/utils/checkin-permissions";
 import { Avatar } from "@/components/ui/avatar";
 import { TierLockBadge, useTierGate, type ModuleId } from "@/components/dashboard/tier-lock";
 import type { Membership, SubscriptionTier } from "@/lib/types";
@@ -167,7 +167,10 @@ export function Sidebar({
   const hasMultipleOrgs = activeMemberships.length > 1;
   const userIsAdmin = isAdmin(activeMembership);
   const userIsScheduler = isScheduler(activeMembership);
-  const userCanAccessCheckin = !!activeMembership && canAccessCheckin(activeMembership);
+  // Use shouldShowCheckinNav (stricter than canAccessCheckin): schedulers
+  // need the explicit checkin_volunteer flag to see Check-In in nav.
+  // Page-level access still uses canAccessCheckin (permissive) elsewhere.
+  const userCanAccessCheckin = !!activeMembership && shouldShowCheckinNav(activeMembership);
 
   // Tier gates per module
   const roomsGate = useTierGate("rooms", subscriptionTier);
@@ -264,6 +267,12 @@ export function Sidebar({
       // group-focus-visible so keyboard users see the upgrade hint too.
       const tierName = gate?.tierRequired ?? "";
       const upgradeText = `Available on ${tierName.charAt(0).toUpperCase()}${tierName.slice(1)}. Upgrade in Settings.`;
+      // Tooltip is positioned BELOW the row (not to the right) because the
+      // sidebar's `overflow-y-auto` implicitly clips overflow-x too, so
+      // tooltips pointing right got hidden at the sidebar's right edge
+      // (Codex Phase 1 v3 retest Finding 2). Below-the-row stays inside
+      // the sidebar's horizontal bounds and only overlaps adjacent nav
+      // rows briefly during hover/focus, which is acceptable.
       return (
         <div
           key={item.href}
@@ -276,7 +285,7 @@ export function Sidebar({
           {content}
           <span
             role="tooltip"
-            className="pointer-events-none absolute left-full top-0 z-50 ml-2 hidden whitespace-nowrap rounded-md bg-vc-indigo px-2 py-1 text-xs font-normal text-white shadow-lg group-hover:block group-focus-visible:block"
+            className="pointer-events-none absolute left-3 top-full z-50 mt-1 max-w-[220px] whitespace-normal rounded-md bg-vc-indigo px-2 py-1 text-xs font-normal text-white shadow-lg opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
           >
             {upgradeText}
           </span>

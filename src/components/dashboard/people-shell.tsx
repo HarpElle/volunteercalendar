@@ -18,15 +18,13 @@ const PEOPLE_TABS: ModuleTab[] = [
 ];
 
 export function PeopleShell({ actions }: { actions?: React.ReactNode }) {
+  // sr-only h1 with active tab is rendered INSIDE <ModuleTabs>.
   return (
-    <>
-      <h1 className="sr-only">People</h1>
-      <ModuleTabs
-        moduleLabel="People"
-        moduleIconPath={PEOPLE_ICON}
-        tabs={PEOPLE_TABS}
-        actions={actions}
-      />
-    </>
+    <ModuleTabs
+      moduleLabel="People"
+      moduleIconPath={PEOPLE_ICON}
+      tabs={PEOPLE_TABS}
+      actions={actions}
+    />
   );
 }

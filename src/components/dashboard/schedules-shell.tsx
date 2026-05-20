@@ -14,15 +14,15 @@ const SCHEDULES_TABS: ModuleTab[] = [
  *  and /dashboard/services-events so the tab strip is consistent across both
  *  sister routes during the Phase 2 → Phase 3 transition. */
 export function SchedulesShell({ actions }: { actions?: React.ReactNode }) {
+  // sr-only h1 is rendered INSIDE <ModuleTabs> so it can include the
+  // active tab text (e.g. "Schedules — Services & Events"). Don't add
+  // another h1 here.
   return (
-    <>
-      <h1 className="sr-only">Schedules</h1>
-      <ModuleTabs
-        moduleLabel="Schedules"
-        moduleIconPath={SCHEDULES_ICON}
-        tabs={SCHEDULES_TABS}
-        actions={actions}
-      />
-    </>
+    <ModuleTabs
+      moduleLabel="Schedules"
+      moduleIconPath={SCHEDULES_ICON}
+      tabs={SCHEDULES_TABS}
+      actions={actions}
+    />
   );
 }
