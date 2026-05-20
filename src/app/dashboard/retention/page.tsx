@@ -98,11 +98,9 @@ export default function RetentionDashboardPage() {
 
   return (
     <div>
-      <PeopleShell
-        actions={
-          <InfoTooltip text="Track volunteer health, identify burnout risk, and monitor team sustainability. Data updates daily." />
-        }
-      />
+      {/* InfoTooltip removed from strip actions in Phase 2 — clipped at viewport edge.
+          Per-tab tooltip descriptions are queued as a follow-up. */}
+      <PeopleShell />
 
       {/* Top-Level Stats */}
       <StatCardGrid className="mb-8">

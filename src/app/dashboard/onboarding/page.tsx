@@ -289,11 +289,10 @@ export default function OnboardingPage() {
 
   return (
     <>
-      <PeopleShell
-        actions={
-          <InfoTooltip text="Track prerequisite steps — like background checks, training, or orientation — that volunteers complete before being scheduled for a team." />
-        }
-      />
+      {/* InfoTooltip removed from strip actions in Phase 2 — its rightward
+          popover was clipping at the viewport edge. Per-tab tooltips with
+          descriptions are queued as a follow-up after Phase 2 ships. */}
+      <PeopleShell />
       <div className="mx-auto max-w-5xl">
         {/* Tabs */}
       {canManage && (

@@ -233,11 +233,9 @@ export default function VolunteerHealthPage() {
 
   return (
     <div>
-      <PeopleShell
-        actions={
-          <InfoTooltip text="Health classifications are based on scheduling frequency, decline patterns, no-shows, and time since last service. Categories update automatically." />
-        }
-      />
+      {/* InfoTooltip removed from strip actions in Phase 2 — clipped at viewport edge.
+          Per-tab tooltip descriptions are queued as a follow-up. */}
+      <PeopleShell />
 
       {/* Stat Cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

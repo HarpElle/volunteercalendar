@@ -72,12 +72,15 @@ export function ModuleTabs({
   // Module breadcrumb links to the default (first) tab as a "module home" affordance.
   const defaultTabHref = tabs[0]?.href;
 
-  // bg-vc-bg is fully opaque (no /95 + no backdrop-blur). When sticky-pinned,
-  // content scrolling underneath is fully hidden behind the strip rather than
-  // reading through as a blurred slice. Backdrop-blur + translucent bg looked
-  // "chopped" because page content remained partly visible through the strip.
+  // Sticky strip — fully opaque bg so content scrolling underneath is hidden.
+  // Negative horizontal margins (-mx-N) escape the parent's horizontal padding
+  // so the strip spans the full main-content width. NO negative margin-top:
+  // the strip sits at the natural top of main's content area (below padding)
+  // and slides smoothly up to viewport top via `sticky top-0` as the user
+  // scrolls. This avoids the overlap that negative-mt caused with the next
+  // sibling in `overflow-y-auto` parents.
   return (
-    <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 border-b border-vc-border-light bg-vc-bg px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-8 xl:-mx-10 xl:-mt-10 xl:px-10">
+    <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-vc-border-light bg-vc-bg px-4 shadow-[0_4px_8px_-6px_rgba(15,23,42,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:-mx-10 xl:px-10">
       {/* min-h locks the strip's height so it stays consistent across pages
           regardless of whether actions are present and what size they are.
           items-stretch + tab padding fills the vertical space. */}
