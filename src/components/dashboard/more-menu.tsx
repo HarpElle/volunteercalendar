@@ -323,12 +323,27 @@ export function MoreMenu({
           </>
         )}
 
-        {/* Rooms workbench */}
+        {/* Schedules workbench — mirrors the SchedulesShell tabs.
+            Phase 5 added this section after Phase 3d nested Services &
+            Events under /dashboard/schedules/*. */}
+        {isAdminShell && (
+          <>
+            <SectionHeading>Schedules workbench</SectionHeading>
+            <WorkbenchLink href="/dashboard/schedules" label="All Schedules" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/schedules/services-events" label="Services & Events" onClose={onClose} />
+          </>
+        )}
+
+        {/* Rooms workbench — mirrors the 5-tab RoomsShell after Phase 3c.
+            Calendar, Facility Groups, and Settings were added in 3c-i/3c-ii. */}
         {isAdminShell && roomsGate.enabled && (
           <>
             <SectionHeading>Rooms workbench</SectionHeading>
             <WorkbenchLink href="/dashboard/rooms" label="Bookings" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/rooms/calendar" label="Calendar" onClose={onClose} />
             <WorkbenchLink href="/dashboard/rooms/requests" label="Requests" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/rooms/facility" label="Facility Groups" onClose={onClose} />
+            <WorkbenchLink href="/dashboard/rooms/settings" label="Settings" onClose={onClose} />
           </>
         )}
 
