@@ -106,8 +106,8 @@ export default function SchedulingDashboardPage() {
     return (
       <div className="mx-auto max-w-5xl">
         <div className="mb-8">
-          <h1 className="font-display text-3xl text-vc-indigo">Scheduling Dashboard</h1>
-          <p className="mt-1 text-vc-text-secondary">Scheduling operations at a glance.</p>
+          <h1 className="font-display text-3xl text-vc-indigo">Service Day</h1>
+          <p className="mt-1 text-vc-text-secondary">Today&apos;s services, attendance, and assignments at a glance.</p>
         </div>
         <SkeletonStats count={4} className="mb-8" />
         <SkeletonList rows={4} />
@@ -180,9 +180,9 @@ export default function SchedulingDashboardPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8">
-        <h1 className="font-display text-3xl text-vc-indigo">Scheduling Dashboard</h1>
+        <h1 className="font-display text-3xl text-vc-indigo">Service Day</h1>
         <p className="mt-1 text-vc-text-secondary">
-          Scheduling operations at a glance.
+          Today&apos;s services, attendance, and assignments at a glance.
         </p>
       </div>
 
