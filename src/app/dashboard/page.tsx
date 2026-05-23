@@ -231,7 +231,7 @@ export default function DashboardPage() {
         </p>
         <div className="mt-8 flex flex-col items-center gap-3">
           <Link
-            href="/dashboard/setup"
+            href="/dashboard/settings/setup"
             className="inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-6 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
           >
             Create a New Organization

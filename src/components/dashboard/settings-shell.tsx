@@ -7,11 +7,11 @@ const SETTINGS_ICON =
 
 const SETTINGS_TABS: ModuleTab[] = [
   { id: "general", label: "General", href: "/dashboard/settings" },
-  { id: "billing", label: "Billing", href: "/dashboard/org/billing" },
-  { id: "activity", label: "Activity", href: "/dashboard/org/activity" },
-  { id: "reminders", label: "Reminders", href: "/dashboard/reminders" },
-  { id: "short-links", label: "Short Links", href: "/dashboard/short-links" },
-  { id: "setup", label: "Setup", href: "/dashboard/setup" },
+  { id: "billing", label: "Billing", href: "/dashboard/settings/billing" },
+  { id: "activity", label: "Activity", href: "/dashboard/settings/activity" },
+  { id: "reminders", label: "Reminders", href: "/dashboard/settings/reminders" },
+  { id: "short-links", label: "Short Links", href: "/dashboard/settings/short-links" },
+  { id: "setup", label: "Setup", href: "/dashboard/settings/setup" },
 ];
 
 export function SettingsShell({ actions }: { actions?: React.ReactNode }) {

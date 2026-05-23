@@ -2,7 +2,8 @@
  * GET /api/admin/audit-logs?church_id=...&action=...&actor=...&since=...&limit=...&cursor=...
  *
  * Org-admin paginated read of audit_logs (Track F.3). Backs the Activity
- * page at /dashboard/org/activity. Always scoped to a single church.
+ * page at /dashboard/settings/activity (Phase 3b moved from /dashboard/org/activity).
+ * Always scoped to a single church.
  */
 
 import { NextRequest, NextResponse } from "next/server";

@@ -15,14 +15,15 @@ import { SettingsShell } from "@/components/dashboard/settings-shell";
 // Redirect legacy tab URLs to their new standalone pages
 // ---------------------------------------------------------------------------
 
-// Phase 3a: teams moved to /dashboard/people/teams. Other routes remain
-// at their /dashboard/org/* locations until subsequent Phase 3 sub-phases.
+// Phase 3a: teams moved to /dashboard/people/teams.
+// Phase 3b: billing moved to /dashboard/settings/billing.
+// campuses and check-ins still pending Phase 3c.
 const TAB_REDIRECTS: Record<string, string> = {
   teams: "/dashboard/people/teams",
   campuses: "/dashboard/org/campuses",
   checkin: "/dashboard/org/check-ins",
   rooms: "/dashboard/org/campuses",
-  billing: "/dashboard/org/billing",
+  billing: "/dashboard/settings/billing",
 };
 
 // ---------------------------------------------------------------------------
