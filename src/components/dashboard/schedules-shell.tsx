@@ -7,12 +7,12 @@ const SCHEDULES_ICON =
 
 const SCHEDULES_TABS: ModuleTab[] = [
   { id: "all", label: "All Schedules", href: "/dashboard/schedules" },
-  { id: "services-events", label: "Services & Events", href: "/dashboard/services-events" },
+  { id: "services-events", label: "Services & Events", href: "/dashboard/schedules/services-events" },
 ];
 
 /** Shell for the Schedules module. Render at the top of /dashboard/schedules
- *  and /dashboard/services-events so the tab strip is consistent across both
- *  sister routes during the Phase 2 → Phase 3 transition. */
+ *  and /dashboard/schedules/services-events so the tab strip is consistent
+ *  across both. Phase 3d moved services-events into /dashboard/schedules/* */
 export function SchedulesShell({ actions }: { actions?: React.ReactNode }) {
   // sr-only h1 is rendered INSIDE <ModuleTabs> so it can include the
   // active tab text (e.g. "Schedules — Services & Events"). Don't add

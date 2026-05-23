@@ -86,7 +86,7 @@ function getAdminItems(): NavItem[] {
   // Phase 1 transition: links point at current routes. Phase 2/3 update the targets.
   return [
     { label: "Home", href: "/dashboard", iconPath: ICON.home },
-    { label: "Service Day", href: "/dashboard/scheduling-dashboard", iconPath: ICON.serviceDay },
+    { label: "Service Day", href: "/dashboard/service-day", iconPath: ICON.serviceDay },
     { label: "Schedules", href: "/dashboard/schedules", iconPath: ICON.schedules },
     { label: "People", href: "/dashboard/people", iconPath: ICON.people },
     { label: "Rooms", href: "/dashboard/rooms", iconPath: ICON.rooms, tierModule: "rooms" },
