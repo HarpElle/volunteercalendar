@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 interface PublicReservation {
@@ -67,8 +67,23 @@ function addDays(iso: string, days: number): string {
  *   token      — roomSettings.public_calendar_token (required)
  *   church_id  — optional. Auto-resolved from the token if missing.
  *   embed      — optional. "true" hides the header for iframe embedding.
+ *
+ * Wrapped in <Suspense> because useSearchParams triggers a CSR bailout
+ * during static prerender. Previously the parent /calendar/layout.tsx
+ * was a "use client" component that forced client-rendering for the
+ * whole subtree; Phase 3c-i hotfix deleted that layout (it was
+ * auth-gating /calendar/public, which is supposed to be public), so
+ * the Suspense boundary now lives here.
  */
 export default function PublicCalendarPage() {
+  return (
+    <Suspense>
+      <PublicCalendarContent />
+    </Suspense>
+  );
+}
+
+function PublicCalendarContent() {
   const searchParams = useSearchParams();
   const churchIdParam = searchParams.get("church_id") || "";
   const token = searchParams.get("token") || "";
