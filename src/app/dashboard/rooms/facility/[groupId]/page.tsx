@@ -177,10 +177,10 @@ export default function FacilityCalendarPage() {
     <div>
       <div className="mb-6">
         <Link
-          href="/dashboard/org/campuses"
+          href="/dashboard/rooms/facility"
           className="text-sm text-vc-text-muted hover:text-vc-coral"
         >
-          ← Back to Campuses
+          ← Back to Facility Groups
         </Link>
         <h1 className="mt-2 font-display text-2xl text-vc-indigo">
           {groupName || "Shared Facility Calendar"}

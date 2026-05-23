@@ -394,7 +394,7 @@ export default function RoomsPage() {
                   <p className="text-xs text-gray-400">
                     Add equipment tags in{" "}
                     <Link
-                      href="/dashboard/org/campuses"
+                      href="/dashboard/rooms/settings"
                       className="text-vc-coral underline"
                     >
                       Room Settings
