@@ -188,8 +188,8 @@ export default function FacilityCalendarPage() {
         <p className="text-sm text-gray-500 mt-1">
           Rooms and reservations from partner organizations in this facility
           group. Your own org's rooms appear at{" "}
-          <Link href="/calendar" className="text-vc-coral underline">
-            /calendar
+          <Link href="/dashboard/rooms/calendar" className="text-vc-coral underline">
+            Rooms → Calendar
           </Link>
           .
         </p>

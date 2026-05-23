@@ -17,11 +17,12 @@ import { SettingsShell } from "@/components/dashboard/settings-shell";
 
 // Phase 3a: teams moved to /dashboard/people/teams.
 // Phase 3b: billing moved to /dashboard/settings/billing.
-// campuses and check-ins still pending Phase 3c.
+// Phase 3c-i: check-ins moved to /dashboard/checkin/settings (reverse alias).
+// campuses still pending Phase 3c-ii's 3-way split.
 const TAB_REDIRECTS: Record<string, string> = {
   teams: "/dashboard/people/teams",
   campuses: "/dashboard/org/campuses",
-  checkin: "/dashboard/org/check-ins",
+  checkin: "/dashboard/checkin/settings",
   rooms: "/dashboard/org/campuses",
   billing: "/dashboard/settings/billing",
 };
