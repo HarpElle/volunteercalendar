@@ -820,7 +820,7 @@ export default function RoomDetailPage() {
                     <p className="text-xs text-gray-400">
                       No facility groups yet.{" "}
                       <Link
-                        href="/dashboard/org/campuses"
+                        href="/dashboard/rooms/facility"
                         className="text-vc-coral underline"
                       >
                         Create a group →
