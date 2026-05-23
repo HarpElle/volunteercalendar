@@ -236,7 +236,7 @@ export function MoreMenu({
         <ModuleRow href="/dashboard" label="Home" iconPath={ICON.home} onClose={onClose} />
         {isAdminShell && (
           <ModuleRow
-            href="/dashboard/scheduling-dashboard"
+            href="/dashboard/service-day"
             label="Service Day"
             iconPath={ICON.serviceDay}
             onClose={onClose}

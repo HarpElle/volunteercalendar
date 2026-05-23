@@ -71,7 +71,7 @@ function getAdminTabs(_worshipEnabled: boolean, canShowCheckin: boolean): Tab[] 
   // Slot 4 swaps: Check-In when tier-enabled AND role-permitted; otherwise
   // Schedules (Free-tier OR no-role-access fallback). Labels match desktop
   // sidebar where reasonable; "Service Day" is the live operational surface
-  // (currently /dashboard/scheduling-dashboard).
+  // (Phase 3d moved from /dashboard/scheduling-dashboard to /dashboard/service-day).
   const tabs: Tab[] = [
     {
       label: "Home",
@@ -81,7 +81,7 @@ function getAdminTabs(_worshipEnabled: boolean, canShowCheckin: boolean): Tab[] 
     },
     {
       label: "Service Day",
-      href: "/dashboard/scheduling-dashboard",
+      href: "/dashboard/service-day",
       iconPath:
         "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
     },

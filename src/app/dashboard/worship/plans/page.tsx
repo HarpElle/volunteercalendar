@@ -213,7 +213,7 @@ export default function PlansPage() {
           <div className="rounded-lg border border-vc-warning/20 bg-vc-warning/5 p-4 text-sm text-vc-text-secondary">
             You need at least one Service defined first.{" "}
             <Link
-              href="/dashboard/services-events"
+              href="/dashboard/schedules/services-events"
               className="font-medium text-vc-coral hover:underline"
             >
               Add a Service →

@@ -121,12 +121,12 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
 
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         {!hasServices && (
-          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+          <a href="/dashboard/schedules/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
             Configure Services &amp; Roles
           </a>
         )}
         {hasServices && !hasOccurrences && (
-          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+          <a href="/dashboard/schedules/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
             Manage Services
           </a>
         )}
@@ -136,7 +136,7 @@ function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
           </a>
         )}
         {hasServices && hasOccurrences && hasVolunteers && (
-          <a href="/dashboard/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
+          <a href="/dashboard/schedules/services-events" className="inline-flex items-center gap-1.5 rounded-lg bg-vc-coral px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-vc-coral-dark">
             Check Service Role Definitions
           </a>
         )}

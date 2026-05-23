@@ -254,7 +254,7 @@ export default function DashboardPage() {
     { step: "Create a team", desc: "Worship, Kids, Tech, Greeters, etc.", href: "/dashboard/organization", done: (stats.ministries ?? 0) > 0 },
     { step: "Set up onboarding prerequisites", desc: "Background checks, training, or other requirements before serving", href: "/dashboard/people/onboarding", done: stats.hasPrerequisites, optional: true },
     { step: "Add your volunteers", desc: "CSV upload, ChMS import, or add manually", href: "/dashboard/people", done: (stats.volunteers ?? 0) > 0 },
-    { step: "Set up a service or event", desc: "Recurring services with roles, or one-time events", href: "/dashboard/services-events", done: (stats.services ?? 0) > 0 },
+    { step: "Set up a service or event", desc: "Recurring services with roles, or one-time events", href: "/dashboard/schedules/services-events", done: (stats.services ?? 0) > 0 },
     { step: "Share your join link", desc: "Invite volunteers to sign up on their own", href: "/dashboard/people", done: (stats.volunteers ?? 0) >= 3 },
     { step: "Generate your first schedule", desc: "Auto-draft a fair, conflict-free rotation", href: "/dashboard/schedules", done: (stats.activeSchedules ?? 0) > 0 },
   ] : [];
@@ -425,7 +425,7 @@ export default function DashboardPage() {
                   {[
                     { label: "Volunteers", value: stats.volunteers, color: "bg-vc-coral/10 text-vc-coral", href: "/dashboard/people" },
                     { label: "Teams", value: stats.ministries, color: "bg-vc-indigo/10 text-vc-indigo", href: "/dashboard/organization" },
-                    { label: "Services", value: stats.services, color: "bg-vc-sage/10 text-vc-sage", href: "/dashboard/services-events" },
+                    { label: "Services", value: stats.services, color: "bg-vc-sage/10 text-vc-sage", href: "/dashboard/schedules/services-events" },
                     { label: "Schedules", value: stats.activeSchedules, color: "bg-vc-sand/10 text-vc-sand-dark", href: "/dashboard/schedules" },
                   ].map((s) => (
                     <Link key={s.label} href={s.href} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
