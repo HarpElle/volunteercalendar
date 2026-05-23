@@ -9,9 +9,14 @@ import { doc, getDoc } from "firebase/firestore";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import type { OrgType, WorkflowMode, Church, Campus } from "@/lib/types";
 
-import { GeneralSettings } from "@/components/settings/general-settings";
+import {
+  GeneralSettings,
+  CcliLicenseSection,
+  DeleteOrgSection,
+} from "@/components/settings/general-settings";
 import { CampusesSettings } from "@/components/settings/campuses-settings";
 import { SettingsShell } from "@/components/dashboard/settings-shell";
+import { isAdmin, isOwner } from "@/lib/utils/permissions";
 
 // ---------------------------------------------------------------------------
 // Redirect legacy tab URLs to their new standalone pages
@@ -120,6 +125,11 @@ function SettingsContent() {
   return (
     <>
       <SettingsShell />
+      {/* Section order matters: General → Campuses → CCLI → Danger Zone.
+          Phase 4 restructured this so the parent page controls ordering;
+          previously CCLI + Danger Zone were rendered inline at the bottom
+          of <GeneralSettings>, which pushed the Phase 3c-ii Campuses
+          section below Danger Zone (Codex 3c-ii retest visual note). */}
       <div className="mx-auto max-w-5xl space-y-10">
         {church && (
           <GeneralSettings
@@ -133,8 +143,6 @@ function SettingsContent() {
             orgTimezone={orgTimezone}
             setOrgTimezone={setOrgTimezone}
             orgWorkflowMode={orgWorkflowMode}
-            user={user}
-            activeMembership={activeMembership}
           />
         )}
 
@@ -165,6 +173,20 @@ function SettingsContent() {
               setMutationError={setCampusesMutationError}
             />
           </section>
+        )}
+
+        {/* CCLI License — admin-only, sits between Campuses and Danger Zone */}
+        {church && isAdmin(activeMembership) && (
+          <CcliLicenseSection
+            churchId={churchId!}
+            church={church}
+            setChurch={setChurch}
+          />
+        )}
+
+        {/* Danger Zone — owner-only, always last */}
+        {isOwner(activeMembership) && churchId && (
+          <DeleteOrgSection churchId={churchId} orgName={orgName} user={user} />
         )}
       </div>
     </>

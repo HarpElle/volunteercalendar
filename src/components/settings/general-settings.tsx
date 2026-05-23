@@ -5,7 +5,6 @@ import { updateDocument } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { isAdmin, isOwner } from "@/lib/utils/permissions";
 import { WORKFLOW_MODES } from "@/lib/constants";
 import type { OrgType, WorkflowMode, Church, Membership } from "@/lib/types";
 import type { User } from "firebase/auth";
@@ -30,9 +29,6 @@ interface GeneralSettingsProps {
   orgTimezone: string;
   setOrgTimezone: (tz: string) => void;
   orgWorkflowMode: WorkflowMode;
-  // Auth
-  user: User | null;
-  activeMembership: Membership | null;
 }
 
 export function GeneralSettings({
@@ -46,8 +42,6 @@ export function GeneralSettings({
   orgTimezone,
   setOrgTimezone,
   orgWorkflowMode,
-  user,
-  activeMembership,
 }: GeneralSettingsProps) {
   const [orgSaving, setOrgSaving] = useState(false);
   const [orgSuccess, setOrgSuccess] = useState("");
@@ -155,28 +149,20 @@ export function GeneralSettings({
         </div>
       </section>
 
-      {/* ── CCLI License & Worship ── */}
-      {isAdmin(activeMembership) && (
-        <CcliLicenseSection
-          churchId={churchId}
-          church={church}
-          setChurch={setChurch}
-        />
-      )}
-
-      {/* ── Danger Zone ── */}
-      {isOwner(activeMembership) && (
-        <DeleteOrgSection churchId={churchId} orgName={orgName} user={user} />
-      )}
+      {/* CCLI License + Danger Zone used to be rendered inline here.
+          Phase 4 extracted them so /dashboard/settings can interleave
+          Campuses between General and CCLI for a coherent section order:
+          General → Campuses → CCLI → Danger Zone. */}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Delete Organization (kept co-located with general settings)
+// Exported sub-sections — settings/page.tsx renders these directly so it
+// can control the section ordering relative to Campuses.
 // ---------------------------------------------------------------------------
 
-function CcliLicenseSection({
+export function CcliLicenseSection({
   churchId,
   church,
   setChurch,
@@ -281,7 +267,7 @@ function CcliLicenseSection({
 // Delete Organization (kept co-located with general settings)
 // ---------------------------------------------------------------------------
 
-function DeleteOrgSection({
+export function DeleteOrgSection({
   churchId,
   orgName,
   user,
