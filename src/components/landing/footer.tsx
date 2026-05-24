@@ -66,6 +66,9 @@ export function Footer() {
             <a href="/terms" className="transition-colors hover:text-vc-indigo">
               Terms of Service
             </a>
+            <a href="/abuse" className="transition-colors hover:text-vc-indigo">
+              Report Abuse
+            </a>
           </div>
           <p>
             &copy; {new Date().getFullYear()} VolunteerCal. All rights reserved.
