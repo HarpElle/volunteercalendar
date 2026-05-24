@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import { clampFeedDateRange } from "@/lib/server/calendar-feed";
 
 /**
  * GET /api/calendar/ministry/[ministryId]/[calendarToken]
@@ -15,7 +16,11 @@ export async function GET(
   }: { params: Promise<{ ministryId: string; calendarToken: string }> },
 ) {
   try {
-    const rl = await rateLimit(request, { limit: 60, windowMs: 60_000 });
+    const rl = await rateLimitDistributed(request, {
+      prefix: "calendar-ministry",
+      limit: 60,
+      windowSeconds: 60,
+    });
     if (rl) return rl;
 
     const { ministryId, calendarToken } = await params;
@@ -45,7 +50,7 @@ export async function GET(
     churchId = settingsDoc.ref.parent.parent?.id || null;
 
     if (!churchId) {
-      return new NextResponse("Invalid configuration", { status: 500 });
+      return new NextResponse("Feed not found", { status: 404 });
     }
 
     const settings = settingsDoc.data();
@@ -78,12 +83,12 @@ export async function GET(
       roomMap.set(doc.id, (doc.data().name as string) || "Room");
     }
 
-    // Query confirmed reservations for this ministry in 90-day window
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date(now);
-    endDate.setDate(endDate.getDate() + 60);
+    // Query confirmed reservations for this ministry — date range
+    // clamped to max 365 days. Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    // overrides the default 30-back / 90-forward window.
+    const fromRaw = request.nextUrl.searchParams.get("from");
+    const toRaw = request.nextUrl.searchParams.get("to");
+    const { from: startDate, to: endDate } = clampFeedDateRange(fromRaw, toRaw);
 
     const reservationsSnap = await adminDb
       .collection(`churches/${churchId}/reservations`)

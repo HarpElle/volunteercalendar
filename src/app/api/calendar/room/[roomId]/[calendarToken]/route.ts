@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
-import { rateLimit } from "@/lib/utils/rate-limit";
-import { todayInTimezone } from "@/lib/utils/date";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import {
+  clampFeedDateRange,
+  touchRoomLastAccessed,
+} from "@/lib/server/calendar-feed";
 
 /**
  * GET /api/calendar/room/[roomId]/[calendarToken]
@@ -14,7 +17,11 @@ export async function GET(
   { params }: { params: Promise<{ roomId: string; calendarToken: string }> },
 ) {
   try {
-    const rl = await rateLimit(request, { limit: 60, windowMs: 60_000 });
+    const rl = await rateLimitDistributed(request, {
+      prefix: "calendar-room",
+      limit: 60,
+      windowSeconds: 60,
+    });
     if (rl) return rl;
 
     const { roomId, calendarToken } = await params;
@@ -33,30 +40,33 @@ export async function GET(
 
     const roomDoc = tokenSnap.docs[0];
     if (roomDoc.id !== roomId) {
-      return new NextResponse("Token mismatch", { status: 403 });
+      // Don't leak whether the token exists for a different room.
+      return new NextResponse("Feed not found", { status: 404 });
     }
 
     const roomData = roomDoc.data();
     const churchId = roomDoc.ref.parent.parent?.id;
     if (!churchId) {
-      return new NextResponse("Invalid room path", { status: 500 });
+      return new NextResponse("Feed not found", { status: 404 });
     }
+
+    // Token validated — fire-and-forget bump of last_accessed so admins
+    // can see whether the feed is actually being subscribed.
+    touchRoomLastAccessed(adminDb, churchId, roomId);
 
     // Get church timezone
     const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
     const timezone =
       (churchSnap.data()?.timezone as string) || "America/New_York";
 
-    // Query confirmed reservations in 90-day window, anchored to the
-    // church's local "today" (not UTC today) so the iCal range doesn't
-    // shift by a day in the late evening.
-    const today = todayInTimezone(timezone);
-    const [ty, tm, td] = today.split("-").map(Number);
-    const anchor = new Date(Date.UTC(ty, tm - 1, td));
-    const startDate = new Date(anchor);
-    startDate.setUTCDate(startDate.getUTCDate() - 30);
-    const endDate = new Date(anchor);
-    endDate.setUTCDate(endDate.getUTCDate() + 60);
+    // Query confirmed reservations — date range clamped to max 365 days.
+    // Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD overrides the default
+    // 30-back / 90-forward window. The helper anchors to UTC; previous
+    // hand-rolled logic anchored to the church's local "today" — for a
+    // ±30/60 day window the off-by-one-day at midnight UTC is harmless.
+    const fromRaw = request.nextUrl.searchParams.get("from");
+    const toRaw = request.nextUrl.searchParams.get("to");
+    const { from: startDate, to: endDate } = clampFeedDateRange(fromRaw, toRaw);
 
     const reservationsSnap = await adminDb
       .collection(`churches/${churchId}/reservations`)

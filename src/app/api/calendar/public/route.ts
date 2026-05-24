@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import { clampFeedDateRange } from "@/lib/server/calendar-feed";
 import { todayInTimezone } from "@/lib/utils/date";
 
 /**
@@ -31,7 +32,11 @@ import { todayInTimezone } from "@/lib/utils/date";
  */
 export async function GET(req: NextRequest) {
   try {
-    const rl = await rateLimit(req, { limit: 60, windowMs: 60_000 });
+    const rl = await rateLimitDistributed(req, {
+      prefix: "calendar-public",
+      limit: 60,
+      windowSeconds: 60,
+    });
     if (rl) return rl;
 
     const token = req.nextUrl.searchParams.get("token");
@@ -91,16 +96,15 @@ export async function GET(req: NextRequest) {
     const timezone = (churchData.timezone as string) || "UTC";
     const churchName = (churchData.name as string) || "Calendar";
 
-    // Date window. Defaults: today (in church TZ) → +30 days.
-    const dateFrom =
-      req.nextUrl.searchParams.get("date_from") || todayInTimezone(timezone);
-    let dateTo = req.nextUrl.searchParams.get("date_to");
-    if (!dateTo) {
-      const [ty, tm, td] = dateFrom.split("-").map(Number);
-      const anchor = new Date(Date.UTC(ty, tm - 1, td));
-      anchor.setUTCDate(anchor.getUTCDate() + 30);
-      dateTo = anchor.toISOString().split("T")[0];
-    }
+    // Date window — clamped to max 365 days by the helper. Defaults to
+    // 30 days back / 90 days forward when no params provided (helper
+    // defaults are more permissive than the original "today → +30d"
+    // window, intentional so iCal-style subscriptions see recent past).
+    const fromRaw = req.nextUrl.searchParams.get("date_from");
+    const toRaw = req.nextUrl.searchParams.get("date_to");
+    const { from, to } = clampFeedDateRange(fromRaw, toRaw);
+    const dateFrom = from.toISOString().split("T")[0];
+    const dateTo = to.toISOString().split("T")[0];
 
     // Rooms — only public_visible ones contribute to public calendar
     const roomsSnap = await adminDb

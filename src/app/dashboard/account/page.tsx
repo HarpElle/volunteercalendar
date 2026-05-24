@@ -420,6 +420,70 @@ export default function AccountPage() {
     }
   }
 
+  /** Pass G Phase 3: rotate this feed's token. Old URL stops working
+   *  immediately; user must re-paste the new URL into their calendar app. */
+  async function handleRegenerateFeed(feedId: string) {
+    if (!churchId || !user) return;
+    if (!confirm("Regenerate this feed's URL? The current URL will stop working immediately and you'll need to re-paste the new one into your calendar app.")) {
+      return;
+    }
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/calendar-feeds/${feedId}/regenerate-token`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      if (!res.ok) throw new Error("Failed to regenerate");
+      const data = await res.json();
+      setFeeds((prev) => prev.map((f) =>
+        f.id === feedId ? { ...f, secret_token: data.secret_token as string } : f,
+      ));
+    } catch {
+      alert("Failed to regenerate feed. Please try again.");
+    }
+  }
+
+  /** Pass G Phase 3: permanently revoke this feed. Calendar API returns 404
+   *  for the token. Irreversible — user must create a new feed if they
+   *  change their mind. */
+  async function handleRevokeFeed(feedId: string) {
+    if (!churchId || !user) return;
+    if (!confirm("Revoke this feed permanently? This cannot be undone. Your calendar app will stop receiving updates. To get scheduling back into your calendar later, you'd need to create a new feed.")) {
+      return;
+    }
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/calendar-feeds/${feedId}/revoke`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      if (!res.ok) throw new Error("Failed to revoke");
+      const nowIso = new Date().toISOString();
+      setFeeds((prev) => prev.map((f) =>
+        f.id === feedId ? { ...f, revoked_at: nowIso } : f,
+      ));
+    } catch {
+      alert("Failed to revoke feed. Please try again.");
+    }
+  }
+
+  function formatLastAccessed(iso: string | undefined): string {
+    if (!iso) return "Never accessed";
+    const d = new Date(iso);
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    if (diffMs < 60_000) return "Last accessed: just now";
+    if (diffMs < 3_600_000)
+      return `Last accessed: ${Math.floor(diffMs / 60_000)}m ago`;
+    if (diffMs < 86_400_000)
+      return `Last accessed: ${Math.floor(diffMs / 3_600_000)}h ago`;
+    if (diffMs < 7 * 86_400_000)
+      return `Last accessed: ${Math.floor(diffMs / 86_400_000)}d ago`;
+    return `Last accessed: ${d.toLocaleDateString()}`;
+  }
+
   function getFeedUrl(feed: CalendarFeed): string {
     const base = typeof window !== "undefined"
       ? window.location.origin.replace(/^http:\/\//, "https://")
@@ -867,8 +931,9 @@ export default function AccountPage() {
           <div className="space-y-3">
             {feeds.filter((f) => f.label !== "app_integration").map((feed) => {
               const url = getFeedUrl(feed);
+              const isRevoked = !!feed.revoked_at;
               return (
-                <div key={feed.id} className="rounded-xl border border-vc-border-light bg-white p-4">
+                <div key={feed.id} className={`rounded-xl border bg-white p-4 ${isRevoked ? "border-vc-border-light opacity-60" : "border-vc-border-light"}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -876,6 +941,11 @@ export default function AccountPage() {
                           {feed.type}
                         </span>
                         <span className="font-medium text-vc-indigo">{getFeedLabel(feed)}</span>
+                        {isRevoked && (
+                          <span className="inline-flex rounded-full bg-vc-danger/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-vc-danger">
+                            Revoked
+                          </span>
+                        )}
                       </div>
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                         <code className="block min-w-0 w-full truncate rounded bg-vc-bg-warm px-2 py-1.5 text-xs text-vc-text-muted sm:flex-1">
@@ -884,23 +954,55 @@ export default function AccountPage() {
                         <div className="flex shrink-0 items-center gap-2">
                           <button
                             onClick={() => handleCopy(feed.id, url)}
-                            className="flex-1 sm:flex-none rounded-lg border border-vc-border px-2.5 py-1 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-coral hover:text-vc-coral"
+                            disabled={isRevoked}
+                            className="flex-1 sm:flex-none rounded-lg border border-vc-border px-2.5 py-1 text-xs font-medium text-vc-text-secondary transition-colors hover:border-vc-coral hover:text-vc-coral disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {copied === feed.id ? "Copied!" : "Copy"}
                           </button>
-                          <a
-                            href={url.replace(/^https:\/\//, "webcal://")}
-                            className="flex-1 sm:flex-none text-center rounded-lg bg-vc-coral px-2.5 py-1 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
-                          >
-                            Subscribe
-                          </a>
+                          {isRevoked ? (
+                            <span className="flex-1 sm:flex-none text-center rounded-lg bg-vc-text-muted/30 px-2.5 py-1 text-xs font-medium text-vc-text-muted">
+                              Disabled
+                            </span>
+                          ) : (
+                            <a
+                              href={url.replace(/^https:\/\//, "webcal://")}
+                              className="flex-1 sm:flex-none text-center rounded-lg bg-vc-coral px-2.5 py-1 text-xs font-medium text-white hover:bg-vc-coral-dark transition-colors"
+                            >
+                              Subscribe
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      {/* Pass G Phase 3: last-accessed visibility + rotation/revocation controls */}
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-vc-text-muted">
+                          {formatLastAccessed(feed.last_accessed_at)}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs">
+                          {!isRevoked && (
+                            <>
+                              <button
+                                onClick={() => handleRegenerateFeed(feed.id)}
+                                className="font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                              >
+                                Regenerate URL
+                              </button>
+                              <span className="text-vc-text-muted/40">·</span>
+                              <button
+                                onClick={() => handleRevokeFeed(feed.id)}
+                                className="font-medium text-vc-text-muted hover:text-vc-danger transition-colors"
+                              >
+                                Revoke
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => handleDeleteFeed(feed.id)}
                       className="shrink-0 text-vc-text-muted hover:text-vc-danger transition-colors"
-                      title="Delete feed"
+                      title="Delete feed entirely"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />

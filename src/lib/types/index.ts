@@ -619,6 +619,21 @@ export interface CalendarFeed {
   created_by_user_id: string;
   /** Person doc ID linked to the creator, when known. Lets schedulers see "I created this for Alex" without exposing it to other users. */
   created_by_person_id?: string;
+  /**
+   * Pass G Phase 3: when set, the feed is revoked and all calendar API
+   * endpoints return 404 (the iCal client sees the subscription disappear).
+   * Revocation is irreversible — user must create a new feed if they
+   * change their mind. Different from regenerating the token (which
+   * keeps the feed alive with a new secret_token).
+   */
+  revoked_at?: string;
+  /**
+   * Pass G Phase 3: write-on-read timestamp set by every successful
+   * /api/calendar/* response that uses this feed's token. Surfaced in
+   * the account page so users can detect unexpected access (e.g. a
+   * shared token being used by someone they didn't intend).
+   */
+  last_accessed_at?: string;
 }
 
 // --- Short Links ---
