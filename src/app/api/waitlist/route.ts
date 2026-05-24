@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     prefix: "waitlist",
     limit: 5,
     windowSeconds: 60 * 60,
+    requireDistributed: true,
   });
   if (limited) return limited;
 

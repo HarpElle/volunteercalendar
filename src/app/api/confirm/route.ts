@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     prefix: "confirm-get",
     limit: 30,
     windowSeconds: 60,
+    requireDistributed: true,
   });
   if (limited) return limited;
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     prefix: "confirm-post",
     limit: 10,
     windowSeconds: 60 * 60,
+    requireDistributed: true,
   });
   if (limited) return limited;
 

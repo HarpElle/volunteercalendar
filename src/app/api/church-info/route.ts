@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     prefix: "church-info-ip",
     limit: 100,
     windowSeconds: 60 * 60,
+    requireDistributed: true,
   });
   if (ipLimited) return ipLimited;
 
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
     limit: 20,
     windowSeconds: 60 * 60,
     extraKey: rawId.toLowerCase().slice(0, 64),
+    requireDistributed: true,
   });
   if (idLimited) return idLimited;
 
