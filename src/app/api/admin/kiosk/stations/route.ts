@@ -8,49 +8,41 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, userActor } from "@/lib/server/audit";
 import { createStation, listStationsForChurch } from "@/lib/server/kiosk";
 
-async function requireOrgAdmin(
-  req: NextRequest,
+/**
+ * Preserve the original `status === "active"` membership check that the
+ * shared helper does not enforce. Helper already verified user is a member
+ * and gave us their role; here we confirm the membership is active.
+ */
+async function assertActiveMembership(
+  userId: string,
   churchId: string,
-): Promise<{ uid: string } | NextResponse> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  let decoded;
-  try {
-    decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  } catch {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
+  role: string,
+): Promise<NextResponse | null> {
   const memSnap = await adminDb
-    .doc(`memberships/${decoded.uid}_${churchId}`)
+    .doc(`memberships/${userId}_${churchId}`)
     .get();
-  if (!memSnap.exists) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
-  }
-  const role = memSnap.data()?.role as string | undefined;
   const status = memSnap.data()?.status as string | undefined;
-  if (status !== "active" || !["owner", "admin"].includes(role ?? "")) {
+  if (status !== "active" || !["owner", "admin"].includes(role)) {
     return NextResponse.json(
       { error: "Only org admins can manage kiosk stations" },
       { status: 403 },
     );
   }
-  return { uid: decoded.uid };
+  return null;
 }
 
 export async function GET(req: NextRequest) {
-  const churchId = req.nextUrl.searchParams.get("church_id");
-  if (!churchId) {
-    return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-  }
-  const auth = await requireOrgAdmin(req, churchId);
-  if (auth instanceof NextResponse) return auth;
+  const gate = await requireModuleTier(req, "checkin");
+  if (!gate.ok) return gate.response;
+  const { userId, churchId, role } = gate.ctx;
+
+  const block = await assertActiveMembership(userId, churchId, role);
+  if (block) return block;
 
   try {
     const stations = await listStationsForChurch(churchId);
@@ -65,6 +57,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModuleTier(req, "checkin", {
+    churchIdFrom: "body",
+  });
+  if (!gate.ok) return gate.response;
+  const { userId, churchId, role } = gate.ctx;
+
+  const block = await assertActiveMembership(userId, churchId, role);
+  if (block) return block;
+
   let body: { church_id?: string; name?: string };
   try {
     body = await req.json();
@@ -72,8 +73,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { church_id, name } = body;
-  if (!church_id || !name || typeof name !== "string" || name.trim().length === 0) {
+  const { name } = body;
+  if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json(
       { error: "Missing or invalid church_id / name" },
       { status: 400 },
@@ -86,18 +87,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const auth = await requireOrgAdmin(req, church_id);
-  if (auth instanceof NextResponse) return auth;
-
   try {
     const { station, code, activation } = await createStation({
-      church_id,
+      church_id: churchId,
       name: name.trim(),
-      created_by_uid: auth.uid,
+      created_by_uid: userId,
     });
     void audit({
-      church_id,
-      actor: userActor(auth.uid),
+      church_id: churchId,
+      actor: userActor(userId),
       action: "kiosk.station_create",
       target_type: "kiosk_station",
       target_id: station.id,

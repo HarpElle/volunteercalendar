@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { ServicePlan } from "@/lib/types";
 
 /**
@@ -10,17 +11,18 @@ import type { ServicePlan } from "@/lib/types";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const gate = await requireModuleTier(req, "worship", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
+
+    if (!["owner", "admin", "scheduler"].includes(role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
 
     const body = await req.json();
     const {
-      church_id,
       service_id,
       service_date,
       theme,
@@ -37,28 +39,17 @@ export async function POST(req: NextRequest) {
       notes?: string;
     };
 
-    if (!church_id || !service_id || !service_date) {
+    if (!service_id || !service_date) {
       return NextResponse.json(
         { error: "Missing required fields: church_id, service_id, service_date" },
         { status: 400 },
       );
     }
 
-    // Verify membership with admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin", "scheduler"].includes(role)) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-    }
-
-    const churchRef = adminDb.collection("churches").doc(church_id);
+    const churchRef = adminDb.collection("churches").doc(churchId);
 
     const planData: Omit<ServicePlan, "id"> = {
-      church_id,
+      church_id: churchId,
       service_id,
       service_date,
       theme: theme || null,
@@ -102,34 +93,17 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { userId, churchId } = gate.ctx;
 
-    const churchId = req.nextUrl.searchParams.get("church_id");
     const serviceId = req.nextUrl.searchParams.get("service_id");
     const serviceDate = req.nextUrl.searchParams.get("service_date");
     const publishedParam = req.nextUrl.searchParams.get("published");
 
-    if (!churchId) {
-      return NextResponse.json(
-        { error: "Missing required query param: church_id" },
-        { status: 400 },
-      );
-    }
-
-    // Verify membership (any active role)
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const membership = membershipSnap.data()!;
-    if (membership.status !== "active") {
+    // Preserve membership status === "active" check (helper only verifies existence).
+    const membershipSnap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
+    if (membershipSnap.data()?.status !== "active") {
       return NextResponse.json({ error: "Membership not active" }, { status: 403 });
     }
 

@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
-
-async function verifyAuth(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  return decoded.uid;
-}
-
-async function getMembershipRole(userId: string, churchId: string) {
-  const snap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
-  if (!snap.exists) return null;
-  return snap.data()!.role as string;
-}
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 const DEFAULTS = {
   equipment_tags: [],
@@ -30,20 +18,9 @@ const DEFAULTS = {
  */
 export async function GET(req: NextRequest) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, churchId);
-    if (!role) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
+    const gate = await requireModuleTier(req, "rooms");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
     const snap = await adminDb
       .doc(`churches/${churchId}/roomSettings/config`)
@@ -68,26 +45,21 @@ export async function GET(req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireModuleTier(req, "rooms", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
 
-    const body = await req.json();
-    const { church_id } = body;
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, church_id);
-    if (!role || !["owner", "admin"].includes(role)) {
+    if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 },
       );
     }
 
-    const ref = adminDb.doc(`churches/${church_id}/roomSettings/config`);
+    const body = await req.json();
+    const ref = adminDb.doc(`churches/${churchId}/roomSettings/config`);
     const snap = await ref.get();
     const now = new Date().toISOString();
 

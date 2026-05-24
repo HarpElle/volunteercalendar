@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * GET /api/checkin/vcard?church_id=...
@@ -12,13 +13,12 @@ export async function GET(req: NextRequest) {
   if (limited) return limited;
 
   try {
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json(
-        { error: "Missing church_id" },
-        { status: 400 },
-      );
-    }
+    // Pass G Phase 1: tier-gate the target church (public guardian endpoint).
+    const gate = await requireModuleTier(req, "checkin", {
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
     const churchSnap = await adminDb
       .collection("churches")

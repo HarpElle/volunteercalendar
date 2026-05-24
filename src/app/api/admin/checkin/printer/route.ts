@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { PrinterConfig } from "@/lib/types";
 
 /**
@@ -9,34 +10,12 @@ import type { PrinterConfig } from "@/lib/types";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
 
-    const body = await req.json();
-    const { church_id, printer } = body as {
-      church_id: string;
-      printer: PrinterConfig;
-    };
-
-    if (!church_id || !printer?.id || !printer.printer_type || !printer.station_name) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
-    }
-
-    // Verify membership
-    const membershipSnap = await adminDb
-      .doc(`memberships/${userId}_${church_id}`)
-      .get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Only admins can configure printers" },
@@ -44,9 +23,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const body = await req.json();
+    const { printer } = body as {
+      church_id: string;
+      printer: PrinterConfig;
+    };
+
+    if (!printer?.id || !printer.printer_type || !printer.station_name) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      );
+    }
+
     const settingsRef = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("checkinSettings")
       .doc("config");
 

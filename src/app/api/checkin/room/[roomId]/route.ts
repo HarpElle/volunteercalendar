@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
 import type { CheckInSession } from "@/lib/types";
 
@@ -21,16 +22,22 @@ export async function GET(
     const { roomId } = await params;
     const { searchParams } = new URL(req.url);
     const token = searchParams.get("token");
-    const church_id = searchParams.get("church_id");
     const date =
       searchParams.get("date") || new Date().toISOString().split("T")[0];
 
-    if (!token || !church_id) {
+    if (!token) {
       return NextResponse.json(
         { error: "Missing token or church_id" },
         { status: 400 },
       );
     }
+
+    // Pass G Phase 1: tier-gate the target church (room token covers auth below).
+    const gate = await requireModuleTier(req, "checkin", {
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
 
     const churchRef = adminDb.collection("churches").doc(church_id);
 

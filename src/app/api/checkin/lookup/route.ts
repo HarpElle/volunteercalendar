@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { assignRoomByGrade, type AssignedRoom } from "@/lib/server/checkin-helpers";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
@@ -31,8 +32,17 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
-    const { church_id, qr_token, phone_last4, phone_full } = body;
+    const { qr_token, phone_last4, phone_full } = body;
 
     const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
     if (churchMismatch) return churchMismatch;

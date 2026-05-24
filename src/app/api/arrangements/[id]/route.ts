@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { SongArrangement } from "@/lib/types";
 
 type Params = { params: Promise<{ id: string }> };
@@ -10,36 +11,23 @@ type Params = { params: Promise<{ id: string }> };
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const gate = await requireModuleTier(req, "worship", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
     const { id } = await params;
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
 
-    const body = await req.json();
-    const { church_id, ...updates } = body;
-
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
+    const body = await req.json();
+    const { ...updates } = body;
+
     const docRef = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("arrangements")
       .doc(id);
 
@@ -53,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const songId = (docSnap.data() as SongArrangement).song_id;
       const otherSnap = await adminDb
         .collection("churches")
-        .doc(church_id)
+        .doc(churchId)
         .collection("arrangements")
         .where("song_id", "==", songId)
         .where("is_default", "==", true)
@@ -94,27 +82,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  */
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
     const { id } = await params;
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
 
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }

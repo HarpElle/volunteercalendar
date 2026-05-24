@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, kioskActor } from "@/lib/server/audit";
 
 const MAX_CHILDREN_PER_REQUEST = 12;
@@ -27,14 +28,23 @@ export async function POST(req: NextRequest) {
   const limited = rateLimit(req, { limit: 60, windowMs: 60_000 });
   if (limited) return limited;
 
+  // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+  // Helper must run before req.json() so its req.clone() has an unread body.
+  const gate = await requireModuleTier(req, "checkin", {
+    churchIdFrom: "body",
+    allowAnonymous: true,
+  });
+  if (!gate.ok) return gate.response;
+  const { churchId: church_id } = gate.ctx;
+
   let body: { church_id?: string; child_ids?: string[] };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { church_id, child_ids } = body;
-  if (!church_id || !Array.isArray(child_ids) || child_ids.length === 0) {
+  const { child_ids } = body;
+  if (!Array.isArray(child_ids) || child_ids.length === 0) {
     return NextResponse.json(
       { error: "Missing church_id or child_ids" },
       { status: 400 },

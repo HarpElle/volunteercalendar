@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { CheckInSettings } from "@/lib/types";
 
 /**
@@ -10,42 +11,18 @@ import type { CheckInSettings } from "@/lib/types";
  * Update check-in settings (service times, thresholds, capacity SMS).
  */
 
-async function verifyAdmin(
-  req: NextRequest,
-  churchId: string,
-): Promise<{ userId: string } | NextResponse> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  const userId = decoded.uid;
-
-  const membershipSnap = await adminDb
-    .doc(`memberships/${userId}_${churchId}`)
-    .get();
-  if (!membershipSnap.exists) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
-  }
-  const role = membershipSnap.data()!.role as string;
-  if (!["owner", "admin"].includes(role)) {
-    return NextResponse.json(
-      { error: "Only admins can manage check-in settings" },
-      { status: 403 },
-    );
-  }
-  return { userId };
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
+    const gate = await requireModuleTier(req, "checkin");
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
-    const auth = await verifyAdmin(req, churchId);
-    if (auth instanceof NextResponse) return auth;
+    if (!["owner", "admin"].includes(role)) {
+      return NextResponse.json(
+        { error: "Only admins can manage check-in settings" },
+        { status: 403 },
+      );
+    }
 
     const settingsSnap = await adminDb
       .collection("churches")
@@ -77,19 +54,24 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { church_id } = body;
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
+
+    if (!["owner", "admin"].includes(role)) {
+      return NextResponse.json(
+        { error: "Only admins can manage check-in settings" },
+        { status: 403 },
+      );
     }
 
-    const auth = await verifyAdmin(req, church_id);
-    if (auth instanceof NextResponse) return auth;
-    const { userId } = auth;
+    const body = await req.json();
 
     const settingsRef = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("checkinSettings")
       .doc("config");
 

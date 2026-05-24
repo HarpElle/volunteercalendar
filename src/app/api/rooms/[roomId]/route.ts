@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-
-async function verifyAuth(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  return decoded.uid;
-}
-
-async function getMembershipRole(userId: string, churchId: string) {
-  const snap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
-  if (!snap.exists) return null;
-  return snap.data()!.role as string;
-}
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 const IMMUTABLE_FIELDS = ["id", "church_id", "created_at", "created_by"];
 
@@ -24,21 +12,11 @@ export async function GET(
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireModuleTier(req, "rooms");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
     const { roomId } = await params;
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, churchId);
-    if (!role) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
 
     const snap = await adminDb
       .doc(`churches/${churchId}/rooms/${roomId}`)
@@ -65,27 +43,23 @@ export async function PUT(
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireModuleTier(req, "rooms", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
-    const { roomId } = await params;
-    const body = await req.json();
-    const { church_id } = body;
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, church_id);
-    if (!role || !["owner", "admin"].includes(role)) {
+    if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 },
       );
     }
 
-    const ref = adminDb.doc(`churches/${church_id}/rooms/${roomId}`);
+    const { roomId } = await params;
+    const body = await req.json();
+
+    const ref = adminDb.doc(`churches/${churchId}/rooms/${roomId}`);
     const snap = await ref.get();
     if (!snap.exists) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
@@ -121,24 +95,18 @@ export async function DELETE(
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireModuleTier(req, "rooms");
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
-    const { roomId } = await params;
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, churchId);
-    if (!role || !["owner", "admin"].includes(role)) {
+    if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 },
       );
     }
+
+    const { roomId } = await params;
 
     const ref = adminDb.doc(`churches/${churchId}/rooms/${roomId}`);
     const snap = await ref.get();

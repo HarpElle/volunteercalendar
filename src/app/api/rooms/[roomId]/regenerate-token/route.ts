@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * POST /api/rooms/[roomId]/regenerate-token
@@ -11,27 +12,12 @@ export async function POST(
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "rooms", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
-    const { roomId } = await params;
-    const body = await req.json();
-    const { church_id } = body;
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const memberSnap = await adminDb
-      .doc(`memberships/${userId}_${church_id}`)
-      .get();
-    if (!memberSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = memberSnap.data()!.role as string;
     if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -39,7 +25,9 @@ export async function POST(
       );
     }
 
-    const ref = adminDb.doc(`churches/${church_id}/rooms/${roomId}`);
+    const { roomId } = await params;
+
+    const ref = adminDb.doc(`churches/${churchId}/rooms/${roomId}`);
     const snap = await ref.get();
     if (!snap.exists) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
