@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { Song } from "@/lib/types";
 import type { ParsedSong } from "@/lib/integrations/songselect";
 
@@ -11,20 +12,16 @@ import type { ParsedSong } from "@/lib/integrations/songselect";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship", { churchIdFrom: "body" });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
 
     const body = await req.json();
-    const { church_id, songs } = body as { church_id: string; songs: ParsedSong[] };
+    const { songs } = body as { songs: ParsedSong[] };
 
-    if (!church_id || !Array.isArray(songs) || songs.length === 0) {
+    if (!Array.isArray(songs) || songs.length === 0) {
       return NextResponse.json(
-        { error: "Missing required fields: church_id, songs[]" },
+        { error: "Missing required fields: songs[]" },
         { status: 400 },
       );
     }
@@ -36,13 +33,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -60,7 +50,7 @@ export async function POST(req: NextRequest) {
         const batch = ccliNumbers.slice(i, i + 30);
         const existingSnap = await adminDb
           .collection("churches")
-          .doc(church_id)
+          .doc(churchId)
           .collection("songs")
           .where("ccli_number", "in", batch)
           .get();
@@ -74,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const songsCollection = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("songs");
 
     const imported: Song[] = [];
@@ -92,7 +82,7 @@ export async function POST(req: NextRequest) {
         const now = new Date().toISOString();
 
         const songData: Omit<Song, "id"> = {
-          church_id,
+          church_id: churchId,
           title: parsed.title,
           ccli_number: parsed.ccli_number,
           ccli_publisher: null,

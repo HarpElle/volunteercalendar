@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb, adminStorage } from "@/lib/firebase/admin";
+import { adminDb, adminStorage } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * GET /api/songs/{id}/pdf-url?church_id=xxx&key=G
@@ -12,30 +13,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    // --- Auth ---
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
     const { id: songId } = await params;
 
     const { searchParams } = new URL(req.url);
-    const churchId = searchParams.get("church_id");
     const requestedKey = searchParams.get("key");
-
-    if (!churchId) {
-      return NextResponse.json({ error: "church_id is required" }, { status: 400 });
-    }
-
-    // --- Verify membership ---
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
 
     // --- Find the PDF file path ---
     let filePath: string | null = null;

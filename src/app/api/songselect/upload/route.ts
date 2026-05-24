@@ -1,55 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb, adminStorage } from "@/lib/firebase/admin";
+import { adminDb, adminStorage } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { Song, SongChartData, SongArrangement, ArrangementFormatting } from "@/lib/types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 /**
- * POST /api/songselect/upload
+ * POST /api/songselect/upload?church_id=xxx
  *
  * Upload an original song file (ChordPro or PDF) to Firebase Storage,
  * create the Song document, and create a default SongArrangement.
  *
  * Form fields:
  *   - file: the original file
- *   - church_id: string
  *   - chart_data: JSON string of SongChartData
  *   - file_type: "chordpro" | "pdf"
+ *
+ * Query: church_id (required, used for tier gating).
  */
 export async function POST(req: NextRequest) {
   try {
-    // --- Auth ---
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Tier-gate via query param before reading multipart body.
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
+
+    if (!["owner", "admin", "scheduler"].includes(role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
 
     // --- Read form data ---
     const formData = await req.formData();
     const file = formData.get("file");
-    const churchId = formData.get("church_id") as string | null;
     const chartDataRaw = formData.get("chart_data") as string | null;
     const fileType = formData.get("file_type") as "chordpro" | "pdf" | null;
 
-    if (!churchId || !chartDataRaw || !fileType) {
+    if (!chartDataRaw || !fileType) {
       return NextResponse.json(
-        { error: "Missing required fields: church_id, chart_data, file_type" },
+        { error: "Missing required fields: chart_data, file_type" },
         { status: 400 },
       );
-    }
-
-    // --- Verify membership ---
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin", "scheduler"].includes(role)) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
     // --- Parse chart data ---

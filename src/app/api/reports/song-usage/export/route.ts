@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { TIER_LIMITS } from "@/lib/constants";
 import type { SongUsageRecord } from "@/lib/types";
 
@@ -9,31 +10,17 @@ import type { SongUsageRecord } from "@/lib/types";
  */
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    // Standardized worship-tier short-circuit for Free/Starter callers.
+    // Codex Phase 6 Pass A pattern: gate by tier BEFORE other lookups.
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
     const { searchParams } = req.nextUrl;
-    const churchId = searchParams.get("church_id");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     const format = searchParams.get("format") ?? "csv";
 
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -45,7 +32,9 @@ export async function GET(req: NextRequest) {
 
     // Codex QA 2026-05-15: CSV export for CCLI is gated by tier. Landing
     // page promises it on Growth+; constants and this endpoint now enforce
-    // that. Free/Starter get 403 with an upgrade hint.
+    // that. Free/Starter get 403 with an upgrade hint. This finer-grained
+    // ccli_csv_export check is redundant with the worship gate above but
+    // provides a more specific error message for downstream callers.
     const tier = (churchData?.subscription_tier as string) || "free";
     const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
     if (!tierLimits.ccli_csv_export) {

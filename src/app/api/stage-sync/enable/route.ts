@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * POST /api/stage-sync/enable
@@ -12,31 +13,20 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship", { churchIdFrom: "body" });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
 
     const body = await req.json();
-    const { church_id, plan_id } = body;
+    const { plan_id } = body;
 
-    if (!church_id || !plan_id) {
+    if (!plan_id) {
       return NextResponse.json(
-        { error: "Missing required fields: church_id, plan_id" },
+        { error: "Missing required fields: plan_id" },
         { status: 400 },
       );
     }
 
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -44,7 +34,7 @@ export async function POST(req: NextRequest) {
     // Get the service plan
     const planRef = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("service_plans")
       .doc(plan_id);
 
@@ -59,8 +49,8 @@ export async function POST(req: NextRequest) {
     if (plan.stage_sync?.enabled && plan.stage_sync?.access_token) {
       return NextResponse.json({
         access_token: plan.stage_sync.access_token,
-        conductor_url: `/stage-sync/conductor/${church_id}/${plan_id}`,
-        participant_url: `/stage-sync/view/${church_id}/${plan_id}`,
+        conductor_url: `/stage-sync/conductor/${churchId}/${plan_id}`,
+        participant_url: `/stage-sync/view/${churchId}/${plan_id}`,
         already_enabled: true,
       });
     }
@@ -93,7 +83,7 @@ export async function POST(req: NextRequest) {
         // Try arrangement first
         if (item.arrangement_id) {
           const arrSnap = await adminDb
-            .collection("churches").doc(church_id)
+            .collection("churches").doc(churchId)
             .collection("arrangements").doc(item.arrangement_id as string)
             .get();
           if (arrSnap.exists) {
@@ -103,7 +93,7 @@ export async function POST(req: NextRequest) {
         // Fall back to song's chart_data
         if (!chartData) {
           const songSnap = await adminDb
-            .collection("churches").doc(church_id)
+            .collection("churches").doc(churchId)
             .collection("songs").doc(item.song_id as string)
             .get();
           if (songSnap.exists) {
@@ -125,7 +115,7 @@ export async function POST(req: NextRequest) {
     // Create the public live sync document (readable by anyone with the token)
     const liveRef = adminDb.collection("stage_sync_live").doc(accessToken);
     batch.set(liveRef, {
-      church_id,
+      church_id: churchId,
       plan_id,
       current_item_id: null,
       current_item_index: 0,
@@ -137,7 +127,7 @@ export async function POST(req: NextRequest) {
     // Store token mapping for lookups
     const tokenRef = adminDb.collection("stage_sync_tokens").doc(accessToken);
     batch.set(tokenRef, {
-      church_id,
+      church_id: churchId,
       plan_id,
       created_by: userId,
       created_at: now,
@@ -147,8 +137,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       access_token: accessToken,
-      conductor_url: `/stage-sync/conductor/${church_id}/${plan_id}`,
-      participant_url: `/stage-sync/view/${church_id}/${plan_id}`,
+      conductor_url: `/stage-sync/conductor/${churchId}/${plan_id}`,
+      participant_url: `/stage-sync/view/${churchId}/${plan_id}`,
       already_enabled: false,
     });
   } catch (error) {

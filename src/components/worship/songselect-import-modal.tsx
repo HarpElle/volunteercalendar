@@ -137,7 +137,7 @@ export function SongSelectImportModal({
           const formData = new FormData();
           formData.append("file", file);
 
-          const res = await fetch("/api/songselect/convert-pdf", {
+          const res = await fetch(`/api/songselect/convert-pdf?church_id=${churchId}`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
@@ -269,7 +269,7 @@ export function SongSelectImportModal({
       formData.append("chart_data", JSON.stringify(song.chart_data));
       formData.append("file_type", song.file_type);
 
-      const res = await fetch("/api/songselect/upload", {
+      const res = await fetch(`/api/songselect/upload?church_id=${churchId}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
