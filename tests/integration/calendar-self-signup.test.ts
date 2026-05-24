@@ -171,8 +171,11 @@ async function seedCalendarFixture() {
 }
 
 async function fetchIcal(token: string): Promise<string> {
+  // NextRequest required since Pass G Phase 3 added rate-limit + ical
+  // route-handler type tightening. The constructor accepts the same URL.
+  const { NextRequest } = await import("next/server");
   const res = await GET(
-    new Request(`https://test/api/calendar?token=${encodeURIComponent(token)}`),
+    new NextRequest(`https://test/api/calendar?token=${encodeURIComponent(token)}`),
   );
   expect(res.status).toBe(200);
   return await res.text();

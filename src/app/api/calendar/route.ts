@@ -1,10 +1,22 @@
-import { NextResponse } from "next/server";
-import type { DocumentData } from "firebase-admin/firestore";
+import { NextRequest, NextResponse } from "next/server";
+import type { DocumentData, DocumentReference } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { generateICalFeed } from "@/lib/utils/ical";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import { touchFeedLastAccessed } from "@/lib/server/calendar-feed";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // Pass G Phase 3: distributed rate-limit. Not requireDistributed:true
+    // because iCal subscribers fetch on long intervals; an Upstash blip
+    // shouldn't break subscriptions.
+    const limited = await rateLimitDistributed(request, {
+      prefix: "calendar-feed",
+      limit: 60,
+      windowSeconds: 60,
+    });
+    if (limited) return limited;
+
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
 
@@ -16,6 +28,7 @@ export async function GET(request: Request) {
     // needing a collection group index (automatic single-field indexes cover this)
     const churchesSnap = await adminDb.collection("churches").get();
     let feed: DocumentData | null = null;
+    let feedRef: DocumentReference | null = null;
     let churchId = "";
 
     for (const churchDoc of churchesSnap.docs) {
@@ -28,14 +41,22 @@ export async function GET(request: Request) {
         .get();
       if (!feedSnap.empty) {
         feed = feedSnap.docs[0].data();
+        feedRef = feedSnap.docs[0].ref;
         churchId = churchDoc.id;
         break;
       }
     }
 
-    if (!feed) {
+    if (!feed || !feedRef) {
       return new NextResponse("Feed not found", { status: 404 });
     }
+
+    // Pass G Phase 3: revoked feeds return 404 to the iCal client.
+    // Revocation is irreversible by design (user must create a new feed).
+    if (feed.revoked_at) {
+      return new NextResponse("Feed not found", { status: 404 });
+    }
+
     const feedType = (feed.type as string) || "personal";
     const targetId = feed.target_id as string;
 
@@ -45,6 +66,10 @@ export async function GET(request: Request) {
     if ((feedType === "personal" || feedType === "team") && !targetId) {
       return new NextResponse("Feed not found", { status: 404 });
     }
+
+    // Pass G Phase 3: fire-and-forget write-on-read so the user can see
+    // when this feed was last consumed (lets them detect unexpected use).
+    touchFeedLastAccessed(feedRef);
 
     // Fetch church for timezone + name
     const churchSnap = await adminDb.doc(`churches/${churchId}`).get();

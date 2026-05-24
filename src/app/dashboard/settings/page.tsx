@@ -15,6 +15,7 @@ import {
   DeleteOrgSection,
 } from "@/components/settings/general-settings";
 import { CampusesSettings } from "@/components/settings/campuses-settings";
+import { SecuritySection } from "@/components/settings/security-section";
 import { SettingsShell } from "@/components/dashboard/settings-shell";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 
@@ -182,6 +183,12 @@ function SettingsContent() {
             church={church}
             setChurch={setChurch}
           />
+        )}
+
+        {/* Security — admin-only. Pass G Phase 3 added the bulk
+            calendar-feed rotation action here. */}
+        {churchId && isAdmin(activeMembership) && (
+          <SecuritySection churchId={churchId} user={user} />
         )}
 
         {/* Danger Zone — owner-only, always last */}
