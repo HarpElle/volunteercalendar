@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { buildTrainingSessionInviteEmail } from "@/lib/utils/emails/training-session-invite";
 import type { VolunteerJourneyStep, TrainingSessionRsvp } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
@@ -19,6 +20,16 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   try {
+    // Pass G Phase 2: per-IP throttle before auth, per-user after. Each
+    // request fans out an email to every eligible volunteer — keep the
+    // per-user cap tight.
+    const ipLimited = await rateLimitDistributed(req, {
+      prefix: "training-invite-ip",
+      limit: 30,
+      windowSeconds: 60 * 60,
+    });
+    if (ipLimited) return ipLimited;
+
     const { sessionId } = await params;
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -26,6 +37,21 @@ export async function POST(
     }
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
     const userId = decoded.uid;
+
+    const userHourLimited = await rateLimitDistributed(req, {
+      prefix: "training-invite-user-hour",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      extraKey: userId,
+    });
+    if (userHourLimited) return userHourLimited;
+    const userDayLimited = await rateLimitDistributed(req, {
+      prefix: "training-invite-user-day",
+      limit: 100,
+      windowSeconds: 60 * 60 * 24,
+      extraKey: userId,
+    });
+    if (userDayLimited) return userDayLimited;
 
     const { church_id } = await req.json();
     if (!church_id) {

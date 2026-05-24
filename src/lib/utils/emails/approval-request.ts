@@ -11,6 +11,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ApprovalRequestEmailData {
   leaderName: string;
@@ -31,15 +32,15 @@ export function buildApprovalRequestEmail(data: ApprovalRequestEmailData): {
   const subject = `Review needed: ${data.ministryName} schedule for ${data.coveragePeriod}`;
 
   const deadlineNote = data.targetDate
-    ? `<p ${P}>Please complete your review by <strong ${BOLD}>${data.targetDate}</strong>.</p>`
+    ? `<p ${P}>Please complete your review by <strong ${BOLD}>${escapeHtml(data.targetDate)}</strong>.</p>`
     : "";
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                A new schedule for <strong ${BOLD}>${data.coveragePeriod}</strong> is ready for your review. As the <strong ${BOLD}>${data.ministryName}</strong> team lead, please review the assignments for your team and approve or request changes.
+                A new schedule for <strong ${BOLD}>${escapeHtml(data.coveragePeriod)}</strong> is ready for your review. As the <strong ${BOLD}>${escapeHtml(data.ministryName)}</strong> team lead, please review the assignments for your team and approve or request changes.
               </p>
               ${deadlineNote}
               <p ${P}>

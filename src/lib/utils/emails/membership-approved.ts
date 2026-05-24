@@ -9,6 +9,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface MembershipApprovedData {
   userName: string;
@@ -27,10 +28,10 @@ export function buildMembershipApprovedEmail(data: MembershipApprovedData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
-                Great news — your request to join <strong ${BOLD}>${data.churchName}</strong> has been approved. You can now view your schedule, set your availability, and more.
+                Great news — your request to join <strong ${BOLD}>${escapeHtml(data.churchName)}</strong> has been approved. You can now view your schedule, set your availability, and more.
               </p>
               ${ctaButton(data.dashboardUrl, "Go to Dashboard")}`;
 

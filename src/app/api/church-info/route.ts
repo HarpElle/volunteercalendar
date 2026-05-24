@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { generateShortCode, SHORT_CODE_RE, resolveShortCode } from "@/lib/utils/short-code";
 
 /**
@@ -9,15 +9,37 @@ import { generateShortCode, SHORT_CODE_RE, resolveShortCode } from "@/lib/utils/
  * Public endpoint — returns basic church info (name, type) for join/invite pages.
  * Accepts a full church_id or a 6-char setup code (short_code).
  * Uses Admin SDK to bypass Firestore rules that restrict client reads to members.
+ *
+ * Pass G Phase 2 / §3.4: Setup-code lookup is an enumeration target — without
+ * throttling, an attacker can grind the 6-char short-code keyspace. We apply
+ * two distributed limits:
+ *   1) 100/IP/hour — the primary brute-force defense; clamps a single attacker
+ *      regardless of how many distinct codes they try.
+ *   2) 20/IP-per-id/hour — extra friction for repeatedly hammering one id, so
+ *      a known short_code can't be probed for state changes either.
  */
 export async function GET(req: NextRequest) {
-  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
-  if (limited) return limited;
-
   const rawId = req.nextUrl.searchParams.get("id");
   if (!rawId) {
     return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
   }
+
+  // Primary: per-IP cap to defeat enumeration across many distinct codes.
+  const ipLimited = await rateLimitDistributed(req, {
+    prefix: "church-info-ip",
+    limit: 100,
+    windowSeconds: 60 * 60,
+  });
+  if (ipLimited) return ipLimited;
+
+  // Secondary: per-(IP, id) cap so any single code can't be hammered.
+  const idLimited = await rateLimitDistributed(req, {
+    prefix: "church-info-id",
+    limit: 20,
+    windowSeconds: 60 * 60,
+    extraKey: rawId.toLowerCase().slice(0, 64),
+  });
+  if (idLimited) return idLimited;
 
   // Try direct doc lookup first, then short code resolution
   let churchId = rawId;

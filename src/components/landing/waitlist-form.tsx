@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useCallback, type FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { AnimateIn } from "./animate-in";
+import {
+  TurnstileWidget,
+  isTurnstileEnabled,
+} from "@/components/forms/turnstile-widget";
 
 const WORKFLOW_OPTIONS = [
   { value: "", label: "How would you like scheduling to work?" },
@@ -29,6 +33,16 @@ export function WaitlistForm() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+
+  // Stable token-setter so the Turnstile widget doesn't re-render the
+  // widget on every parent render (which would cycle the challenge).
+  const handleTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+
+  const turnstileActive = isTurnstileEnabled();
+  const submitDisabled = loading || (turnstileActive && !turnstileToken);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -50,6 +64,9 @@ export function WaitlistForm() {
           current_tool: data.get("current_tool"),
           workflow_preference: data.get("workflow_preference"),
           phone: data.get("phone") || null,
+          // Empty string when Turnstile is env-gated off; server skips
+          // verification in that case.
+          turnstile_token: turnstileToken,
         }),
       });
 
@@ -244,6 +261,10 @@ export function WaitlistForm() {
                     />
                   </div>
 
+                  {/* Cloudflare Turnstile — bot challenge. Renders only when
+                      NEXT_PUBLIC_TURNSTILE_SITE_KEY is set (env-gated). */}
+                  <TurnstileWidget onToken={handleTurnstileToken} />
+
                   {error && (
                     <div className="rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
                       {error}
@@ -252,7 +273,7 @@ export function WaitlistForm() {
 
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={submitDisabled}
                     className="w-full rounded-full bg-vc-coral px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-vc-coral/20 transition-all hover:bg-vc-coral-dark hover:shadow-xl hover:shadow-vc-coral/30 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
                   >
                     {loading ? (

@@ -10,6 +10,8 @@
  * outside the card). Self-contained HTML — does NOT use wrapInLayout.
  */
 
+import { escapeHtml } from "./escape";
+
 export interface EventSignupConfirmationData {
   recipientName: string;
   eventName: string;
@@ -48,14 +50,14 @@ export function buildEventSignupConfirmationEmail(
                 <tr>
                   <td style="padding:0 0 8px;">
                     <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:14px;color:#9A9BB5;">
-                      ${data.churchName}
+                      ${escapeHtml(data.churchName)}
                     </p>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:0 0 24px;">
                     <h1 style="margin:0;font-family:'DM Serif Display',Georgia,serif;font-size:28px;font-weight:400;color:#2D3047;line-height:1.3;">
-                      You&rsquo;re signed up, ${firstName}!
+                      You&rsquo;re signed up, ${escapeHtml(firstName)}!
                     </h1>
                   </td>
                 </tr>
@@ -66,13 +68,13 @@ export function buildEventSignupConfirmationEmail(
                       <tr>
                         <td style="padding:24px;">
                           <h2 style="margin:0 0 8px;font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;color:#2D3047;">
-                            ${data.eventName}
+                            ${escapeHtml(data.eventName)}
                           </h2>
                           <p style="margin:0 0 12px;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#6B6D8A;">
-                            📅 ${data.eventDate} &nbsp;&bull;&nbsp; 🕐 ${data.eventTime}
+                            📅 ${escapeHtml(data.eventDate)} &nbsp;&bull;&nbsp; 🕐 ${escapeHtml(data.eventTime)}
                           </p>
                           <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#2D3047;">
-                            <strong>Your role:</strong> ${data.roleTitle}
+                            <strong>Your role:</strong> ${escapeHtml(data.roleTitle)}
                           </p>
                         </td>
                       </tr>
@@ -107,7 +109,7 @@ export function buildEventSignupConfirmationEmail(
           <tr>
             <td style="padding:32px 0 0;text-align:center;">
               <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#9A9BB5;">
-                Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${data.churchName}
+                Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${escapeHtml(data.churchName)}
               </p>
             </td>
           </tr>

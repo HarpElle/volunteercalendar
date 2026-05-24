@@ -1,6 +1,7 @@
 /** Gentle nudge email for volunteers with stalled onboarding progress. */
 
 import { wrapInLayout, P, ctaButton, onBehalfFooter, BOLD } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface PrerequisiteNudgeEmailData {
   volunteerName: string;
@@ -37,10 +38,10 @@ export function buildPrerequisiteNudgeEmail(data: PrerequisiteNudgeEmailData): {
 </table>`;
 
   const body = `<p ${P}>
-    Hi ${firstName},
+    Hi ${escapeHtml(firstName)},
   </p>
   <p ${P}>
-    You're making progress on your onboarding for <strong ${BOLD}>${data.ministryName}</strong> at ${data.churchName}! You have ${data.stepsRemaining} step${data.stepsRemaining === 1 ? "" : "s"} remaining.
+    You're making progress on your onboarding for <strong ${BOLD}>${escapeHtml(data.ministryName)}</strong> at ${escapeHtml(data.churchName)}! You have ${data.stepsRemaining} step${data.stepsRemaining === 1 ? "" : "s"} remaining.
   </p>
   ${progressBar}
   <p ${P}>

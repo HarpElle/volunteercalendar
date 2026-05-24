@@ -11,6 +11,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface WelcomeToOrgEmailData {
   userName: string;
@@ -33,10 +34,10 @@ export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
   let statusText: string;
 
   if (data.isPending) {
-    statusParagraph = `Your request to join <strong ${BOLD}>${data.churchName}</strong> has been submitted. An admin will review it and you'll be notified when approved.`;
+    statusParagraph = `Your request to join <strong ${BOLD}>${escapeHtml(data.churchName)}</strong> has been submitted. An admin will review it and you'll be notified when approved.`;
     statusText = `Your request to join ${data.churchName} has been submitted. An admin will review it and you'll be notified when approved.`;
   } else {
-    statusParagraph = `You're now part of <strong ${BOLD}>${data.churchName}</strong>! You can view your schedule, set your availability, and stay in the loop.`;
+    statusParagraph = `You're now part of <strong ${BOLD}>${escapeHtml(data.churchName)}</strong>! You can view your schedule, set your availability, and stay in the loop.`;
     statusText = `You're now part of ${data.churchName}! You can view your schedule, set your availability, and stay in the loop.`;
   }
 
@@ -62,11 +63,11 @@ export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
 
   const mutedNote = data.isPending
     ? mutedCenter("We'll send you another email once your request has been reviewed.")
-    : mutedCenter("You're receiving this because you joined " + data.churchName + " on VolunteerCal.");
+    : mutedCenter("You're receiving this because you joined " + escapeHtml(data.churchName) + " on VolunteerCal.");
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
                 ${statusParagraph}

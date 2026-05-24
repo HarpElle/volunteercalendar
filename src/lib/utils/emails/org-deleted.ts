@@ -8,6 +8,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface OrgDeletedEmailData {
   userName: string;
@@ -25,10 +26,10 @@ export function buildOrgDeletedEmail(data: OrgDeletedEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                This is a confirmation that your organization <strong ${BOLD}>${data.orgName}</strong> and all of its associated data — including volunteers, schedules, memberships, and billing — have been permanently deleted from VolunteerCal.
+                This is a confirmation that your organization <strong ${BOLD}>${escapeHtml(data.orgName)}</strong> and all of its associated data — including volunteers, schedules, memberships, and billing — have been permanently deleted from VolunteerCal.
               </p>
               <p ${P}>
                 Thank you for giving VolunteerCal a place in your workflow. We genuinely appreciate the time you spent with us, and we hope we made scheduling a little easier along the way.

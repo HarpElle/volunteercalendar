@@ -15,6 +15,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface VacancyAlertEmailData {
   schedulerName: string;
@@ -52,10 +53,10 @@ export function buildVacancyAlertEmail(data: VacancyAlertEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.departedName}</strong> is no longer part of <strong ${BOLD}>${data.churchName}</strong>. The following assignments previously held by ${data.departedName} now need to be filled:
+                <strong ${BOLD}>${escapeHtml(data.departedName)}</strong> is no longer part of <strong ${BOLD}>${escapeHtml(data.churchName)}</strong>. The following assignments previously held by ${escapeHtml(data.departedName)} now need to be filled:
               </p>
 
               ${vacancyCard}

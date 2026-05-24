@@ -10,6 +10,7 @@ import {
   formatDateLong,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ExpiryWarningEmailData {
   volunteerName: string;
@@ -31,10 +32,10 @@ export function buildExpiryWarningEmail(data: ExpiryWarningEmailData): {
   const subject = `Action needed \u2014 your ${data.stepLabel} expires in ${data.daysRemaining} days`;
 
   const body = `<p ${P}>
-    Hi ${firstName},
+    Hi ${escapeHtml(firstName)},
   </p>
   <p ${P}>
-    Your <strong ${BOLD}>${data.stepLabel}</strong> for ${data.ministryName} at ${data.churchName} is expiring soon. Please renew it to maintain your eligibility to serve.
+    Your <strong ${BOLD}>${escapeHtml(data.stepLabel)}</strong> for ${escapeHtml(data.ministryName)} at ${escapeHtml(data.churchName)} is expiring soon. Please renew it to maintain your eligibility to serve.
   </p>
   ${detailCard(`<table width="100%" cellpadding="0" cellspacing="0">
     ${detailRow("Requirement", data.stepLabel)}

@@ -11,6 +11,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface AdminDepartureEmailData {
   adminName: string;
@@ -41,13 +42,13 @@ export function buildAdminDepartureEmail(data: AdminDepartureEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.departedName}</strong> (${data.departedRole}) has left <strong ${BOLD}>${data.churchName}</strong>.
+                <strong ${BOLD}>${escapeHtml(data.departedName)}</strong> (${escapeHtml(data.departedRole)}) has left <strong ${BOLD}>${escapeHtml(data.churchName)}</strong>.
               </p>
               <p ${P}>
-                <strong ${BOLD}>Teams affected:</strong> ${teamsList}.
+                <strong ${BOLD}>Teams affected:</strong> ${escapeHtml(teamsList)}.
               </p>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 ${schedulerNote}
@@ -55,7 +56,7 @@ export function buildAdminDepartureEmail(data: AdminDepartureEmailData): {
 
               ${ctaButton("https://volunteercal.com/dashboard/people", "View People")}
 
-              ${mutedCenter("You're receiving this because you're an administrator of " + data.churchName + ".")}`;
+              ${mutedCenter("You're receiving this because you're an administrator of " + escapeHtml(data.churchName) + ".")}`;
 
   const html = wrapInLayout({
     headerText: "Member Departure",

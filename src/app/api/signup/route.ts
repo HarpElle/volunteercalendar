@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { buildEventSignupConfirmationEmail } from "@/lib/utils/emails";
 import type { Event, Church, EventSignup } from "@/lib/types";
@@ -40,7 +41,12 @@ function formatEventTime(
  * Public endpoint — no auth required for public events.
  */
 export async function GET(req: NextRequest) {
-  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  // Pass G Phase 2: distributed limit (was per-instance in-memory).
+  const limited = await rateLimitDistributed(req, {
+    prefix: "signup-get",
+    limit: 30,
+    windowSeconds: 60,
+  });
   if (limited) return limited;
 
   const eventId = req.nextUrl.searchParams.get("eventId");
@@ -101,8 +107,27 @@ export async function GET(req: NextRequest) {
  * Authenticated users send Bearer token; public guests send name+email.
  */
 export async function POST(req: NextRequest) {
-  const limited = rateLimit(req, { limit: 10, windowMs: 60_000 });
+  // Pass G Phase 2: distributed limit (was per-instance in-memory). Public
+  // signup creates DB rows + sends a confirmation email, so it's a higher-
+  // cost target than the read-only GET.
+  const limited = await rateLimitDistributed(req, {
+    prefix: "signup-post",
+    limit: 10,
+    windowSeconds: 60,
+  });
   if (limited) return limited;
+
+  // Cloudflare Turnstile bot challenge for guest signups (anonymous). The
+  // client form skips the widget when caller is logged-in; the server
+  // accepts an empty token in that case because verifyTurnstile checks
+  // for env-gated activation. For Phase G the server treats Turnstile as
+  // required on this route IF the env is configured AND the request has
+  // no Authorization header. Logged-in callers (Firebase ID token) are
+  // their own bot challenge.
+  if (!req.headers.get("Authorization")?.startsWith("Bearer ")) {
+    const captchaFailed = await verifyTurnstile(req);
+    if (captchaFailed) return captchaFailed;
+  }
 
   try {
     const body = await req.json();

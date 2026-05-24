@@ -14,6 +14,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface AssignmentChangeEmailData {
   volunteerName: string;
@@ -60,15 +61,15 @@ export function buildAssignmentChangeEmail(data: AssignmentChangeEmailData): {
 
   const actionText =
     data.action === "removed"
-      ? `you have been removed from <strong ${BOLD}>${data.oldRole}</strong>`
-      : `you have been moved from <strong ${BOLD}>${data.oldRole}</strong> to <strong ${BOLD}>${data.newRole}</strong>`;
+      ? `you have been removed from <strong ${BOLD}>${escapeHtml(data.oldRole)}</strong>`
+      : `you have been moved from <strong ${BOLD}>${escapeHtml(data.oldRole)}</strong> to <strong ${BOLD}>${escapeHtml(data.newRole)}</strong>`;
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                ${data.changedByName} has updated your schedule at <strong ${BOLD}>${data.churchName}</strong> — ${actionText} for <strong ${BOLD}>${data.serviceName}</strong> on ${dateStr}.
+                ${escapeHtml(data.changedByName)} has updated your schedule at <strong ${BOLD}>${escapeHtml(data.churchName)}</strong> — ${actionText} for <strong ${BOLD}>${escapeHtml(data.serviceName)}</strong> on ${escapeHtml(dateStr)}.
               </p>
 
               ${card}

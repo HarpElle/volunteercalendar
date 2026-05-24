@@ -1,6 +1,7 @@
 /** Purchase thank-you email — sent after a plan upgrade. */
 
 import { wrapInLayout, P, BOLD, ctaButton } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface PurchaseThankYouData {
   userName: string;
@@ -18,10 +19,10 @@ export function buildPurchaseThankYouEmail(data: PurchaseThankYouData): {
   const subject = `Thanks for upgrading to ${data.planName}`;
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Thanks for upgrading ${data.churchName} to the <strong ${BOLD}>${data.planName}</strong> plan. Your new features are already active \u2014 no setup needed.
+                Thanks for upgrading ${escapeHtml(data.churchName)} to the <strong ${BOLD}>${escapeHtml(data.planName)}</strong> plan. Your new features are already active \u2014 no setup needed.
               </p>
               <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 If you ever have questions about your plan or need help with anything, just reply to this email. We're here.

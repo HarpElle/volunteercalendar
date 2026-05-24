@@ -1,6 +1,7 @@
 /** Email sent to schedulers when a volunteer completes all prerequisites and becomes eligible. */
 
 import { wrapInLayout, P, ctaButton, onBehalfFooter, BOLD } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface EligibleNotifyEmailData {
   schedulerName: string;
@@ -20,10 +21,10 @@ export function buildEligibleNotifyEmail(data: EligibleNotifyEmailData): {
   const subject = `${data.volunteerName} is now eligible for ${data.ministryName}`;
 
   const body = `<p ${P}>
-    Hi ${firstName},
+    Hi ${escapeHtml(firstName)},
   </p>
   <p ${P}>
-    <strong ${BOLD}>${data.volunteerName}</strong> has completed all prerequisite steps for <strong ${BOLD}>${data.ministryName}</strong> and is now eligible to be scheduled.
+    <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong> has completed all prerequisite steps for <strong ${BOLD}>${escapeHtml(data.ministryName)}</strong> and is now eligible to be scheduled.
   </p>
   <p ${P}>
     You can include them in your next schedule.

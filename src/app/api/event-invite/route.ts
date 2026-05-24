@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { buildEventInviteEmail } from "@/lib/utils/email-templates";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
@@ -19,12 +20,36 @@ import { resend } from "@/lib/resend";
  */
 export async function POST(req: NextRequest) {
   try {
+    // Pass G Phase 2: per-IP throttle (cheap, runs before auth) then per-user
+    // (after we have the UID). Hard recipient cap stays at 50 below.
+    const ipLimited = await rateLimitDistributed(req, {
+      prefix: "event-invite-ip",
+      limit: 30,
+      windowSeconds: 60 * 60,
+    });
+    if (ipLimited) return ipLimited;
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
     const userId = decoded.uid;
+
+    const userHourLimited = await rateLimitDistributed(req, {
+      prefix: "event-invite-user-hour",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      extraKey: userId,
+    });
+    if (userHourLimited) return userHourLimited;
+    const userDayLimited = await rateLimitDistributed(req, {
+      prefix: "event-invite-user-day",
+      limit: 100,
+      windowSeconds: 60 * 60 * 24,
+      extraKey: userId,
+    });
+    if (userDayLimited) return userDayLimited;
 
     const body = await req.json();
     const { church_id, event_id, recipient_emails } = body;

@@ -11,6 +11,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface AvailabilityWindowEmailData {
   volunteerName: string;
@@ -31,15 +32,15 @@ export function buildAvailabilityWindowEmail(data: AvailabilityWindowEmailData):
   const subject = `Update your availability for ${data.coveragePeriod} — ${data.churchName}`;
 
   const customMessage = data.message
-    ? `<p ${P}>${data.message}</p>`
+    ? `<p ${P}>${escapeHtml(data.message)}</p>`
     : "";
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Help us plan ahead! Please update your availability for <strong ${BOLD}>${data.coveragePeriod}</strong> by <strong ${BOLD}>${data.dueDate}</strong> so we can create a fair, balanced schedule.
+                Help us plan ahead! Please update your availability for <strong ${BOLD}>${escapeHtml(data.coveragePeriod)}</strong> by <strong ${BOLD}>${escapeHtml(data.dueDate)}</strong> so we can create a fair, balanced schedule.
               </p>
               ${customMessage}
 

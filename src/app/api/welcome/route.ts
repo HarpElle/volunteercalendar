@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { buildWelcomeEmail, buildAccountCreatedEmail } from "@/lib/utils/email-templates";
 import { resend } from "@/lib/resend";
 
@@ -17,8 +17,14 @@ import { resend } from "@/lib/resend";
  * Track D. Until then, the auth gate prevents abuse.
  */
 export async function POST(request: NextRequest) {
-  // Rate limit (in-memory today; replaced with Upstash in Track D.5).
-  const limited = rateLimit(request, { limit: 5, windowMs: 60 * 60_000 }); // 5/hour/IP
+  // Pass G Phase 2: distributed rate limit (was per-instance in-memory).
+  // 5/IP/hour — an account is only welcomed once, so a real user never
+  // bumps this. Auth gate below still requires the inviter's ID token.
+  const limited = await rateLimitDistributed(request, {
+    prefix: "welcome",
+    limit: 5,
+    windowSeconds: 60 * 60,
+  });
   if (limited) return limited;
 
   // Require a freshly-issued Firebase ID token.

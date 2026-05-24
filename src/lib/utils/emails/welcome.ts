@@ -1,6 +1,7 @@
 /** Welcome email — sent when a new user creates an account. */
 
 import { wrapInLayout, P, ctaButton, P_LAST } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface WelcomeEmailData {
   userName: string;
@@ -34,7 +35,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): {
   const subject = "Welcome to VolunteerCal \u2014 let's get your team set up";
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
                 Thanks for creating your account. VolunteerCal was built to take the guesswork out of volunteer scheduling \u2014 so you can spend less time juggling spreadsheets and more time with your team.
@@ -107,7 +108,7 @@ export function buildAccountCreatedEmail(data: AccountCreatedEmailData): {
   const subject = "Your VolunteerCal account is ready";
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
                 Your VolunteerCal account is ready. As soon as you're added to an organization (or you accept an invite), you'll see your upcoming assignments, set your availability, and manage your schedule from the dashboard.

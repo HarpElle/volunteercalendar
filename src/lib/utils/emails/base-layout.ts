@@ -30,8 +30,13 @@ export interface LayoutOptions {
  * Returns a complete `<!DOCTYPE html>` string.
  */
 export function wrapInLayout(opts: LayoutOptions): string {
+  // Pass G Phase 2: headerText + headerSubtitle are caller-supplied and
+  // ~23 call sites pass user-controlled values like data.churchName here
+  // directly. Escape at the helper layer so callers can't accidentally
+  // inject HTML. body + footerHtml are intentionally raw — they're
+  // constructed by template files using already-escaped sub-helpers.
   const subtitle = opts.headerSubtitle
-    ? `<p style="margin:6px 0 0;font-size:14px;color:rgba(255,255,255,0.65);">${opts.headerSubtitle}</p>`
+    ? `<p style="margin:6px 0 0;font-size:14px;color:rgba(255,255,255,0.65);">${escapeHtml(opts.headerSubtitle)}</p>`
     : "";
 
   const footer =
@@ -53,7 +58,7 @@ export function wrapInLayout(opts: LayoutOptions): string {
           <tr>
             <td style="background-color:#2D3047;padding:28px 32px;text-align:center;">
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
-                ${opts.headerText}
+                ${escapeHtml(opts.headerText)}
               </h1>
               ${subtitle}
             </td>

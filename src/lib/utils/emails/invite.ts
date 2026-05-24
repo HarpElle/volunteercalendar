@@ -10,6 +10,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface InviteEmailData {
   inviteeName: string;
@@ -30,10 +31,10 @@ export function buildInviteEmail(data: InviteEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.inviterName}</strong> has invited you to join <strong ${BOLD}>${data.churchName}</strong> on VolunteerCal as a <strong ${BOLD}>${data.role}</strong>.
+                <strong ${BOLD}>${escapeHtml(data.inviterName)}</strong> has invited you to join <strong ${BOLD}>${escapeHtml(data.churchName)}</strong> on VolunteerCal as a <strong ${BOLD}>${escapeHtml(data.role)}</strong>.
               </p>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 VolunteerCal makes it simple to see when you're scheduled, confirm your availability, and stay in the loop — all in one place.

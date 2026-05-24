@@ -14,6 +14,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface SelfRemovalAlertData {
   recipientName: string;
@@ -48,17 +49,17 @@ export function buildSelfRemovalAlertEmail(data: SelfRemovalAlertData): {
 
   const noteBlock = data.note
     ? `<div style="margin:16px 0;padding:12px 16px;background:#FBF7F0;border-left:3px solid #E07A5F;border-radius:4px;font-size:14px;color:#4A4A6A;line-height:1.6;">
-        <strong ${BOLD}>Note from ${data.volunteerName}:</strong><br/>
-        ${data.note.replace(/\n/g, "<br/>")}
+        <strong ${BOLD}>Note from ${escapeHtml(data.volunteerName)}:</strong><br/>
+        ${escapeHtml(data.note).replace(/\n/g, "<br/>")}
       </div>`
     : "";
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.volunteerName}</strong> has removed themselves from <strong ${BOLD}>${data.roleName}</strong> for <strong ${BOLD}>${data.serviceName}</strong> on ${dateStr} at <strong ${BOLD}>${data.churchName}</strong>.
+                <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong> has removed themselves from <strong ${BOLD}>${escapeHtml(data.roleName)}</strong> for <strong ${BOLD}>${escapeHtml(data.serviceName)}</strong> on ${escapeHtml(dateStr)} at <strong ${BOLD}>${escapeHtml(data.churchName)}</strong>.
               </p>
 
               ${card}

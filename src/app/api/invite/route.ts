@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { buildInviteEmail } from "@/lib/utils/email-templates";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
 
@@ -19,8 +20,17 @@ import { resend } from "@/lib/resend";
  *
  * Auth: Bearer token (Firebase ID token from the inviter)
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Pass G Phase 2: per-IP throttle BEFORE auth — cheapest possible gate
+    // for an unauthenticated flood.
+    const ipLimited = await rateLimitDistributed(request, {
+      prefix: "invite-ip",
+      limit: 30,
+      windowSeconds: 60 * 60,
+    });
+    if (ipLimited) return ipLimited;
+
     const authHeader = request.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,6 +39,23 @@ export async function POST(request: Request) {
     const idToken = authHeader.slice(7);
     const decoded = await adminAuth.verifyIdToken(idToken);
     const inviterUid = decoded.uid;
+
+    // Per-user throttle: 20/hour + 100/day. Mixes the UID into the bucket key
+    // so one compromised account can't fan out across IPs.
+    const userHourLimited = await rateLimitDistributed(request, {
+      prefix: "invite-user-hour",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      extraKey: inviterUid,
+    });
+    if (userHourLimited) return userHourLimited;
+    const userDayLimited = await rateLimitDistributed(request, {
+      prefix: "invite-user-day",
+      limit: 100,
+      windowSeconds: 60 * 60 * 24,
+      extraKey: inviterUid,
+    });
+    if (userDayLimited) return userDayLimited;
 
     // Verify inviter is admin+ for this church
     const inviterMembershipId = `${inviterUid}_${(await request.clone().json()).churchId}`;
