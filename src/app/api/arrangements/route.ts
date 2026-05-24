@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { SongArrangement, ArrangementFormatting, Song } from "@/lib/types";
 
 /**
@@ -8,27 +9,14 @@ import type { SongArrangement, ArrangementFormatting, Song } from "@/lib/types";
  */
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
-    const { searchParams } = req.nextUrl;
-    const churchId = searchParams.get("church_id");
-    const songId = searchParams.get("song_id");
+    const songId = req.nextUrl.searchParams.get("song_id");
 
-    if (!churchId || !songId) {
+    if (!songId) {
       return NextResponse.json({ error: "Missing church_id or song_id" }, { status: 400 });
-    }
-
-    // Verify membership
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
     const snap = await adminDb
@@ -59,33 +47,24 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const gate = await requireModuleTier(req, "worship", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
+
+    if (!["owner", "admin", "scheduler"].includes(role)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
 
     const body = await req.json();
-    const { church_id, song_id, name, clone_from } = body;
+    const { song_id, name, clone_from } = body;
 
-    if (!church_id || !song_id || !name) {
+    if (!song_id || !name) {
       return NextResponse.json(
         { error: "Missing required fields: church_id, song_id, name" },
         { status: 400 },
       );
-    }
-
-    // Verify admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin", "scheduler"].includes(role)) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
     const now = new Date().toISOString();
@@ -103,7 +82,7 @@ export async function POST(req: NextRequest) {
       // Clone from existing arrangement
       const sourceSnap = await adminDb
         .collection("churches")
-        .doc(church_id)
+        .doc(churchId)
         .collection("arrangements")
         .doc(clone_from)
         .get();
@@ -124,7 +103,7 @@ export async function POST(req: NextRequest) {
       // Create from song's chart data
       const songSnap = await adminDb
         .collection("churches")
-        .doc(church_id)
+        .doc(churchId)
         .collection("songs")
         .doc(song_id)
         .get();
@@ -137,7 +116,7 @@ export async function POST(req: NextRequest) {
 
       arrangementData = {
         song_id,
-        church_id,
+        church_id: churchId,
         name,
         key: song.default_key || "C",
         chart_type: "standard",
@@ -154,7 +133,7 @@ export async function POST(req: NextRequest) {
 
     const docRef = await adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("arrangements")
       .add(arrangementData);
 

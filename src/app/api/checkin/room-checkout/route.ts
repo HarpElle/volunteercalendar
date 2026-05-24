@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * POST /api/checkin/room-checkout
@@ -13,15 +14,24 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (room token covers auth below).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
-    const { church_id, room_id, token, session_id } = body as {
+    const { room_id, token, session_id } = body as {
       church_id: string;
       room_id: string;
       token: string;
       session_id: string;
     };
 
-    if (!church_id || !room_id || !token || !session_id) {
+    if (!room_id || !token || !session_id) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },

@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
 import { TIER_LIMITS } from "@/lib/constants";
-
-async function verifyAuth(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  return decoded.uid;
-}
-
-async function getMembershipRole(userId: string, churchId: string) {
-  const snap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
-  if (!snap.exists) return null;
-  return snap.data()!.role as string;
-}
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * GET /api/rooms?church_id=...&include_inactive=true
@@ -22,20 +10,9 @@ async function getMembershipRole(userId: string, churchId: string) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    const role = await getMembershipRole(userId, churchId);
-    if (!role) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
+    const gate = await requireModuleTier(req, "rooms");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
     const includeInactive =
       req.nextUrl.searchParams.get("include_inactive") === "true";
@@ -72,42 +49,29 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const gate = await requireModuleTier(req, "rooms", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, tier, role } = gate.ctx;
 
-    const body = await req.json();
-    const { church_id, name } = body;
-    if (!church_id || !name?.trim()) {
-      return NextResponse.json(
-        { error: "Missing church_id or name" },
-        { status: 400 },
-      );
-    }
-
-    const role = await getMembershipRole(userId, church_id);
-    if (!role || !["owner", "admin"].includes(role)) {
+    if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 },
       );
     }
 
-    // Check tier limit
-    const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
-    const tier = (churchSnap.data()?.subscription_tier || "free") as string;
-    const limits = TIER_LIMITS[tier];
-    if (!limits?.rooms_enabled) {
-      return NextResponse.json(
-        { error: "Room booking requires Starter tier or higher" },
-        { status: 403 },
-      );
+    const body = await req.json();
+    const { name } = body;
+    if (!name?.trim()) {
+      return NextResponse.json({ error: "Missing name" }, { status: 400 });
     }
 
-    // Check rooms_max
+    // Check rooms_max (module-enabled check already done by requireModuleTier).
+    const limits = TIER_LIMITS[tier];
     const existingSnap = await adminDb
-      .collection(`churches/${church_id}/rooms`)
+      .collection(`churches/${churchId}/rooms`)
       .where("is_active", "==", true)
       .get();
     if (existingSnap.size >= limits.rooms_max) {
@@ -120,10 +84,10 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    const docRef = adminDb.collection(`churches/${church_id}/rooms`).doc();
+    const docRef = adminDb.collection(`churches/${churchId}/rooms`).doc();
     const room = {
       id: docRef.id,
-      church_id,
+      church_id: churchId,
       name: name.trim(),
       description: body.description?.trim() || "",
       capacity: body.capacity || null,

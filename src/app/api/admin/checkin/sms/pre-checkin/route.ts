@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { TIER_LIMITS } from "@/lib/constants";
 import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
@@ -23,27 +24,12 @@ import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId, tier, role } = gate.ctx;
 
-    const body = await req.json();
-    const { church_id } = body;
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify membership + admin role
-    const membershipSnap = await adminDb
-      .doc(`memberships/${userId}_${church_id}`)
-      .get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -51,12 +37,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check tier
-    const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
-    if (!churchSnap.exists) {
-      return NextResponse.json({ error: "Church not found" }, { status: 404 });
-    }
-    const tier = (churchSnap.data()!.subscription_tier || "free") as keyof typeof TIER_LIMITS;
+    // Stricter sub-feature gate: pre-check-in SMS specifically requires Pro+.
+    // The helper already verified checkin_enabled (Growth+).
     const limits = TIER_LIMITS[tier];
     if (!limits?.checkin_pre_checkin_sms) {
       return NextResponse.json(
@@ -65,9 +47,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const churchSnap = await adminDb.doc(`churches/${churchId}`).get();
+
     // Load check-in settings
     const settingsSnap = await adminDb
-      .doc(`churches/${church_id}/checkinSettings/config`)
+      .doc(`churches/${churchId}/checkinSettings/config`)
       .get();
     if (!settingsSnap.exists) {
       return NextResponse.json(
@@ -105,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Query all active households
     const householdsSnap = await adminDb
-      .collection(`churches/${church_id}/checkin_households`)
+      .collection(`churches/${churchId}/checkin_households`)
       .where("is_active", "==", true)
       .get();
 
@@ -129,7 +113,7 @@ export async function POST(req: NextRequest) {
 
       // Get children names for this household
       const childrenSnap = await adminDb
-        .collection(`churches/${church_id}/children`)
+        .collection(`churches/${churchId}/children`)
         .where("household_id", "==", doc.id)
         .where("is_active", "==", true)
         .get();

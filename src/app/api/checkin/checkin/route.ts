@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, kioskActor } from "@/lib/server/audit";
 import {
   assignRoomByGrade,
@@ -32,9 +33,17 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
     const {
-      church_id,
       household_id,
       child_ids,
       room_overrides,
@@ -53,7 +62,7 @@ export async function POST(req: NextRequest) {
       alerts_acknowledged?: boolean;
     };
 
-    if (!church_id || !household_id || !child_ids?.length || !service_date) {
+    if (!household_id || !child_ids?.length || !service_date) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
@@ -65,14 +74,8 @@ export async function POST(req: NextRequest) {
 
     const churchRef = adminDb.collection("churches").doc(church_id);
 
-    // Load church doc for name
+    // Load church doc for name (helper already verified existence)
     const churchSnap = await churchRef.get();
-    if (!churchSnap.exists) {
-      return NextResponse.json(
-        { error: "Church not found" },
-        { status: 404 },
-      );
-    }
     const churchName = churchSnap.data()!.name as string;
 
     // Load check-in settings for printer config + service times

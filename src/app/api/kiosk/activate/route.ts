@@ -11,8 +11,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase/admin";
+import { TIER_LIMITS } from "@/lib/constants";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { ActivationError, consumeActivation } from "@/lib/server/kiosk";
+import type { SubscriptionTier } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   // Distributed rate limit (Track D.5). 8-char hex code = 16M keyspace, so
@@ -54,6 +57,25 @@ export async function POST(req: NextRequest) {
       code,
       device_fingerprint: fingerprint,
     });
+
+    // Pass G Phase 1: tier-gate the target church AFTER activation succeeds.
+    // We don't know the church_id until consumeActivation returns, so we
+    // can't use the shared `requireModuleTier` helper here (it expects the
+    // church_id in the request). Inline the equivalent tier check.
+    const churchSnap = await adminDb.doc(`churches/${station.church_id}`).get();
+    const tier =
+      (churchSnap.data()?.subscription_tier as SubscriptionTier) || "free";
+    if (TIER_LIMITS[tier]?.checkin_enabled !== true) {
+      return NextResponse.json(
+        {
+          error: "This feature requires the Growth tier or higher.",
+          required_tier: "growth",
+          module: "checkin",
+        },
+        { status: 403 },
+      );
+    }
+
     return NextResponse.json({
       token,
       station: {

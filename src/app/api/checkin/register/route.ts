@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, kioskActor } from "@/lib/server/audit";
 import { randomBytes } from "crypto";
 import type { CheckInHousehold, ChildGrade } from "@/lib/types";
@@ -35,9 +36,17 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
     const {
-      church_id,
       primary_guardian_name,
       primary_guardian_phone,
       secondary_guardian_name,
@@ -60,7 +69,6 @@ export async function POST(req: NextRequest) {
     };
 
     if (
-      !church_id ||
       !primary_guardian_name ||
       !primary_guardian_phone ||
       !children?.length
@@ -74,15 +82,8 @@ export async function POST(req: NextRequest) {
     const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
     if (churchMismatch) return churchMismatch;
 
-    // Validate church exists
+    // Helper already verified church exists.
     const churchRef = adminDb.collection("churches").doc(church_id);
-    const churchSnap = await churchRef.get();
-    if (!churchSnap.exists) {
-      return NextResponse.json(
-        { error: "Church not found" },
-        { status: 404 },
-      );
-    }
 
     // Normalize phone to E.164
     const normalizedPhone = normalizePhone(primary_guardian_phone);

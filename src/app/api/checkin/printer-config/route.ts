@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { PrinterConfig, PrinterType, PrintMethod, PrinterConnectionType, BrotherLabelSize, ZebraLabelSize, DymoLabelSize } from "@/lib/types";
 
 type LabelSize = BrotherLabelSize | ZebraLabelSize | DymoLabelSize;
@@ -24,8 +25,17 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
-    const { church_id, printer } = body as {
+    const { printer } = body as {
       church_id: string;
       printer: {
         station_name?: string;
@@ -40,7 +50,7 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    if (!church_id || !printer?.printer_type) {
+    if (!printer?.printer_type) {
       return NextResponse.json(
         { error: "Missing required fields: church_id, printer.printer_type" },
         { status: 400 },
@@ -57,12 +67,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify church exists
+    // Helper already verified church exists.
     const churchRef = adminDb.collection("churches").doc(church_id);
-    const churchSnap = await churchRef.get();
-    if (!churchSnap.exists) {
-      return NextResponse.json({ error: "Church not found" }, { status: 404 });
-    }
 
     // Default label size based on printer type
     const defaultLabelSize =

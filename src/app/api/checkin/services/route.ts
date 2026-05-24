@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { TIER_LIMITS } from "@/lib/constants";
 import { SHORT_CODE_RE, generateShortCode, resolveShortCode } from "@/lib/utils/short-code";
-import type { CheckInSettings, CheckInServiceTime } from "@/lib/types";
+import type { CheckInSettings, CheckInServiceTime, SubscriptionTier } from "@/lib/types";
 
 /**
  * GET /api/checkin/services?church_id=...
@@ -52,6 +53,22 @@ export async function GET(req: NextRequest) {
 
     const churchData = churchSnap.data()!;
     const churchName = churchData.name as string;
+
+    // Pass G Phase 1: tier-gate. Inlined here because the route accepts both
+    // a church_id and a short_code; the short_code needs to be resolved before
+    // the tier check, so the shared `requireModuleTier` helper (which expects
+    // a real churchId in the request) doesn't fit cleanly.
+    const tier = (churchData.subscription_tier as SubscriptionTier) || "free";
+    if (TIER_LIMITS[tier]?.checkin_enabled !== true) {
+      return NextResponse.json(
+        {
+          error: "This feature requires the Growth tier or higher.",
+          required_tier: "growth",
+          module: "checkin",
+        },
+        { status: 403 },
+      );
+    }
 
     // Backfill short_code for existing churches that don't have one
     if (!churchData.short_code) {

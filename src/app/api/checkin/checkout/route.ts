@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { timingSafeEqual } from "crypto";
 import type { CheckInSession, CheckInAlert } from "@/lib/types";
@@ -24,8 +25,17 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    // Pass G Phase 1: tier-gate the target church (kiosk token covers auth).
+    // Helper must run before req.json() so its req.clone() has an unread body.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId: church_id } = gate.ctx;
+
     const body = await req.json();
-    const { church_id, session_id, security_code, volunteer_user_id } =
+    const { session_id, security_code, volunteer_user_id } =
       body as {
         church_id: string;
         session_id?: string;
@@ -33,7 +43,7 @@ export async function POST(req: NextRequest) {
         volunteer_user_id?: string;
       };
 
-    if (!church_id || !security_code) {
+    if (!security_code) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },

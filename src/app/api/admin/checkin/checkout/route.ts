@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { loadChild } from "@/lib/server/checkin-helpers";
 
 /**
@@ -9,36 +10,32 @@ import { loadChild } from "@/lib/server/checkin-helpers";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { userId, churchId, role } = gate.ctx;
 
     const body = await req.json();
-    const { church_id, session_id } = body as {
+    const { session_id } = body as {
       church_id: string;
       session_id: string;
     };
 
-    if (!church_id || !session_id) {
+    if (!session_id) {
       return NextResponse.json(
         { error: "Missing church_id or session_id" },
         { status: 400 },
       );
     }
 
-    // Verify membership (scheduler+ or checkin_volunteer)
+    // Preserve the original membership check — admin/scheduler OR a flagged
+    // checkin_volunteer. Helper gives us role, but we still need the
+    // checkin_volunteer flag from the membership doc.
     const membershipSnap = await adminDb
-      .doc(`memberships/${userId}_${church_id}`)
+      .doc(`memberships/${userId}_${churchId}`)
       .get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const membership = membershipSnap.data()!;
-    const role = membership.role as string;
-    const isCheckinVolunteer = membership.checkin_volunteer === true;
+    const isCheckinVolunteer = membershipSnap.data()?.checkin_volunteer === true;
 
     if (!["owner", "admin", "scheduler"].includes(role) && !isCheckinVolunteer) {
       return NextResponse.json(
@@ -47,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const churchRef = adminDb.collection("churches").doc(church_id);
+    const churchRef = adminDb.collection("churches").doc(churchId);
     const sessionRef = churchRef.collection("checkInSessions").doc(session_id);
     const sessionSnap = await sessionRef.get();
 

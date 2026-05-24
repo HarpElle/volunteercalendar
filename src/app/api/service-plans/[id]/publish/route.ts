@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { ServicePlan, ServicePlanItem, Song } from "@/lib/types";
 
 /**
@@ -16,34 +17,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship", {
+      churchIdFrom: "body",
+    });
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
     const { id: planId } = await params;
 
-    const body = await req.json();
-    const { church_id } = body as { church_id: string };
-
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify membership with admin/scheduler role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const churchRef = adminDb.collection("churches").doc(church_id);
+    const churchRef = adminDb.collection("churches").doc(churchId);
     const planRef = churchRef.collection("service_plans").doc(planId);
     const planSnap = await planRef.get();
 
@@ -105,7 +90,7 @@ export async function POST(
       // Create a SongUsageRecord
       const usageRef = churchRef.collection("song_usage").doc();
       batch.set(usageRef, {
-        church_id,
+        church_id: churchId,
         song_id: songId,
         service_plan_id: planId,
         service_date: plan.service_date,
