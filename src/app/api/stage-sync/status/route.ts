@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * GET /api/stage-sync/status?church_id=xxx&plan_id=yyy
@@ -7,30 +8,18 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
  */
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
     const { searchParams } = req.nextUrl;
-    const churchId = searchParams.get("church_id");
     const planId = searchParams.get("plan_id");
 
-    if (!churchId || !planId) {
+    if (!planId) {
       return NextResponse.json(
-        { error: "Missing required params: church_id, plan_id" },
+        { error: "Missing required params: plan_id" },
         { status: 400 },
       );
-    }
-
-    // Verify membership
-    const membershipId = `${userId}_${churchId}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
     // Get the service plan

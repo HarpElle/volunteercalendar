@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 
 /**
  * POST /api/stage-sync/advance
@@ -10,31 +11,20 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
  */
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
+    const gate = await requireModuleTier(req, "worship", { churchIdFrom: "body" });
+    if (!gate.ok) return gate.response;
+    const { churchId, role } = gate.ctx;
 
     const body = await req.json();
-    const { church_id, plan_id, target_index } = body;
+    const { plan_id, target_index } = body;
 
-    if (!church_id || !plan_id) {
+    if (!plan_id) {
       return NextResponse.json(
-        { error: "Missing required fields: church_id, plan_id" },
+        { error: "Missing required fields: plan_id" },
         { status: 400 },
       );
     }
 
-    // Verify membership
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
     if (!["owner", "admin", "scheduler"].includes(role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -42,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Get the service plan
     const planRef = adminDb
       .collection("churches")
-      .doc(church_id)
+      .doc(churchId)
       .collection("service_plans")
       .doc(plan_id);
 

@@ -1,27 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
 import Anthropic from "@anthropic-ai/sdk";
 
 const MAX_PDF_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /**
- * POST /api/songselect/convert-pdf
+ * POST /api/songselect/convert-pdf?church_id=xxx
  *
  * Accept a PDF chord chart file, send it to Claude Vision API
  * for metadata extraction only (title, key, tempo, CCLI, etc.).
  * The PDF itself is stored as-is for native display.
  *
- * Requires ANTHROPIC_API_KEY env var.
+ * Requires ANTHROPIC_API_KEY env var. Tier-gated to Worship Prep (Growth+).
  */
 export async function POST(req: NextRequest) {
   try {
-    // --- Auth ---
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    await adminAuth.verifyIdToken(token);
+    // Tier-gate FIRST so Free/Starter callers can't burn Anthropic credits.
+    const gate = await requireModuleTier(req, "worship");
+    if (!gate.ok) return gate.response;
 
     // --- Check for API key ---
     const apiKey = process.env.ANTHROPIC_API_KEY;
