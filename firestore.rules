@@ -442,9 +442,12 @@ service cloud.firestore {
         allow update: if request.auth != null
           && isOrgAdmin(resource.data.church_id);
 
-        // Admins of the member's own org can leave (delete)
+        // Pass G Phase 4: OWNER only (not any admin) can leave. Plan §4.5 —
+        // leaving silently disconnects shared-room visibility from the
+        // partner org, which can disrupt coordination. Restrict to the
+        // role most accountable for external organizational relationships.
         allow delete: if request.auth != null
-          && isOrgAdmin(resource.data.church_id);
+          && isOrgOwner(resource.data.church_id);
       }
     }
 
