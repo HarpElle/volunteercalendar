@@ -6,6 +6,13 @@ import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
 import { audit, userActor } from "@/lib/server/audit";
 import { generateShortCode } from "@/lib/utils/short-code";
 import { resend } from "@/lib/resend";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import {
+  FREE_ORG_CAP_PER_EMAIL,
+  ORG_CREATION_PER_IP_PER_DAY,
+  isBetaTester,
+  isBetaTesterEmail,
+} from "@/lib/server/abuse-caps";
 
 /**
  * POST /api/organization
@@ -22,6 +29,7 @@ export async function POST(req: NextRequest) {
     const token = authHeader.slice(7);
     const decoded = await adminAuth.verifyIdToken(token);
     const userId = decoded.uid;
+    const callerEmail = decoded.email ?? null;
 
     const body = await req.json();
     const { name, org_type, timezone, workflow_mode } = body;
@@ -30,14 +38,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Determine churchId: first org uses uid, additional orgs use random UUID
+    // Pass G Phase 5: per-IP throttle on org creation. Catches IP-rotating
+    // scripted multiplication. Beta-testers exempt.
+    const isExempt =
+      isBetaTester(userId) || isBetaTesterEmail(callerEmail);
+    if (!isExempt) {
+      const ipLimited = await rateLimitDistributed(req, {
+        prefix: "org-create-ip",
+        limit: ORG_CREATION_PER_IP_PER_DAY,
+        windowSeconds: 24 * 60 * 60,
+      });
+      if (ipLimited) return ipLimited;
+    }
+
+    // Pass G Phase 5: anti-multiplication cap. Count this user's existing
+    // active OWNER memberships on Free-tier churches. If at the cap, refuse
+    // to create another Free org. Once a user upgrades an existing org
+    // their remaining Free budget is unchanged (intent: prevent abusing
+    // the Free tier as a way to multiply limits across many "shell" orgs).
     const existingMemberships = await adminDb
       .collection("memberships")
       .where("user_id", "==", userId)
       .where("status", "==", "active")
-      .limit(1)
       .get();
     const hasExistingOrg = !existingMemberships.empty;
+    if (!isExempt && hasExistingOrg) {
+      const ownedFreeChurchIds: string[] = [];
+      for (const memDoc of existingMemberships.docs) {
+        if ((memDoc.data().role as string) !== "owner") continue;
+        const ownedChurchId = memDoc.data().church_id as string;
+        const churchSnap = await adminDb
+          .doc(`churches/${ownedChurchId}`)
+          .get();
+        if (!churchSnap.exists) continue;
+        const tier = (churchSnap.data()?.subscription_tier as string) || "free";
+        if (tier === "free") ownedFreeChurchIds.push(ownedChurchId);
+      }
+      if (ownedFreeChurchIds.length >= FREE_ORG_CAP_PER_EMAIL) {
+        return NextResponse.json(
+          {
+            error: `You already own ${ownedFreeChurchIds.length} Free organizations (cap is ${FREE_ORG_CAP_PER_EMAIL}). Upgrade an existing organization to add more, or contact support if you have a legitimate need for additional Free orgs.`,
+            cap: FREE_ORG_CAP_PER_EMAIL,
+            current_count: ownedFreeChurchIds.length,
+          },
+          { status: 403 },
+        );
+      }
+    }
+
+    // Determine churchId: first org uses uid, additional orgs use random UUID
     const churchId = hasExistingOrg ? crypto.randomUUID() : userId;
 
     const slug = name

@@ -59,9 +59,16 @@ export default function DashboardLayout({
         const orgPrereqs: unknown[] = data.org_prerequisites || [];
         setHasPrerequisites(orgPrereqs.length > 0);
         setSubscriptionTier((data.subscription_tier as SubscriptionTier) || "free");
+
+        // Pass G Phase 5: redirect to suspended landing if the org is
+        // platform-admin-suspended. Soft block — data preserved; admin
+        // can unsuspend via /api/platform/orgs/<id>/suspend.
+        if (data.suspended_at) {
+          router.replace("/account/suspended");
+        }
       }
     }).catch(() => {});
-  }, [churchId]);
+  }, [churchId, router]);
 
   // Load names for all orgs (for org switcher)
   const activeMemberships = memberships.filter((m) => m.status === "active");
