@@ -4,6 +4,16 @@ import { requireModuleTier } from "@/lib/server/require-module-tier";
 import type { Song, SongChartData, SongArrangement, ArrangementFormatting } from "@/lib/types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+// Server-side MIME whitelist. The client claims a Content-Type via the
+// File API but a malicious caller can claim anything; this list is the
+// authoritative gate. Use BOTH this list AND the `file_type` form field
+// (which determines the parsing path) — they must agree.
+const ALLOWED_MIME_TYPES: Record<"chordpro" | "pdf", string[]> = {
+  // ChordPro files are plain text. Browsers may send these as
+  // text/plain, application/octet-stream, or with no extension at all.
+  chordpro: ["text/plain", "application/octet-stream", ""],
+  pdf: ["application/pdf"],
+};
 
 /**
  * POST /api/songselect/upload?church_id=xxx
@@ -40,6 +50,38 @@ export async function POST(req: NextRequest) {
         { error: "Missing required fields: chart_data, file_type" },
         { status: 400 },
       );
+    }
+
+    // Server-side file validation. Codex Pass G Phase 2 retest caught
+    // that the previous code silently skipped files over MAX_FILE_SIZE
+    // (the user saw a successful upload that had no file attached) and
+    // didn't enforce MIME whitelist (any content-type passed through to
+    // Storage). Both are real Sev 3 issues; fix is to REJECT (not skip).
+    if (file && !(file instanceof File)) {
+      return NextResponse.json(
+        { error: "Invalid file payload" },
+        { status: 400 },
+      );
+    }
+    if (file instanceof File) {
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `File too large (max ${MAX_FILE_SIZE / 1024 / 1024} MB)` },
+          { status: 400 },
+        );
+      }
+      const allowed = ALLOWED_MIME_TYPES[fileType] ?? [];
+      // Browsers vary on what Content-Type they send for ChordPro; be
+      // permissive on the "" case for that file type only. PDF must be
+      // explicit since it's binary.
+      if (!allowed.includes(file.type)) {
+        return NextResponse.json(
+          {
+            error: `File type "${file.type}" not allowed for ${fileType}. Expected: ${allowed.filter(Boolean).join(", ") || "PDF/ChordPro"}.`,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // --- Parse chart data ---
