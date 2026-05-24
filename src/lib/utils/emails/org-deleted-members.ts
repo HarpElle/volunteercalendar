@@ -10,6 +10,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface OrgDeletedMembersEmailData {
   userName: string;
@@ -39,10 +40,10 @@ export function buildOrgDeletedMembersEmail(data: OrgDeletedMembersEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.orgName}</strong> has been deleted by its administrator. Your membership and any associated data have been removed.
+                <strong ${BOLD}>${escapeHtml(data.orgName)}</strong> has been deleted by its administrator. Your membership and any associated data have been removed.
               </p>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 ${followUpHtml}
@@ -50,7 +51,7 @@ export function buildOrgDeletedMembersEmail(data: OrgDeletedMembersEmailData): {
 
               ${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}
 
-              ${mutedCenter("You're receiving this because you were a member of " + data.orgName + ".")}`;
+              ${mutedCenter("You're receiving this because you were a member of " + escapeHtml(data.orgName) + ".")}`;
 
   const html = wrapInLayout({
     headerText: "Organization Deleted",

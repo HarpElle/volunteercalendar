@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  TurnstileWidget,
+  isTurnstileEnabled,
+} from "@/components/forms/turnstile-widget";
 import type { Event, RoleSlot, EventSignup, Church } from "@/lib/types";
 
 type PageState = "loading" | "not_found" | "ready" | "submitted";
@@ -24,6 +28,17 @@ export default function EventSignupPage() {
   const [guestEmail, setGuestEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+
+  // Stable token-setter so the Turnstile widget doesn't re-render on every
+  // parent render (which would cycle the challenge).
+  const handleTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+
+  const turnstileRequired = isTurnstileEnabled() && !user;
+  // Only require Turnstile for guest (unauthenticated) signups. Logged-in
+  // users have a Firebase ID token which is its own bot challenge.
 
   useEffect(() => {
     async function load() {
@@ -57,6 +72,10 @@ export default function EventSignupPage() {
       setErrorMsg("Please enter your name and email.");
       return;
     }
+    if (turnstileRequired && !turnstileToken) {
+      setErrorMsg("Please complete the bot challenge.");
+      return;
+    }
 
     setErrorMsg("");
     setSubmitting(true);
@@ -69,6 +88,9 @@ export default function EventSignupPage() {
         volunteer_name: isLoggedIn ? (profile?.display_name || "") : guestName.trim(),
         volunteer_email: isLoggedIn ? (profile?.email || "") : guestEmail.trim(),
         user_id: isLoggedIn ? user!.uid : null,
+        // Empty string when Turnstile is env-gated off OR when caller is
+        // authenticated. Server skips verification in both cases.
+        turnstile_token: turnstileToken,
       };
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -337,6 +359,15 @@ export default function EventSignupPage() {
           </div>
         )}
 
+        {/* Turnstile bot challenge — guest signups only (logged-in users
+            already have Firebase ID token). Renders nothing when
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY isn't set (env-gated). */}
+        {turnstileRequired && (
+          <div className="mt-4">
+            <TurnstileWidget onToken={handleTurnstileToken} />
+          </div>
+        )}
+
         {/* Error */}
         {errorMsg && (
           <div className="mt-4 rounded-lg bg-vc-danger/5 px-4 py-3 text-sm text-vc-danger">
@@ -350,7 +381,9 @@ export default function EventSignupPage() {
             <Button
               onClick={handleSignup}
               loading={submitting}
-              disabled={!selectedRoleId}
+              disabled={
+                !selectedRoleId || (turnstileRequired && !turnstileToken)
+              }
               className="w-full"
               size="lg"
             >

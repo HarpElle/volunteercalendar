@@ -5,6 +5,8 @@
  * outside the card). It does NOT use wrapInLayout — the HTML is self-contained.
  */
 
+import { escapeHtml } from "./escape";
+
 export interface EventInviteData {
   recipientName: string;
   eventName: string;
@@ -24,7 +26,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
     ? `<tr>
         <td style="padding: 0 0 24px;">
           <p style="margin: 0; font-family: 'DM Sans', Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #6B6D8A;">
-            ${data.eventDescription}
+            ${escapeHtml(data.eventDescription)}
           </p>
         </td>
       </tr>`
@@ -51,14 +53,14 @@ export function buildEventInviteEmail(data: EventInviteData) {
                 <tr>
                   <td style="padding:0 0 8px;">
                     <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:14px;color:#9A9BB5;">
-                      ${data.churchName}
+                      ${escapeHtml(data.churchName)}
                     </p>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:0 0 24px;">
                     <h1 style="margin:0;font-family:'DM Serif Display',Georgia,serif;font-size:28px;font-weight:400;color:#2D3047;line-height:1.3;">
-                      ${firstName}, you're invited!
+                      ${escapeHtml(firstName)}, you're invited!
                     </h1>
                   </td>
                 </tr>
@@ -69,10 +71,10 @@ export function buildEventInviteEmail(data: EventInviteData) {
                       <tr>
                         <td style="padding:24px;">
                           <h2 style="margin:0 0 8px;font-family:'DM Serif Display',Georgia,serif;font-size:22px;font-weight:400;color:#2D3047;">
-                            ${data.eventName}
+                            ${escapeHtml(data.eventName)}
                           </h2>
                           <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#6B6D8A;">
-                            📅 ${data.eventDate} &nbsp;&bull;&nbsp; 🕐 ${data.eventTime}
+                            📅 ${escapeHtml(data.eventDate)} &nbsp;&bull;&nbsp; 🕐 ${escapeHtml(data.eventTime)}
                           </p>
                         </td>
                       </tr>
@@ -83,7 +85,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
                 <tr>
                   <td style="padding:0 0 24px;">
                     <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:15px;line-height:1.6;color:#6B6D8A;">
-                      ${data.senderName} has invited you to sign up for this event. Tap the button below to view details and volunteer.
+                      ${escapeHtml(data.senderName)} has invited you to sign up for this event. Tap the button below to view details and volunteer.
                     </p>
                   </td>
                 </tr>
@@ -101,7 +103,7 @@ export function buildEventInviteEmail(data: EventInviteData) {
           <tr>
             <td style="padding:32px 0 0;text-align:center;">
               <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#9A9BB5;">
-                Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${data.churchName}
+                Sent by <span style="color:#2D3047;">Volunteer</span><span style="color:#E07A5F;">Cal</span> on behalf of ${escapeHtml(data.churchName)}
               </p>
             </td>
           </tr>

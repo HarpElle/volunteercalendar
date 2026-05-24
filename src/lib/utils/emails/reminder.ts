@@ -10,6 +10,7 @@ import {
   formatDateLong,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ReminderEmailData {
   volunteerName: string;
@@ -35,7 +36,7 @@ export function buildReminderEmail(data: ReminderEmailData): {
 
   const body = `
               <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#4A4A6A;">
-                Hi <strong ${BOLD}>${data.volunteerName}</strong>,
+                Hi <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong>,
                 just a reminder that you're scheduled to serve <strong ${BOLD}>${timeLabel}</strong>.
               </p>
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBF7F0;border-radius:12px;margin-bottom:24px;">
@@ -51,15 +52,15 @@ export function buildReminderEmail(data: ReminderEmailData): {
                       <tr>
                         <td style="padding-bottom:12px;">
                           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Service</span><br>
-                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.serviceName}</span>
-                          ${data.startTime ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${data.startTime}</span>` : ""}
+                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${escapeHtml(data.serviceName)}</span>
+                          ${data.startTime ? `<span style="font-size:13px;color:#9A9BB5;"> &middot; ${escapeHtml(data.startTime)}</span>` : ""}
                         </td>
                       </tr>
                       <tr>
                         <td>
                           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${data.roleTitle}</span>
-                          <span style="font-size:13px;color:#9A9BB5;"> &middot; ${data.ministryName}</span>
+                          <span style="font-size:15px;font-weight:600;color:#2D3047;">${escapeHtml(data.roleTitle)}</span>
+                          <span style="font-size:13px;color:#9A9BB5;"> &middot; ${escapeHtml(data.ministryName)}</span>
                         </td>
                       </tr>
                     </table>

@@ -1,6 +1,7 @@
 /** Plan change notification email — sent when a subscription is downgraded or cancelled. */
 
 import { wrapInLayout, P, BOLD, ctaButton, detailCard } from "./base-layout";
+import { escapeHtml } from "./escape";
 import type { OverLimitItem } from "@/lib/utils/tier-enforcement";
 
 export interface DowngradeNotificationData {
@@ -24,10 +25,10 @@ export function buildDowngradeNotificationEmail(
   const subject = `Your ${data.churchName} plan has been updated to ${data.newPlanName}`;
 
   let body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Your <strong ${BOLD}>${data.churchName}</strong> account has moved from the <strong ${BOLD}>${data.oldPlanName}</strong> plan to the <strong ${BOLD}>${data.newPlanName}</strong> plan. Here's what that means for your account.
+                Your <strong ${BOLD}>${escapeHtml(data.churchName)}</strong> account has moved from the <strong ${BOLD}>${escapeHtml(data.oldPlanName)}</strong> plan to the <strong ${BOLD}>${escapeHtml(data.newPlanName)}</strong> plan. Here's what that means for your account.
               </p>`;
 
   // Lost features section
@@ -35,7 +36,7 @@ export function buildDowngradeNotificationEmail(
     const featureRows = data.lostFeatures
       .map(
         (f) =>
-          `<tr><td style="padding:4px 0 4px 12px;font-size:14px;color:#4A4A6A;">&bull; ${f}</td></tr>`,
+          `<tr><td style="padding:4px 0 4px 12px;font-size:14px;color:#4A4A6A;">&bull; ${escapeHtml(f)}</td></tr>`,
       )
       .join("");
 
@@ -50,7 +51,7 @@ export function buildDowngradeNotificationEmail(
     const limitRows = data.overLimitItems
       .map(
         (item) =>
-          `<tr><td style="padding:4px 0 4px 12px;font-size:14px;color:#4A4A6A;">&bull; You have ${item.current} ${item.resource} (${data.newPlanName} allows ${item.newLimit})</td></tr>`,
+          `<tr><td style="padding:4px 0 4px 12px;font-size:14px;color:#4A4A6A;">&bull; You have ${item.current} ${escapeHtml(item.resource)} (${escapeHtml(data.newPlanName)} allows ${item.newLimit})</td></tr>`,
       )
       .join("");
 

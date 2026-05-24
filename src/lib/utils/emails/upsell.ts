@@ -1,6 +1,7 @@
 /** Free-tier upsell email — sent when usage approaches plan limits. */
 
 import { wrapInLayout, P, BOLD, detailCard, ctaButton } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface UpsellData {
   userName: string;
@@ -50,12 +51,12 @@ export function buildUpsellEmail(data: UpsellData): {
     : `Unlock more for ${data.churchName}`;
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
                 ${nearLimit
-                  ? `${data.churchName} now has <strong ${BOLD}>${data.volunteerCount} of ${data.volunteerLimit}</strong> volunteers on the Free plan. Once you hit the limit, you won't be able to add more until you upgrade.`
-                  : `${data.churchName} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "ministry" : "ministries"}. Here's what you could unlock with a paid plan:`}
+                  ? `${escapeHtml(data.churchName)} now has <strong ${BOLD}>${data.volunteerCount} of ${data.volunteerLimit}</strong> volunteers on the Free plan. Once you hit the limit, you won't be able to add more until you upgrade.`
+                  : `${escapeHtml(data.churchName)} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "ministry" : "ministries"}. Here's what you could unlock with a paid plan:`}
               </p>
 
               ${detailCard(featureList())}

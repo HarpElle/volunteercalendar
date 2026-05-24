@@ -1,6 +1,7 @@
 /** Org created email — sent when a user creates a new organization. */
 
 import { wrapInLayout, P, ctaButton } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface OrgCreatedEmailData {
   userName: string;
@@ -38,10 +39,10 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
   const subject = `${data.orgName} is live on VolunteerCal`;
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Great news \u2014 <strong>${data.orgName}</strong> is all set up on VolunteerCal! You're the owner, which means you have full control over scheduling, ${teamWord}, and members.
+                Great news \u2014 <strong>${escapeHtml(data.orgName)}</strong> is all set up on VolunteerCal! You're the owner, which means you have full control over scheduling, ${teamWord}, and members.
               </p>
 
               <!-- What's done -->
@@ -51,7 +52,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
                     <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D3047;text-transform:uppercase;letter-spacing:0.5px;">Done</p>
                     <table width="100%" cellpadding="0" cellspacing="0">
                       ${checkItem("Account created")}
-                      ${checkItem(`${data.orgName} organization set up`)}
+                      ${checkItem(`${escapeHtml(data.orgName)} organization set up`)}
                     </table>
                   </td>
                 </tr>

@@ -9,6 +9,7 @@ import {
   onBehalfFooter,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface BatchAssignment {
   serviceDate: string;
@@ -45,7 +46,7 @@ export function buildBatchConfirmationEmail(
         <tr>
           <td>
             <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
-            <span style="font-size:15px;font-weight:600;color:#2D3047;">${a.roleTitle}</span>
+            <span style="font-size:15px;font-weight:600;color:#2D3047;">${escapeHtml(a.roleTitle)}</span>
           </td>
         </tr>
       </table>`)}
@@ -62,7 +63,7 @@ export function buildBatchConfirmationEmail(
     .join("");
 
   const body = `<p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#4A4A6A;">
-    Hi <strong ${BOLD}>${data.volunteerName}</strong>,
+    Hi <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong>,
     you've been scheduled to serve${count > 1 ? ` for ${count} upcoming dates` : ""}. Please review and confirm each assignment below.
   </p>
   ${cards}

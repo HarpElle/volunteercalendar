@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { buildInviteEmail } from "@/lib/utils/email-templates";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+
+/** Hard cap on items per batch request — also bounds invite fan-out per call. */
+const MAX_BATCH_ITEMS = 50;
 
 /**
  * POST /api/invite/batch
@@ -14,6 +18,15 @@ import { resend } from "@/lib/resend";
  */
 export async function POST(req: NextRequest) {
   try {
+    // Pass G Phase 2: per-IP throttle BEFORE auth so an unauth flood gets
+    // short-circuited cheaply.
+    const ipLimited = await rateLimitDistributed(req, {
+      prefix: "invite-batch-ip",
+      limit: 30,
+      windowSeconds: 60 * 60,
+    });
+    if (ipLimited) return ipLimited;
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,9 +34,34 @@ export async function POST(req: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
     const inviterUid = decoded.uid;
 
+    // Per-user request throttles: 20 batch calls/hour, 100/day. Combined
+    // with MAX_BATCH_ITEMS=50, that caps fan-out at ~1k invites/hour/user
+    // and ~5k/day — high enough for legit org imports, low enough to slow
+    // a compromised admin account.
+    const userHourLimited = await rateLimitDistributed(req, {
+      prefix: "invite-batch-user-hour",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      extraKey: inviterUid,
+    });
+    if (userHourLimited) return userHourLimited;
+    const userDayLimited = await rateLimitDistributed(req, {
+      prefix: "invite-batch-user-day",
+      limit: 100,
+      windowSeconds: 60 * 60 * 24,
+      extraKey: inviterUid,
+    });
+    if (userDayLimited) return userDayLimited;
+
     const { church_id, queue_item_ids } = await req.json();
     if (!church_id || !queue_item_ids?.length) {
       return NextResponse.json({ error: "Missing church_id or queue_item_ids" }, { status: 400 });
+    }
+    if (!Array.isArray(queue_item_ids) || queue_item_ids.length > MAX_BATCH_ITEMS) {
+      return NextResponse.json(
+        { error: `queue_item_ids must be an array of at most ${MAX_BATCH_ITEMS} ids` },
+        { status: 400 },
+      );
     }
 
     // Verify inviter is admin+

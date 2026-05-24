@@ -1,15 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { autoReschedule } from "@/lib/services/auto-reschedule";
 import { buildConfirmationEmail } from "@/lib/utils/email-templates";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
 
-export async function GET(request: Request) {
-  const limited = rateLimit(request, { limit: 30, windowMs: 60_000 });
+export async function GET(request: NextRequest) {
+  // Pass G Phase 2: distributed limit (was per-instance in-memory). GET is
+  // the confirmation-page bootstrap fetch; still pretty cheap, so we keep
+  // the 30/min window to allow normal page reloads.
+  const limited = await rateLimitDistributed(request, {
+    prefix: "confirm-get",
+    limit: 30,
+    windowSeconds: 60,
+  });
   if (limited) return limited;
 
   try {
@@ -61,8 +68,15 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  const limited = rateLimit(request, { limit: 10, windowMs: 60_000 });
+export async function POST(request: NextRequest) {
+  // Pass G Phase 2: distributed limit (was per-instance in-memory), tightened
+  // to 10/IP/hour. POST mutates an assignment and can trigger auto-reschedule
+  // + outbound email, so cost-per-request is much higher than the GET path.
+  const limited = await rateLimitDistributed(request, {
+    prefix: "confirm-post",
+    limit: 10,
+    windowSeconds: 60 * 60,
+  });
   if (limited) return limited;
 
   try {

@@ -10,6 +10,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface HouseholdConflictEmailData {
   familyName: string;
@@ -31,10 +32,10 @@ export function buildHouseholdConflictEmail(data: HouseholdConflictEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${data.familyName},
+                Hi ${escapeHtml(data.familyName)},
               </p>
               <p ${P}>
-                We wanted to let you know that the recently published schedule has <strong ${BOLD}>${memberList}</strong> scheduled in a way that conflicts with your family's preference: <strong ${BOLD}>${data.constraintDescription}</strong> on <strong ${BOLD}>${data.conflictDate}</strong>.
+                We wanted to let you know that the recently published schedule has <strong ${BOLD}>${escapeHtml(memberList)}</strong> scheduled in a way that conflicts with your family's preference: <strong ${BOLD}>${escapeHtml(data.constraintDescription)}</strong> on <strong ${BOLD}>${escapeHtml(data.conflictDate)}</strong>.
               </p>
               <p ${P}>
                 We'll work on adjusting this in the next schedule. If this is urgent, please reach out to your scheduling team.

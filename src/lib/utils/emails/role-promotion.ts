@@ -11,6 +11,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface RolePromotionEmailData {
   userName: string;
@@ -37,10 +38,10 @@ export function buildRolePromotionEmail(data: RolePromotionEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Great news — you've been promoted to <strong ${BOLD}>${data.newRole}</strong> at <strong ${BOLD}>${data.churchName}</strong>.
+                Great news — you've been promoted to <strong ${BOLD}>${escapeHtml(data.newRole)}</strong> at <strong ${BOLD}>${escapeHtml(data.churchName)}</strong>.
               </p>
               <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 ${capabilitiesHtml} We're glad to have you in this role.
@@ -48,7 +49,7 @@ export function buildRolePromotionEmail(data: RolePromotionEmailData): {
 
               ${ctaButton("https://volunteercal.com/dashboard", "Go to Dashboard")}
 
-              ${mutedCenter("You're receiving this because your role was updated at " + data.churchName + ".")}`;
+              ${mutedCenter("You're receiving this because your role was updated at " + escapeHtml(data.churchName) + ".")}`;
 
   const html = wrapInLayout({
     headerText: "Congratulations!",

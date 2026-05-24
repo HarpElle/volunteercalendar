@@ -1,6 +1,7 @@
 /** Re-engagement email — sent when a user hasn't logged in for a while. */
 
 import { wrapInLayout, P, ctaButton } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ReEngagementData {
   userName: string;
@@ -18,10 +19,10 @@ export function buildReEngagementEmail(data: ReEngagementData): {
   const subject = `${data.churchName}'s schedule is waiting for you`;
 
   const body = `<p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                It's been about ${data.daysSinceLastLogin} days since you last visited VolunteerCal. Your account and ${data.churchName}'s data are right where you left them.
+                It's been about ${data.daysSinceLastLogin} days since you last visited VolunteerCal. Your account and ${escapeHtml(data.churchName)}'s data are right where you left them.
               </p>
               <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#4A4A6A;">
                 If you ran into something that didn't work the way you expected, we'd genuinely like to hear about it. Just reply to this email \u2014 it goes straight to a real person.

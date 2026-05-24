@@ -14,6 +14,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface AbsenceAlertData {
   recipientName: string;
@@ -48,17 +49,17 @@ export function buildAbsenceAlertEmail(data: AbsenceAlertData): {
 
   const noteBlock = data.note
     ? `<div style="margin:16px 0;padding:12px 16px;background:#FBF7F0;border-left:3px solid #D4A574;border-radius:4px;font-size:14px;color:#4A4A6A;line-height:1.6;">
-        <strong ${BOLD}>Note from ${data.volunteerName}:</strong><br/>
-        ${data.note.replace(/\n/g, "<br/>")}
+        <strong ${BOLD}>Note from ${escapeHtml(data.volunteerName)}:</strong><br/>
+        ${escapeHtml(data.note).replace(/\n/g, "<br/>")}
       </div>`
     : "";
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                <strong ${BOLD}>${data.volunteerName}</strong> has let you know they can't make it for <strong ${BOLD}>${data.roleName}</strong> at <strong ${BOLD}>${data.serviceName}</strong> on ${dateStr}.
+                <strong ${BOLD}>${escapeHtml(data.volunteerName)}</strong> has let you know they can't make it for <strong ${BOLD}>${escapeHtml(data.roleName)}</strong> at <strong ${BOLD}>${escapeHtml(data.serviceName)}</strong> on ${escapeHtml(dateStr)}.
               </p>
 
               ${card}

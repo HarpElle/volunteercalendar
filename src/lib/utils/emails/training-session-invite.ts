@@ -10,6 +10,7 @@ import {
   formatDateLong,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface TrainingSessionInviteEmailData {
   volunteerName: string;
@@ -33,10 +34,10 @@ export function buildTrainingSessionInviteEmail(data: TrainingSessionInviteEmail
   const subject = `You're invited \u2014 ${data.sessionTitle} on ${formatDateLong(data.sessionDate)}`;
 
   const body = `<p ${P}>
-    Hi ${firstName},
+    Hi ${escapeHtml(firstName)},
   </p>
   <p ${P}>
-    You're invited to <strong ${BOLD}>${data.sessionTitle}</strong> at ${data.churchName}. This session is part of your onboarding journey.
+    You're invited to <strong ${BOLD}>${escapeHtml(data.sessionTitle)}</strong> at ${escapeHtml(data.churchName)}. This session is part of your onboarding journey.
   </p>
   ${detailCard(`<table width="100%" cellpadding="0" cellspacing="0">
     ${detailRow("Date", formatDateLong(data.sessionDate))}

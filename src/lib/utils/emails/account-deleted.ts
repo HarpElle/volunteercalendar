@@ -8,6 +8,7 @@ import {
   P_LAST,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface AccountDeletedEmailData {
   userName: string;
@@ -24,7 +25,7 @@ export function buildAccountDeletedEmail(data: AccountDeletedEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
                 Your VolunteerCal account has been successfully deleted, and all associated data has been removed from our systems.

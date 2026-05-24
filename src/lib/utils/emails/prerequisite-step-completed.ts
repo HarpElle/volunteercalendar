@@ -1,6 +1,7 @@
 /** Email sent when a volunteer completes an onboarding prerequisite step. */
 
 import { wrapInLayout, P, ctaButton, onBehalfFooter, BOLD } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface StepCompletedEmailData {
   volunteerName: string;
@@ -41,10 +42,10 @@ export function buildStepCompletedEmail(data: StepCompletedEmailData): {
 </table>`;
 
   const body = `<p ${P}>
-    Hi ${firstName},
+    Hi ${escapeHtml(firstName)},
   </p>
   <p ${P}>
-    Great news \u2014 you've completed <strong ${BOLD}>${data.stepLabel}</strong> for ${data.ministryName} at ${data.churchName}.
+    Great news \u2014 you've completed <strong ${BOLD}>${escapeHtml(data.stepLabel)}</strong> for ${escapeHtml(data.ministryName)} at ${escapeHtml(data.churchName)}.
   </p>
   ${progressBar}
   <p ${P}>

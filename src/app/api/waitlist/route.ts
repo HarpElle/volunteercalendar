@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { rateLimit } from "@/lib/utils/rate-limit";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 /**
  * POST /api/waitlist
@@ -14,10 +15,25 @@ import { rateLimit } from "@/lib/utils/rate-limit";
  * was therefore blocking every submission, returning "Failed to save
  * submission" to the user. Server routes must use the Admin SDK to
  * bypass rules. See plan i-want-you-to-iterative-spring.md Layer 5.
+ *
+ * Pass G Phase 2: upgraded from in-memory rateLimit (per-instance Map,
+ * defeated by parallel serverless instances or IP rotation) to the Upstash-
+ * backed distributed limiter. 5/IP/hour is plenty for a real signup —
+ * the previous 5/IP/minute let a determined spammer fill the table fast.
  */
-export async function POST(request: Request) {
-  const limited = rateLimit(request, { limit: 5, windowMs: 60_000 });
+export async function POST(request: NextRequest) {
+  const limited = await rateLimitDistributed(request, {
+    prefix: "waitlist",
+    limit: 5,
+    windowSeconds: 60 * 60,
+  });
   if (limited) return limited;
+
+  // Cloudflare Turnstile bot challenge. Env-gated: returns null when
+  // TURNSTILE_SECRET_KEY is unset (rollout window). The companion widget
+  // at src/components/landing/waitlist-form.tsx is also a no-op then.
+  const captchaFailed = await verifyTurnstile(request);
+  if (captchaFailed) return captchaFailed;
 
   let body: Record<string, unknown>;
   try {

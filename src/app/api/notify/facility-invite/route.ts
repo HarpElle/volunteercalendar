@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
 
@@ -13,12 +14,37 @@ import { resend } from "@/lib/resend";
  */
 export async function POST(req: NextRequest) {
   try {
+    // Pass G Phase 2: per-IP throttle before auth, per-user after.
+    // This route fans out an email to every admin of the target org, so
+    // each request can produce N emails — keep the per-user cap tight.
+    const ipLimited = await rateLimitDistributed(req, {
+      prefix: "facility-invite-ip",
+      limit: 30,
+      windowSeconds: 60 * 60,
+    });
+    if (ipLimited) return ipLimited;
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
     const userId = decoded.uid;
+
+    const userHourLimited = await rateLimitDistributed(req, {
+      prefix: "facility-invite-user-hour",
+      limit: 20,
+      windowSeconds: 60 * 60,
+      extraKey: userId,
+    });
+    if (userHourLimited) return userHourLimited;
+    const userDayLimited = await rateLimitDistributed(req, {
+      prefix: "facility-invite-user-day",
+      limit: 100,
+      windowSeconds: 60 * 60 * 24,
+      extraKey: userId,
+    });
+    if (userDayLimited) return userDayLimited;
 
     const { church_id, target_church_id, facility_group_id, facility_group_name } =
       await req.json();

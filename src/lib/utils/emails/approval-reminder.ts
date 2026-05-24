@@ -11,6 +11,7 @@ import {
   P,
   BOLD,
 } from "./base-layout";
+import { escapeHtml } from "./escape";
 
 export interface ApprovalReminderEmailData {
   leaderName: string;
@@ -32,10 +33,10 @@ export function buildApprovalReminderEmail(data: ApprovalReminderEmailData): {
 
   const body = `
               <p ${P}>
-                Hi ${firstName},
+                Hi ${escapeHtml(firstName)},
               </p>
               <p ${P}>
-                Just a friendly reminder — the <strong ${BOLD}>${data.ministryName}</strong> schedule for <strong ${BOLD}>${data.coveragePeriod}</strong> still needs your approval. The deadline is <strong ${BOLD}>${data.targetDate}</strong>.
+                Just a friendly reminder — the <strong ${BOLD}>${escapeHtml(data.ministryName)}</strong> schedule for <strong ${BOLD}>${escapeHtml(data.coveragePeriod)}</strong> still needs your approval. The deadline is <strong ${BOLD}>${escapeHtml(data.targetDate)}</strong>.
               </p>
               <p ${P}>
                 Once all team leads approve, the schedule can be published and volunteers notified.
