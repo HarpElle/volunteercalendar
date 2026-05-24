@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
     prefix: "signup-get",
     limit: 30,
     windowSeconds: 60,
+    requireDistributed: true,
   });
   if (limited) return limited;
 
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
     prefix: "signup-post",
     limit: 10,
     windowSeconds: 60,
+    requireDistributed: true,
   });
   if (limited) return limited;
 
