@@ -159,8 +159,39 @@ export function FacilitySharingSection({
     try { await acceptFacilityInvite(groupId, churchId); await loadGroups(); } catch { setError("Failed to accept invitation"); }
   }
 
-  async function handleLeave(groupId: string) {
-    try { await leaveFacilityGroup(groupId, churchId); await loadGroups(); } catch { setError("Failed to leave facility group"); }
+  /**
+   * Pass G Phase 4: Leave Facility Group is owner-only at the Firestore
+   * rule layer (was: any admin). The UI also guards via the typed
+   * confirmation pattern below so the user has to actively type the
+   * group name to confirm — prevents accidental clicks from breaking
+   * a partner org's shared-room visibility.
+   *
+   * Note: declining a PENDING invite is a different action (effectively
+   * just removing the row); using the same handler keeps the UI simple,
+   * but the Firestore rule still requires owner role for the delete.
+   */
+  async function handleLeave(groupId: string, groupName: string, isPending: boolean) {
+    if (!isPending) {
+      const confirmText = prompt(
+        `Leaving "${groupName}" will permanently disconnect your org from the partner orgs in this facility group. Their shared rooms will no longer appear on your calendar and vice versa.\n\nThis action cannot be undone. Type the group name (${groupName}) to confirm:`,
+      );
+      if (confirmText !== groupName) {
+        if (confirmText !== null) {
+          setError("Group name didn't match. Leave cancelled.");
+        }
+        return;
+      }
+    }
+    try {
+      await leaveFacilityGroup(groupId, churchId);
+      await loadGroups();
+    } catch {
+      setError(
+        isPending
+          ? "Failed to decline invitation"
+          : "Failed to leave facility group (owner role required)",
+      );
+    }
   }
 
   const activeGroups = groups.filter((g) => g.membership.status === "active");
@@ -209,7 +240,7 @@ export function FacilitySharingSection({
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => handleAccept(g.id)}>Accept</Button>
-                        <Button size="sm" variant="secondary" onClick={() => handleLeave(g.id)}>Decline</Button>
+                        <Button size="sm" variant="secondary" onClick={() => handleLeave(g.id, g.name, true)}>Decline</Button>
                       </div>
                     </div>
                   ))}
@@ -233,7 +264,7 @@ export function FacilitySharingSection({
                             View shared calendar →
                           </Link>
                           <Button size="sm" variant="secondary" onClick={() => setInviteGroupId(inviteGroupId === g.id ? null : g.id)}>Invite Org</Button>
-                          <button onClick={() => handleLeave(g.id)} className="text-xs text-vc-text-muted hover:text-vc-danger">Leave</button>
+                          <button onClick={() => handleLeave(g.id, g.name, false)} className="text-xs text-vc-text-muted hover:text-vc-danger" title="Owner role required">Leave</button>
                         </div>
                       </div>
                       <div className="space-y-1">

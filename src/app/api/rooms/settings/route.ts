@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
+import { TIER_LIMITS } from "@/lib/constants";
 
 const DEFAULTS = {
   equipment_tags: [],
@@ -49,7 +50,7 @@ export async function PUT(req: NextRequest) {
       churchIdFrom: "body",
     });
     if (!gate.ok) return gate.response;
-    const { userId, churchId, role } = gate.ctx;
+    const { userId, churchId, tier, role } = gate.ctx;
 
     if (!["owner", "admin"].includes(role)) {
       return NextResponse.json(
@@ -59,6 +60,27 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
+
+    // Pass G Phase 4: rooms_public_calendar is a separate tier flag from
+    // rooms_enabled. Starter has rooms_enabled (so requireModuleTier passes)
+    // but rooms_public_calendar=false. Block the toggle from being flipped
+    // to true on tiers that don't include the feature — otherwise Starter
+    // gets a paid feature (public ICS feed) for free.
+    if (
+      body.public_calendar_enabled === true &&
+      TIER_LIMITS[tier]?.rooms_public_calendar !== true
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Public room calendar feed requires the Growth tier or higher.",
+          required_tier: "growth",
+          module: "rooms",
+        },
+        { status: 403 },
+      );
+    }
+
     const ref = adminDb.doc(`churches/${churchId}/roomSettings/config`);
     const snap = await ref.get();
     const now = new Date().toISOString();

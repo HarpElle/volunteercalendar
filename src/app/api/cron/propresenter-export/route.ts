@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
-import type { ServicePlan, Song } from "@/lib/types";
+import { TIER_LIMITS } from "@/lib/constants";
+import type { ServicePlan, Song, SubscriptionTier } from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -35,6 +36,15 @@ export async function GET(req: NextRequest) {
     for (const churchDoc of churchesSnap.docs) {
       const churchId = churchDoc.id;
       const churchData = churchDoc.data();
+
+      // Pass G Phase 4: per-church worship tier gate. The cron caller is
+      // authenticated only by the CRON_SECRET — once inside the loop, we
+      // need to check each church's tier individually. Without this,
+      // Free-tier churches that somehow accumulated service_plans + songs
+      // (e.g. via a tier downgrade after creation) would still trigger
+      // ProPresenter export emails. Skip them.
+      const tier = (churchData.subscription_tier as SubscriptionTier) || "free";
+      if (TIER_LIMITS[tier]?.worship_enabled !== true) continue;
 
       // Find published plans for tomorrow
       const plansSnap = await adminDb
