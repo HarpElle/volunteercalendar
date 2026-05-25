@@ -975,8 +975,18 @@ function PeopleContent() {
                   onDelete={async () => {
                     if (!churchId) return;
                     if (!confirm(`Delete the ${hh.name} family?`)) return;
-                    await removeChurchDocument(churchId, "households", hh.id);
-                    setHouseholds((prev) => prev.filter((h) => h.id !== hh.id));
+                    // Same try/catch defense as the save handler above —
+                    // a silent rule rejection would otherwise leave the
+                    // card visible but the user with no feedback.
+                    try {
+                      await removeChurchDocument(churchId, "households", hh.id);
+                      setHouseholds((prev) => prev.filter((h) => h.id !== hh.id));
+                    } catch (err) {
+                      console.error("[households] delete failed:", err);
+                      setActionError(
+                        "Failed to delete the family. Please try again — if it keeps failing, check your network and confirm you have admin access.",
+                      );
+                    }
                   }}
                 />
               ))}
@@ -993,31 +1003,50 @@ function PeopleContent() {
             existingHousehold={editingHousehold}
             onSave={async (data) => {
               if (!churchId || !user) return;
-              if (editingHousehold) {
-                await updateChurchDocument(churchId, "households", editingHousehold.id, {
-                  ...data,
-                  updated_by: user.uid,
-                });
-                setHouseholds((prev) =>
-                  prev.map((h) =>
-                    h.id === editingHousehold.id
-                      ? { ...h, ...data, updated_by: user.uid }
-                      : h,
-                  ),
+              // Codex Pass H Phase 3 retest Sev 2 (2026-05-25): prior
+              // implementation had no try/catch on the household write.
+              // When the Firestore rule rejected it (rule was `if false`
+              // — see this PR's firestore.rules change), the await threw,
+              // the rest of the handler never ran, the modal stayed open,
+              // and there was zero feedback to the user. Wrap everything
+              // in try/catch so any future write failure (network, rule,
+              // permission churn) surfaces in the existing actionError
+              // toast instead of leaving the user staring at an open
+              // modal.
+              try {
+                if (editingHousehold) {
+                  await updateChurchDocument(churchId, "households", editingHousehold.id, {
+                    ...data,
+                    updated_by: user.uid,
+                  });
+                  setHouseholds((prev) =>
+                    prev.map((h) =>
+                      h.id === editingHousehold.id
+                        ? { ...h, ...data, updated_by: user.uid }
+                        : h,
+                    ),
+                  );
+                } else {
+                  const now = new Date().toISOString();
+                  const docData = {
+                    ...data,
+                    church_id: churchId,
+                    created_at: now,
+                    updated_by: user.uid,
+                  };
+                  const ref = await addChurchDocument(churchId, "households", docData);
+                  setHouseholds((prev) => [...prev, { ...docData, id: ref.id } as Household]);
+                }
+                setHouseholdModalOpen(false);
+                setEditingHousehold(undefined);
+              } catch (err) {
+                console.error("[households] save failed:", err);
+                setActionError(
+                  editingHousehold
+                    ? "Failed to update the family. Please try again — if it keeps failing, check your network and confirm you have admin access."
+                    : "Failed to create the family. Please try again — if it keeps failing, check your network and confirm you have admin access.",
                 );
-              } else {
-                const now = new Date().toISOString();
-                const docData = {
-                  ...data,
-                  church_id: churchId,
-                  created_at: now,
-                  updated_by: user.uid,
-                };
-                const ref = await addChurchDocument(churchId, "households", docData);
-                setHouseholds((prev) => [...prev, { ...docData, id: ref.id } as Household]);
               }
-              setHouseholdModalOpen(false);
-              setEditingHousehold(undefined);
             }}
           />
         </>

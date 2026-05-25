@@ -338,7 +338,25 @@ service cloud.firestore {
       }
 
       match /households/{docId} {
-        allow read, write: if false;
+        // People-side households (volunteer scheduling families). The
+        // Families tab in /dashboard/people writes here via the client
+        // SDK to set scheduling preferences (never_same_service /
+        // prefer_same_service / never_same_time) and member lists.
+        //
+        // Codex Pass H Phase 3 retest Sev 2 (2026-05-25): prior
+        // `allow read, write: if false` was inherited from when this
+        // collection was assumed Admin-SDK-only via /api/checkin/*. In
+        // practice the People Families tab has always used client
+        // writes, which silently failed (modal stayed open, no card
+        // update). UI gates with `canManage = isAdmin(...)` so rule
+        // mirrors with isOrgAdmin. Reads stay server-side via
+        // /api/people-data for now but are also permitted to org
+        // admins for direct-read paths in the future.
+        //
+        // Check-in flows continue to use the Admin SDK from
+        // /api/checkin/* and are unaffected by these client-side rules.
+        allow read: if isOrgAdmin(churchId);
+        allow write: if isOrgAdmin(churchId);
       }
 
       match /checkin_households/{docId} {
