@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useActiveCampus } from "@/lib/context/campus-context";
+import { useAuth } from "@/lib/context/auth-context";
+import { isScheduler } from "@/lib/utils/permissions";
 
 /**
  * Pass H Phase 1: campus selector for the sidebar header.
@@ -17,6 +19,7 @@ import { useActiveCampus } from "@/lib/context/campus-context";
 export function CampusSelector() {
   const { campuses, isMultiCampus, activeCampusId, setActiveCampusId } =
     useActiveCampus();
+  const { activeMembership } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -31,6 +34,15 @@ export function CampusSelector() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
+
+  // Codex Phase 1 retest Sev 3: hide for volunteer-only users. The
+  // selector controls a filter that only affects admin/scheduler views
+  // (Schedules, Service Day, People, reports). Volunteers' personal
+  // views always show their own assignments across all their campuses;
+  // a campus filter would be meaningless and confusing. Role gate
+  // lives inside the component so all callers inherit it (defense in
+  // depth — future Mobile More menu placement, etc.).
+  if (!isScheduler(activeMembership)) return null;
 
   if (!isMultiCampus) return null;
 
