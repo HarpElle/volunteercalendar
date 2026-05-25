@@ -413,6 +413,18 @@ export interface EventPromotion {
 export interface Event {
   id: string;
   church_id: string;
+  /**
+   * Pass H Phase 4: campus this event belongs to.
+   *   - null / undefined  → org-wide event, universal (visible under every
+   *                          campus view; same semantic as Service.campus_id
+   *                          null and Person.campus_ids === []).
+   *   - non-null          → event is scoped to that specific campus.
+   *
+   * Used by Service Day to filter the Upcoming Events list, by the public
+   * signup page to render a campus chip, by the confirmation email to
+   * include campus name, and by personal iCal feeds to scope by campus.
+   */
+  campus_id?: string | null;
   name: string;
   description: string;
   event_type: EventType;
@@ -642,6 +654,20 @@ export interface CalendarFeed {
    * shared token being used by someone they didn't intend).
    */
   last_accessed_at?: string;
+  /**
+   * Pass H Phase 4: per-feed campus scope.
+   *   - null / undefined → feed includes assignments + events from every
+   *                         campus the target_id touches (status quo).
+   *   - non-null         → feed only includes items whose campus_id
+   *                         matches this value (or items with no
+   *                         campus_id, which are treated as universal).
+   *
+   * Lets a volunteer who serves at multiple campuses create one personal
+   * calendar feed per campus and subscribe to each from a different
+   * calendar (e.g. one for North work, one for South work). Defaults to
+   * null on every existing feed so nothing breaks.
+   */
+  campus_id?: string | null;
 }
 
 // --- Short Links ---

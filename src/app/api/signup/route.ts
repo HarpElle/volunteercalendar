@@ -86,6 +86,22 @@ export async function GET(req: NextRequest) {
       ? ({ id: churchSnap.id, ...churchSnap.data() } as Church)
       : null;
 
+    // Pass H Phase 4: load the campus name when the event has one.
+    // We return ONLY the public-facing fields (id + name) so a malicious
+    // caller can't enumerate campus metadata via a public event link.
+    let campusInfo: { id: string; name: string } | null = null;
+    if (eventData.campus_id) {
+      const campusSnap = await adminDb
+        .doc(`churches/${eventData.church_id}/campuses/${eventData.campus_id}`)
+        .get();
+      if (campusSnap.exists) {
+        const d = campusSnap.data();
+        if (d?.name) {
+          campusInfo = { id: campusSnap.id, name: String(d.name) };
+        }
+      }
+    }
+
     // Load signups
     const signupsSnap = await adminDb
       .collection("event_signups")
@@ -95,7 +111,7 @@ export async function GET(req: NextRequest) {
       (d) => ({ id: d.id, ...d.data() }) as EventSignup,
     );
 
-    return NextResponse.json({ event: eventData, church: churchData, signups });
+    return NextResponse.json({ event: eventData, church: churchData, campus: campusInfo, signups });
   } catch (err) {
     console.error("GET /api/signup error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
@@ -259,6 +275,18 @@ export async function POST(req: NextRequest) {
       try {
         const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
         const churchName = (churchSnap.data()?.name as string) || "the church";
+        // Pass H Phase 4: include campus name in the confirmation when the
+        // event is campus-scoped. Single extra read; org-wide events skip
+        // the lookup entirely.
+        let campusName: string | null = null;
+        if (event.campus_id) {
+          const campusSnap = await adminDb
+            .doc(`churches/${church_id}/campuses/${event.campus_id}`)
+            .get();
+          if (campusSnap.exists) {
+            campusName = (campusSnap.data()?.name as string) || null;
+          }
+        }
         const eventDate = formatEventDate(event.date || "");
         const eventTime = formatEventTime(
           event.start_time,
@@ -274,6 +302,7 @@ export async function POST(req: NextRequest) {
           roleTitle,
           churchName,
           eventUrl,
+          campusName,
         });
         await resend.emails.send({
           from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,

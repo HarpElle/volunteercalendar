@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import {
   addChurchDocument,
   getChurchDocuments,
@@ -37,6 +38,9 @@ export default function AccountPage() {
   const userIsScheduler = isScheduler(activeMembership);
   const myVolunteerId = activeMembership?.volunteer_id || null;
   const schedulerMinistryScope = activeMembership?.ministry_scope || [];
+  // Pass H Phase 4: per-feed campus scope. campuses[] drives the picker;
+  // isMultiCampus hides the field entirely for single-campus orgs.
+  const { campuses, isMultiCampus } = useActiveCampus();
 
   // Calendar feeds state
   const [feeds, setFeeds] = useState<CalendarFeed[]>([]);
@@ -48,6 +52,11 @@ export default function AccountPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [feedType, setFeedType] = useState<CalendarFeedType>("personal");
   const [targetId, setTargetId] = useState("");
+  // Pass H Phase 4: per-feed campus scope. Empty string = "All campuses"
+  // (universal — feed includes every campus the target_id touches).
+  // Non-empty = single specific campus. Existing feeds default to empty
+  // so nothing breaks. Hidden in the UI for single-campus orgs.
+  const [feedCampusId, setFeedCampusId] = useState<string>("");
 
   // Profile state
   const [displayName, setDisplayName] = useState("");
@@ -398,11 +407,16 @@ export default function AccountPage() {
         created_at: new Date().toISOString(),
         created_by_user_id: user.uid,
         ...(created_by_person_id ? { created_by_person_id } : {}),
+        // Pass H Phase 4: persist per-feed campus scope. Empty string in
+        // UI state means "All campuses" (universal) — store as null on
+        // the doc so the route's `?? null` coalesce works cleanly.
+        campus_id: feedCampusId === "" ? null : feedCampusId,
       };
       const ref = await addChurchDocument(churchId, "calendar_feeds", feedData);
       setFeeds((prev) => [{ id: ref.id, ...feedData }, ...prev]);
       setShowCreate(false);
       setTargetId("");
+      setFeedCampusId("");
     } catch {
       // silent
     } finally {
@@ -902,11 +916,40 @@ export default function AccountPage() {
                 </div>
               )}
 
+              {/* Pass H Phase 4: per-feed campus picker. Hidden for
+                  single-campus orgs (the value stays "" and the route
+                  treats it as universal — no behavior change). The
+                  picker is independent of feed type so a personal feed
+                  AND a team feed can each be carved per campus. */}
+              {isMultiCampus && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-vc-text" htmlFor="feed-campus">
+                    Campus filter
+                  </label>
+                  <select
+                    id="feed-campus"
+                    value={feedCampusId}
+                    onChange={(e) => setFeedCampusId(e.target.value)}
+                    className="w-full rounded-lg border border-vc-border bg-white px-3 py-2 text-sm text-vc-text focus:border-vc-coral focus:outline-none focus:ring-2 focus:ring-vc-coral/20"
+                  >
+                    <option value="">All campuses (default)</option>
+                    {campuses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.is_primary ? `${c.name} — Primary` : c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-vc-text-muted">
+                    Pick a campus to only include assignments at that location, or leave as &ldquo;All campuses&rdquo;.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <Button loading={creating} onClick={handleCreateFeed}>
                   Create Feed
                 </Button>
-                <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                <Button variant="ghost" onClick={() => { setShowCreate(false); setFeedCampusId(""); }}>
                   Cancel
                 </Button>
               </div>
@@ -936,11 +979,24 @@ export default function AccountPage() {
                 <div key={feed.id} className={`rounded-xl border bg-white p-4 ${isRevoked ? "border-vc-border-light opacity-60" : "border-vc-border-light"}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex rounded-full bg-vc-indigo/10 px-2 py-0.5 text-xs font-medium text-vc-indigo">
                           {feed.type}
                         </span>
                         <span className="font-medium text-vc-indigo">{getFeedLabel(feed)}</span>
+                        {/* Pass H Phase 4: show the campus chip when a
+                            feed is scoped. Hidden for "All campuses"
+                            feeds (campus_id null) and single-campus orgs
+                            (campuses[] is short enough that disambiguation
+                            isn't needed). */}
+                        {isMultiCampus && feed.campus_id && (
+                          <span
+                            className="inline-flex rounded-full bg-vc-sand/30 px-2 py-0.5 text-xs font-medium text-vc-text-secondary"
+                            title={`Scoped to ${campuses.find((c) => c.id === feed.campus_id)?.name ?? "a specific campus"}`}
+                          >
+                            📍 {campuses.find((c) => c.id === feed.campus_id)?.name ?? "Campus"}
+                          </span>
+                        )}
                         {isRevoked && (
                           <span className="inline-flex rounded-full bg-vc-danger/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-vc-danger">
                             Revoked

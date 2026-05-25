@@ -21,6 +21,13 @@ export interface EventSignupConfirmationData {
   churchName: string;
   /** Public detail page for the event, so the volunteer can view full info / cancel if needed. */
   eventUrl: string;
+  /**
+   * Pass H Phase 4: campus name when the event is campus-scoped. Omit
+   * for org-wide events (callers pass null/undefined). When provided,
+   * surfaces in the event details card next to date/time so multi-
+   * campus volunteers know which location they signed up at.
+   */
+  campusName?: string | null;
 }
 
 export function buildEventSignupConfirmationEmail(
@@ -71,7 +78,11 @@ export function buildEventSignupConfirmationEmail(
                             ${escapeHtml(data.eventName)}
                           </h2>
                           <p style="margin:0 0 12px;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#6B6D8A;">
-                            📅 ${escapeHtml(data.eventDate)} &nbsp;&bull;&nbsp; 🕐 ${escapeHtml(data.eventTime)}
+                            📅 ${escapeHtml(data.eventDate)} &nbsp;&bull;&nbsp; 🕐 ${escapeHtml(data.eventTime)}${
+                              data.campusName
+                                ? ` &nbsp;&bull;&nbsp; 📍 ${escapeHtml(data.campusName)}`
+                                : ""
+                            }
                           </p>
                           <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:15px;color:#2D3047;">
                             <strong>Your role:</strong> ${escapeHtml(data.roleTitle)}
@@ -128,7 +139,7 @@ You're signed up to volunteer at:
 
 ${data.eventName}
 Date: ${data.eventDate}
-Time: ${data.eventTime}
+Time: ${data.eventTime}${data.campusName ? `\nCampus: ${data.campusName}` : ""}
 Your role: ${data.roleTitle}
 
 Thanks for volunteering! The event organizer will follow up with any final details closer to the date.

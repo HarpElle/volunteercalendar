@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import {
   addChurchDocument,
   getChurchDocuments,
@@ -121,6 +122,13 @@ export function EventList({
   const [recurrence, setRecurrence] = useState<RecurrencePattern>("weekly");
   const [dayOfWeek, setDayOfWeek] = useState("0");
   const [ministryIds, setMinistryIds] = useState<string[]>([]);
+  // Pass H Phase 4: event campus picker. null = org-wide event (visible
+  // under every campus view; universal). When the admin is filtering by
+  // a specific campus in the sidebar, default new events to that campus
+  // so the common case (create event for the campus you're managing)
+  // is one click less.
+  const [campusId, setCampusId] = useState<string | null>(null);
+  const { campuses, activeCampusId, isMultiCampus } = useActiveCampus();
   const [roles, setRoles] = useState<RoleSlot[]>([
     { role_id: crypto.randomUUID(), title: "", count: 1, ministry_id: null, allow_signup: true, start_time: null, end_time: null },
   ]);
@@ -191,6 +199,11 @@ export function EventList({
     setRecurrence("weekly");
     setDayOfWeek("0");
     setMinistryIds([]);
+    // Pass H Phase 4: pre-fill campus to the active sidebar filter when
+    // one is selected. If the admin is viewing North Campus, a fresh
+    // event defaults to North; they can change to "All campuses" in the
+    // picker if they want an org-wide event.
+    setCampusId(activeCampusId ?? null);
     setRoles([
       { role_id: crypto.randomUUID(), title: "", count: 1, ministry_id: null, allow_signup: true, start_time: null, end_time: null },
     ]);
@@ -211,6 +224,7 @@ export function EventList({
     setRecurrence(e.recurrence || "weekly");
     setDayOfWeek(String(e.day_of_week ?? 0));
     setMinistryIds(e.ministry_ids);
+    setCampusId(e.campus_id ?? null);
     setRoles(
       e.roles.length > 0
         ? e.roles
@@ -277,6 +291,11 @@ export function EventList({
         day_of_week: eventType === "recurring" ? Number(dayOfWeek) : null,
         roles: filteredRoles,
         ministry_ids: ministryIds,
+        // Pass H Phase 4: persist campus on the event doc. null is
+        // a valid value (org-wide event) so we always write it, not
+        // conditionally — that lets an admin switch an event from
+        // a specific campus back to org-wide.
+        campus_id: campusId,
         promotion: {
           send_email_blast: false,
           send_sms_blast: false,
@@ -584,6 +603,32 @@ export function EventList({
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Pass H Phase 4: campus picker for multi-campus orgs.
+                Hidden for single-campus orgs (the value stays null and
+                the field is effectively absent — no behavior change). */}
+            {isMultiCampus && (
+              <div>
+                <label className="text-sm font-medium text-vc-text" htmlFor="event-campus">
+                  Campus
+                </label>
+                <p className="mb-2 text-xs text-vc-text-muted">
+                  Pick a campus to scope this event, or leave as &ldquo;All campuses&rdquo; for org-wide.
+                </p>
+                <Select
+                  id="event-campus"
+                  value={campusId ?? ""}
+                  onChange={(e) => setCampusId(e.target.value === "" ? null : e.target.value)}
+                  options={[
+                    { value: "", label: "All campuses (org-wide)" },
+                    ...campuses.map((c) => ({
+                      value: c.id,
+                      label: c.is_primary ? `${c.name} — Primary` : c.name,
+                    })),
+                  ]}
                 />
               </div>
             )}

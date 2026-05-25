@@ -171,6 +171,37 @@ export async function GET(request: NextRequest) {
     }
     // "org" type returns all assignments — no filter needed
 
+    // Pass H Phase 4: per-feed campus scope. When the feed has a
+    // campus_id set, drop any assignment whose service.campus_id doesn't
+    // match. Org-wide services (campus_id null) pass — they cover every
+    // campus by design. This lets a multi-campus volunteer subscribe to
+    // a per-campus feed from a separate calendar app.
+    const feedCampusId = (feed.campus_id as string | null | undefined) ?? null;
+    if (feedCampusId) {
+      assignments = assignments.filter((a) => {
+        const svc = serviceMap.get(a.service_id as string);
+        if (!svc) return true; // unknown service → keep, don't drop
+        const svcCampus = (svc.campus_id as string | null | undefined) ?? null;
+        if (!svcCampus) return true; // org-wide service
+        return svcCampus === feedCampusId;
+      });
+      // Append a campus tag to the calendar name so iCal clients show
+      // distinct entries when a volunteer subscribes to multiple per-
+      // campus feeds. We pull the campus name lazily from the
+      // churches/{churchId}/campuses subcollection.
+      try {
+        const campusDoc = await adminDb
+          .doc(`churches/${churchId}/campuses/${feedCampusId}`)
+          .get();
+        const cname = campusDoc.exists ? (campusDoc.data()?.name as string) : null;
+        if (cname) {
+          calendarName = `${calendarName} (${cname})`;
+        }
+      } catch {
+        // Campus name lookup is cosmetic; ignore failures.
+      }
+    }
+
     // Build iCal events
     let events;
 
