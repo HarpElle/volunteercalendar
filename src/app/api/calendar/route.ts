@@ -259,17 +259,30 @@ export async function GET(request: NextRequest) {
       // landed in the .ics. Now we also include public-event signups
       // where the volunteer is the feed's target.
       //
-      // Filters applied:
-      //   1. volunteer_id matches the feed's target_id (just like
-      //      assignments use person_id === targetId)
-      //   2. status !== "cancelled" (Service Day uses the same rule)
-      //   3. parent event exists in eventMap (drops orphans)
-      //   4. campus filter — when feed.campus_id is set, drop signups
-      //      whose event.campus_id doesn't match (org-wide events
-      //      with campus_id null pass every filter, same semantic as
-      //      the assignment side above)
+      // Identity join (Codex Phase 4 hotfix round 2 retest Sev 2):
+      // logged-in /api/signup writes historically wrote
+      // `volunteer_id: ""` and only kept user_id, so a strict
+      // `volunteer_id === targetId` filter missed every signup made
+      // by an authenticated user. The POST handler now backfills
+      // volunteer_id from the linked Person doc on new writes (see
+      // /api/signup), but this fallback covers all the legacy
+      // signups already in production: accept either
+      //   (a) signup.volunteer_id === targetId  — new shape
+      //   (b) signup.user_id === target_person.user_id  — legacy
+      // The Person → user_id link is resolved once before the loop
+      // (skipped when the target has no user_id).
+      const targetPerson = volunteerMap.get(targetId);
+      const targetUserId = (targetPerson?.user_id as string | null | undefined) ?? null;
       const mySignups = eventSignups.filter((s) => {
-        if (s.volunteer_id !== targetId) return false;
+        const matchesVolunteer =
+          typeof s.volunteer_id === "string" &&
+          s.volunteer_id !== "" &&
+          s.volunteer_id === targetId;
+        const matchesUser =
+          targetUserId !== null &&
+          typeof s.user_id === "string" &&
+          s.user_id === targetUserId;
+        if (!matchesVolunteer && !matchesUser) return false;
         if (s.status === "cancelled") return false;
         const evt = eventMap.get(s.event_id as string);
         if (!evt) return false; // orphaned signup → skip
