@@ -271,8 +271,23 @@ function PeopleContent() {
   // and the People page only looked at memberships.
   const pendingInviteTotal = pendingMems.length + pendingInviteCount;
 
-  // Build unified roster: start with volunteers, enrich with membership data
-  const rosterPeople = volunteers.map((v) => {
+  // Codex Phase 3 retest Sev 3: derive the campus-scoped volunteer set
+  // ONCE up here so every count, tab badge, and sidebar reflects the
+  // sidebar filter instead of staying at org-wide values. Empty
+  // campus_ids = universal (same semantic as the roster filter); single-
+  // campus orgs keep activeCampusId === null so this is a no-op identity
+  // and `campusScopedVolunteers === volunteers`.
+  const campusScopedVolunteers = activeCampusId === null
+    ? volunteers
+    : volunteers.filter((v) => {
+        const ids = v.campus_ids;
+        return !ids || ids.length === 0 || ids.includes(activeCampusId);
+      });
+
+  // Build unified roster from the campus-scoped set so downstream
+  // filters (status/ministry/role/search) compose on top of the campus
+  // filter, and the visible-rows count matches the labels above.
+  const rosterPeople = campusScopedVolunteers.map((v) => {
     const mem = v.membership_id
       ? memberships.find((m) => m.id === v.membership_id) || null
       : memberships.find((m) => m.volunteer_id === v.id) || null;
@@ -280,14 +295,7 @@ function PeopleContent() {
   });
 
   const filteredRoster = rosterPeople.filter(({ volunteer: v, membership: mem }) => {
-    // Pass H Phase 3: campus filter. Empty campus_ids = universal
-    // (treated as "any campus" so people aren't orphaned during
-    // multi-campus rollout). Non-empty campus_ids must include the
-    // active campus to pass.
-    if (activeCampusId !== null) {
-      const ids = v.campus_ids;
-      if (ids && ids.length > 0 && !ids.includes(activeCampusId)) return false;
-    }
+    // (campus filter applied at source via campusScopedVolunteers above)
     // Status filter (default: active only)
     if (filterStatus !== "all" && v.status !== filterStatus) return false;
     // Team membership filter
@@ -574,7 +582,10 @@ function PeopleContent() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-vc-text-muted">
-            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
+            {/* Codex Phase 3 retest Sev 3: counts now reflect the campus-
+                scoped roster base. pendingInviteTotal stays global because
+                invites aren't yet tagged with a campus (Codex's guidance). */}
+            {campusScopedVolunteers.filter(v => v.status !== "archived").length} active · {campusScopedVolunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
           </p>
           {/* Pass H Phase 3: surface the active campus filter inline next
               to the count so admins notice the roster has been narrowed. */}
@@ -676,7 +687,11 @@ function PeopleContent() {
       {/* Tabs */}
       <TabBar
         tabs={[
-          { key: "roster" as const, label: `Roster (${volunteers.length})` },
+          // Codex Phase 3 retest Sev 3: Roster badge counts the campus-
+          // scoped set so it matches the visible row count. Invites tab
+          // stays global per Codex's guidance (pending invites have no
+          // campus tag yet).
+          { key: "roster" as const, label: `Roster (${campusScopedVolunteers.length})` },
           ...(canManage ? [{ key: "invites" as const, label: `Invites (${pendingInviteTotal})` }] : []),
           ...(canManage ? [{ key: "families" as const, label: `Families (${households.length})` }] : []),
         ]}
@@ -752,9 +767,13 @@ function PeopleContent() {
           ) : (
             <div className="flex gap-6">
               {/* Team sidebar (desktop) */}
+              {/* Codex Phase 3 retest Sev 3: pass the campus-scoped set
+                  so per-team counts reflect the active filter — otherwise
+                  the sidebar shows all-org counts while the right column
+                  only renders a subset of rows. */}
               <TeamSidebar
                 ministries={ministries}
-                volunteers={volunteers}
+                volunteers={campusScopedVolunteers}
                 selectedMinistryId={sidebarMinistry}
                 onSelectMinistry={setSidebarMinistry}
               />

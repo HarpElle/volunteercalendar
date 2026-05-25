@@ -17,14 +17,23 @@ export function HouseholdCard({
     .map((id) => volunteers.find((v) => v.id === id)?.name)
     .filter(Boolean);
 
+  // Codex Phase 3 retest Sev 2: pre-Pass-G households were written
+  // without a `constraints` object, so accessing
+  // `household.constraints.never_same_service` throws and crashes the
+  // entire Families tab with "Something went wrong". Optional-chain so
+  // a missing/null constraints object just renders zero badges instead
+  // of taking the whole tab down. The form modal continues to write
+  // a fully populated constraints object on edit, so this is purely
+  // a read-side guard for legacy data.
+  const constraints = household.constraints;
   const constraintBadges: { label: string; color: string }[] = [];
-  if (household.constraints.never_same_service) {
+  if (constraints?.never_same_service) {
     constraintBadges.push({ label: "Never together", color: "bg-vc-coral/10 text-vc-coral" });
   }
-  if (household.constraints.prefer_same_service) {
+  if (constraints?.prefer_same_service) {
     constraintBadges.push({ label: "Prefer together", color: "bg-vc-sage/15 text-vc-sage" });
   }
-  if (household.constraints.never_same_time) {
+  if (constraints?.never_same_time) {
     constraintBadges.push({ label: "Never same day", color: "bg-amber-100 text-amber-700" });
   }
 
