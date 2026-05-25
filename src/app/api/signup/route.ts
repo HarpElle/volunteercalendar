@@ -245,13 +245,41 @@ export async function POST(req: NextRequest) {
     // Determine role title from the event's roles
     const roleTitle = role.title;
 
+    // Codex Pass H Phase 4 retest round 2 Sev 2 (2026-05-25): resolve
+    // the signer's linked Person doc so we can write a real
+    // volunteer_id instead of "". Without this, downstream consumers
+    // that key off volunteer_id (notably /api/calendar's personal
+    // iCal path) can't join the signup back to the volunteer and
+    // silently drop it. Only fires when an authenticated user is
+    // signing up — guest signups (no auth) legitimately have no
+    // Person doc to link.
+    let resolvedVolunteerId = "";
+    if (effectiveUserId) {
+      try {
+        const personSnap = await adminDb
+          .collection("churches")
+          .doc(church_id)
+          .collection("people")
+          .where("user_id", "==", effectiveUserId)
+          .limit(1)
+          .get();
+        if (!personSnap.empty) {
+          resolvedVolunteerId = personSnap.docs[0].id;
+        }
+      } catch (lookupErr) {
+        // Non-fatal — signup still works, just won't appear in
+        // personal iCal until the user_id fallback below catches it.
+        console.warn("[POST /api/signup] volunteer_id lookup failed:", lookupErr);
+      }
+    }
+
     // Create the signup
     const signupData = {
       event_id,
       church_id,
       role_id,
       role_title: roleTitle,
-      volunteer_id: "", // Will be linked if they have a volunteer record
+      volunteer_id: resolvedVolunteerId,
       user_id: effectiveUserId || null,
       volunteer_name: volunteer_name || "",
       volunteer_email: volunteer_email || "",
