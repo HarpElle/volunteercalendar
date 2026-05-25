@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -17,11 +18,6 @@ import {
   calculateDeclineRates,
   calculateGrowth,
   calculateFairnessScore,
-  type BurnoutRisk,
-  type BenchDepth,
-  type ServingFrequency,
-  type MinistryDeclineRate,
-  type GrowthMetrics,
 } from "@/lib/services/retention-analytics";
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -29,19 +25,18 @@ import {
 export default function RetentionDashboardPage() {
   const { profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
+  // Pass H Phase 3: scope retention analytics by active campus.
+  // Empty campus_ids on a volunteer = universal (visible in every view)
+  // — same semantic as the People main list.
+  const { activeCampusId, campuses } = useActiveCampus();
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   const [loading, setLoading] = useState(true);
   const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
-
-  // Computed analytics
-  const [burnoutRisks, setBurnoutRisks] = useState<BurnoutRisk[]>([]);
-  const [benchDepths, setBenchDepths] = useState<BenchDepth[]>([]);
-  const [servingFreq, setServingFreq] = useState<ServingFrequency[]>([]);
-  const [declineRates, setDeclineRates] = useState<MinistryDeclineRate[]>([]);
-  const [growth, setGrowth] = useState<GrowthMetrics>({ last30: 0, last60: 0, last90: 0 });
-  const [fairness, setFairness] = useState(1);
 
   useEffect(() => {
     if (!churchId) {
@@ -65,15 +60,6 @@ export default function RetentionDashboardPage() {
         setVolunteers(vols);
         setAssignments(assigns);
         setMinistries(mins);
-
-        // Run analytics
-        const minList = mins.map((m) => ({ id: m.id, name: m.name }));
-        setBurnoutRisks(calculateBurnoutRisks(vols, assigns));
-        setBenchDepths(calculateBenchDepth(vols, assigns, minList));
-        setServingFreq(calculateServingFrequency(vols, assigns));
-        setDeclineRates(calculateDeclineRates(assigns, minList));
-        setGrowth(calculateGrowth(vols));
-        setFairness(calculateFairnessScore(vols, assigns));
       } catch {
         // silent
       } finally {
@@ -83,6 +69,47 @@ export default function RetentionDashboardPage() {
     load();
   }, [churchId]);
 
+  // Pass H Phase 3: scope volunteers by campus before running analytics.
+  // Doing it here (instead of at load time) keeps the data fetch
+  // independent of the sidebar campus chip — switching campuses just
+  // recomputes the derived stats without re-fetching anything.
+  const scopedVolunteers = useMemo(() => {
+    if (activeCampusId === null) return volunteers;
+    return volunteers.filter((v) => {
+      const ids = v.campus_ids;
+      return !ids || ids.length === 0 || ids.includes(activeCampusId);
+    });
+  }, [volunteers, activeCampusId]);
+
+  // All analytics derive from scopedVolunteers + assignments. Assignments
+  // are NOT campus-filtered here: a volunteer's burnout risk depends on
+  // their ENTIRE serving history, not just what they did at this campus,
+  // and decline rates are a ministry-level signal that's most useful when
+  // computed across the whole org. This mirrors the Service Day decision
+  // where we filter the people side but leave history aggregates alone.
+  const minList = useMemo(() => ministries.map((m) => ({ id: m.id, name: m.name })), [ministries]);
+  const burnoutRisks = useMemo(
+    () => calculateBurnoutRisks(scopedVolunteers, assignments),
+    [scopedVolunteers, assignments],
+  );
+  const benchDepths = useMemo(
+    () => calculateBenchDepth(scopedVolunteers, assignments, minList),
+    [scopedVolunteers, assignments, minList],
+  );
+  const servingFreq = useMemo(
+    () => calculateServingFrequency(scopedVolunteers, assignments),
+    [scopedVolunteers, assignments],
+  );
+  const declineRates = useMemo(
+    () => calculateDeclineRates(assignments, minList),
+    [assignments, minList],
+  );
+  const growth = useMemo(() => calculateGrowth(scopedVolunteers), [scopedVolunteers]);
+  const fairness = useMemo(
+    () => calculateFairnessScore(scopedVolunteers, assignments),
+    [scopedVolunteers, assignments],
+  );
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -91,7 +118,7 @@ export default function RetentionDashboardPage() {
     );
   }
 
-  const activeCount = volunteers.length;
+  const activeCount = scopedVolunteers.length;
   const thinBenches = benchDepths.filter((b) => b.isThin);
   const overcommitted = servingFreq.filter((s) => s.isOvercommitted);
   const fairnessPct = Math.round(fairness * 100);
@@ -101,6 +128,16 @@ export default function RetentionDashboardPage() {
       {/* InfoTooltip removed from strip actions in Phase 2 — clipped at viewport edge.
           Per-tab tooltip descriptions are queued as a follow-up. */}
       <PeopleShell />
+
+      {/* Pass H Phase 3: campus filter indicator. Auto-hides when filter
+          is off or org is single-campus (activeCampusName stays null). */}
+      {activeCampusName && (
+        <div className="mb-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-vc-indigo/8 px-3 py-1 text-xs font-medium text-vc-indigo-muted">
+            📍 Showing retention for {activeCampusName} only
+          </span>
+        </div>
+      )}
 
       {/* Top-Level Stats */}
       <StatCardGrid className="mb-8">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import { getChurchDocuments, updateChurchDocument } from "@/lib/firebase/firestore";
 import { where } from "firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
@@ -62,6 +63,12 @@ export default function OnboardingPage() {
   const { profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
   const canManage = isAdmin(activeMembership);
+  // Pass H Phase 3: scope onboarding pipeline by active campus. Empty
+  // campus_ids = universal (same semantic as the People list + retention).
+  const { activeCampusId, campuses } = useActiveCampus();
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   const [volunteers, setVolunteers] = useState<Person[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
@@ -117,9 +124,20 @@ export default function OnboardingPage() {
       ? ministriesWithPrereqs
       : ministriesWithPrereqs.filter((m) => m.id === selectedMinistry);
 
+  // Pass H Phase 3: scope volunteers by active campus before computing
+  // pipeline stats. The write path (updateJourneyStep) keeps using the
+  // full `volunteers` list so a stale lookup never blocks an update.
+  const scopedVolunteers = useMemo(() => {
+    if (activeCampusId === null) return volunteers;
+    return volunteers.filter((v) => {
+      const ids = v.campus_ids;
+      return !ids || ids.length === 0 || ids.includes(activeCampusId);
+    });
+  }, [volunteers, activeCampusId]);
+
   // Count stats
   const pipelineStats = filteredMinistries.map((ministry) => {
-    const ministryVols = volunteers.filter(
+    const ministryVols = scopedVolunteers.filter(
       (v) => v.ministry_ids.includes(ministry.id),
     );
     const stages: Record<PipelineStage, Person[]> = {
@@ -294,6 +312,15 @@ export default function OnboardingPage() {
           descriptions are queued as a follow-up after Phase 2 ships. */}
       <PeopleShell />
       <div className="mx-auto max-w-5xl">
+        {/* Pass H Phase 3: campus filter indicator. Auto-hides for
+            single-campus orgs (activeCampusName stays null). */}
+        {activeCampusName && (
+          <div className="mb-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-vc-indigo/8 px-3 py-1 text-xs font-medium text-vc-indigo-muted">
+              📍 Showing onboarding for {activeCampusName} only
+            </span>
+          </div>
+        )}
         {/* Tabs */}
       {canManage && (
         <div className="mb-6 flex gap-1 rounded-lg bg-vc-bg-warm p-1">
