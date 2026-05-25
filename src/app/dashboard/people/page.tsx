@@ -54,6 +54,50 @@ import { TIER_LIMITS } from "@/lib/constants";
 import { OverLimitBanner } from "@/components/ui/over-limit-banner";
 
 // ---------------------------------------------------------------------------
+// Write-failure surfacing helpers
+// ---------------------------------------------------------------------------
+//
+// Codex Pass H Phase 3 retest round 4 (2026-05-25): Firestore's client
+// SDK queues offline writes locally and resolves them once the network
+// returns, rather than rejecting promptly. That means a user who clicks
+// Save while offline saw the modal hang indefinitely — no toast, no
+// loading indicator timeout, nothing.
+//
+// `withTimeout` races the write against a 10-second deadline so a
+// hung promise still surfaces as an error toast. It's intentionally
+// generous (10s) because a slow-but-eventually-successful save would
+// otherwise show a false "failed" message — at 10s the network is
+// genuinely stuck, not just slow.
+//
+// `isClientOffline` is a fast preflight using `navigator.onLine`
+// before we even attempt the write. `onLine === false` is
+// authoritative for "definitely offline" — `true` doesn't guarantee
+// connectivity, hence the additional timeout as a safety net.
+//
+// Scope: currently only used for Families create/update/delete since
+// that's where Codex reproduced the silent-hang. Worth extending to
+// other client-write surfaces (volunteer edit, invite, etc.) if the
+// same pattern keeps surfacing.
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} did not complete within ${ms / 1000}s`)),
+        ms,
+      ),
+    ),
+  ]);
+}
+
+function isClientOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+const WRITE_TIMEOUT_MS = 10_000;
+
+// ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
@@ -975,11 +1019,20 @@ function PeopleContent() {
                   onDelete={async () => {
                     if (!churchId) return;
                     if (!confirm(`Delete the ${hh.name} family?`)) return;
-                    // Same try/catch defense as the save handler above —
-                    // a silent rule rejection would otherwise leave the
-                    // card visible but the user with no feedback.
+                    // Codex Phase 3 retest round 4 Sev 3: offline-aware.
+                    // Fast preflight + 10s timeout so a hung Firestore
+                    // write surfaces an error toast instead of leaving
+                    // the card present with no feedback.
+                    if (isClientOffline()) {
+                      setActionError("You appear to be offline. Reconnect and try again.");
+                      return;
+                    }
                     try {
-                      await removeChurchDocument(churchId, "households", hh.id);
+                      await withTimeout(
+                        removeChurchDocument(churchId, "households", hh.id),
+                        WRITE_TIMEOUT_MS,
+                        "household delete",
+                      );
                       setHouseholds((prev) => prev.filter((h) => h.id !== hh.id));
                     } catch (err) {
                       console.error("[households] delete failed:", err);
@@ -1006,19 +1059,33 @@ function PeopleContent() {
               // Codex Pass H Phase 3 retest Sev 2 (2026-05-25): prior
               // implementation had no try/catch on the household write.
               // When the Firestore rule rejected it (rule was `if false`
-              // — see this PR's firestore.rules change), the await threw,
-              // the rest of the handler never ran, the modal stayed open,
-              // and there was zero feedback to the user. Wrap everything
-              // in try/catch so any future write failure (network, rule,
-              // permission churn) surfaces in the existing actionError
-              // toast instead of leaving the user staring at an open
-              // modal.
+              // — see firestore.rules), the await threw, the rest of
+              // the handler never ran, the modal stayed open, and there
+              // was zero feedback. Wrap everything in try/catch so any
+              // future write failure (network, rule, permission churn)
+              // surfaces in the existing actionError toast.
+              //
+              // Codex Phase 3 retest round 4 Sev 3 (2026-05-25): also
+              // add an offline preflight + 10s write timeout. Firestore's
+              // client SDK queues offline writes locally instead of
+              // rejecting, so the previous try/catch never fired when
+              // the user was offline. Preflight catches the obvious case
+              // immediately; timeout catches "navigator says online but
+              // socket is wedged" via Promise.race.
+              if (isClientOffline()) {
+                setActionError("You appear to be offline. Reconnect and try again.");
+                return;
+              }
               try {
                 if (editingHousehold) {
-                  await updateChurchDocument(churchId, "households", editingHousehold.id, {
-                    ...data,
-                    updated_by: user.uid,
-                  });
+                  await withTimeout(
+                    updateChurchDocument(churchId, "households", editingHousehold.id, {
+                      ...data,
+                      updated_by: user.uid,
+                    }),
+                    WRITE_TIMEOUT_MS,
+                    "household update",
+                  );
                   setHouseholds((prev) =>
                     prev.map((h) =>
                       h.id === editingHousehold.id
@@ -1034,7 +1101,11 @@ function PeopleContent() {
                     created_at: now,
                     updated_by: user.uid,
                   };
-                  const ref = await addChurchDocument(churchId, "households", docData);
+                  const ref = await withTimeout(
+                    addChurchDocument(churchId, "households", docData),
+                    WRITE_TIMEOUT_MS,
+                    "household create",
+                  );
                   setHouseholds((prev) => [...prev, { ...docData, id: ref.id } as Household]);
                 }
                 setHouseholdModalOpen(false);
