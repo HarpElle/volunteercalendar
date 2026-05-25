@@ -1439,6 +1439,20 @@ export default function SchedulesPage() {
                 const specificCampusIds = [...campusSet].filter(
                   (id): id is string => id !== null,
                 );
+                // Codex Phase 2 retest Sev 3: when the user is filtering by a
+                // specific campus, the chip for THAT campus must be visible
+                // on the card. Without this reorder, a 3-campus schedule
+                // viewed under "North" could render "Main, South, +1 more"
+                // and bury the active campus inside the overflow — making the
+                // (correct) filter result look like a bug. Sort the active
+                // campus to position 0 before slicing to the visible chips.
+                const orderedCampusIds =
+                  activeCampusId && specificCampusIds.includes(activeCampusId)
+                    ? [
+                        activeCampusId,
+                        ...specificCampusIds.filter((id) => id !== activeCampusId),
+                      ]
+                    : specificCampusIds;
                 return (
                   <div key={s.id} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1461,12 +1475,12 @@ export default function SchedulesPage() {
                                 📍 All campuses
                               </span>
                             )}
-                            {specificCampusIds.slice(0, 2).map((cid) => (
+                            {orderedCampusIds.slice(0, 2).map((cid) => (
                               <CampusBadge key={cid} campusId={cid} />
                             ))}
-                            {specificCampusIds.length > 2 && (
+                            {orderedCampusIds.length > 2 && (
                               <span className="text-[10px] font-medium text-vc-text-muted">
-                                +{specificCampusIds.length - 2} more
+                                +{orderedCampusIds.length - 2} more
                               </span>
                             )}
                           </div>
