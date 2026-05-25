@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import {
   addChurchDocument,
   getChurchDocuments,
@@ -19,6 +20,7 @@ import { ScheduleMatrix } from "@/components/scheduling/schedule-matrix";
 import { MinistryReviewPanel } from "@/components/scheduling/ministry-review-panel";
 import { ApprovalCountdown } from "@/components/scheduling/approval-countdown";
 import { SelfServiceOpenSlots } from "@/components/scheduling/self-service-open-slots";
+import { CampusBadge } from "@/components/dashboard/campus-badge";
 import { normalizeWorkflowMode, generateOccurrences } from "@/lib/services/scheduler";
 import type {
   Schedule,
@@ -38,6 +40,25 @@ import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { TIER_LIMITS } from "@/lib/constants";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+
+/**
+ * Pass H Phase 2: a service "belongs to" the active campus when
+ *   1) no campus filter is active (activeCampusId === null), OR
+ *   2) the service has no campus_id set (org-wide service shows in every view), OR
+ *   3) the service's campus_id matches the active campus.
+ *
+ * Used to derive which schedules to show in the list, which services
+ * to feed into the generator, and which assignments to surface in
+ * Service Day. Centralizing the semantic here avoids drift across pages.
+ */
+function serviceMatchesCampus(
+  service: Pick<Service, "campus_id">,
+  activeCampusId: string | null,
+): boolean {
+  if (activeCampusId === null) return true;
+  if (!service.campus_id) return true;
+  return service.campus_id === activeCampusId;
+}
 
 function ScheduleEmptyState({ schedule, services, volunteers, ministries }: {
   schedule: Schedule;
@@ -160,6 +181,12 @@ export default function SchedulesPage() {
   const { profile, user, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
   const { confirm } = useConfirm();
+  // Pass H Phase 2: when a campus is selected in the sidebar, scope the
+  // schedules list AND new-schedule generation to services in that campus
+  // (plus org-wide services with no campus_id). Single-campus orgs always
+  // see everything because activeCampusId stays null and isMultiCampus is
+  // false — keeping the experience identical for them.
+  const { activeCampusId, campuses, isMultiCampus } = useActiveCampus();
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -299,8 +326,12 @@ export default function SchedulesPage() {
       const schedRef = await addChurchDocument(churchId, "schedules", scheduleData);
       const scheduleId = schedRef.id;
 
-      // Filter to selected ministries when scoped scheduling is requested
-      const scopedServices =
+      // Filter to selected ministries when scoped scheduling is requested,
+      // then further narrow by active campus (Pass H Phase 2). Org-wide
+      // services (campus_id null/undefined) always pass — they cover every
+      // campus by design and shouldn't be dropped just because the admin
+      // is viewing North Campus.
+      const ministryScopedServices =
         options.ministryIds.length > 0
           ? services.filter((s) => {
               const ids = [
@@ -310,6 +341,9 @@ export default function SchedulesPage() {
               return options.ministryIds.some((id) => ids.includes(id));
             })
           : services;
+      const scopedServices = ministryScopedServices.filter((s) =>
+        serviceMatchesCampus(s, activeCampusId),
+      );
       const scopedVolunteers =
         options.ministryIds.length > 0
           ? volunteers.filter((v) =>
@@ -680,6 +714,65 @@ export default function SchedulesPage() {
 
   const activeSchedule = schedules.find((s) => s.id === activeScheduleId);
   const canGenerate = services.length > 0 && volunteers.length > 0;
+
+  /**
+   * Pass H Phase 2: derive a (schedule.id → Set<campus_id | null>) map so
+   * the list can hide schedules that don't touch the active campus, and
+   * cards can show inline campus chips.
+   *
+   * The campus set for a schedule is the union of campus_ids on every
+   * service inside its ministry scope. A schedule with at least one
+   * org-wide service (campus_id null/undefined) is represented with the
+   * sentinel `null` in the set and is treated as universal — it always
+   * passes the campus filter regardless of which campus is active.
+   *
+   * Schedules with no ministry scope (org-wide schedule) inherit campus
+   * coverage from EVERY service, which is the right semantic — an
+   * unscoped schedule covers anything the org runs.
+   */
+  const scheduleCampusMap = useMemo(() => {
+    const map = new Map<string, Set<string | null>>();
+    for (const sched of schedules) {
+      const schedMinistryIds = sched.ministry_ids || [];
+      const scopedSvcs =
+        schedMinistryIds.length > 0
+          ? services.filter((s) => {
+              const ids = [
+                s.ministry_id,
+                ...(s.ministries?.map((m) => m.ministry_id) ?? []),
+              ];
+              return schedMinistryIds.some((id) => ids.includes(id));
+            })
+          : services;
+      const set = new Set<string | null>();
+      for (const svc of scopedSvcs) {
+        set.add(svc.campus_id ?? null);
+      }
+      map.set(sched.id, set);
+    }
+    return map;
+  }, [schedules, services]);
+
+  /**
+   * Schedules that match the active campus filter. A schedule passes when:
+   *   - no filter is active (activeCampusId === null), OR
+   *   - the schedule has an org-wide service (null in its campus set), OR
+   *   - the schedule explicitly covers the active campus.
+   *
+   * On single-campus orgs activeCampusId stays null so this is a no-op.
+   */
+  const visibleSchedules = useMemo(() => {
+    if (activeCampusId === null) return schedules;
+    return schedules.filter((sched) => {
+      const set = scheduleCampusMap.get(sched.id);
+      if (!set) return true;
+      return set.has(null) || set.has(activeCampusId);
+    });
+  }, [schedules, scheduleCampusMap, activeCampusId]);
+
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   /**
    * Live-derived stats for the top stats bar. PR #40 polish: when an
@@ -1311,49 +1404,102 @@ export default function SchedulesPage() {
                 Create Your First Schedule
               </button>
             </div>
+          ) : visibleSchedules.length === 0 && activeCampusName ? (
+            // Pass H Phase 2: schedules exist for the org but none touch the
+            // currently-selected campus. Tell the admin what filter is on and
+            // how to clear it.
+            <div className="rounded-xl border border-dashed border-vc-border bg-white p-10 text-center">
+              <svg className="mx-auto h-8 w-8 text-vc-text-muted/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+              </svg>
+              <p className="mt-3 font-medium text-vc-indigo">
+                No schedules for {activeCampusName}
+              </p>
+              <p className="mt-1 text-sm text-vc-text-muted">
+                {schedules.length} schedule{schedules.length === 1 ? "" : "s"} exist for other campuses.
+                Switch to <strong>All campuses</strong> in the sidebar to see them all, or generate a new schedule scoped to {activeCampusName}.
+              </p>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-5 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+              >
+                New Schedule for {activeCampusName}
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
-              {schedules.map((s) => (
-                <div key={s.id} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => viewSchedule(s)}
-                        className="font-semibold text-vc-indigo hover:text-vc-coral transition-colors"
-                      >
-                        {s.date_range_start} — {s.date_range_end}
-                      </button>
-                      <Badge variant={statusColors[s.status] as "default" | "primary" | "success" | "warning" | "danger"}>
-                        {s.status.replace("_", " ")}
-                      </Badge>
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => viewSchedule(s)} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">View</button>
-                      {s.status === "draft" && (
-                        <button onClick={() => handleDeleteSchedule(s.id)} disabled={deleting === s.id} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors">
-                          {deleting === s.id ? "..." : "Delete"}
+              {visibleSchedules.map((s) => {
+                // Pass H Phase 2: show inline campus chip(s) per card. We
+                // intentionally render at most 2 — anything more becomes
+                // visual noise and the user can open the schedule to see the
+                // full breakdown. Falls back to a single "All campuses" pill
+                // when the schedule covers an org-wide service.
+                const campusSet = scheduleCampusMap.get(s.id) ?? new Set();
+                const hasOrgWide = campusSet.has(null);
+                const specificCampusIds = [...campusSet].filter(
+                  (id): id is string => id !== null,
+                );
+                return (
+                  <div key={s.id} className="group rounded-xl border border-vc-border-light bg-white p-5 transition-shadow hover:shadow-md">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={() => viewSchedule(s)}
+                          className="font-semibold text-vc-indigo hover:text-vc-coral transition-colors"
+                        >
+                          {s.date_range_start} — {s.date_range_end}
                         </button>
-                      )}
+                        <Badge variant={statusColors[s.status] as "default" | "primary" | "success" | "warning" | "danger"}>
+                          {s.status.replace("_", " ")}
+                        </Badge>
+                        {/* Campus chips — hidden for single-campus orgs and
+                            for org-only schedules with no campus diversity */}
+                        {isMultiCampus && (hasOrgWide || specificCampusIds.length > 0) && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {hasOrgWide && specificCampusIds.length === 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-vc-indigo/8 px-2 py-0.5 text-[10px] font-medium text-vc-indigo-muted">
+                                📍 All campuses
+                              </span>
+                            )}
+                            {specificCampusIds.slice(0, 2).map((cid) => (
+                              <CampusBadge key={cid} campusId={cid} />
+                            ))}
+                            {specificCampusIds.length > 2 && (
+                              <span className="text-[10px] font-medium text-vc-text-muted">
+                                +{specificCampusIds.length - 2} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => viewSchedule(s)} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-secondary hover:text-vc-coral transition-colors">View</button>
+                        {s.status === "draft" && (
+                          <button onClick={() => handleDeleteSchedule(s.id)} disabled={deleting === s.id} className="inline-flex items-center min-h-[44px] px-2 text-xs font-medium text-vc-text-muted hover:text-vc-danger transition-colors">
+                            {deleting === s.id ? "..." : "Delete"}
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    <p className="mt-1 text-sm text-vc-text-muted">
+                      Created {new Date(s.created_at).toLocaleDateString()} · {s.workflow_mode.replace("-", " ")}
+                      {s.status === "published" && s.published_at && (
+                        <> · Published {new Date(s.published_at).toLocaleDateString()}</>
+                      )}
+                      {s.availability_window?.due_date && s.status === "draft" && (
+                        <> · Availability due {s.availability_window.due_date}</>
+                      )}
+                      {s.status === "in_review" && (() => {
+                        const approvals = Object.values(s.ministry_approvals);
+                        const approved = approvals.filter((a) => a.status === "approved").length;
+                        return approvals.length > 0 ? (
+                          <> · {approved}/{approvals.length} teams approved</>
+                        ) : null;
+                      })()}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-vc-text-muted">
-                    Created {new Date(s.created_at).toLocaleDateString()} · {s.workflow_mode.replace("-", " ")}
-                    {s.status === "published" && s.published_at && (
-                      <> · Published {new Date(s.published_at).toLocaleDateString()}</>
-                    )}
-                    {s.availability_window?.due_date && s.status === "draft" && (
-                      <> · Availability due {s.availability_window.due_date}</>
-                    )}
-                    {s.status === "in_review" && (() => {
-                      const approvals = Object.values(s.ministry_approvals);
-                      const approved = approvals.filter((a) => a.status === "approved").length;
-                      return approvals.length > 0 ? (
-                        <> · {approved}/{approvals.length} teams approved</>
-                      ) : null;
-                    })()}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
