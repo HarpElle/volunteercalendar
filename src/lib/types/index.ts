@@ -64,6 +64,14 @@ export interface Membership {
   event_coordinator?: boolean;
   /** Grants access to room/resource management without full admin role */
   facility_coordinator?: boolean;
+  /**
+   * Pass H Phase 1: per-membership campus preference. When the user
+   * switches campus via the sidebar selector, this is persisted to the
+   * membership doc so the same campus is selected next time they log in
+   * from a different device. Null/undefined = "All campuses" (default).
+   * Only meaningful when the org has 2+ campuses.
+   */
+  default_campus_id?: string | null;
   created_at: string;
   updated_at: string;
 }

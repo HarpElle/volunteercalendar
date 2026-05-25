@@ -17,6 +17,7 @@ import { MobileHeader } from "@/components/dashboard/mobile-header";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { MoreMenu } from "@/components/dashboard/more-menu";
 import { FeedbackButton } from "@/components/feedback/feedback-button";
+import { CampusProvider } from "@/lib/context/campus-context";
 import type { SubscriptionTier } from "@/lib/types";
 import { TIER_LIMITS } from "@/lib/constants";
 
@@ -151,6 +152,7 @@ export default function DashboardLayout({
   }
 
   return (
+    <CampusProvider>
     <div className="flex min-h-screen bg-vc-bg">
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar
@@ -231,5 +233,6 @@ export default function DashboardLayout({
         onSignOut={handleSignOut}
       />
     </div>
+    </CampusProvider>
   );
 }
