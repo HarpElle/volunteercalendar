@@ -1,0 +1,147 @@
+# Auto-deploy Firebase rules + Firestore indexes on merge to main.
+#
+# Background:
+#   Vercel only deploys app code. Firebase services (Firestore rules,
+#   Firestore indexes, Storage rules) need an explicit `firebase deploy`
+#   to take effect. This gap bit us three times in recent passes:
+#     - Pass G Phase 6 retest (admin could leave facility group via REST)
+#     - Pass H PR #74      (Families save kept failing in production)
+#     - Pass H PR #80      (campus delete bypass)
+#   The manual "Jason runs `firebase deploy --only firestore:rules`" step
+#   was easy to forget on the day, and Codex caught each one. This
+#   workflow makes it automatic.
+#
+# Trigger:
+#   On every push to main (i.e. merged PR) where ANY of these files changed:
+#     - firestore.rules
+#     - firestore.indexes.json
+#     - storage.rules
+#   If none of those files changed, the workflow doesn't run at all.
+#
+# Auth:
+#   Uses a Firebase service account JSON stored as
+#   `FIREBASE_SERVICE_ACCOUNT` in repo secrets. The CLI picks it up
+#   via the standard `GOOGLE_APPLICATION_CREDENTIALS` env var.
+#
+# Required one-time setup (Jason — done once, never again):
+#   1. In GCP console for the volunteercalendar Firebase project:
+#      - Create a service account with role:
+#          - "Firebase Rules Admin"      (firebaserules.admin)
+#          - "Firebase Admin"            (acceptable shortcut if you
+#                                         don't want to mint a custom
+#                                         role; broader than needed)
+#      - Generate a JSON key for it (Keys → Add key → Create new key → JSON)
+#   2. In GitHub repo settings → Secrets and variables → Actions:
+#      - New repository secret `FIREBASE_SERVICE_ACCOUNT` → paste the
+#        entire JSON (including the curly braces)
+#      - New repository variable `FIREBASE_PROJECT_ID` → set to the
+#        Firebase project ID (probably `volunteercalendar` or
+#        whatever the alias is in your local firebase config)
+#   3. Once that's in place, this workflow runs on every rules-change
+#      merge. Jason no longer has to run `firebase deploy --only
+#      firestore:rules` from his terminal — it just happens.
+#
+# Failure mode:
+#   If the deploy fails the workflow run goes red and shows up in the
+#   Actions tab. Sentry / GitHub notifications surface it. The app code
+#   that already deployed on Vercel keeps running, but the rules in
+#   production stay at the previous version — same as if Jason just
+#   forgot to run the manual command. We intentionally don't auto-roll-
+#   back the Vercel deploy because the app usually still works under
+#   the old rules; surfacing the failure clearly is the right call.
+
+name: Deploy Firebase rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - firestore.indexes.json
+      - storage.rules
+
+# Two PRs landing back-to-back shouldn't race each other; the later
+# one wins. (Firebase's deploy is idempotent so a queued deploy
+# overriding a previous in-flight one is safe.)
+concurrency:
+  group: deploy-rules-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy rules + indexes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Write service-account credentials to a temp file
+        # firebase-tools authenticates via GOOGLE_APPLICATION_CREDENTIALS
+        # pointing at a JSON file on disk. We write the secret to a temp
+        # file (runner is ephemeral) and export the env var so the deploy
+        # step picks it up automatically.
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is missing. See the comment at the top of .github/workflows/deploy-rules.yml for setup steps."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP"
+          echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
+          chmod 600 "$RUNNER_TEMP/firebase-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+
+      - name: Validate project ID is configured
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          if [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo "::error::FIREBASE_PROJECT_ID repo variable is missing. See the comment at the top of .github/workflows/deploy-rules.yml for setup steps."
+            exit 1
+          fi
+          echo "Will deploy to project: $FIREBASE_PROJECT_ID"
+
+      - name: Deploy firestore rules + indexes + storage rules
+        # --non-interactive: refuse to hang on any prompt (e.g. release
+        #   confirmation, billing warnings).
+        # --force: skip the "review changes" interactive prompt; we're CI.
+        # The targets line up with firebase.json's three configured sections.
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          firebase deploy \
+            --only firestore:rules,firestore:indexes,storage:rules \
+            --project "$FIREBASE_PROJECT_ID" \
+            --non-interactive \
+            --force
+
+      - name: Post-deploy summary
+        # Surfaces in the Actions UI so a glance at a green run tells
+        # Jason exactly what landed in production.
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          {
+            echo "## Firebase rules deployed"
+            echo ""
+            echo "**Commit:** \`$COMMIT_SHA\`"
+            echo ""
+            echo "**Message:**"
+            echo ""
+            echo "\`\`\`"
+            echo "$COMMIT_MSG"
+            echo "\`\`\`"
+            echo ""
+            echo "**Deployed:** firestore:rules, firestore:indexes, storage:rules"
+          } >> "$GITHUB_STEP_SUMMARY"
