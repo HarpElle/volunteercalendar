@@ -22,6 +22,10 @@ export default function EventSignupPage() {
   const [state, setState] = useState<PageState>("loading");
   const [event, setEvent] = useState<Event | null>(null);
   const [church, setChurch] = useState<Church | null>(null);
+  // Pass H Phase 4: campus comes from /api/signup as `{ id, name }` so
+  // public visitors get the human-readable label without us exposing the
+  // full campus doc (only id + name surface).
+  const [campus, setCampus] = useState<{ id: string; name: string } | null>(null);
   const [signups, setSignups] = useState<EventSignup[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [guestName, setGuestName] = useState("");
@@ -51,6 +55,7 @@ export default function EventSignupPage() {
         const data = await res.json();
         setEvent(data.event as Event);
         setChurch(data.church as Church);
+        setCampus((data.campus as { id: string; name: string } | null) ?? null);
         setSignups(data.signups as EventSignup[]);
         setState("ready");
       } catch {
@@ -243,6 +248,20 @@ export default function EventSignupPage() {
             {event!.all_day && (
               <span className="rounded-full bg-vc-sand/30 px-2 py-0.5 text-xs font-medium text-vc-text-secondary">
                 All day
+              </span>
+            )}
+            {/* Pass H Phase 4: campus chip on public event pages so
+                signers-up at multi-campus orgs know which location they
+                are committing to. Hidden when the event has no
+                campus_id (org-wide event). Visible to ALL visitors
+                including non-logged-in — the campus name is the only
+                campus metadata exposed (id + name only from the API). */}
+            {campus && (
+              <span
+                className="flex items-center gap-1 rounded-full bg-vc-indigo/8 px-2.5 py-0.5 text-xs font-medium text-vc-indigo-muted"
+                title={`Campus: ${campus.name}`}
+              >
+                📍 {campus.name}
               </span>
             )}
           </div>

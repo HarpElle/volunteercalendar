@@ -147,13 +147,21 @@ export default function SchedulingDashboardPage() {
     );
   }
 
-  // Upcoming events (next 30 days) — events have no campus_id; they're
-  // org-wide for now (Phase 3 may add event.campus_id).
+  // Upcoming events (next 30 days). Pass H Phase 4 closes the Phase 2
+  // caveat: events now carry an optional campus_id and the active campus
+  // chip actually narrows the list. Universal semantic: an event with
+  // null/undefined campus_id passes every campus filter (org-wide
+  // event, visible everywhere — same rule as Service.campus_id null).
   const thirtyDaysOut = new Date();
   thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
   const cutoff = thirtyDaysOut.toISOString().split("T")[0];
   const upcomingEvents = events
-    .filter((e) => e.date >= today && e.date <= cutoff)
+    .filter((e) => {
+      if (e.date < today || e.date > cutoff) return false;
+      if (activeCampusId === null) return true;
+      if (!e.campus_id) return true; // org-wide event
+      return e.campus_id === activeCampusId;
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 
   // Upcoming assignments with gaps (unfilled roles in next 14 days)
@@ -197,14 +205,27 @@ export default function SchedulingDashboardPage() {
     b.date.localeCompare(a.date),
   );
 
-  // Stats — combine service assignments + event signups. Assignment-side
-  // numbers filter by campus; signup-side numbers stay org-wide (events
-  // have no campus_id yet). The combined totals therefore over-report
-  // when filtering by campus IF the org runs both campus-scoped services
-  // and org-wide events — acceptable for now; called out in the page
-  // subtitle when a filter is active.
+  // Stats — combine service assignments + event signups. Pass H Phase 4:
+  // both sides now respect the active campus. Service-side via
+  // assignmentMatchesCampus (service_id lookup); event-side by joining
+  // signups to their parent event and matching event.campus_id. Org-wide
+  // events (campus_id null) pass every campus filter — same semantic as
+  // org-wide services.
+  const eventById = new Map(events.map((e) => [e.id, e]));
   const eventDateMap = new Map(events.map((e) => [e.id, e.date]));
-  const activeSignups = allEventSignups.filter((s) => s.status !== "cancelled" && (eventDateMap.get(s.event_id) || "") >= today);
+  const signupMatchesCampus = (s: EventSignup): boolean => {
+    if (activeCampusId === null) return true;
+    const evt = eventById.get(s.event_id);
+    if (!evt) return true; // unknown event → don't drop; surface for cleanup
+    if (!evt.campus_id) return true; // org-wide event
+    return evt.campus_id === activeCampusId;
+  };
+  const activeSignups = allEventSignups.filter(
+    (s) =>
+      s.status !== "cancelled" &&
+      (eventDateMap.get(s.event_id) || "") >= today &&
+      signupMatchesCampus(s),
+  );
 
   const draftAssignments = assignments.filter(
     (a) =>
@@ -299,7 +320,17 @@ export default function SchedulingDashboardPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium text-vc-indigo">{evt.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-vc-indigo">{evt.name}</p>
+                        {/* Pass H Phase 4: campus chip helps admins
+                            disambiguate same-named events at different
+                            campuses (e.g. "Outreach Day" at North vs
+                            South). Auto-hides for single-campus orgs
+                            and for org-wide events (campus_id null). */}
+                        {isMultiCampus && evt.campus_id && (
+                          <CampusBadge campusId={evt.campus_id} />
+                        )}
+                      </div>
                       <p className="mt-0.5 text-xs text-vc-text-muted">{formatDate(evt.date)}</p>
                     </div>
                     <div className="text-right shrink-0 ml-4">
