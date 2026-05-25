@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import {
   addChurchDocument,
   getChurchDocuments,
@@ -71,6 +72,19 @@ function PeopleContent() {
 
   const canManage = isAdmin(activeMembership);
   const canViewRoster = isScheduler(activeMembership);
+
+  // Pass H Phase 3: when a campus is active in the sidebar, scope the
+  // roster + families + invite-queue counts to people whose campus_ids
+  // include that campus. People with empty campus_ids are treated as
+  // universal (visible under every campus view) for two reasons:
+  //   1. consistency with the "org-wide service" semantic in Phase 2
+  //   2. ensures nobody disappears during the campus rollout when admins
+  //      haven't yet tagged everyone with explicit campus_ids
+  // Single-campus orgs see no change (activeCampusId stays null).
+  const { activeCampusId, campuses } = useActiveCampus();
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   // Tab state
   const rawTab = searchParams.get("tab");
@@ -266,6 +280,14 @@ function PeopleContent() {
   });
 
   const filteredRoster = rosterPeople.filter(({ volunteer: v, membership: mem }) => {
+    // Pass H Phase 3: campus filter. Empty campus_ids = universal
+    // (treated as "any campus" so people aren't orphaned during
+    // multi-campus rollout). Non-empty campus_ids must include the
+    // active campus to pass.
+    if (activeCampusId !== null) {
+      const ids = v.campus_ids;
+      if (ids && ids.length > 0 && !ids.includes(activeCampusId)) return false;
+    }
     // Status filter (default: active only)
     if (filterStatus !== "all" && v.status !== filterStatus) return false;
     // Team membership filter
@@ -550,9 +572,18 @@ function PeopleContent() {
       {/* People module shell + Roster page actions */}
       <PeopleShell />
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-vc-text-muted">
-          {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-vc-text-muted">
+            {volunteers.filter(v => v.status !== "archived").length} active · {volunteers.filter(v => v.status === "archived").length} archived · {pendingInviteTotal} pending
+          </p>
+          {/* Pass H Phase 3: surface the active campus filter inline next
+              to the count so admins notice the roster has been narrowed. */}
+          {activeCampusName && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-vc-indigo/8 px-2 py-0.5 text-xs font-medium text-vc-indigo-muted">
+              📍 {activeCampusName}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {canManage && (
             <ShareMenu
@@ -751,16 +782,31 @@ function PeopleContent() {
                   />
                 </div>
 
-                {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0) && (
+                {filteredRoster.length === 0 && (searchQuery || activeFilterCount > 0 || activeCampusName) && (
                   <div className="rounded-xl border border-vc-border-light bg-white px-5 py-8 text-center text-sm text-vc-text-muted">
-                    No people match your search{activeFilterCount > 0 ? " and filters" : ""}.
-                    {activeFilterCount > 0 && (
-                      <button
-                        onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); setSidebarMinistry(null); }}
-                        className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
-                      >
-                        Clear all
-                      </button>
+                    {activeCampusName && activeFilterCount === 0 && !searchQuery ? (
+                      // Pass H Phase 3: when the ONLY filter that excluded
+                      // everyone is the campus selector, name it explicitly
+                      // — admins switching campuses for the first time may
+                      // not realize the sidebar chip is what's hiding rows.
+                      <>
+                        No people assigned to <strong>{activeCampusName}</strong> yet.
+                        Switch to <strong>All campuses</strong> in the sidebar to see everyone,
+                        or open a person and add them to this campus.
+                      </>
+                    ) : (
+                      <>
+                        No people match your search{activeFilterCount > 0 ? " and filters" : ""}
+                        {activeCampusName ? ` at ${activeCampusName}` : ""}.
+                        {(activeFilterCount > 0 || searchQuery) && (
+                          <button
+                            onClick={() => { setFilterMinistries([]); setFilterRoles([]); setFilterOrgRoles([]); setFilterEligibility("all"); setFilterStatus("active"); setFilterTeam("all"); setSearchQuery(""); setSidebarMinistry(null); }}
+                            className="ml-1 font-medium text-vc-coral hover:text-vc-coral-dark transition-colors"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

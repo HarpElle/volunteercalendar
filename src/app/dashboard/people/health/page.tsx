@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -165,6 +166,12 @@ const CATEGORY_TOOLTIPS: Record<HealthCategory, string> = {
 export default function VolunteerHealthPage() {
   const { profile, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
+  // Pass H Phase 3: scope health categories by active campus. Empty
+  // campus_ids = universal (same semantic as the People list).
+  const { activeCampusId, campuses } = useActiveCampus();
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   const [loading, setLoading] = useState(true);
   const [volunteers, setVolunteers] = useState<Person[]>([]);
@@ -192,6 +199,17 @@ export default function VolunteerHealthPage() {
     load();
   }, [churchId]);
 
+  // Pass H Phase 3: scope volunteers by active campus before classifying.
+  // Assignment-side stays org-wide (a volunteer's no-show pattern is
+  // independent of which campus they served at — same call as retention).
+  const scopedVolunteers = useMemo(() => {
+    if (activeCampusId === null) return volunteers;
+    return volunteers.filter((v) => {
+      const ids = v.campus_ids;
+      return !ids || ids.length === 0 || ids.includes(activeCampusId);
+    });
+  }, [volunteers, activeCampusId]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -200,8 +218,8 @@ export default function VolunteerHealthPage() {
     );
   }
 
-  // Classify all volunteers
-  const healthData = volunteers.map((v) => classifyHealth(v, assignments));
+  // Classify (campus-scoped) volunteers
+  const healthData = scopedVolunteers.map((v) => classifyHealth(v, assignments));
 
   // Group by category
   const byCategory: Record<HealthCategory, VolunteerHealth[]> = {
@@ -215,7 +233,7 @@ export default function VolunteerHealthPage() {
     byCategory[h.category].push(h);
   }
 
-  const totalActive = volunteers.length;
+  const totalActive = scopedVolunteers.length;
   const needsAttention = healthData.filter((h) => h.category !== "healthy").length;
   const healthyCount = byCategory.healthy.length;
   const healthRate = totalActive > 0 ? Math.round((healthyCount / totalActive) * 100) : 100;
@@ -236,6 +254,16 @@ export default function VolunteerHealthPage() {
       {/* InfoTooltip removed from strip actions in Phase 2 — clipped at viewport edge.
           Per-tab tooltip descriptions are queued as a follow-up. */}
       <PeopleShell />
+
+      {/* Pass H Phase 3: campus filter indicator. Auto-hides when filter
+          is off or org is single-campus. */}
+      {activeCampusName && (
+        <div className="mb-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-vc-indigo/8 px-3 py-1 text-xs font-medium text-vc-indigo-muted">
+            📍 Showing health for {activeCampusName} only
+          </span>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
