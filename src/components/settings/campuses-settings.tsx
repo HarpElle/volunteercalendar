@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   addChurchDocument,
   updateChurchDocument,
-  removeChurchDocument,
 } from "@/lib/firebase/firestore";
 import { Button } from "@/components/ui/button";
 import type { Campus } from "@/lib/types";
@@ -12,6 +11,12 @@ import {
   CampusFormModal,
   type CampusFormData,
 } from "@/components/forms/campus-form-modal";
+// Pass H Phase 5: delete safeguards. The old `confirm() +
+// removeChurchDocument()` flow orphaned every reference (services,
+// events, people, calendar feeds) still scoped to the campus. The
+// new modal audits references first, then runs a cascade via
+// /api/campuses/[id].
+import { CampusDeleteModal } from "@/components/forms/campus-delete-modal";
 
 interface CampusesSettingsProps {
   churchId: string;
@@ -31,6 +36,11 @@ export function CampusesSettings({
   const [showCampusForm, setShowCampusForm] = useState(false);
   const [editingCampusId, setEditingCampusId] = useState<string | null>(null);
   const [campusSaving, setCampusSaving] = useState(false);
+  // Pass H Phase 5: separate state for the delete modal so the
+  // existing edit modal (CampusFormModal) and the new delete
+  // confirmation can be open at the same time during a typical
+  // "Edit → Delete" tap chain.
+  const [deletingCampusId, setDeletingCampusId] = useState<string | null>(null);
 
   function closeCampusForm() {
     setEditingCampusId(null);
@@ -98,16 +108,20 @@ export function CampusesSettings({
     }
   }
 
-  async function handleDeleteCampus(id: string) {
-    if (!window.confirm("Delete this campus? This cannot be undone.")) return;
-    try {
-      await removeChurchDocument(churchId, "campuses", id);
-      setCampuses((prev) => prev.filter((c) => c.id !== id));
-      closeCampusForm();
-    } catch (err) {
-      console.error("Delete campus failed:", err);
-      setMutationError("Failed to delete campus.");
-    }
+  // Pass H Phase 5: open the audit/cascade modal instead of a bare
+  // browser confirm + bare delete. The modal handles the actual
+  // cascade through /api/campuses/[id]; this function just opens it
+  // and closes the edit panel underneath so the user lands on the
+  // delete confirmation cleanly. Returns a Promise so it matches
+  // the existing CampusFormModal.onDelete signature.
+  async function startDeleteCampus(id: string): Promise<void> {
+    setDeletingCampusId(id);
+    closeCampusForm();
+  }
+
+  function handleCampusDeleted(id: string) {
+    setCampuses((prev) => prev.filter((c) => c.id !== id));
+    setDeletingCampusId(null);
   }
 
   return (
@@ -125,13 +139,30 @@ export function CampusesSettings({
           </Button>
         </div>
 
+        {/* Pass H Phase 5: delete-with-cascade modal. Mounted unconditionally
+            so the audit fetch can fire as soon as `deletingCampusId` is set. */}
+        {deletingCampusId && (() => {
+          const target = campuses.find((c) => c.id === deletingCampusId);
+          if (!target) return null;
+          return (
+            <CampusDeleteModal
+              open={!!deletingCampusId}
+              onClose={() => setDeletingCampusId(null)}
+              onDeleted={handleCampusDeleted}
+              churchId={churchId}
+              campus={target}
+              allCampuses={campuses}
+            />
+          );
+        })()}
+
         <CampusFormModal
           open={showCampusForm}
           onClose={closeCampusForm}
           onSubmit={handleCampusSubmit}
           onDelete={
             editingCampusId
-              ? () => handleDeleteCampus(editingCampusId)
+              ? () => startDeleteCampus(editingCampusId)
               : undefined
           }
           saving={campusSaving}

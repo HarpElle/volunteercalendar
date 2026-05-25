@@ -246,8 +246,14 @@ service cloud.firestore {
       }
 
       match /campuses/{docId} {
+        // Pass H Phase 5 (2026-05-25): split write so create/update
+        // stay client-allowed but delete is forced through
+        // /api/campuses/[id] (Admin SDK + cascade). Bare client
+        // deletes would orphan campus_id references on services,
+        // events, calendar_feeds, and people.campus_ids arrays.
         allow read: if isActiveMember(churchId);
-        allow write: if isSchedulerOrAbove(churchId);
+        allow create, update: if isSchedulerOrAbove(churchId);
+        allow delete: if false;
       }
 
       // ─── Calendar Feeds ───
