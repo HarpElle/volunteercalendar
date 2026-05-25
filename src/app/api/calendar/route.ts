@@ -77,36 +77,58 @@ export async function GET(request: NextRequest) {
     const timezone = (church?.timezone as string) || "America/New_York";
     const churchName = (church?.name as string) || "Church";
 
-    // Fetch assignments, supporting data, AND schedules in parallel. Schedules
-    // are required to filter out non-published assignments.
-    const [assignSnap, servicesSnap, ministriesSnap, peopleSnap, schedulesSnap] =
-      await Promise.all([
-        adminDb
-          .collection("churches")
-          .doc(churchId)
-          .collection("assignments")
-          .get(),
-        adminDb
-          .collection("churches")
-          .doc(churchId)
-          .collection("services")
-          .get(),
-        adminDb
-          .collection("churches")
-          .doc(churchId)
-          .collection("ministries")
-          .get(),
-        adminDb
-          .collection("churches")
-          .doc(churchId)
-          .collection("people")
-          .get(),
-        adminDb
-          .collection("churches")
-          .doc(churchId)
-          .collection("schedules")
-          .get(),
-      ]);
+    // Fetch assignments, supporting data, schedules, AND events +
+    // event_signups in parallel. Schedules are required to filter out
+    // non-published assignments. Events + event_signups (Pass H Phase 4
+    // retest Sev 2) are required for personal feeds to include the
+    // volunteer's public-event signups, not just their service
+    // assignments. event_signups lives at the church root (not under
+    // /churches), unlike the other collections.
+    const [
+      assignSnap,
+      servicesSnap,
+      ministriesSnap,
+      peopleSnap,
+      schedulesSnap,
+      eventsSnap,
+      eventSignupsSnap,
+    ] = await Promise.all([
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("assignments")
+        .get(),
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("services")
+        .get(),
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("ministries")
+        .get(),
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("people")
+        .get(),
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("schedules")
+        .get(),
+      adminDb
+        .collection("churches")
+        .doc(churchId)
+        .collection("events")
+        .get(),
+      // event_signups live in a top-level collection, scoped by church_id field.
+      adminDb
+        .collection("event_signups")
+        .where("church_id", "==", churchId)
+        .get(),
+    ]);
 
     const serviceMap = new Map(
       servicesSnap.docs.map((d) => [d.id, d.data()]),
@@ -117,6 +139,16 @@ export async function GET(request: NextRequest) {
     const volunteerMap = new Map(
       peopleSnap.docs.map((d) => [d.id, d.data()]),
     );
+    // Pass H Phase 4 retest Sev 2: needed by the personal-feed path
+    // below to resolve signup → event for both name/time AND the
+    // campus filter.
+    const eventMap = new Map(
+      eventsSnap.docs.map((d) => [d.id, d.data()]),
+    );
+    const eventSignups = eventSignupsSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    })) as Record<string, unknown>[];
 
     // SECURITY (Codex QA 2026-05-15): collect IDs of published schedules.
     // Drafts, in_review, and approved schedules must NEVER bleed into iCal
@@ -206,7 +238,7 @@ export async function GET(request: NextRequest) {
     let events;
 
     if (feedType === "personal") {
-      events = assignments.map((a) => {
+      const assignmentEvents = assignments.map((a) => {
         const service = serviceMap.get(a.service_id as string);
         const ministry = ministryMap.get(a.ministry_id as string);
         return {
@@ -221,6 +253,67 @@ export async function GET(request: NextRequest) {
           durationMinutes: (service?.duration_minutes as number) || 90,
         };
       });
+
+      // Pass H Phase 4 retest Sev 2 (2026-05-25): personal feeds were
+      // missing event signups entirely — only service assignments
+      // landed in the .ics. Now we also include public-event signups
+      // where the volunteer is the feed's target.
+      //
+      // Filters applied:
+      //   1. volunteer_id matches the feed's target_id (just like
+      //      assignments use person_id === targetId)
+      //   2. status !== "cancelled" (Service Day uses the same rule)
+      //   3. parent event exists in eventMap (drops orphans)
+      //   4. campus filter — when feed.campus_id is set, drop signups
+      //      whose event.campus_id doesn't match (org-wide events
+      //      with campus_id null pass every filter, same semantic as
+      //      the assignment side above)
+      const mySignups = eventSignups.filter((s) => {
+        if (s.volunteer_id !== targetId) return false;
+        if (s.status === "cancelled") return false;
+        const evt = eventMap.get(s.event_id as string);
+        if (!evt) return false; // orphaned signup → skip
+        if (feedCampusId) {
+          const evtCampus = (evt.campus_id as string | null | undefined) ?? null;
+          // Universal events (campus_id null) pass every campus filter;
+          // specific events only pass when they match exactly.
+          if (evtCampus && evtCampus !== feedCampusId) return false;
+        }
+        return true;
+      });
+
+      const signupEvents = mySignups.map((s) => {
+        const evt = eventMap.get(s.event_id as string)!;
+        const evtName = (evt.name as string) || "Event";
+        const roleTitle = (s.role_title as string) || "Volunteer";
+        const isAllDay = Boolean(evt.all_day);
+        // Mirror the assignment shape so generateICalFeed can treat
+        // both uniformly. duration_minutes is computed from start/end
+        // when present; falls back to a 60-minute default — events
+        // don't carry a duration_minutes field like services do.
+        const startTime = (evt.start_time as string | null) || "09:00";
+        const endTime = (evt.end_time as string | null) || null;
+        let durationMinutes = 60;
+        if (!isAllDay && startTime && endTime) {
+          const [sh, sm] = startTime.split(":").map(Number);
+          const [eh, em] = endTime.split(":").map(Number);
+          const mins = eh * 60 + em - (sh * 60 + sm);
+          if (mins > 0) durationMinutes = mins;
+        }
+        return {
+          uid: `signup_${s.id}`,
+          summary: `${roleTitle} - ${evtName}`,
+          description: [
+            `Event: ${evtName}`,
+            `Role: ${roleTitle}`,
+          ].join("\n"),
+          dtstart: evt.date as string,
+          startTime,
+          durationMinutes,
+        };
+      });
+
+      events = [...assignmentEvents, ...signupEvents];
     } else {
       // Team / ministry / org feeds: aggregate by service + date
       const grouped = new Map<string, typeof assignments>();

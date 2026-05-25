@@ -186,6 +186,18 @@ export function EventList({
     load();
   }, [churchId, user]);
 
+  // Codex Pass H Phase 4 retest Sev 3 (2026-05-25): the "Create Event"
+  // button previously called only setShowForm(true), leaving all the
+  // form fields at whatever values were last edited. That meant the
+  // campus default (which lives in resetForm) never fired on create —
+  // a North-Campus admin saw the form open with "All campuses" selected.
+  // startCreate() resets to a fresh form AND opens it so the active
+  // sidebar campus actually pre-fills.
+  function startCreate() {
+    resetForm();
+    setShowForm(true);
+  }
+
   function resetForm() {
     setName("");
     setDescription("");
@@ -470,7 +482,7 @@ export function EventList({
             </p>
           )}
           <Button
-            onClick={() => setShowForm(true)}
+            onClick={startCreate}
             disabled={!editingId && events.length >= tierLimits.active_events}
           >
             Create Event
