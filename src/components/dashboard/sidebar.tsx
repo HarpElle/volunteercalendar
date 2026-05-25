@@ -7,6 +7,7 @@ import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { shouldShowCheckinNav } from "@/lib/utils/checkin-permissions";
 import { Avatar } from "@/components/ui/avatar";
 import { TierLockBadge, useTierGate, type ModuleId } from "@/components/dashboard/tier-lock";
+import { CampusSelector } from "@/components/dashboard/campus-selector";
 import type { Membership, SubscriptionTier } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -341,6 +342,8 @@ export function Sidebar({
             </svg>
           </button>
         )}
+        {/* Pass H Phase 1: campus selector. Hides itself for single-campus orgs. */}
+        <CampusSelector />
       </div>
 
       {/* Nav items */}
