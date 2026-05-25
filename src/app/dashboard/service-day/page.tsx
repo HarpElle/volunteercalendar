@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import { getChurchDocuments, getEventSignupsBatch } from "@/lib/firebase/firestore";
 import { where } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
@@ -10,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SkeletonStats, SkeletonList } from "@/components/ui/skeleton";
 import { EventRoster } from "@/components/scheduling/event-roster";
 import { ServiceRoster } from "@/components/scheduling/service-roster";
+import { CampusBadge } from "@/components/dashboard/campus-badge";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
 import { ServiceDateTile, groupAssignmentsByServiceDate } from "@/components/scheduling/service-date-tile";
 import type { Service, Event, Schedule, Assignment, Ministry, EventSignup } from "@/lib/types";
@@ -28,6 +30,15 @@ export default function SchedulingDashboardPage() {
   const churchId = activeMembership?.church_id || profile?.church_id;
   const showAdminSection = isAdmin(activeMembership);
   const canMarkAttendance = isScheduler(activeMembership);
+  // Pass H Phase 2: when a campus is active, scope every section that's
+  // derived from `services` or `assignments` (which inherit campus via
+  // service_id lookup). Events are intentionally left alone — they have
+  // no `campus_id` and are treated as org-wide for now (Phase 3 may add
+  // event campus_id; tracked in the Pass H plan).
+  const { activeCampusId, campuses, isMultiCampus } = useActiveCampus();
+  const activeCampusName = activeCampusId
+    ? campuses.find((c) => c.id === activeCampusId)?.name ?? null
+    : null;
 
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
@@ -102,6 +113,27 @@ export default function SchedulingDashboardPage() {
     load();
   }, [churchId]);
 
+  // Pass H Phase 2: an assignment's campus is derived via its service_id.
+  // Org-wide services (campus_id null/undefined) are universal and pass
+  // every campus filter. Built once so it can be reused across sections.
+  // Declared BEFORE the loading early return — React hooks must be called
+  // in the same order on every render.
+  const serviceMap = useMemo(
+    () => new Map(services.map((s) => [s.id, s])),
+    [services],
+  );
+
+  const assignmentMatchesCampus = useMemo(() => {
+    return (a: Assignment): boolean => {
+      if (activeCampusId === null) return true;
+      if (!a.service_id) return true; // event-style assignments (no service) — org-wide
+      const svc = serviceMap.get(a.service_id);
+      if (!svc) return true; // service unknown → don't drop, surface for cleanup
+      if (!svc.campus_id) return true; // org-wide service
+      return svc.campus_id === activeCampusId;
+    };
+  }, [activeCampusId, serviceMap]);
+
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -115,7 +147,8 @@ export default function SchedulingDashboardPage() {
     );
   }
 
-  // Upcoming events (next 30 days)
+  // Upcoming events (next 30 days) — events have no campus_id; they're
+  // org-wide for now (Phase 3 may add event.campus_id).
   const thirtyDaysOut = new Date();
   thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
   const cutoff = thirtyDaysOut.toISOString().split("T")[0];
@@ -128,19 +161,26 @@ export default function SchedulingDashboardPage() {
   fourteenDaysOut.setDate(fourteenDaysOut.getDate() + 14);
   const gapCutoff = fourteenDaysOut.toISOString().split("T")[0];
 
-  // Active schedules
+  // Active schedules (campus filtering happens per-section below — admin
+  // count stays org-wide on purpose so the count matches the Schedules tab)
   const activeSchedules = schedules.filter(
     (s) => s.status === "published" || s.status === "draft",
   );
 
-  // Recent service dates for attendance (past 14 days + today)
+  // Recent service dates for attendance (past 14 days + today). Campus
+  // filter applies to the underlying service lookup.
   const fourteenDaysAgo = new Date();
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
   const pastCutoff = fourteenDaysAgo.toISOString().split("T")[0];
-  const serviceMap = new Map(services.map((s) => [s.id, s]));
   const serviceDateMap = new Map<string, { service: Service; date: string; count: number }>();
   for (const a of assignments) {
-    if (a.service_id && a.service_date >= pastCutoff && a.service_date <= today && a.status !== "declined") {
+    if (
+      a.service_id &&
+      a.service_date >= pastCutoff &&
+      a.service_date <= today &&
+      a.status !== "declined" &&
+      assignmentMatchesCampus(a)
+    ) {
       const key = `${a.service_id}-${a.service_date}`;
       const existing = serviceDateMap.get(key);
       if (existing) {
@@ -157,23 +197,36 @@ export default function SchedulingDashboardPage() {
     b.date.localeCompare(a.date),
   );
 
-  // Stats — combine service assignments + event signups
+  // Stats — combine service assignments + event signups. Assignment-side
+  // numbers filter by campus; signup-side numbers stay org-wide (events
+  // have no campus_id yet). The combined totals therefore over-report
+  // when filtering by campus IF the org runs both campus-scoped services
+  // and org-wide events — acceptable for now; called out in the page
+  // subtitle when a filter is active.
   const eventDateMap = new Map(events.map((e) => [e.id, e.date]));
   const activeSignups = allEventSignups.filter((s) => s.status !== "cancelled" && (eventDateMap.get(s.event_id) || "") >= today);
 
   const draftAssignments = assignments.filter(
-    (a) => a.status === "draft" && a.service_date >= today,
+    (a) =>
+      a.status === "draft" &&
+      a.service_date >= today &&
+      assignmentMatchesCampus(a),
   );
   const waitlistedSignups = activeSignups.filter((s) => s.status === "waitlisted");
   const awaitingResponseCount = draftAssignments.length + waitlistedSignups.length;
 
   const confirmedAssignments = assignments.filter(
-    (a) => a.status === "confirmed" && a.service_date >= today,
+    (a) =>
+      a.status === "confirmed" &&
+      a.service_date >= today &&
+      assignmentMatchesCampus(a),
   );
   const confirmedSignups = activeSignups.filter((s) => s.status === "confirmed");
   const confirmedUpcomingCount = confirmedAssignments.length + confirmedSignups.length;
 
-  const volunteerIdSet = new Set(assignments.map((a) => a.person_id));
+  const volunteerIdSet = new Set(
+    assignments.filter(assignmentMatchesCampus).map((a) => a.person_id),
+  );
   for (const s of activeSignups) volunteerIdSet.add(s.volunteer_id);
   const totalVolunteersActive = volunteerIdSet.size;
 
@@ -183,6 +236,14 @@ export default function SchedulingDashboardPage() {
         <h1 className="font-display text-3xl text-vc-indigo">Service Day</h1>
         <p className="mt-1 text-vc-text-secondary">
           Today&apos;s services, attendance, and assignments at a glance.
+          {activeCampusName && (
+            <>
+              {" "}
+              <span className="inline-flex items-center gap-1 rounded-full bg-vc-indigo/8 px-2 py-0.5 text-xs font-medium text-vc-indigo-muted align-middle">
+                📍 {activeCampusName}
+              </span>
+            </>
+          )}
         </p>
       </div>
 
@@ -370,8 +431,16 @@ export default function SchedulingDashboardPage() {
         const publishedIds = new Set(
           schedules.filter((s) => s.status === "published").map((s) => s.id),
         );
+        // Pass H Phase 2: campus filter applies via the assignment's
+        // service_id (assignmentMatchesCampus). Tile cards render a
+        // CampusBadge so admins can tell which campus each date is for
+        // even in "All campuses" view.
         const upcomingAssignments = assignments.filter(
-          (a) => a.schedule_id && publishedIds.has(a.schedule_id) && a.service_date >= today,
+          (a) =>
+            a.schedule_id &&
+            publishedIds.has(a.schedule_id) &&
+            a.service_date >= today &&
+            assignmentMatchesCampus(a),
         );
         const groups = groupAssignmentsByServiceDate(upcomingAssignments, services);
         if (groups.length === 0) return null;
@@ -383,6 +452,9 @@ export default function SchedulingDashboardPage() {
                 <h2 className="font-semibold text-vc-indigo">Upcoming Service Dates</h2>
                 <p className="mt-0.5 text-xs text-vc-text-muted">
                   Click a date to view the roster and manage assignments.
+                  {activeCampusName && (
+                    <> Showing <strong>{activeCampusName}</strong> only.</>
+                  )}
                 </p>
               </div>
               <Link
@@ -394,13 +466,21 @@ export default function SchedulingDashboardPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {groups.slice(0, 9).map((group) => (
-                <ServiceDateTile
-                  key={`${group.service.id}-${group.date}`}
-                  group={group}
-                  ministryMap={ministryMap}
-                  onClick={() => setRosterService({ service: group.service, date: group.date })}
-                  churchId={churchId || undefined}
-                />
+                <div key={`${group.service.id}-${group.date}`} className="relative">
+                  <ServiceDateTile
+                    group={group}
+                    ministryMap={ministryMap}
+                    onClick={() => setRosterService({ service: group.service, date: group.date })}
+                    churchId={churchId || undefined}
+                  />
+                  {/* Campus chip overlay — auto-hides for single-campus orgs
+                      and for org-wide services (campus_id null). */}
+                  {isMultiCampus && group.service.campus_id && (
+                    <div className="absolute right-2 top-2 pointer-events-none">
+                      <CampusBadge campusId={group.service.campus_id} />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
             {groups.length > 9 && (
@@ -419,6 +499,9 @@ export default function SchedulingDashboardPage() {
             <h2 className="font-semibold text-vc-indigo">Take Attendance</h2>
             <p className="mt-0.5 text-xs text-vc-text-muted">
               Click a service date to view the roster or mark attendance.
+              {activeCampusName && (
+                <> Showing <strong>{activeCampusName}</strong> only.</>
+              )}
             </p>
           </div>
           <div className="divide-y divide-vc-border-light">
@@ -428,9 +511,17 @@ export default function SchedulingDashboardPage() {
                 onClick={() => setRosterService({ service, date })}
                 className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-vc-bg-warm/50"
               >
-                <div>
-                  <p className="text-sm font-medium text-vc-indigo">{service.name}</p>
-                  <p className="text-xs text-vc-text-muted">{formatDate(date)}</p>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-vc-indigo">{service.name}</p>
+                    <p className="text-xs text-vc-text-muted">{formatDate(date)}</p>
+                  </div>
+                  {/* Pass H Phase 2: campus chip helps admins disambiguate
+                      identically-named services across campuses (e.g.
+                      "Sunday Morning Service" at North vs South). */}
+                  {isMultiCampus && service.campus_id && (
+                    <CampusBadge campusId={service.campus_id} />
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-vc-indigo/8 px-2.5 py-0.5 text-xs font-medium text-vc-indigo-muted">{count} assigned</span>
