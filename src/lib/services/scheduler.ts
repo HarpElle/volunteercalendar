@@ -200,10 +200,15 @@ function hasHouseholdConflict(
   const household = households.find((h) => h.id === householdId);
   if (!household) return false;
 
-  const { never_same_service, never_same_time } = household.constraints;
+  // Same legacy-doc guard as the Families tab fix (PRs #71/#72): pre-Pass-G
+  // households were written without `constraints` and/or `volunteer_ids`,
+  // so direct access throws. A single bad doc would otherwise abort the
+  // whole draft-generation run for the org.
+  const never_same_service = household.constraints?.never_same_service ?? false;
+  const never_same_time = household.constraints?.never_same_time ?? false;
   if (!never_same_service && !never_same_time) return false;
 
-  const otherMembers = household.volunteer_ids.filter((id) => id !== volunteer.id);
+  const otherMembers = (household.volunteer_ids ?? []).filter((id) => id !== volunteer.id);
 
   if (never_same_time) {
     // Hard constraint: no household members on ANY service on the same date
@@ -236,9 +241,11 @@ function getHouseholdPreferenceBonus(
   const householdId = volunteer.household_ids[0] ?? null;
   if (!householdId) return 0;
   const household = households.find((h) => h.id === householdId);
-  if (!household || !household.constraints.prefer_same_service) return 0;
+  // Same legacy-doc guard as the Families tab fix (PRs #71/#72): missing
+  // `constraints` / `volunteer_ids` on pre-Pass-G household docs.
+  if (!household || !household.constraints?.prefer_same_service) return 0;
 
-  const otherMembers = household.volunteer_ids.filter((id) => id !== volunteer.id);
+  const otherMembers = (household.volunteer_ids ?? []).filter((id) => id !== volunteer.id);
   const hasFamilyOnSameService = assignments.some(
     (a) =>
       a.service_date === date &&
