@@ -43,14 +43,22 @@ export function HouseholdFormModal({
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Reset form when modal opens or household changes
+  // Reset form when modal opens or household changes.
+  // Codex Phase 3 retest Sev 2 (round 2): the constraints chain
+  // (`existingHousehold?.constraints.never_same_service`) only
+  // short-circuits on `existingHousehold`, NOT on a missing
+  // `constraints` object. If a legacy household has no constraints
+  // field, editing it threw `Cannot read properties of undefined`
+  // and crashed the modal. Read into a stable local first, then
+  // optional-chain every field so any subset can be missing.
   useEffect(() => {
     if (open) {
+      const c = existingHousehold?.constraints;
       setName(existingHousehold?.name || "");
       setSelectedIds(existingHousehold?.volunteer_ids || []);
-      setNeverSameService(existingHousehold?.constraints.never_same_service || false);
-      setPreferSameService(existingHousehold?.constraints.prefer_same_service || false);
-      setNeverSameTime(existingHousehold?.constraints.never_same_time || false);
+      setNeverSameService(c?.never_same_service || false);
+      setPreferSameService(c?.prefer_same_service || false);
+      setNeverSameTime(c?.never_same_time || false);
       setNotes(existingHousehold?.notes || "");
       setMemberSearch("");
       setSaving(false);

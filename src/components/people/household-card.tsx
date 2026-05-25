@@ -13,7 +13,14 @@ export function HouseholdCard({
   onEdit,
   onDelete,
 }: HouseholdCardProps) {
-  const memberNames = household.volunteer_ids
+  // Codex Phase 3 retest Sev 2 (round 2): also guard volunteer_ids.
+  // Legacy household docs were observed in production with a missing
+  // volunteer_ids array, which made `.map(...)` throw and propagated
+  // to the dashboard error boundary, taking down the entire Families
+  // tab. Default to [] so a malformed household renders as "0 members"
+  // with no member chips — admin can edit/delete to clean it up.
+  const volunteerIds = household.volunteer_ids ?? [];
+  const memberNames = volunteerIds
     .map((id) => volunteers.find((v) => v.id === id)?.name)
     .filter(Boolean);
 
@@ -43,7 +50,7 @@ export function HouseholdCard({
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-lg text-vc-indigo">{household.name}</h3>
           <p className="mt-0.5 text-xs text-vc-text-muted">
-            {household.volunteer_ids.length} {household.volunteer_ids.length === 1 ? "member" : "members"}
+            {volunteerIds.length} {volunteerIds.length === 1 ? "member" : "members"}
           </p>
         </div>
         <div className="flex items-center gap-1">
