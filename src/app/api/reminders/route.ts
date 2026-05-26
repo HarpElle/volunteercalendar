@@ -7,6 +7,123 @@ import type { NotificationType, NotificationChannel } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
+import type { DocumentReference } from "firebase-admin/firestore";
+
+// ─── Idempotency helpers (Wave 2.1) ──────────────────────────────────────────
+//
+// The previous shape stored an array of "kind:timestamp" strings on the
+// assignment doc and appended via a non-transactional batch read-then-write.
+// Two concurrent cron invocations (Vercel retries, manual + scheduled
+// overlap) could both read an empty array, both append, and both dispatch
+// — resulting in duplicate reminders.
+//
+// New shape: a map `reminder_dispatches` on the assignment doc, keyed by
+// `${kind}_${channel}`. Each value carries `claimed_at` + `status`
+// ("claimed" | "sent" | "failed"). The claim is written inside a Firestore
+// transaction so only one cron invocation wins the race; the loser's
+// transaction retries and reads the now-existing key, returning `false`.
+//
+// Per-channel: a partial failure where email sent but SMS errored doesn't
+// poison the whole assignment. The SMS slot remains unclaimed and can be
+// retried on the next cron pass.
+
+type ReminderChannel = Extract<NotificationChannel, "email" | "sms">;
+
+interface ReminderDispatchEntry {
+  claimed_at: string;
+  status: "claimed" | "sent" | "failed";
+  completed_at?: string;
+  error_message?: string;
+  /** When set, this entry was inferred from the legacy reminder_sent_at array, not a real claim. */
+  backfilled_from?: "legacy_array";
+}
+
+/**
+ * Atomically claim the (assignment, kind, channel) slot. Returns true if
+ * we won the race and the caller should proceed to dispatch; false if
+ * another invocation already claimed (or the legacy array indicates this
+ * kind was sent in a prior deploy).
+ *
+ * Side-effect on a false-because-legacy result: backfills the new shape
+ * with `status: "sent", backfilled_from: "legacy_array"` so subsequent
+ * cron runs skip the legacy check.
+ */
+async function claimReminderDispatch(
+  assignmentRef: DocumentReference,
+  kind: NotificationType,
+  channel: ReminderChannel,
+): Promise<boolean> {
+  return adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(assignmentRef);
+    const data = snap.data() ?? {};
+    const dispatches =
+      (data.reminder_dispatches as Record<string, ReminderDispatchEntry>) ?? {};
+    const key = `${kind}_${channel}`;
+    if (dispatches[key]) return false;
+
+    // Legacy-grace: the old shape stored entries like
+    // "reminder_48h:2026-05-24T..." in a single string array. If THIS
+    // kind appears there, treat it as already-sent for BOTH channels —
+    // we can't distinguish channel from the legacy format, and a
+    // false-skip on a never-sent SMS is far better than a duplicate.
+    const legacy = (data.reminder_sent_at as string[]) ?? [];
+    if (legacy.some((entry) => entry.startsWith(`${kind}:`))) {
+      tx.update(assignmentRef, {
+        [`reminder_dispatches.${key}`]: {
+          claimed_at: new Date().toISOString(),
+          status: "sent",
+          backfilled_from: "legacy_array",
+        } satisfies ReminderDispatchEntry,
+      });
+      return false;
+    }
+
+    tx.update(assignmentRef, {
+      [`reminder_dispatches.${key}`]: {
+        claimed_at: new Date().toISOString(),
+        status: "claimed",
+      } satisfies ReminderDispatchEntry,
+    });
+    return true;
+  });
+}
+
+/**
+ * Record the outcome of a previously-claimed dispatch. Non-transactional —
+ * we already own the slot; this is just an observability/state update.
+ * Failures here don't break idempotency (the claim stays in place either
+ * way) but they do degrade the "sent vs claimed" signal.
+ */
+async function markReminderDispatchResult(
+  assignmentRef: DocumentReference,
+  kind: NotificationType,
+  channel: ReminderChannel,
+  status: "sent" | "failed",
+  errorMessage?: string | null,
+): Promise<void> {
+  const key = `${kind}_${channel}`;
+  const update: Record<string, unknown> = {
+    [`reminder_dispatches.${key}.status`]: status,
+    [`reminder_dispatches.${key}.completed_at`]: new Date().toISOString(),
+  };
+  if (errorMessage) {
+    update[`reminder_dispatches.${key}.error_message`] = errorMessage;
+  }
+  try {
+    await assignmentRef.update(update);
+  } catch (err) {
+    // Don't bubble — the dispatch already happened, the claim already
+    // marked the slot. The result-tracking failure is observability-only.
+    log.warn("reminder dispatch result update failed", {
+      error: err,
+      assignment_id: assignmentRef.id,
+      kind,
+      channel,
+      status,
+    });
+  }
+}
 
 /**
  * POST /api/reminders
@@ -70,14 +187,16 @@ export async function POST(request: Request) {
       ...d.data(),
     }));
 
-    // Filter to assignments on the target date that haven't been declined
-    // and haven't already received this reminder type
+    // Filter to assignments on the target date that haven't been declined.
+    // Note: we DO NOT pre-filter by reminder-sent state here anymore. The
+    // per-(assignment, kind, channel) idempotency check now lives in the
+    // claimReminderDispatch transaction below, so an assignment that
+    // already got an email reminder is still eligible for the SMS path
+    // if SMS hasn't been claimed yet.
     const reminderType: NotificationType = hours <= 24 ? "reminder_24h" : "reminder_48h";
     const targetAssignments = allAssignments.filter((a) => {
       if (a.service_date !== targetDateStr) return false;
       if (a.status === "declined" || a.status === "no_show") return false;
-      const sentReminders = (a.reminder_sent_at as string[]) || [];
-      if (sentReminders.some((r: string) => r.includes(reminderType))) return false;
       return true;
     });
 
@@ -90,24 +209,6 @@ export async function POST(request: Request) {
         skipped: 0,
       });
     }
-
-    // Track E.4: claim the work BEFORE dispatching, so a concurrent cron
-    // invocation (or a retry after timeout) can't re-send the same reminders.
-    // At-most-once semantics: if an email/SMS fails to send after the claim,
-    // we don't retry it, but we also don't risk duplicate sends. That's the
-    // right tradeoff for reminder-style notifications.
-    const claimBatch = adminDb.batch();
-    const claimTimestamp = new Date().toISOString();
-    for (const assignment of targetAssignments) {
-      const existingSent = (assignment.reminder_sent_at as string[]) || [];
-      claimBatch.update(
-        adminDb.doc(`churches/${church_id}/assignments/${assignment.id}`),
-        {
-          reminder_sent_at: [...existingSent, `${reminderType}:${claimTimestamp}`],
-        },
-      );
-    }
-    await claimBatch.commit();
 
     // Fetch volunteers, services, ministries
     const [volSnap, svcSnap, minSnap] = await Promise.all([
@@ -200,56 +301,88 @@ export async function POST(request: Request) {
         schedule_id: (assignment.schedule_id as string) || null,
       };
 
+      const assignmentRef = adminDb.doc(
+        `churches/${church_id}/assignments/${assignment.id}`,
+      );
+
       // Send email reminder
       if (channels.includes("email") && email && process.env.RESEND_API_KEY) {
-        const { subject, html, text } = buildReminderEmail(templateData);
-        try {
-          const result = await resend.emails.send({
-            from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
-            replyTo: "info@volunteercal.com",
-            to: [email],
-            subject,
-            html,
-            text,
-          });
-          sentEmail++;
-          await logNotification({
-            ...notifBase,
-            channel: "email",
-            status: "sent",
-            error_message: null,
-            external_id: (result as Record<string, unknown>).id as string || null,
-          });
-        } catch (err) {
-          errors.push(`Email to ${email}: ${(err as Error).message}`);
-          await logNotification({
-            ...notifBase,
-            channel: "email",
-            status: "failed",
-            error_message: (err as Error).message,
-            external_id: null,
-          });
+        const claimed = await claimReminderDispatch(
+          assignmentRef,
+          reminderType,
+          "email",
+        );
+        if (!claimed) {
+          skipped++;
+        } else {
+          const { subject, html, text } = buildReminderEmail(templateData);
+          try {
+            const result = await resend.emails.send({
+              from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+              replyTo: "info@volunteercal.com",
+              to: [email],
+              subject,
+              html,
+              text,
+            });
+            sentEmail++;
+            await markReminderDispatchResult(assignmentRef, reminderType, "email", "sent");
+            await logNotification({
+              ...notifBase,
+              channel: "email",
+              status: "sent",
+              error_message: null,
+              external_id: (result as Record<string, unknown>).id as string || null,
+            });
+          } catch (err) {
+            const errMsg = (err as Error).message;
+            errors.push(`Email to ${email}: ${errMsg}`);
+            await markReminderDispatchResult(assignmentRef, reminderType, "email", "failed", errMsg);
+            await logNotification({
+              ...notifBase,
+              channel: "email",
+              status: "failed",
+              error_message: errMsg,
+              external_id: null,
+            });
+          }
         }
       }
 
       // Send SMS reminder
       if (channels.includes("sms") && phone) {
-        const smsBody = buildReminderSms(templateData);
-        const smsResult = await sendSms({ to: phone, body: smsBody });
-
-        if (smsResult.success) {
-          sentSms++;
+        const claimed = await claimReminderDispatch(
+          assignmentRef,
+          reminderType,
+          "sms",
+        );
+        if (!claimed) {
+          skipped++;
         } else {
-          errors.push(`SMS to ${phone}: ${smsResult.error}`);
-        }
+          const smsBody = buildReminderSms(templateData);
+          const smsResult = await sendSms({ to: phone, body: smsBody });
 
-        await logNotification({
-          ...notifBase,
-          channel: "sms",
-          status: smsResult.success ? "sent" : "failed",
-          error_message: smsResult.error,
-          external_id: smsResult.sid,
-        });
+          if (smsResult.success) {
+            sentSms++;
+          } else {
+            errors.push(`SMS to ${phone}: ${smsResult.error}`);
+          }
+
+          await markReminderDispatchResult(
+            assignmentRef,
+            reminderType,
+            "sms",
+            smsResult.success ? "sent" : "failed",
+            smsResult.error,
+          );
+          await logNotification({
+            ...notifBase,
+            channel: "sms",
+            status: smsResult.success ? "sent" : "failed",
+            error_message: smsResult.error,
+            external_id: smsResult.sid,
+          });
+        }
       }
 
       // Fire-and-forget: create in-app reminder notification
@@ -272,12 +405,15 @@ export async function POST(request: Request) {
           });
         }
       } catch (notifErr) {
-        console.error("User notification error (reminder):", notifErr);
+        log.error("User notification error (reminder)", { error: notifErr });
       }
     }
 
-    // (E.4) Marks were written upfront via claimBatch so dispatch is safely
-    // idempotent against concurrent cron runs.
+    // Idempotency note: each (assignment, kind, channel) is claimed
+    // inside its own Firestore transaction above, so concurrent cron
+    // invocations (Vercel retries, manual + scheduled overlap) can't
+    // double-fire reminders. See claimReminderDispatch for the full
+    // semantics.
 
     return NextResponse.json({
       success: true,
@@ -290,7 +426,7 @@ export async function POST(request: Request) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
-    console.error("Reminder error:", error);
+    log.error("POST /api/reminders failed", { error });
     return NextResponse.json(
       { error: "Failed to send reminders" },
       { status: 500 },
@@ -342,7 +478,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ notifications });
   } catch (error) {
-    console.error("Get reminders error:", error);
+    log.error("GET /api/reminders failed", { error });
     return NextResponse.json(
       { error: "Failed to fetch notifications" },
       { status: 500 },
