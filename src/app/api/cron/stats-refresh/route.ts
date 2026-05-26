@@ -5,6 +5,7 @@ import { TIER_LIMITS } from "@/lib/constants";
 import {
   buildOrgSnapshot,
   buildRecentActivity,
+  computeMarketingRollup,
 } from "@/lib/server/org-snapshot";
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
 import type { OrgSnapshot } from "@/lib/types/platform";
@@ -249,42 +250,9 @@ export async function GET(req: NextRequest) {
         return !["resolved", "wont_do", "duplicate"].includes(status);
       }).length;
 
-      // Wave 0: marketing-friendly rollups summed across the per-org
-      // snapshots we just wrote. Safe to compute even if `snapshots` is
-      // empty (no orgs processed) — every field defaults to 0.
-      const totalActiveOrgs = snapshots.filter(
-        (s) => s.status === "active",
-      ).length;
-      const totalVolunteersAllOrgs = snapshots.reduce(
-        (sum, s) => sum + (s.memberships.volunteer ?? 0),
-        0,
-      );
-      const totalServicesAllOrgs = snapshots.reduce(
-        (sum, s) => sum + (s.counts.services ?? 0),
-        0,
-      );
-      const scheduledAssignments30d = snapshots.reduce(
-        (sum, s) =>
-          sum +
-          (s.recent_activity?.assignments_by_day?.reduce(
-            (acc, n) => acc + n,
-            0,
-          ) ?? 0),
-        0,
-      );
-      // Events-with-signups proxy: count orgs that had ANY assignment
-      // activity in the past 30 days. We don't currently snapshot
-      // event_signup activity separately, so this is a reasonable
-      // approximation until we add an event-signup field to OrgSnapshot
-      // in a future wave. Tracks "orgs whose users are actively engaging
-      // with scheduling", which is what we'd highlight on marketing copy.
-      const eventsWithSignups30d = snapshots.filter(
-        (s) =>
-          (s.recent_activity?.assignments_by_day?.reduce(
-            (acc, n) => acc + n,
-            0,
-          ) ?? 0) > 0,
-      ).length;
+      // Wave 0: marketing-friendly rollups (shared helper so cron + manual
+      // POST endpoint stay in sync — Codex hotfix retest 2026-05-25).
+      const marketing = computeMarketingRollup(snapshots);
 
       const platformStats: PlatformStats = {
         total_orgs: churchesSnap.size,
@@ -305,13 +273,7 @@ export async function GET(req: NextRequest) {
           checkin_enabled: featureCheckin,
           rooms_enabled: featureRooms,
         },
-        marketing: {
-          total_active_orgs: totalActiveOrgs,
-          total_volunteers_all_orgs: totalVolunteersAllOrgs,
-          total_services_all_orgs: totalServicesAllOrgs,
-          scheduled_assignments_30d: scheduledAssignments30d,
-          events_with_signups_30d: eventsWithSignups30d,
-        },
+        marketing,
         computed_at: now.toISOString(),
       };
 

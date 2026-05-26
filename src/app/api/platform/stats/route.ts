@@ -2,31 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isPlatformAdmin } from "@/lib/utils/platform-admin";
 import { TIER_LIMITS } from "@/lib/constants";
-import { buildOrgSnapshot, buildRecentActivity } from "@/lib/server/org-snapshot";
-import type { SubscriptionTier } from "@/lib/types";
+import {
+  buildOrgSnapshot,
+  buildRecentActivity,
+  computeMarketingRollup,
+} from "@/lib/server/org-snapshot";
+import type { SubscriptionTier, PlatformStats } from "@/lib/types";
 import type { OrgSnapshot } from "@/lib/types/platform";
 
-interface PlatformStats {
-  total_orgs: number;
-  new_orgs_30d: number;
-  new_orgs_60d: number;
-  new_orgs_90d: number;
-  tier_distribution: Record<SubscriptionTier, number>;
-  total_people: number;
-  total_volunteers: number;
-  new_people_30d: number;
-  new_people_60d: number;
-  new_people_90d: number;
-  total_assignments: number;
-  total_feedback: number;
-  open_platform_feedback: number;
-  feature_adoption: {
-    worship_enabled: number;
-    checkin_enabled: number;
-    rooms_enabled: number;
-  };
-  computed_at: string;
-}
+// Wave 0 hotfix (Codex retest 2026-05-25): import PlatformStats from
+// @/lib/types instead of redefining locally. The local interface was
+// missing the `marketing` field added to the global type in Wave 0,
+// which is precisely why the manual refresh path silently shipped
+// without it. Same drift class of bug Codex caught in the rollup
+// computation itself.
 
 const VALID_TIERS: SubscriptionTier[] = [
   "free",
@@ -177,30 +166,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const stats: PlatformStats = {
-      total_orgs: churchesSnap.size,
-      new_orgs_30d: newOrgs30d,
-      new_orgs_60d: newOrgs60d,
-      new_orgs_90d: newOrgs90d,
-      tier_distribution: tierDistribution,
-      total_people: totalPeople,
-      total_volunteers: totalVolunteers,
-      new_people_30d: newPeople30d,
-      new_people_60d: newPeople60d,
-      new_people_90d: newPeople90d,
-      total_assignments: totalAssignments,
-      total_feedback: totalFeedback,
-      open_platform_feedback: openPlatformFeedback,
-      feature_adoption: featureAdoption,
-      computed_at: now.toISOString(),
-    };
-
-    // Persist aggregate stats
-    await adminDb.doc("platform/stats").set(stats);
-
     // ─── Per-org snapshots + recent activity rollup ──────────────────────────
-    // Build snapshots for every church. Run with concurrency cap so we don't
+    // Build snapshots for every church FIRST so the marketing rollup
+    // below can sum across them. Run with concurrency cap so we don't
     // blast Firestore on a recompute.
+    //
+    // Wave 0 hotfix (Codex retest 2026-05-25): snapshot build moved
+    // ahead of the platform/stats write so the marketing rollup can be
+    // computed and included in the stats doc. Previously the stats doc
+    // was written first (without marketing), then snapshots were built
+    // — leaving the manual refresh path silently missing the field that
+    // the dashboard panel keys off.
     const snapshots: OrgSnapshot[] = [];
     const churchIds = churchesSnap.docs.map((d) => d.id);
     const concurrency = 5;
@@ -224,14 +200,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Persist each snapshot under platform/orgs/{churchId}
+    // Persist each snapshot under platform_orgs/{churchId}
     const writer = adminDb.bulkWriter();
     for (const s of snapshots) {
       writer.set(adminDb.doc(`platform_orgs/${s.id}`), s);
     }
     await writer.close();
 
-    // Persist the rollup
+    // Wave 0 hotfix: marketing rollup via the shared helper so this
+    // path and the cron path can't drift again.
+    const marketing = computeMarketingRollup(snapshots);
+
+    const stats: PlatformStats = {
+      total_orgs: churchesSnap.size,
+      new_orgs_30d: newOrgs30d,
+      new_orgs_60d: newOrgs60d,
+      new_orgs_90d: newOrgs90d,
+      tier_distribution: tierDistribution,
+      total_people: totalPeople,
+      total_volunteers: totalVolunteers,
+      new_people_30d: newPeople30d,
+      new_people_60d: newPeople60d,
+      new_people_90d: newPeople90d,
+      total_assignments: totalAssignments,
+      total_feedback: totalFeedback,
+      open_platform_feedback: openPlatformFeedback,
+      feature_adoption: featureAdoption,
+      marketing,
+      computed_at: now.toISOString(),
+    };
+
+    // Persist aggregate stats (now includes marketing rollup)
+    await adminDb.doc("platform/stats").set(stats);
+
+    // Persist the recent-activity rollup
     const recentActivity = buildRecentActivity(snapshots);
     await adminDb.doc("platform/recent_activity").set(recentActivity);
 
