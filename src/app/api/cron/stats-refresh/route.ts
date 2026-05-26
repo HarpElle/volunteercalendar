@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
     const churchesSnap = await adminDb.collection("churches").get();
     let totalUpdated = 0;
     let totalSnapshotsWritten = 0;
+    let platformStatsOk = false;
     const errors: string[] = [];
     // Wave 0: collect every successful snapshot so we can compute the
     // platform/recent_activity rollup at the end. Pushed by processChurch.
@@ -232,21 +233,31 @@ export async function GET(req: NextRequest) {
         } catch { /* skip this church for people counts */ }
       }
 
-      // Assignment and feedback counts via collection group
-      const [assignSnap, feedbackSnap] = await Promise.all([
-        adminDb.collectionGroup("assignments").count().get(),
-        adminDb.collectionGroup("feedback").count().get(),
-      ]);
-      const totalAssignments = assignSnap.data().count;
-      const totalFeedback = feedbackSnap.data().count;
-
-      // Open platform feedback count
-      const platformFbSnap = await adminDb
-        .collectionGroup("feedback")
-        .where("platform_feedback", "==", true)
+      // Assignment count via collection group .count() (no docs returned)
+      const assignSnap = await adminDb
+        .collectionGroup("assignments")
+        .count()
         .get();
-      const openPlatformFeedback = platformFbSnap.docs.filter((d) => {
-        const status = d.data().status as string;
+      const totalAssignments = assignSnap.data().count;
+
+      // Feedback: fetch all docs and filter in JS. Wave 0 hotfix round 2
+      // (Codex 2026-05-26): previously this used
+      // `.where("platform_feedback", "==", true)` which needs a Firestore
+      // collection-group single-field index on feedback.platform_feedback.
+      // Production didn't have the index so the whole platform-stats
+      // block 9-FAILED_PRECONDITION'd, leaving the marketing rollup
+      // stale on the cron path even though the manual /api/platform/stats
+      // POST endpoint worked fine (it filters in JS). Aligns both paths
+      // on the same query shape — no index dependency. Avoids the
+      // recurring drift class of bug that's bitten Wave 0 twice now.
+      const feedbackSnap = await adminDb
+        .collectionGroup("feedback")
+        .get();
+      const totalFeedback = feedbackSnap.size;
+      const openPlatformFeedback = feedbackSnap.docs.filter((d) => {
+        const data = d.data();
+        if (data.platform_feedback !== true) return false;
+        const status = data.status as string;
         return !["resolved", "wont_do", "duplicate"].includes(status);
       }).length;
 
@@ -278,6 +289,13 @@ export async function GET(req: NextRequest) {
       };
 
       await adminDb.doc("platform/stats").set(platformStats);
+      // Wave 0 hotfix round 2: only flip the success flag AFTER the
+      // platform/stats write lands. Previously the response always
+      // claimed `platform_stats_computed: true` regardless of whether
+      // the inner try threw — Codex caught this when the missing
+      // feedback index made the block 9-FAILED_PRECONDITION but the
+      // cron response still reported success.
+      platformStatsOk = true;
 
       // Wave 0: persist the recent-activity rollup (most_active, dormant,
       // at_risk). Previously only the manual /api/platform/stats POST
@@ -301,7 +319,7 @@ export async function GET(req: NextRequest) {
       churches_processed: churchesSnap.size,
       volunteers_updated: totalUpdated,
       snapshots_written: totalSnapshotsWritten,
-      platform_stats_computed: true,
+      platform_stats_computed: platformStatsOk,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {
