@@ -21,6 +21,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
+import { withCronRun } from "@/lib/server/cron-runs";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -31,67 +33,78 @@ export async function GET(req: NextRequest) {
   const blocked = requireCronSecret(req);
   if (blocked) return blocked;
 
-  const now = new Date();
-  const cutoffIso = new Date(now.getTime() - GRACE_DAYS * DAY_MS).toISOString();
+  try {
+    const { response } = await withCronRun("dunning", async () => {
+      const now = new Date();
+      const cutoffIso = new Date(now.getTime() - GRACE_DAYS * DAY_MS).toISOString();
 
-  // Find churches whose payment_failed_at is older than the grace window
-  // AND who are still on a paid tier.
-  const snap = await adminDb
-    .collection("churches")
-    .where("payment_failed_at", "<=", cutoffIso)
-    .get();
+      // Find churches whose payment_failed_at is older than the grace window
+      // AND who are still on a paid tier.
+      const snap = await adminDb
+        .collection("churches")
+        .where("payment_failed_at", "<=", cutoffIso)
+        .get();
 
-  let downgraded = 0;
-  let skipped = 0;
-  const errors: string[] = [];
+      let downgraded = 0;
+      let skipped = 0;
+      const errors: string[] = [];
 
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const tier = (data.subscription_tier as string) ?? "free";
-    if (tier === "free") {
-      skipped++;
-      continue;
-    }
-    if (data.subscription_source === "manual") {
-      // Respect manual tier overrides — don't auto-downgrade enterprise
-      // accounts that the platform admin has set tier on directly.
-      skipped++;
-      continue;
-    }
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        const tier = (data.subscription_tier as string) ?? "free";
+        if (tier === "free") {
+          skipped++;
+          continue;
+        }
+        if (data.subscription_source === "manual") {
+          // Respect manual tier overrides — don't auto-downgrade enterprise
+          // accounts that the platform admin has set tier on directly.
+          skipped++;
+          continue;
+        }
 
-    try {
-      await doc.ref.update({
-        subscription_tier: "free",
-        previous_tier: tier,
-        tier_changed_at: now.toISOString(),
-        // Don't clear payment_failed_at — keep it as audit context. The
-        // webhook will clear it if a new successful payment comes through.
-      });
-      void audit({
-        church_id: doc.id,
-        actor: SYSTEM_ACTOR,
-        action: "billing.subscription_canceled",
-        target_type: "church",
-        target_id: doc.id,
-        metadata: {
-          reason: "dunning_lapsed",
-          from_tier: tier,
-          payment_failed_at: data.payment_failed_at,
-          grace_days: GRACE_DAYS,
-        },
-        outcome: "ok",
-      });
-      downgraded++;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`${doc.id}: ${msg}`);
-    }
+        try {
+          await doc.ref.update({
+            subscription_tier: "free",
+            previous_tier: tier,
+            tier_changed_at: now.toISOString(),
+            // Don't clear payment_failed_at — keep it as audit context. The
+            // webhook will clear it if a new successful payment comes through.
+          });
+          void audit({
+            church_id: doc.id,
+            actor: SYSTEM_ACTOR,
+            action: "billing.subscription_canceled",
+            target_type: "church",
+            target_id: doc.id,
+            metadata: {
+              reason: "dunning_lapsed",
+              from_tier: tier,
+              payment_failed_at: data.payment_failed_at,
+              grace_days: GRACE_DAYS,
+            },
+            outcome: "ok",
+          });
+          downgraded++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${doc.id}: ${msg}`);
+        }
+      }
+
+      return {
+        response: NextResponse.json({
+          candidates: snap.docs.length,
+          downgraded,
+          skipped,
+          errors: errors.length > 0 ? errors : undefined,
+        }),
+        summary: { processed: downgraded, failed: errors.length },
+      };
+    });
+    return response;
+  } catch (err) {
+    log.error("Cron dunning failed", { error: err });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
-
-  return NextResponse.json({
-    candidates: snap.docs.length,
-    downgraded,
-    skipped,
-    errors: errors.length > 0 ? errors : undefined,
-  });
 }

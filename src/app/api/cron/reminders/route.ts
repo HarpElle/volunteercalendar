@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { log } from "@/lib/log";
+import { withCronRun } from "@/lib/server/cron-runs";
 
 export const maxDuration = 300;
 
@@ -24,64 +25,78 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get all churches
-    const churchesSnap = await adminDb.collection("churches").get();
+    const { response } = await withCronRun(`reminders-${hours}h`, async () => {
+      // Get all churches
+      const churchesSnap = await adminDb.collection("churches").get();
 
-    if (churchesSnap.empty) {
-      return NextResponse.json({ success: true, message: "No churches found", results: [] });
-    }
-
-    const origin = getBaseUrl(request);
-
-    const results: { church_id: string; church_name: string; sent_email: number; sent_sms: number; skipped: number; error?: string }[] = [];
-
-    for (const churchDoc of churchesSnap.docs) {
-      const churchId = churchDoc.id;
-      const churchName = (churchDoc.data().name as string) || churchId;
-
-      try {
-        const res = await fetch(`${origin}/api/reminders`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-cron-secret": process.env.CRON_SECRET || "",
-            "Origin": origin,
-          },
-          body: JSON.stringify({ church_id: churchId, hours }),
-        });
-
-        const data = await res.json();
-        results.push({
-          church_id: churchId,
-          church_name: churchName,
-          sent_email: data.sent_email || 0,
-          sent_sms: data.sent_sms || 0,
-          skipped: data.skipped || 0,
-          error: res.ok ? undefined : data.error,
-        });
-      } catch (err) {
-        results.push({
-          church_id: churchId,
-          church_name: churchName,
-          sent_email: 0,
-          sent_sms: 0,
-          skipped: 0,
-          error: (err as Error).message,
-        });
+      if (churchesSnap.empty) {
+        return {
+          response: NextResponse.json({ success: true, message: "No churches found", results: [] }),
+          summary: { processed: 0 },
+        };
       }
-    }
 
-    const totalEmail = results.reduce((sum, r) => sum + r.sent_email, 0);
-    const totalSms = results.reduce((sum, r) => sum + r.sent_sms, 0);
+      const origin = getBaseUrl(request);
 
-    return NextResponse.json({
-      success: true,
-      hours,
-      churches_processed: results.length,
-      total_email: totalEmail,
-      total_sms: totalSms,
-      results,
+      const results: { church_id: string; church_name: string; sent_email: number; sent_sms: number; skipped: number; error?: string }[] = [];
+
+      for (const churchDoc of churchesSnap.docs) {
+        const churchId = churchDoc.id;
+        const churchName = (churchDoc.data().name as string) || churchId;
+
+        try {
+          const res = await fetch(`${origin}/api/reminders`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-cron-secret": process.env.CRON_SECRET || "",
+              "Origin": origin,
+            },
+            body: JSON.stringify({ church_id: churchId, hours }),
+          });
+
+          const data = await res.json();
+          results.push({
+            church_id: churchId,
+            church_name: churchName,
+            sent_email: data.sent_email || 0,
+            sent_sms: data.sent_sms || 0,
+            skipped: data.skipped || 0,
+            error: res.ok ? undefined : data.error,
+          });
+        } catch (err) {
+          results.push({
+            church_id: churchId,
+            church_name: churchName,
+            sent_email: 0,
+            sent_sms: 0,
+            skipped: 0,
+            error: (err as Error).message,
+          });
+        }
+      }
+
+      const totalEmail = results.reduce((sum, r) => sum + r.sent_email, 0);
+      const totalSms = results.reduce((sum, r) => sum + r.sent_sms, 0);
+      const failedCount = results.filter((r) => r.error).length;
+
+      return {
+        response: NextResponse.json({
+          success: true,
+          hours,
+          churches_processed: results.length,
+          total_email: totalEmail,
+          total_sms: totalSms,
+          results,
+        }),
+        summary: {
+          processed: results.length,
+          failed: failedCount,
+          metadata: { total_email: totalEmail, total_sms: totalSms },
+        },
+      };
     });
+    return response;
   } catch (error) {
     log.error("Cron reminders failed", { error });
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });

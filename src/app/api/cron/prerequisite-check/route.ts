@@ -8,6 +8,7 @@ import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
+import { withCronRun } from "@/lib/server/cron-runs";
 
 export const maxDuration = 300;
 
@@ -28,9 +29,13 @@ export async function GET(request: NextRequest) {
   if (blocked) return blocked;
 
   try {
+    const { response } = await withCronRun("prerequisite-check", async () => {
     const churchesSnap = await adminDb.collection("churches").get();
     if (churchesSnap.empty) {
-      return NextResponse.json({ success: true, message: "No churches", results: [] });
+      return {
+        response: NextResponse.json({ success: true, message: "No churches", results: [] }),
+        summary: { processed: 0 },
+      };
     }
 
     const now = new Date();
@@ -220,14 +225,24 @@ export async function GET(request: NextRequest) {
 
     const totalExpiry = results.reduce((s, r) => s + r.expiry_warnings, 0);
     const totalNudges = results.reduce((s, r) => s + r.nudges, 0);
+    const failedCount = results.reduce((s, r) => s + r.errors.length, 0);
 
-    return NextResponse.json({
-      success: true,
-      churches_processed: results.length,
-      total_expiry_warnings: totalExpiry,
-      total_nudges: totalNudges,
-      results,
+      return {
+        response: NextResponse.json({
+          success: true,
+          churches_processed: results.length,
+          total_expiry_warnings: totalExpiry,
+          total_nudges: totalNudges,
+          results,
+        }),
+        summary: {
+          processed: results.length,
+          failed: failedCount,
+          metadata: { total_expiry_warnings: totalExpiry, total_nudges: totalNudges },
+        },
+      };
     });
+    return response;
   } catch (error) {
     log.error("Cron prerequisite-check failed", { error });
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });

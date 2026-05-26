@@ -10,6 +10,7 @@ import {
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
 import type { OrgSnapshot } from "@/lib/types/platform";
 import { log } from "@/lib/log";
+import { withCronRun } from "@/lib/server/cron-runs";
 
 export const maxDuration = 300;
 
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked;
 
   try {
+    const { response } = await withCronRun("stats-refresh", async () => {
     const churchesSnap = await adminDb.collection("churches").get();
     let totalUpdated = 0;
     let totalSnapshotsWritten = 0;
@@ -319,13 +321,26 @@ export async function GET(req: NextRequest) {
       errors.push(`platform_stats: ${platformErr instanceof Error ? platformErr.message : String(platformErr)}`);
     }
 
-    return NextResponse.json({
-      churches_processed: churchesSnap.size,
-      volunteers_updated: totalUpdated,
-      snapshots_written: totalSnapshotsWritten,
-      platform_stats_computed: platformStatsOk,
-      errors: errors.length > 0 ? errors : undefined,
+      return {
+        response: NextResponse.json({
+          churches_processed: churchesSnap.size,
+          volunteers_updated: totalUpdated,
+          snapshots_written: totalSnapshotsWritten,
+          platform_stats_computed: platformStatsOk,
+          errors: errors.length > 0 ? errors : undefined,
+        }),
+        summary: {
+          processed: churchesSnap.size,
+          failed: errors.length,
+          metadata: {
+            volunteers_updated: totalUpdated,
+            snapshots_written: totalSnapshotsWritten,
+            platform_stats_computed: platformStatsOk,
+          },
+        },
+      };
     });
+    return response;
   } catch (err) {
     log.error("stats-refresh fatal error", { error: err });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

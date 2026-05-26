@@ -26,6 +26,7 @@ import {
 } from "@/lib/server/outbox";
 import { sendSms } from "@/lib/services/sms";
 import { log } from "@/lib/log";
+import { withCronRun } from "@/lib/server/cron-runs";
 
 export const maxDuration = 300;
 
@@ -35,21 +36,23 @@ export async function GET(req: NextRequest) {
   const blocked = requireCronSecret(req);
   if (blocked) return blocked;
 
-  const now = new Date().toISOString();
+  try {
+    const { response } = await withCronRun("outbox-drain", async () => {
+      const now = new Date().toISOString();
 
-  const snap = await adminDb
-    .collection("notification_outbox")
-    .where("status", "==", "pending")
-    .where("next_attempt_at", "<=", now)
-    .orderBy("next_attempt_at", "asc")
-    .limit(BATCH_SIZE)
-    .get();
+      const snap = await adminDb
+        .collection("notification_outbox")
+        .where("status", "==", "pending")
+        .where("next_attempt_at", "<=", now)
+        .orderBy("next_attempt_at", "asc")
+        .limit(BATCH_SIZE)
+        .get();
 
-  let sent = 0;
-  let retried = 0;
-  let deadLettered = 0;
+      let sent = 0;
+      let retried = 0;
+      let deadLettered = 0;
 
-  for (const doc of snap.docs) {
+      for (const doc of snap.docs) {
     const entry = doc.data() as NotificationOutboxEntry;
 
     try {
@@ -114,10 +117,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
-    processed: snap.docs.length,
-    sent,
-    retried,
-    dead_lettered: deadLettered,
-  });
+      return {
+        response: NextResponse.json({
+          processed: snap.docs.length,
+          sent,
+          retried,
+          dead_lettered: deadLettered,
+        }),
+        summary: {
+          processed: snap.docs.length,
+          failed: deadLettered,
+          metadata: { sent, retried },
+        },
+      };
+    });
+    return response;
+  } catch (err) {
+    log.error("Cron outbox-drain failed", { error: err });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
 }

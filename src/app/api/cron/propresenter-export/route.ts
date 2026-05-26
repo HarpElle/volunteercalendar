@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { TIER_LIMITS } from "@/lib/constants";
 import { log } from "@/lib/log";
+import { withCronRun } from "@/lib/server/cron-runs";
 import type { ServicePlan, Song, SubscriptionTier } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -18,21 +19,22 @@ export async function GET(req: NextRequest) {
   const blocked = requireCronSecret(req);
   if (blocked) return blocked;
 
-  const results: {
-    church_id: string;
-    plan_id: string;
-    service_date: string;
-    sent_to: string[];
-  }[] = [];
-
   try {
-    // Find published plans with service_date = tomorrow
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    const { response } = await withCronRun("propresenter-export", async () => {
+      const results: {
+        church_id: string;
+        plan_id: string;
+        service_date: string;
+        sent_to: string[];
+      }[] = [];
 
-    // Get all churches
-    const churchesSnap = await adminDb.collection("churches").get();
+      // Find published plans with service_date = tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split("T")[0];
+
+      // Get all churches
+      const churchesSnap = await adminDb.collection("churches").get();
 
     for (const churchDoc of churchesSnap.docs) {
       const churchId = churchDoc.id;
@@ -172,11 +174,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      exports_sent: results.length,
-      results,
-      completed_at: new Date().toISOString(),
+      return {
+        response: NextResponse.json({
+          exports_sent: results.length,
+          results,
+          completed_at: new Date().toISOString(),
+        }),
+        summary: { processed: results.length },
+      };
     });
+    return response;
   } catch (error) {
     log.error("Cron propresenter-export failed", { error });
     return NextResponse.json({ error: "Export cron failed" }, { status: 500 });
