@@ -1,7 +1,12 @@
 # Pass H — Multi-Campus — Status
 
-Single-page tracker of where Pass H stands. Updated at the close of each phase
-plus on every Codex round-trip.
+> ## ✅ Pass H is CLOSED
+>
+> Codex PASS on Phase 6 hotfix retest (2026-05-25) against production head
+> `f15708c`. All six phases shipped, all open findings resolved, all PRs
+> merged.
+
+Single-page tracker of where Pass H stands. Frozen at closure.
 
 ---
 
@@ -14,7 +19,7 @@ plus on every Codex round-trip.
 | **3** | People + retention/health/onboarding campus filter | #70 #71 #72 #73 #74 #75 | `4227b03` | ✅ Closed |
 | **4** | Public events + emails + iCal + `Event.campus_id` | #76 #77 #78 | `8e412c6` | ✅ Closed |
 | **5** | Campus delete safeguards (audit + reassign/convert + cascade) | #80 | `2554cd1` | ✅ Closed |
-| **6** | Codex full sweep across Phases 1–5 | — | — | ⏸ Queued (no new code; regression sweep only) |
+| **6** | Codex full sweep across Phases 1–5 + identity-join hotfixes | #83 #84 | `f15708c` | ✅ Closed |
 
 ---
 
@@ -46,12 +51,13 @@ plus on every Codex round-trip.
 | Last remaining campus deletable via convert | 5 | User signoff. Org returns to single-campus mode; sidebar selector auto-hides. |
 | Calendar feeds **always** go to `null` on campus delete (both modes) | 5 | User signoff. Avoids silently re-pointing a user's iCal subscription to a different campus. |
 | Direct client-side `campuses` delete blocked by rules | 5 | Forces all deletes through `/api/campuses/[id]` cascade (server-side, transactional, audit-aware). |
+| `event_signup` ownership identity-join: `volunteer_id` first, fall back to `person_id` (legacy field) and `user_id` (legacy logged-in signups) | 6 hotfix | Same pattern applied to `/api/calendar`, `/api/roster/self-remove`, `/api/notify/absence`, `/api/attendance`. Codex caught self-remove first; audit follow-up found the other three. |
 
 ---
 
 ## Open Codex findings
 
-None as of `2554cd1` (Phase 5 closed by Codex 2026-05-25).
+None as of `f15708c` (Phase 6 hotfix retest PASS, 2026-05-25). Pass H closed.
 
 ---
 
@@ -61,15 +67,40 @@ None as of `2554cd1` (Phase 5 closed by Codex 2026-05-25).
   change) and again after PR #80 (campuses delete rule tightening). Phase 4 PRs
   in between touched only client + Admin SDK code so no rules deploy was needed
   for them.
+- Phase 6 hotfixes (#83, #84) did not touch rules — no deploy needed.
+- **Going forward**: PR #82 (merged) installs a GitHub Action that auto-runs
+  `firebase deploy --only firestore:rules,firestore:indexes,storage:rules` on
+  every merge that touches those files. The manual step is retired (provided
+  the `FIREBASE_SERVICE_ACCOUNT` secret + `FIREBASE_PROJECT_ID` variable are
+  configured in repo settings).
 
 ---
 
 ## Next up
 
-**Phase 6** — Codex full sweep across Phases 1–5. No new code; pure
-cross-phase regression test in `TESTER — Codex 2` (multi-campus) and a
-single-campus org. Closure of Phase 6 closes Pass H entirely. After that the
-launch-readiness queue resumes (Sentry, MFA, CSP enforcement, GitHub Action
-for `firebase deploy --only firestore:rules` — that last one would have
-caught the recurring rules-deploy gap that bit Pass G Phase 6 and PR #74 /
-PR #80 in this pass).
+Pass H is closed. The launch-readiness queue resumes:
+
+- Sentry instrumentation
+- MFA (multi-factor auth)
+- CSP enforcement (currently report-only)
+- Real "notify ministry leads" endpoint (deferred from Codex QA, Pass G)
+- Branded `/account/suspended` page (deferred from Pass G Phase 5)
+- Backend perf optimization of the assignment-rule `get()` call
+  (deferred from Codex QA 2026-05-15, acceptable for current scale)
+
+The GitHub Action for auto-deploying Firebase rules is already in place
+(PR #82). Future PRs touching `firestore.rules`, `firestore.indexes.json`,
+or `storage.rules` deploy automatically on merge — the manual step that
+bit Pass G Phase 6 and Pass H PRs #74 / #80 is retired.
+
+## Retrospective (closed)
+
+10 PRs + 1 docs PR + 1 CI workflow + 1 closure doc = 13 merges total
+across 5 weeks of cadence. Codex caught one Sev 2 per phase on average
+(Phase 1: selector visibility for volunteers; Phase 2: chip order;
+Phase 3: Families crash chain + counts; Phase 4: identity-join in iCal;
+Phase 5: clean PASS; Phase 6: identity-join in self-remove). The single
+recurring class of bug across the whole pass was field-name
+inconsistencies after renamed schemas (`person_id` → `volunteer_id` on
+event_signups); the Phase 6 audit caught the last two consumers
+preemptively before Codex bounced them back.
