@@ -41,6 +41,26 @@
 #      merge. Jason no longer has to run `firebase deploy --only
 #      firestore:rules` from his terminal — it just happens.
 #
+# Why storage:rules is NOT deployed here:
+#   The first real run (2026-05-26, PR #96) failed at the precondition
+#   step `firebase deploy --only storage:rules` runs, which calls
+#   serviceusage.googleapis.com to verify firebasestorage.googleapis.com
+#   is enabled. The service account has firebaserules.admin but not
+#   serviceusage.serviceUsageConsumer — so the check 403s and the entire
+#   deploy aborts before any rule lands.
+#
+#   We dropped storage:rules from the --only flag rather than add the
+#   role because (a) storage.rules changes are rare (last touched
+#   months ago), and (b) it's a smaller blast radius if the workflow
+#   ever leaks credentials. To put storage:rules auto-deploy back, run:
+#
+#     SA_EMAIL=$(jq -r .client_email < ~/Downloads/firebase-sa.json)
+#     gcloud projects add-iam-policy-binding volunteercalendar-mvp \
+#       --member="serviceAccount:${SA_EMAIL}" \
+#       --role="roles/serviceusage.serviceUsageConsumer"
+#
+#   Then re-add `storage:rules` to the --only line below.
+#
 # Failure mode:
 #   If the deploy fails the workflow run goes red and shows up in the
 #   Actions tab. Sentry / GitHub notifications surface it. The app code
@@ -59,6 +79,11 @@ on:
       - firestore.rules
       - firestore.indexes.json
       - storage.rules
+  # Manual re-run from the Actions UI. Useful when a previous run
+  # failed for env reasons (e.g. service account IAM gap) — once the
+  # cause is fixed, click "Run workflow" to deploy the current main's
+  # rules without making a no-op commit.
+  workflow_dispatch:
 
 # Two PRs landing back-to-back shouldn't race each other; the later
 # one wins. (Firebase's deploy is idempotent so a queued deploy
@@ -111,16 +136,16 @@ jobs:
           fi
           echo "Will deploy to project: $FIREBASE_PROJECT_ID"
 
-      - name: Deploy firestore rules + indexes + storage rules
+      - name: Deploy firestore rules + indexes
         # --non-interactive: refuse to hang on any prompt (e.g. release
         #   confirmation, billing warnings).
         # --force: skip the "review changes" interactive prompt; we're CI.
-        # The targets line up with firebase.json's three configured sections.
+        # storage:rules intentionally omitted — see top-of-file comment.
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
         run: |
           firebase deploy \
-            --only firestore:rules,firestore:indexes,storage:rules \
+            --only firestore:rules,firestore:indexes \
             --project "$FIREBASE_PROJECT_ID" \
             --non-interactive \
             --force
@@ -143,5 +168,7 @@ jobs:
             echo "$COMMIT_MSG"
             echo "\`\`\`"
             echo ""
-            echo "**Deployed:** firestore:rules, firestore:indexes, storage:rules"
+            echo "**Deployed:** firestore:rules, firestore:indexes"
+            echo ""
+            echo "_(storage:rules is deployed manually — see workflow comment)_"
           } >> "$GITHUB_STEP_SUMMARY"
