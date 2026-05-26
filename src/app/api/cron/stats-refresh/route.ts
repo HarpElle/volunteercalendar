@@ -2,15 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { TIER_LIMITS } from "@/lib/constants";
+import {
+  buildOrgSnapshot,
+  buildRecentActivity,
+} from "@/lib/server/org-snapshot";
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
+import type { OrgSnapshot } from "@/lib/types/platform";
 
 export const maxDuration = 300;
 
 /**
  * GET /api/cron/stats-refresh
  *
- * Recalculates volunteer stats (times_scheduled_last_90d, last_served_date)
- * from assignment data for every church. Runs daily via Vercel cron.
+ * Nightly daily-at-5-AM-UTC cron. Does three jobs in one pass over every
+ * church so we only iterate the collection once:
+ *
+ *   1. Per-volunteer 90-day stats (times_scheduled_last_90d, last_served_date)
+ *   2. Per-org snapshot under `platform_orgs/{churchId}` (Wave 0, 2026-05-25 —
+ *      previously only the manual /api/platform/stats POST wrote these, so
+ *      the platform admin list view showed stale dormant pills for any org
+ *      where nobody had clicked Refresh recently). Calls
+ *      buildOrgSnapshot(churchId, true) so admin/scheduler sign-in times
+ *      land in the snapshot's activity signal.
+ *   3. Aggregate `platform/stats` doc + `platform/recent_activity` rollup
+ *
+ * Why one cron instead of three: keeps one nightly schedule under one set
+ * of telemetry + cron_runs tracking (Wave 2). The previous two-path design
+ * (cron updated stats + manual POST updated snapshots) had the failure
+ * mode "Jason hasn't clicked Refresh in 3 weeks → snapshots stale forever."
  */
 export async function GET(req: NextRequest) {
   const blocked = requireCronSecret(req);
@@ -19,11 +38,18 @@ export async function GET(req: NextRequest) {
   try {
     const churchesSnap = await adminDb.collection("churches").get();
     let totalUpdated = 0;
+    let totalSnapshotsWritten = 0;
     const errors: string[] = [];
+    // Wave 0: collect every successful snapshot so we can compute the
+    // platform/recent_activity rollup at the end. Pushed by processChurch.
+    const snapshots: OrgSnapshot[] = [];
 
     // Track E.3: process churches in concurrent batches of 5 instead of
     // sequentially. At 100 churches × ~2s each, sequential = 200s (over the
     // Vercel timeout). Concurrent = ~40s with the same per-church cost.
+    // Wave 0: adding buildOrgSnapshot(id, true) per church adds ~2s of work
+    // per church (membership read + admin auth batch + service/event counts).
+    // 100 churches × ~4s each / 5 concurrency = ~80s — still well inside 300s.
     const CONCURRENCY = 5;
     async function processChurch(churchDoc: FirebaseFirestore.QueryDocumentSnapshot) {
       try {
@@ -108,6 +134,29 @@ export async function GET(req: NextRequest) {
 
         if (batchCount > 0) {
           await batch.commit();
+        }
+
+        // Wave 0: build + write per-org snapshot. Wrapped in its own
+        // try/catch so a snapshot failure (e.g. transient Firebase Auth
+        // error during the admin sign-in batch fetch) doesn't roll back
+        // the volunteer-stats batch we already committed above.
+        try {
+          const snapshot = await buildOrgSnapshot(churchId, true);
+          if (snapshot) {
+            await adminDb
+              .doc(`platform_orgs/${churchId}`)
+              .set(snapshot);
+            snapshots.push(snapshot);
+            totalSnapshotsWritten++;
+          }
+        } catch (snapErr) {
+          const msg =
+            snapErr instanceof Error ? snapErr.message : String(snapErr);
+          errors.push(`${churchDoc.id} snapshot: ${msg}`);
+          console.error(
+            `[stats-refresh] Snapshot error for church ${churchDoc.id}:`,
+            snapErr,
+          );
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -200,6 +249,43 @@ export async function GET(req: NextRequest) {
         return !["resolved", "wont_do", "duplicate"].includes(status);
       }).length;
 
+      // Wave 0: marketing-friendly rollups summed across the per-org
+      // snapshots we just wrote. Safe to compute even if `snapshots` is
+      // empty (no orgs processed) — every field defaults to 0.
+      const totalActiveOrgs = snapshots.filter(
+        (s) => s.status === "active",
+      ).length;
+      const totalVolunteersAllOrgs = snapshots.reduce(
+        (sum, s) => sum + (s.memberships.volunteer ?? 0),
+        0,
+      );
+      const totalServicesAllOrgs = snapshots.reduce(
+        (sum, s) => sum + (s.counts.services ?? 0),
+        0,
+      );
+      const scheduledAssignments30d = snapshots.reduce(
+        (sum, s) =>
+          sum +
+          (s.recent_activity?.assignments_by_day?.reduce(
+            (acc, n) => acc + n,
+            0,
+          ) ?? 0),
+        0,
+      );
+      // Events-with-signups proxy: count orgs that had ANY assignment
+      // activity in the past 30 days. We don't currently snapshot
+      // event_signup activity separately, so this is a reasonable
+      // approximation until we add an event-signup field to OrgSnapshot
+      // in a future wave. Tracks "orgs whose users are actively engaging
+      // with scheduling", which is what we'd highlight on marketing copy.
+      const eventsWithSignups30d = snapshots.filter(
+        (s) =>
+          (s.recent_activity?.assignments_by_day?.reduce(
+            (acc, n) => acc + n,
+            0,
+          ) ?? 0) > 0,
+      ).length;
+
       const platformStats: PlatformStats = {
         total_orgs: churchesSnap.size,
         new_orgs_30d: newOrgs30,
@@ -219,10 +305,31 @@ export async function GET(req: NextRequest) {
           checkin_enabled: featureCheckin,
           rooms_enabled: featureRooms,
         },
+        marketing: {
+          total_active_orgs: totalActiveOrgs,
+          total_volunteers_all_orgs: totalVolunteersAllOrgs,
+          total_services_all_orgs: totalServicesAllOrgs,
+          scheduled_assignments_30d: scheduledAssignments30d,
+          events_with_signups_30d: eventsWithSignups30d,
+        },
         computed_at: now.toISOString(),
       };
 
       await adminDb.doc("platform/stats").set(platformStats);
+
+      // Wave 0: persist the recent-activity rollup (most_active, dormant,
+      // at_risk). Previously only the manual /api/platform/stats POST
+      // did this; now the cron does it so the platform admin's "Recent
+      // Activity" panel stays fresh without anyone clicking Refresh.
+      try {
+        const recentActivity = buildRecentActivity(snapshots);
+        await adminDb.doc("platform/recent_activity").set(recentActivity);
+      } catch (raErr) {
+        console.error("[stats-refresh] recent_activity write failed:", raErr);
+        errors.push(
+          `recent_activity: ${raErr instanceof Error ? raErr.message : String(raErr)}`,
+        );
+      }
     } catch (platformErr) {
       console.error("[stats-refresh] Platform stats error:", platformErr);
       errors.push(`platform_stats: ${platformErr instanceof Error ? platformErr.message : String(platformErr)}`);
@@ -231,6 +338,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       churches_processed: churchesSnap.size,
       volunteers_updated: totalUpdated,
+      snapshots_written: totalSnapshotsWritten,
       platform_stats_computed: true,
       errors: errors.length > 0 ? errors : undefined,
     });

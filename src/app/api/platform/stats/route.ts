@@ -207,8 +207,13 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < churchIds.length; i += concurrency) {
       const batch = churchIds.slice(i, i + concurrency);
       const results = await Promise.all(
+        // Wave 0 (2026-05-25): pass `true` so the manual "Refresh Stats"
+        // button captures admin/scheduler sign-in times too — matches the
+        // nightly cron path. Without this the manual refresh would still
+        // produce stale dormant pills for orgs whose only activity is
+        // admin logins.
         batch.map((id) =>
-          buildOrgSnapshot(id, false).catch((err) => {
+          buildOrgSnapshot(id, true).catch((err) => {
             console.error(`[platform/stats] snapshot failed for ${id}`, err);
             return null;
           }),

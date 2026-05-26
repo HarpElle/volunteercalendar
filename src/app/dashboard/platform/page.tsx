@@ -166,6 +166,45 @@ export default function PlatformOverviewPage() {
             <StatCard label="Total Feedback" value={stats.total_feedback} />
           </div>
 
+          {/* Wave 0: Marketing-friendly rollups. Summed from the per-org
+              snapshots written by the nightly cron. Use these for landing-
+              page hero copy ("X organizations · Y volunteers ·
+              Z scheduled this month") once the platform has enough data
+              to be flattering. Hidden when the cron hasn't populated the
+              marketing field yet (pre-first-run state). */}
+          {stats.marketing && (
+            <div className="mt-6 rounded-xl border border-vc-coral/20 bg-vc-coral/5 p-5">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="font-semibold text-vc-indigo">Platform totals</h2>
+                <p className="text-xs text-vc-text-muted">
+                  Marketing-ready aggregates · refreshed nightly
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                <StatCard
+                  label="Active orgs"
+                  value={stats.marketing.total_active_orgs}
+                />
+                <StatCard
+                  label="Volunteers across all orgs"
+                  value={stats.marketing.total_volunteers_all_orgs}
+                />
+                <StatCard
+                  label="Services configured"
+                  value={stats.marketing.total_services_all_orgs}
+                />
+                <StatCard
+                  label="Assignments scheduled (30d)"
+                  value={stats.marketing.scheduled_assignments_30d}
+                />
+                <StatCard
+                  label="Orgs engaging (30d)"
+                  value={stats.marketing.events_with_signups_30d}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Growth */}
           <div className="mt-6 rounded-xl border border-vc-border-light bg-white p-5">
             <h2 className="mb-3 font-semibold text-vc-indigo">Org Growth</h2>

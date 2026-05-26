@@ -15,6 +15,7 @@ import type {
   SubscriptionTier,
 } from "@/lib/types";
 import type {
+  AdminSignInSignal,
   OrgChildrenPresence,
   OrgConfigurationCounts,
   OrgConfigurationFlags,
@@ -35,8 +36,11 @@ const ABANDONED_SIGNUP_DAYS = 7;
  *
  * @param churchId    The doc ID of the church.
  * @param includeOwnerLastSignIn  If true, fetches `lastSignInTime` from
- *   Firebase Auth (1 extra round-trip). Skip during bulk recompute to keep
- *   the cron under timeout; the per-org detail view sets this true.
+ *   Firebase Auth for the owner AND every active admin/scheduler member
+ *   (Wave 0 expansion — was owner-only). Cost: one batched
+ *   `adminAuth.getUsers([...])` call per snapshot. Skip during bulk
+ *   recompute paths that don't need the freshest activity signal; the
+ *   per-org detail view + the nightly cron set this true.
  */
 export async function buildOrgSnapshot(
   churchId: string,
@@ -134,6 +138,13 @@ export async function buildOrgSnapshot(
   const owners: Membership[] = [];
   const memberDocs = memberships.docs.map((d) => d.data() as Membership);
 
+  // Wave 0: collect every active owner/admin/scheduler UID so we can
+  // batch-fetch their Firebase Auth lastSignInTime below. Volunteers are
+  // excluded — the question we're answering is "does anyone with admin
+  // power log in regularly", which is the signal a free org being
+  // actively run vs. abandoned.
+  const adminLevelUids: string[] = [];
+
   for (const m of memberDocs) {
     if (m.status === "pending_volunteer_approval") {
       breakdown.pending_invite++;
@@ -146,10 +157,13 @@ export async function buildOrgSnapshot(
       if (role === "owner") {
         breakdown.owner++;
         owners.push(m);
+        if (m.user_id) adminLevelUids.push(m.user_id);
       } else if (role === "admin") {
         breakdown.admin++;
+        if (m.user_id) adminLevelUids.push(m.user_id);
       } else if (role === "scheduler") {
         breakdown.scheduler++;
+        if (m.user_id) adminLevelUids.push(m.user_id);
       } else {
         breakdown.volunteer++;
       }
@@ -184,17 +198,68 @@ export async function buildOrgSnapshot(
       owner.email = (u.email as string) ?? null;
       owner.display_name = (u.display_name as string) ?? null;
     }
-    if (includeOwnerLastSignIn) {
-      try {
-        const authUser = await adminAuth.getUser(ownerUid);
-        owner.last_sign_in_at =
-          authUser.metadata.lastSignInTime
-            ? new Date(authUser.metadata.lastSignInTime).toISOString()
-            : null;
-      } catch {
-        // ignore — auth user may not exist for orphaned memberships
-      }
+    // Owner is always part of adminLevelUids (collected above) if they
+    // had an active owner membership. If the only owner signal is via
+    // `church.created_by` (no membership), add it now so the batched
+    // sign-in fetch below still resolves it.
+    if (!adminLevelUids.includes(ownerUid)) {
+      adminLevelUids.push(ownerUid);
     }
+  }
+
+  // ── Admin-level sign-in batch fetch ───────────────────────────────────────
+  // Wave 0 expansion (2026-05-25): when the snapshot is computed with
+  // `includeOwnerLastSignIn: true`, resolve `lastSignInTime` for every
+  // active owner/admin/scheduler in one batched Firebase Auth call,
+  // not just the owner. Closes Jason's "Anchor Falls shows dormant 14d"
+  // bug — his daily logins as owner are now captured even when his
+  // schedulers + admins also log in independently.
+  //
+  // adminAuth.getUsers([{uid: ...}, ...]) accepts up to 100 UIDs per
+  // call. The vast majority of orgs have <10 admin-level members, so a
+  // single batch covers them.
+  let adminSignInSignal: AdminSignInSignal | undefined;
+  if (includeOwnerLastSignIn && adminLevelUids.length > 0) {
+    let latestSignIn: string | null = null;
+    let resolvedCount = 0;
+    try {
+      // De-dupe in case `ownerUid` was added twice (paranoid)
+      const uniqueUids = Array.from(new Set(adminLevelUids));
+      // Chunk into 100s if any org ever exceeds — virtually never hits
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueUids.length; i += 100) {
+        chunks.push(uniqueUids.slice(i, i + 100));
+      }
+      for (const chunk of chunks) {
+        const result = await adminAuth.getUsers(
+          chunk.map((uid) => ({ uid })),
+        );
+        for (const user of result.users) {
+          resolvedCount++;
+          const iso = user.metadata.lastSignInTime
+            ? new Date(user.metadata.lastSignInTime).toISOString()
+            : null;
+          if (iso && (!latestSignIn || iso > latestSignIn)) {
+            latestSignIn = iso;
+          }
+          // Backfill the owner's last_sign_in_at if this user matches
+          if (user.uid === ownerUid) {
+            owner.last_sign_in_at = iso;
+          }
+        }
+      }
+    } catch (err) {
+      // Non-fatal — snapshot still emits, just without admin_sign_in.
+      // Sentry will catch this via Wave 1's structured logger when ready.
+      console.error(
+        `[org-snapshot] admin sign-in fetch failed for ${churchId}`,
+        err,
+      );
+    }
+    adminSignInSignal = {
+      latest_at: latestSignIn,
+      resolved_count: resolvedCount,
+    };
   }
 
   // ── Configuration flags + counts ──────────────────────────────────────────
@@ -277,6 +342,11 @@ export async function buildOrgSnapshot(
     }
   }
   bumpActive(owner.last_sign_in_at);
+  // Wave 0: the freshest admin/scheduler sign-in counts as activity too.
+  // This is what fixes Jason's Anchor Falls case: his daily owner login
+  // already feeds owner.last_sign_in_at, but if an admin/scheduler is
+  // the one keeping the org alive, that signal now matters too.
+  bumpActive(adminSignInSignal?.latest_at ?? null);
   bumpActive((church.updated_at as string) ?? null);
   bumpActive((church.created_at as string) ?? null);
 
@@ -374,6 +444,7 @@ export async function buildOrgSnapshot(
       assignments_by_day: assignmentsByDay,
       members_added_by_day: membersAddedByDay,
     },
+    ...(adminSignInSignal ? { admin_sign_in: adminSignInSignal } : {}),
     computed_at: nowIso,
   };
 }
