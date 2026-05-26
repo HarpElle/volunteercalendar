@@ -4,11 +4,48 @@ import { withSentryConfig } from "@sentry/nextjs";
 /**
  * Content Security Policy.
  *
- * Shipped in Report-Only mode for the first ~7 days so violations are
- * collected via Sentry/Vercel without breaking real users. After observing
- * reports we flip to enforcing mode by changing the header name from
- * `Content-Security-Policy-Report-Only` to `Content-Security-Policy`.
+ * Shipped in Report-Only mode while we observe what real traffic actually
+ * triggers. Violations are sent to Sentry via the Reporting API (see
+ * `sentryCspReportUrl()` below + the `Reporting-Endpoints` header). Wave
+ * 1.2b flips this to enforcing mode once we've reviewed a week of reports
+ * and confirmed no legitimate paths are blocked.
+ *
+ * Three pieces are wired together for cross-browser coverage:
+ *   1. `report-uri` directive — older Chromium/Safari/Firefox fallback
+ *   2. `report-to` directive  — modern Reporting API (Chromium 96+)
+ *   3. `Reporting-Endpoints` header — defines the endpoint name referenced
+ *      by `report-to`. Replaces the deprecated `Report-To` JSON header
+ *      that earlier specs used. Chromium accepts either; we ship the new
+ *      shape only since that's what supported browsers honor.
+ *
+ * Endpoint URL is derived from NEXT_PUBLIC_SENTRY_DSN at build time. If
+ * the DSN isn't set (local dev without Sentry), the report directives are
+ * omitted entirely — better than shipping a dead endpoint.
  */
+
+/**
+ * Parse the Sentry DSN at build time and construct the CSP security report URL.
+ * DSN format: `https://<public_key>@<host>/<project_id>` → returns
+ *   `https://<host>/api/<project_id>/security/?sentry_key=<public_key>`
+ * Returns null if DSN is missing or malformed so the caller can no-op.
+ */
+function sentryCspReportUrl(): string | null {
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN ?? process.env.SENTRY_DSN;
+  if (!dsn) return null;
+  try {
+    const url = new URL(dsn);
+    const publicKey = url.username;
+    const host = url.host;
+    const projectId = url.pathname.replace(/^\//, "");
+    if (!publicKey || !host || !projectId) return null;
+    return `https://${host}/api/${projectId}/security/?sentry_key=${publicKey}`;
+  } catch {
+    return null;
+  }
+}
+
+const CSP_REPORT_URL = sentryCspReportUrl();
+const CSP_REPORT_ENDPOINT_NAME = "csp-endpoint";
 const cspDirectives: Record<string, string[]> = {
   "default-src": ["'self'"],
   "script-src": [
@@ -80,6 +117,12 @@ const cspDirectives: Record<string, string[]> = {
   "upgrade-insecure-requests": [],
 };
 
+// Add reporting directives only if we have a working report endpoint.
+if (CSP_REPORT_URL) {
+  cspDirectives["report-uri"] = [CSP_REPORT_URL];
+  cspDirectives["report-to"] = [CSP_REPORT_ENDPOINT_NAME];
+}
+
 const cspString = Object.entries(cspDirectives)
   .map(([key, values]) => (values.length ? `${key} ${values.join(" ")}` : key))
   .join("; ");
@@ -105,6 +148,17 @@ const nextConfig: NextConfig = {
               "camera=(self), geolocation=(self), microphone=(), payment=(self), usb=(), magnetometer=(), accelerometer=(), gyroscope=()",
           },
           { key: "X-Frame-Options", value: "DENY" }, // belt-and-suspenders w/ frame-ancestors
+          // Reporting API endpoint definition — referenced by the `report-to`
+          // CSP directive. Only emitted when we actually have a Sentry DSN to
+          // forward reports to (omit in DSN-less dev/preview).
+          ...(CSP_REPORT_URL
+            ? [
+                {
+                  key: "Reporting-Endpoints",
+                  value: `${CSP_REPORT_ENDPOINT_NAME}="${CSP_REPORT_URL}"`,
+                },
+              ]
+            : []),
           {
             key: "Content-Security-Policy-Report-Only",
             value: cspString,
