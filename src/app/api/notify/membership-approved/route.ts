@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildMembershipApprovedEmail } from "@/lib/utils/email-templates";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 /**
  * POST /api/notify/membership-approved
@@ -77,12 +78,12 @@ export async function POST(req: NextRequest) {
         metadata: { link_href: "/dashboard/my-schedule" },
       });
     } catch (notifErr) {
-      console.error("User notification error (membership approved):", notifErr);
+      log.error("User notification error (membership approved)", { error: notifErr });
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("notify/membership-approved error:", err);
+    log.error("POST /api/notify/membership-approved failed", { error: err });
     return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
   }
 }

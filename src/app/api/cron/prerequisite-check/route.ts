@@ -7,6 +7,7 @@ import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
                   });
                 }
               } catch (notifErr) {
-                console.error("Expiry warning user notification failed:", notifErr);
+                log.error("Expiry warning user notification failed", { error: notifErr });
               }
             } catch (err) {
               errors.push(`expiry warning to ${volunteerEmail}: ${(err as Error).message}`);
@@ -198,7 +199,7 @@ export async function GET(request: NextRequest) {
                     });
                   }
                 } catch (notifErr) {
-                  console.error("Nudge user notification failed:", notifErr);
+                  log.error("Prerequisite nudge user notification failed", { error: notifErr });
                 }
               } catch (err) {
                 errors.push(`nudge to ${volunteerEmail}: ${(err as Error).message}`);
@@ -228,7 +229,7 @@ export async function GET(request: NextRequest) {
       results,
     });
   } catch (error) {
-    console.error("Cron prerequisite-check error:", error);
+    log.error("Cron prerequisite-check failed", { error });
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });
   }
 }

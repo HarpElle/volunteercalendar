@@ -8,6 +8,7 @@ import { isDowngrade, computeLostFeatures, computeOverLimitItems } from "@/lib/u
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { Resend } from "resend";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 const VALID_TIERS = ["free", "starter", "growth", "pro", "enterprise"];
 
@@ -82,7 +83,7 @@ async function sendDowngradeEmail(churchId: string, oldTier: string, newTier: st
       text,
     });
   } catch (err) {
-    console.error("Downgrade notification email failed:", err);
+    log.error("Downgrade notification email failed", { error: err, church_id: churchId, old_tier: oldTier, new_tier: newTier });
   }
 }
 
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+    log.error("Stripe webhook signature verification failed", { error: err });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     }
     // Other errors — log and proceed; we'd rather double-process once than
     // drop an event due to an unrelated Firestore hiccup.
-    console.error("Webhook idempotency check failed:", err);
+    log.error("Stripe webhook idempotency check failed", { error: err, event_id: event.id, event_type: event.type });
   }
 
   try {
@@ -140,18 +141,18 @@ export async function POST(req: NextRequest) {
         const tier = session.metadata?.tier;
 
         if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
-          console.warn("Webhook: missing or invalid church_id in checkout metadata");
+          log.warn("Stripe webhook: missing or invalid church_id in checkout metadata", { event_id: event.id });
           break;
         }
         if (!tier || !VALID_TIERS.includes(tier)) {
-          console.warn(`Webhook: invalid tier "${tier}" in checkout metadata`);
+          log.warn("Stripe webhook: invalid tier in checkout metadata", { event_id: event.id, tier });
           break;
         }
 
         // Respect manual tier overrides
         const checkoutChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
         if (checkoutChurchSnap.data()?.subscription_source === "manual") {
-          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          log.warn("Stripe webhook: skipping tier change — manual override active", { event_id: event.id, church_id: churchId });
           break;
         }
 
@@ -187,7 +188,7 @@ export async function POST(req: NextRequest) {
             subject,
             html,
             text,
-          }).catch((err: unknown) => console.error("Purchase thank-you email failed:", err));
+          }).catch((err: unknown) => log.error("Purchase thank-you email failed", { error: err, church_id: churchId, tier }));
         }
         break;
       }
@@ -196,14 +197,14 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const churchId = subscription.metadata?.church_id;
         if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
-          console.warn("Webhook: missing or invalid church_id in subscription.updated metadata");
+          log.warn("Stripe webhook: missing or invalid church_id in subscription.updated metadata", { event_id: event.id });
           break;
         }
 
         // Respect manual tier overrides
         const updatedChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
         if (updatedChurchSnap.data()?.subscription_source === "manual") {
-          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          log.warn("Stripe webhook: skipping subscription.updated — manual override active", { event_id: event.id, church_id: churchId });
           break;
         }
 
@@ -250,14 +251,14 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const churchId = subscription.metadata?.church_id;
         if (!churchId || typeof churchId !== "string" || churchId.trim() === "") {
-          console.warn("Webhook: missing or invalid church_id in subscription.deleted metadata");
+          log.warn("Stripe webhook: missing or invalid church_id in subscription.deleted metadata", { event_id: event.id });
           break;
         }
 
         // Respect manual tier overrides
         const deletedChurchSnap = await adminDb.doc(`churches/${churchId}`).get();
         if (deletedChurchSnap.data()?.subscription_source === "manual") {
-          console.warn(`Webhook: skipping tier change for ${churchId} — manual override active`);
+          log.warn("Stripe webhook: skipping subscription.deleted — manual override active", { event_id: event.id, church_id: churchId });
           break;
         }
 
@@ -315,9 +316,10 @@ export async function POST(req: NextRequest) {
           }
         }
         if (!churchId) {
-          console.warn(
-            "Webhook: invoice.payment_failed without resolvable church_id",
-          );
+          log.warn("Stripe webhook: invoice.payment_failed without resolvable church_id", {
+            event_id: event.id,
+            invoice_id: invoice.id,
+          });
           break;
         }
 
@@ -418,7 +420,7 @@ export async function POST(req: NextRequest) {
             }
           }
         } catch (e) {
-          console.error("Dispute lookup failed:", e);
+          log.error("Stripe webhook: dispute lookup failed", { error: e, event_id: event.id, dispute_id: dispute.id });
         }
 
         const now = new Date().toISOString();
@@ -449,7 +451,7 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch (err) {
-    console.error("Webhook handler error:", err);
+    log.error("Stripe webhook handler error", { error: err, event_id: event.id, event_type: event.type });
     return NextResponse.json(
       { error: "Webhook processing failed" },
       { status: 500 }

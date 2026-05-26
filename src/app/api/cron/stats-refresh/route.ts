@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/org-snapshot";
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
 import type { OrgSnapshot } from "@/lib/types/platform";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -155,15 +156,18 @@ export async function GET(req: NextRequest) {
           const msg =
             snapErr instanceof Error ? snapErr.message : String(snapErr);
           errors.push(`${churchDoc.id} snapshot: ${msg}`);
-          console.error(
-            `[stats-refresh] Snapshot error for church ${churchDoc.id}:`,
-            snapErr,
-          );
+          log.error("stats-refresh snapshot failed for church", {
+            error: snapErr,
+            church_id: churchDoc.id,
+          });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`${churchDoc.id}: ${msg}`);
-        console.error(`[stats-refresh] Error for church ${churchDoc.id}:`, err);
+        log.error("stats-refresh per-church processing failed", {
+          error: err,
+          church_id: churchDoc.id,
+        });
       }
     }
 
@@ -305,13 +309,13 @@ export async function GET(req: NextRequest) {
         const recentActivity = buildRecentActivity(snapshots);
         await adminDb.doc("platform/recent_activity").set(recentActivity);
       } catch (raErr) {
-        console.error("[stats-refresh] recent_activity write failed:", raErr);
+        log.error("stats-refresh recent_activity write failed", { error: raErr });
         errors.push(
           `recent_activity: ${raErr instanceof Error ? raErr.message : String(raErr)}`,
         );
       }
     } catch (platformErr) {
-      console.error("[stats-refresh] Platform stats error:", platformErr);
+      log.error("stats-refresh platform stats write failed", { error: platformErr });
       errors.push(`platform_stats: ${platformErr instanceof Error ? platformErr.message : String(platformErr)}`);
     }
 
@@ -323,7 +327,7 @@ export async function GET(req: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {
-    console.error("[stats-refresh] Fatal error:", err);
+    log.error("stats-refresh fatal error", { error: err });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -25,6 +25,7 @@ import {
   OUTBOX_DEFAULTS,
 } from "@/lib/server/outbox";
 import { sendSms } from "@/lib/services/sms";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -85,10 +86,12 @@ export async function GET(req: NextRequest) {
     } catch (err) {
       const attempts = entry.attempts + 1;
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[outbox-drain] ${entry.id} (origin=${entry.origin}) attempt ${attempts} failed:`,
-        errMsg,
-      );
+      log.error("Outbox drain attempt failed", {
+        error: err,
+        outbox_id: entry.id,
+        origin: entry.origin,
+        attempt: attempts,
+      });
 
       if (attempts >= OUTBOX_DEFAULTS.MAX_ATTEMPTS) {
         await doc.ref.update({

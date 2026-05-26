@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { TIER_LIMITS } from "@/lib/constants";
+import { log } from "@/lib/log";
 import type { ServicePlan, Song, SubscriptionTier } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
       completed_at: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("[CRON propresenter-export]", error);
+    log.error("Cron propresenter-export failed", { error });
     return NextResponse.json({ error: "Export cron failed" }, { status: 500 });
   }
 }

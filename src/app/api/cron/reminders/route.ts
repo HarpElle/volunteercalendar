@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { getBaseUrl } from "@/lib/utils/base-url";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
       results,
     });
   } catch (error) {
-    console.error("Cron reminder error:", error);
+    log.error("Cron reminders failed", { error });
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });
   }
 }

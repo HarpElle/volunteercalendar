@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildRolePromotionEmail } from "@/lib/utils/email-templates";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 const ROLE_RANK: Record<string, number> = {
   volunteer: 0,
@@ -97,12 +98,12 @@ export async function POST(req: NextRequest) {
         metadata: { link_href: "/dashboard" },
       });
     } catch (notifErr) {
-      console.error("Role promotion user notification failed:", notifErr);
+      log.error("Role promotion user notification failed", { error: notifErr });
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("notify/role-change error:", err);
+    log.error("POST /api/notify/role-change failed", { error: err });
     return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
   }
 }

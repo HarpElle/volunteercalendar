@@ -6,6 +6,7 @@
  */
 
 import { adminDb } from "@/lib/firebase/admin";
+import { log } from "@/lib/log";
 import { FieldValue } from "firebase-admin/firestore";
 import crypto from "node:crypto";
 import type {
@@ -132,7 +133,7 @@ export async function listStationsForChurch(
       .get();
     return snap.docs.map((d) => d.data() as KioskStation);
   } catch (err) {
-    console.error("[listStationsForChurch] ordered query failed, trying unordered:", err);
+    log.warn("listStationsForChurch ordered query failed, retrying unordered", { error: err, church_id });
     const snap = await adminDb
       .collection("kiosk_stations")
       .where("church_id", "==", church_id)

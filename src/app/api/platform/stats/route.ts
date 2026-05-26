@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/org-snapshot";
 import type { SubscriptionTier, PlatformStats } from "@/lib/types";
 import type { OrgSnapshot } from "@/lib/types/platform";
+import { log } from "@/lib/log";
 
 // Wave 0 hotfix (Codex retest 2026-05-25): import PlatformStats from
 // @/lib/types instead of redefining locally. The local interface was
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ stats, recent_activity });
   } catch (error) {
-    console.error("[GET /api/platform/stats]", error);
+    log.error("GET /api/platform/stats failed", { error });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -190,7 +191,7 @@ export async function POST(req: NextRequest) {
         // admin logins.
         batch.map((id) =>
           buildOrgSnapshot(id, true).catch((err) => {
-            console.error(`[platform/stats] snapshot failed for ${id}`, err);
+            log.error("platform/stats snapshot build failed for church", { error: err, church_id: id });
             return null;
           }),
         ),
@@ -239,7 +240,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ stats, snapshots_written: snapshots.length });
   } catch (error) {
-    console.error("[POST /api/platform/stats]", error);
+    log.error("POST /api/platform/stats failed", { error });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

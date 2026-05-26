@@ -1,4 +1,5 @@
 import type { Firestore, DocumentReference } from "firebase-admin/firestore";
+import { log } from "@/lib/log";
 
 /**
  * Shared helpers for calendar feed access (Pass G Phase 3).
@@ -21,7 +22,7 @@ export function touchFeedLastAccessed(feedRef: DocumentReference): void {
     .update({ last_accessed_at: new Date().toISOString() })
     .catch((err) => {
       // Non-fatal — don't block the iCal response.
-      console.warn("[calendar-feed] touch last_accessed_at failed:", err);
+      log.warn("calendar-feed touch last_accessed_at failed", { error: err });
     });
 }
 
@@ -37,7 +38,7 @@ export function touchRoomLastAccessed(
   db.doc(`churches/${churchId}/rooms/${roomId}`)
     .update({ calendar_last_accessed_at: new Date().toISOString() })
     .catch((err) => {
-      console.warn("[calendar-feed] touch room last_accessed_at failed:", err);
+      log.warn("calendar-feed touch room last_accessed_at failed", { error: err, church_id: churchId, room_id: roomId });
     });
 }
 

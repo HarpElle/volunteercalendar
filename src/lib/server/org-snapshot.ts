@@ -9,6 +9,7 @@
 
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { TIER_LIMITS } from "@/lib/constants";
+import { log } from "@/lib/log";
 import type {
   Membership,
   OrgRole,
@@ -250,11 +251,7 @@ export async function buildOrgSnapshot(
       }
     } catch (err) {
       // Non-fatal — snapshot still emits, just without admin_sign_in.
-      // Sentry will catch this via Wave 1's structured logger when ready.
-      console.error(
-        `[org-snapshot] admin sign-in fetch failed for ${churchId}`,
-        err,
-      );
+      log.error("org-snapshot admin sign-in fetch failed", { error: err, church_id: churchId });
     }
     adminSignInSignal = {
       latest_at: latestSignIn,

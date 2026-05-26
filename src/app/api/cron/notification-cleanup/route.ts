@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
+import { log } from "@/lib/log";
 
 export const maxDuration = 300;
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ deleted });
   } catch (err) {
-    console.error("notification-cleanup error:", err);
+    log.error("Cron notification-cleanup failed", { error: err });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

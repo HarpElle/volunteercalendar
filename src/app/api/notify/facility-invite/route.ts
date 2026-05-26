@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 /**
  * POST /api/notify/facility-invite
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sent: sentCount });
   } catch (err) {
-    console.error("Facility invite notification error:", err);
+    log.error("Facility invite notification failed", { error: err });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
