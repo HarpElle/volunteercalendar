@@ -87,11 +87,37 @@ export async function POST(req: NextRequest) {
       if (data.church_id !== church_id) {
         return NextResponse.json({ error: "Signup does not belong to this organization" }, { status: 403 });
       }
-      volunteerId = data.person_id as string;
+      // Codex Pass H Phase 6 sweep Sev 2 (2026-05-25): the new event_signup
+      // shape (per Phase 4 PR #78) writes `volunteer_id`, but this route
+      // previously read only `data.person_id`. Result: Alex got 403 "You
+      // can only remove yourself" when cancelling his own newly-created
+      // signup. Fix: read volunteer_id first, fall back to person_id for
+      // any legacy doc that still uses the older field name.
+      //
+      // ALSO accept a user_id match (same identity-join pattern as
+      // /api/calendar): legacy logged-in signups have `volunteer_id: ""`
+      // and only carry `user_id`. Without this fallback those would still
+      // 403 even after the field-name fix above.
+      const signupVolunteerId =
+        (data.volunteer_id as string | undefined) ||
+        (data.person_id as string | undefined) ||
+        "";
+      const signupUserId = data.user_id as string | undefined;
+      volunteerId = signupVolunteerId;
       roleName = data.role_title as string;
 
-      if (volunteerId !== userVolunteerId) {
+      const matchesVolunteer =
+        signupVolunteerId !== "" && signupVolunteerId === userVolunteerId;
+      const matchesUser = signupUserId !== undefined && signupUserId === userId;
+      if (!matchesVolunteer && !matchesUser) {
         return NextResponse.json({ error: "You can only remove yourself" }, { status: 403 });
+      }
+      // For the downstream notification + audit lookups (volunteer name)
+      // we need a non-empty volunteerId. If the legacy path matched only
+      // by user_id, resolve the Person from the membership so the email
+      // still names the right volunteer.
+      if (!matchesVolunteer && matchesUser && userVolunteerId) {
+        volunteerId = userVolunteerId;
       }
 
       // Get event name + date
