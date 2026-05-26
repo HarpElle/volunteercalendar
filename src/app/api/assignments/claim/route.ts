@@ -241,6 +241,12 @@ export async function POST(req: NextRequest) {
         role_title: role.title,
         ministry_id,
         status: "confirmed",
+        // Wave 2.2 denorm: inherit parent schedule's current status.
+        // Claim only allowed when schedule.status is "draft" or
+        // "in_review" (gated above), so this is what gets stamped.
+        // Future schedule transitions (approve / publish) fan out via
+        // fanOutScheduleStatus and update this field on the new doc too.
+        schedule_status: schedule.status,
         signup_type: "self_signup",
         assignment_type: "regular",
         confirmation_token: crypto.randomUUID(),

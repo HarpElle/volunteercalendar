@@ -605,6 +605,20 @@ export interface Assignment {
   role_title: string;
   ministry_id: string;
   status: AssignmentStatus;
+  /**
+   * Denormalized parent schedule status (Wave 2.2, 2026-05-26). Kept in
+   * sync by:
+   *   - schedule generation (initial value mirrors the new schedule's status,
+   *     usually "draft")
+   *   - /api/schedules/{id}/publish + /approve (fan-out to all child assignments)
+   *   - /api/assignments/claim (inherits parent's status at claim time)
+   *
+   * Optional during the migration window: legacy assignments backfilled by
+   * scripts/backfill-assignment-schedule-status.ts. Firestore rule treats a
+   * missing value as not-readable-by-volunteers, so backfill MUST complete
+   * before the tightened rule deploys.
+   */
+  schedule_status?: ScheduleStatus;
   signup_type: SignupType;
   /** "trainee" = shadow/observe, does not fill a role slot */
   assignment_type?: AssignmentType;

@@ -362,6 +362,10 @@ export default function SchedulesPage() {
           confirmation_token: crypto.randomUUID(),
           responded_at: null,
           reminder_sent_at: [],
+          // Wave 2.2 denorm: new schedules always start as drafts; the
+          // status-change endpoints (publish, approve) fan out updates
+          // to all child assignments when the parent transitions.
+          schedule_status: "draft" as const,
         };
         const ref = await addChurchDocument(churchId, "assignments", assignmentData);
         savedAssignments.push({ id: ref.id, ...assignmentData });
