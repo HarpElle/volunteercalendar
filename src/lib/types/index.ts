@@ -1786,6 +1786,28 @@ export interface PlatformStats {
     checkin_enabled: number;
     rooms_enabled: number;
   };
+  /**
+   * Wave 0 (2026-05-25): marketing-friendly rollups summed from the
+   * per-org snapshots in `platform_orgs/*`. Available for hero copy
+   * on the landing page (e.g. "X organizations · Y volunteers ·
+   * Z assignments scheduled this month") and for the platform admin
+   * overview's "Platform totals" panel.
+   *
+   * All fields default to 0 if the per-org snapshot pass hasn't
+   * happened yet — safe to render even before the first cron run.
+   */
+  marketing?: {
+    /** Orgs with `status === "active"` after the nightly snapshot pass. */
+    total_active_orgs: number;
+    /** Sum of `memberships.volunteer + memberships.total_active` across orgs (active members minus pending). */
+    total_volunteers_all_orgs: number;
+    /** Sum of `counts.services` across orgs. */
+    total_services_all_orgs: number;
+    /** Sum of `recent_activity.assignments_by_day` (length 30) across orgs. */
+    scheduled_assignments_30d: number;
+    /** Orgs with any event_signup activity in the past 30 days. */
+    events_with_signups_30d: number;
+  };
   computed_at: string;
 }
 

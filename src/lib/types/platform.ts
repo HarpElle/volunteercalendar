@@ -87,6 +87,21 @@ export interface OrgOwner {
   last_sign_in_at: string | null;
 }
 
+/**
+ * Wave 0 (2026-05-25): when the snapshot is computed with
+ * `includeOwnerLastSignIn: true`, the cron also fetches `lastSignInTime`
+ * for every active owner/admin/scheduler membership and stores the most
+ * recent timestamp here. Used to keep `last_active_at` fresh for orgs
+ * where admins log in regularly but don't trigger
+ * assignment/check-in/membership writes (Jason's Anchor Falls case).
+ */
+export interface AdminSignInSignal {
+  /** Most recent sign-in across owner + admin + scheduler members; null if none ever signed in. */
+  latest_at: string | null;
+  /** How many admin-level members the snapshot resolved sign-ins for. */
+  resolved_count: number;
+}
+
 export interface OrgSnapshot {
   /** Doc ID matches churchId. */
   id: string;
@@ -114,6 +129,15 @@ export interface OrgSnapshot {
     assignments_by_day: number[];
     members_added_by_day: number[];
   };
+
+  /**
+   * Wave 0: most-recent sign-in across all admin-level members
+   * (owner + admin + scheduler). Only populated when the snapshot is
+   * computed with `includeOwnerLastSignIn: true`. Used to flag an org
+   * as active when admins are logging in regularly even if other
+   * activity signals are quiet.
+   */
+  admin_sign_in?: AdminSignInSignal;
 
   computed_at: string;
 }
