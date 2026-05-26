@@ -482,6 +482,59 @@ export function activeRiskBadges(s: OrgSnapshot): Array<keyof OrgRiskSignals> {
 }
 
 /** Build the recent_activity rollup from an array of snapshots. */
+/**
+ * Wave 0 hotfix (Codex retest 2026-05-25): shared marketing-rollup
+ * computation. Previously the cron and the manual /api/platform/stats
+ * POST endpoint each built `platformStats` independently — the cron
+ * inlined a marketing rollup but the POST endpoint forgot to add it,
+ * so the manual "Refresh Stats" button returned 200 without the
+ * marketing field and the Platform totals panel stayed hidden.
+ *
+ * Extract the rollup here so the two paths can't drift again. Both
+ * callers feed in the same snapshots array; output schema lives on
+ * PlatformStats["marketing"] (optional field so the type stays
+ * backwards-compatible with pre-rollup callers).
+ */
+export function computeMarketingRollup(
+  snapshots: OrgSnapshot[],
+): NonNullable<import("@/lib/types").PlatformStats["marketing"]> {
+  const totalActiveOrgs = snapshots.filter((s) => s.status === "active").length;
+  const totalVolunteersAllOrgs = snapshots.reduce(
+    (sum, s) => sum + (s.memberships.volunteer ?? 0),
+    0,
+  );
+  const totalServicesAllOrgs = snapshots.reduce(
+    (sum, s) => sum + (s.counts.services ?? 0),
+    0,
+  );
+  const scheduledAssignments30d = snapshots.reduce(
+    (sum, s) =>
+      sum +
+      (s.recent_activity?.assignments_by_day?.reduce(
+        (acc, n) => acc + n,
+        0,
+      ) ?? 0),
+    0,
+  );
+  // Proxy: count orgs with any assignment activity in the past 30 days.
+  // The snapshot doesn't currently track event_signup activity directly;
+  // this approximation tracks the same intent ("orgs actively engaging
+  // with scheduling").
+  const eventsWithSignups30d = snapshots.filter(
+    (s) =>
+      (s.recent_activity?.assignments_by_day?.reduce((acc, n) => acc + n, 0) ??
+        0) > 0,
+  ).length;
+
+  return {
+    total_active_orgs: totalActiveOrgs,
+    total_volunteers_all_orgs: totalVolunteersAllOrgs,
+    total_services_all_orgs: totalServicesAllOrgs,
+    scheduled_assignments_30d: scheduledAssignments30d,
+    events_with_signups_30d: eventsWithSignups30d,
+  };
+}
+
 export function buildRecentActivity(snapshots: OrgSnapshot[]): RecentActivity {
   const toRow = (s: OrgSnapshot): RecentActivityRow => ({
     id: s.id,
