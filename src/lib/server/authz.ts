@@ -111,11 +111,21 @@ export async function requireKioskToken(
  * closed: if `CRON_SECRET` env var is unset, every cron route 503s. If the
  * presented header is missing or doesn't match, 401. Constant-time compare.
  *
+ * Accepts EITHER of two secrets:
+ *   - `CRON_SECRET`        — the primary, used by Vercel's scheduled
+ *                            cron invocations + any internal automation
+ *   - `CODEX_CRON_SECRET`  — optional, separately-rotatable secret for
+ *                            Codex's QA harness. Lets Jason share a
+ *                            cron-invoke credential without exposing the
+ *                            primary, and revoke independently if needed.
+ *                            Unset by default; the route works exactly
+ *                            as before until the env var is configured.
+ *
  * Use at the top of every route under /api/cron/*.
  */
 export function requireCronSecret(req: NextRequest): NextResponse | null {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
+  const primary = process.env.CRON_SECRET;
+  if (!primary) {
     return NextResponse.json(
       { error: "Cron not configured (CRON_SECRET env var missing)" },
       { status: 503 },
@@ -123,9 +133,27 @@ export function requireCronSecret(req: NextRequest): NextResponse | null {
   }
   const presented =
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  const a = Buffer.from(presented);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+  const presentedBuf = Buffer.from(presented);
+
+  // Constant-time compare against each accepted secret. Loop the full
+  // list (not short-circuit on first match) so a timing observer can't
+  // tell which secret matched.
+  const accepted = [primary];
+  const codex = process.env.CODEX_CRON_SECRET;
+  if (codex) accepted.push(codex);
+
+  let matched = false;
+  for (const candidate of accepted) {
+    const candBuf = Buffer.from(candidate);
+    if (
+      candBuf.length === presentedBuf.length &&
+      timingSafeEqual(candBuf, presentedBuf)
+    ) {
+      matched = true;
+      // Don't break — full iteration keeps timing uniform
+    }
+  }
+  if (!matched) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return null;
