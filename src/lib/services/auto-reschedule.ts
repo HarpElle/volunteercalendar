@@ -47,8 +47,9 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
   const { churchId, scheduleId, serviceId, serviceDate, ministryId, roleId, roleTitle, declinedVolunteerId } = slot;
   const churchRef = adminDb.collection("churches").doc(churchId);
 
-  // Fetch service, all active volunteers, households, ministries, church doc, and existing assignments in parallel
-  const [serviceSnap, volSnap, householdSnap, ministrySnap, churchSnap, assignSnap] = await Promise.all([
+  // Fetch service, all active volunteers, households, ministries, church doc, existing assignments,
+  // and the parent schedule (Wave 2.2: needed to stamp schedule_status on the replacement) in parallel
+  const [serviceSnap, volSnap, householdSnap, ministrySnap, churchSnap, assignSnap, scheduleSnap] = await Promise.all([
     churchRef.collection("services").doc(serviceId).get(),
     churchRef.collection("people").where("is_volunteer", "==", true).where("status", "==", "active").get(),
     churchRef.collection("households").get(),
@@ -58,9 +59,17 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
       .where("schedule_id", "==", scheduleId)
       .where("status", "in", ["draft", "confirmed"])
       .get(),
+    churchRef.collection("schedules").doc(scheduleId).get(),
   ]);
 
   if (!serviceSnap.exists) return { replaced: false };
+
+  // Wave 2.2: read parent schedule status so the new assignment inherits.
+  // Defaults to "published" since auto-reschedule only fires when a
+  // volunteer declines a confirmation request — which implies the
+  // schedule is already published.
+  const parentScheduleStatus =
+    (scheduleSnap.exists ? (scheduleSnap.data()?.status as string) : null) ?? "published";
 
   const service = { id: serviceSnap.id, ...serviceSnap.data()! } as Service;
   const persons: Person[] = volSnap.docs
@@ -141,6 +150,8 @@ export async function autoReschedule(slot: DeclinedSlot): Promise<RescheduleResu
     role_title: roleTitle,
     ministry_id: ministryId,
     status: "draft",
+    // Wave 2.2 denorm: inherit parent schedule's current status.
+    schedule_status: parentScheduleStatus,
     signup_type: "scheduled",
     confirmation_token: token,
     responded_at: null,

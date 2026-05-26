@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
 import { audit, userActor } from "@/lib/server/audit";
 import { enqueueOutboxEntry } from "@/lib/server/outbox";
+import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
@@ -76,6 +77,14 @@ export async function POST(
       status: "published",
       published_at: now,
     });
+
+    // Wave 2.2: fan out the new status to every assignment doc so the
+    // Firestore rule can enforce volunteer visibility without an inline
+    // get() (which Firestore's list-query rule engine rejects). Affects
+    // ALL assignments under this schedule regardless of their own
+    // per-doc status — the parent schedule transitioning is what makes
+    // them volunteer-readable.
+    await fanOutScheduleStatus(church_id, scheduleId, "published");
 
     // Fetch all draft assignments for this schedule
     const assignSnap = await churchRef

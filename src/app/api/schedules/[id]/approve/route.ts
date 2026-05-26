@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import type { Schedule, ApprovalStatus } from "@/lib/types";
+import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
 
 interface ApproveBody {
   church_id: string;
@@ -110,6 +111,14 @@ export async function PATCH(
     }
 
     await scheduleRef.update(approvalUpdate);
+
+    // Wave 2.2: when the final ministry approval flips the schedule to
+    // "approved", denormalize the new status onto every child assignment.
+    // (Single-ministry approvals that don't trigger a schedule-level
+    // status change skip this — no fan-out needed.)
+    if (allApproved && status === "approved") {
+      await fanOutScheduleStatus(church_id, scheduleId, "approved");
+    }
 
     return NextResponse.json({
       success: true,
