@@ -17,6 +17,7 @@
  */
 
 import { adminDb } from "@/lib/firebase/admin";
+import { log } from "@/lib/log";
 
 /** Stable, lowercased dot-namespaced action identifier. */
 export type AuditAction =
@@ -109,7 +110,7 @@ export async function audit(entry: Omit<AuditEntry, "created_at" | "id">): Promi
       created_at: new Date().toISOString(),
     });
   } catch (err) {
-    console.error("[audit] write failed", { action: entry.action, err });
+    log.error("audit log write failed", { error: err, action: entry.action, target_type: entry.target_type, target_id: entry.target_id });
   }
 }
 

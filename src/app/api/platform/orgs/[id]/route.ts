@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isPlatformAdmin } from "@/lib/utils/platform-admin";
 import { buildOrgSnapshot } from "@/lib/server/org-snapshot";
 import type { OrgSnapshot } from "@/lib/types/platform";
+import { log } from "@/lib/log";
 
 async function requirePlatformAdmin(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
@@ -72,7 +73,7 @@ export async function GET(
     }
     return NextResponse.json({ snapshot: cached });
   } catch (error) {
-    console.error(`[GET /api/platform/orgs/${id}]`, error);
+    log.error("GET /api/platform/orgs/[id] failed", { error, org_id: id });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -102,7 +103,7 @@ export async function POST(
     await adminDb.doc(`platform_orgs/${id}`).set(fresh);
     return NextResponse.json({ snapshot: fresh });
   } catch (error) {
-    console.error(`[POST /api/platform/orgs/${id}]`, error);
+    log.error("POST /api/platform/orgs/[id] failed", { error, org_id: id });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

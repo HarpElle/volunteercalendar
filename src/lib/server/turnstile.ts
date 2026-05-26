@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log } from "@/lib/log";
 
 /**
  * Cloudflare Turnstile server-side token verification.
@@ -86,7 +87,7 @@ export async function verifyTurnstile(
     });
     result = (await res.json()) as TurnstileResponse;
   } catch (err) {
-    console.error("[turnstile] verify network error:", err);
+    log.error("turnstile verify network error", { error: err });
     return NextResponse.json(
       { error: "Bot verification temporarily unavailable. Please try again." },
       { status: 503 },
@@ -94,10 +95,7 @@ export async function verifyTurnstile(
   }
 
   if (!result.success) {
-    console.warn(
-      "[turnstile] verification failed:",
-      result["error-codes"]?.join(", ") ?? "unknown",
-    );
+    log.warn("turnstile verification failed", { error_codes: result["error-codes"] ?? [] });
     return NextResponse.json(
       { error: "Bot challenge failed. Please refresh and try again." },
       { status: 403 },

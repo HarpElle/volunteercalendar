@@ -8,6 +8,7 @@ import type {
   OrgSnapshot,
   OrgStatus,
 } from "@/lib/types/platform";
+import { log } from "@/lib/log";
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ orgs });
   } catch (error) {
-    console.error("[GET /api/platform/orgs]", error);
+    log.error("GET /api/platform/orgs failed", { error });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

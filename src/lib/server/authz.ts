@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { verifyKioskToken } from "@/lib/server/kiosk";
 import type { KioskScope } from "@/lib/types";
+import { log } from "@/lib/log";
 
 // ─── Kiosk token ────────────────────────────────────────────────────────────
 
@@ -179,9 +180,10 @@ export function assertKioskChurchMatch(
     );
   }
   if (!principal.church_id) {
-    console.warn(
-      "[authz] Kiosk request used unbound bootstrap token; trusting client church_id. " +
+    log.warn(
+      "Kiosk request used unbound bootstrap token; trusting client church_id. " +
         "Set KIOSK_BOOTSTRAP_CHURCH_ID or migrate to a real station token.",
+      { client_church_id: clientChurchId },
     );
   }
   return null;

@@ -4,6 +4,7 @@ import { isPlatformAdmin } from "@/lib/utils/platform-admin";
 import { sendEmail } from "@/lib/services/email";
 import type { FeedbackItem } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
+import { log } from "@/lib/log";
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items });
   } catch (error) {
-    console.error("[GET /api/platform/feedback]", error);
+    log.error("GET /api/platform/feedback failed", { error });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -225,7 +226,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ id: feedback_id, ...updateData });
   } catch (error) {
-    console.error("[PATCH /api/platform/feedback]", error);
+    log.error("PATCH /api/platform/feedback failed", { error });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

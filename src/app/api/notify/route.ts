@@ -7,6 +7,7 @@ import {
 } from "@/lib/utils/emails/batch-confirmation";
 import { resolveUserId, createUserNotificationBatch } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
+import { log } from "@/lib/log";
 
 export async function POST(request: NextRequest) {
   try {
@@ -219,7 +220,7 @@ export async function POST(request: NextRequest) {
         await createUserNotificationBatch(notifPayloads);
       }
     } catch (notifErr) {
-      console.error("User notification error (schedule publish):", notifErr);
+      log.error("User notification error (schedule publish)", { error: notifErr });
     }
 
     return NextResponse.json({
@@ -230,7 +231,7 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
-    console.error("Notify error:", error);
+    log.error("POST /api/notify failed", { error });
     return NextResponse.json(
       { error: "Failed to send notifications" },
       { status: 500 },

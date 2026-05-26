@@ -6,6 +6,7 @@ import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check"
 import type { Membership } from "@/lib/types";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 interface AbsenceBody {
   church_id: string;
@@ -241,7 +242,7 @@ export async function POST(req: NextRequest) {
           metadata: { link_href: "/dashboard/schedules" },
         });
       } catch (notifErr) {
-        console.error("Absence alert user notification failed:", notifErr);
+        log.error("Absence alert user notification failed", { error: notifErr });
       }
     }
 

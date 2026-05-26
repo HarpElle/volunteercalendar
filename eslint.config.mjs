@@ -27,6 +27,27 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/preserve-manual-memoization": "warn",
       "react-hooks/incompatible-library": "warn",
+      // Discourage raw console.* — prefer src/lib/log.ts so logs are
+      // structured + Sentry-routed. Warn (not error) so CI keeps flowing
+      // while we sweep the ~228 existing call sites; allow `warn`/`error`
+      // for the moment so the warning count tracks only `console.log`-ish
+      // chatter. The sweep over time replaces these with `log.warn`/`log.error`.
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  // The log wrapper itself, Sentry instrumentation, and CLI scripts all
+  // legitimately use console.* — silence the rule for them so the warning
+  // count reflects actual call sites we want to migrate.
+  {
+    files: [
+      "src/lib/log.ts",
+      "instrumentation.ts",
+      "instrumentation-client.ts",
+      "scripts/**/*.{ts,js,mjs}",
+      "tests/**/*.{ts,js,mjs}",
+    ],
+    rules: {
+      "no-console": "off",
     },
   },
 ]);

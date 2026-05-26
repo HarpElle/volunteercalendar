@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildOrgCreatedEmail } from "@/lib/utils/email-templates";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 /**
  * POST /api/notify/org-created
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("notify/org-created error:", err);
+    log.error("POST /api/notify/org-created failed", { error: err });
     return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
   }
 }

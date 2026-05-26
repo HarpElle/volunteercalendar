@@ -7,6 +7,7 @@ import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { log } from "@/lib/log";
 
 /**
  * POST /api/notify/prerequisite
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
           });
         }
       } catch (notifErr) {
-        console.error("Step-completed user notification failed:", notifErr);
+        log.error("Step-completed user notification failed", { error: notifErr });
       }
     }
 
@@ -181,13 +182,13 @@ export async function POST(req: NextRequest) {
           });
         }
       } catch (notifErr) {
-        console.error("All-completed user notification failed:", notifErr);
+        log.error("All-completed user notification failed", { error: notifErr });
       }
     }
 
     return NextResponse.json({ success: true, results });
   } catch (err) {
-    console.error("notify/prerequisite error:", err);
+    log.error("POST /api/notify/prerequisite failed", { error: err });
     return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
   }
 }
