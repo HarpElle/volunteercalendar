@@ -91,7 +91,15 @@ export async function POST(req: NextRequest) {
       if (entry.type === "event_signup" && data.church_id !== church_id) continue;
 
       const previousAttended = data.attended ?? null;
-      const volunteerId: string | null = (data.person_id as string) || null;
+      // Pass H Phase 6 audit follow-up (2026-05-25): event_signup uses
+      // `volunteer_id`, not `person_id`. Without this fallback the
+      // no-show delta below keyed off `null` for every event signup —
+      // the volunteer's stats.no_show_count never updated for missed
+      // events. Assignment branch uses `person_id` correctly.
+      const volunteerId: string | null =
+        (data.person_id as string | undefined) ||
+        (data.volunteer_id as string | undefined) ||
+        null;
 
       batch.update(docRef, {
         attended: entry.attended,

@@ -91,11 +91,31 @@ export async function POST(req: NextRequest) {
       if (data.church_id !== church_id) {
         return NextResponse.json({ error: "Signup does not belong to this organization" }, { status: 403 });
       }
-      volunteerId = data.person_id as string;
+      // Pass H Phase 6 audit follow-up (2026-05-25): mirror the
+      // self-remove identity-join fix. event_signups carry
+      // `volunteer_id` (new shape per Phase 4 PR #78), not
+      // `person_id`. Without this the volunteer's "can't make it"
+      // button 403'd for every signup they made through the
+      // authenticated public flow.
+      const signupVolunteerId =
+        (data.volunteer_id as string | undefined) ||
+        (data.person_id as string | undefined) ||
+        "";
+      const signupUserId = data.user_id as string | undefined;
+      volunteerId = signupVolunteerId;
       roleName = data.role_title as string;
 
-      if (volunteerId !== userVolunteerId) {
+      const matchesVolunteer =
+        signupVolunteerId !== "" && signupVolunteerId === userVolunteerId;
+      const matchesUser = signupUserId !== undefined && signupUserId === userId;
+      if (!matchesVolunteer && !matchesUser) {
         return NextResponse.json({ error: "You can only notify for your own signups" }, { status: 403 });
+      }
+      // Backfill volunteerId from membership when the legacy user_id
+      // path matched, so the notification email below names the right
+      // volunteer (same logic as self-remove).
+      if (!matchesVolunteer && matchesUser && userVolunteerId) {
+        volunteerId = userVolunteerId;
       }
 
       // Get event name + date
