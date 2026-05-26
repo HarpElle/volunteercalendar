@@ -545,6 +545,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Cron run history (Wave 2.3). Top-level docs written by Admin SDK from
+    // every cron route via withCronRun(). The platform admin "Cron Runs"
+    // page reads via /api/platform/cron-runs which checks isPlatformAdmin.
+    match /cron_runs/{docId} {
+      allow read, write: if false;
+    }
+
     // No global wildcard. Any new top-level collection requires an explicit rule.
   }
 }
