@@ -59,7 +59,13 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col items-center gap-2 text-xs text-vc-text-muted">
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-center gap-4">
+            <a href="/status" className="transition-colors hover:text-vc-indigo">
+              Status
+            </a>
+            <a href="/changelog" className="transition-colors hover:text-vc-indigo">
+              Changelog
+            </a>
             <a href="/privacy" className="transition-colors hover:text-vc-indigo">
               Privacy Policy
             </a>

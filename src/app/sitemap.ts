@@ -38,5 +38,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.3,
     },
+    {
+      url: "https://volunteercal.com/status",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.4,
+    },
+    {
+      url: "https://volunteercal.com/changelog",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.4,
+    },
   ];
 }

@@ -13,7 +13,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3) | `5994089` + (pending) | ⏳ In progress (4.2 MFA + 4.4 status page remain) |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4) | `5994089` + `d6c6f57` + (pending) | ⏳ In progress (only 4.2 MFA remains — queued for Jason's call) |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -129,13 +129,15 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 
 ---
 
-## Wave 4 — In progress (4.1 in PR)
+## Wave 4 — In progress (4.1 + 4.3 + 4.4 done; 4.2 MFA queued for Jason's call)
 
 ### Closed pieces
 
 | Item | PR | Commit | Scope |
 |------|----|--------|-------|
 | 4.1 | #110 | `5994089` | `audit_logs` coverage audit. New `/api/memberships/[id]` PATCH+DELETE absorbs direct-Firestore membership mutations from `firestore.ts` so every lifecycle change emits an audit row. `audit()` calls added across invite + batch invite + tier override + kiosk activate + kiosk checkout + org create + the three CSV export endpoints + short-link (allowlist external only). New AuditAction `membership.accept_invite`. 12 integration tests in `tests/integration/membership-mutations.test.ts`. Full suite 262 passing. Codex retest doc at `CODEX_WAVE_4_1.md`. |
+| 4.3 | #111 | `d6c6f57` | Real Notify Ministry Leads endpoint. New `/api/schedules/[id]/notify-leads` POST replaces the stub "Request Approval" button (was POSTing to `/approve` without ministry_id, silently 400'ing). Sends approval-request email per ministry lead with `lead_email` set via the existing outbox. New AuditAction `schedule.notify_leads` (one per call, not per email). 7 integration tests in `tests/integration/notify-leads.test.ts`. Full suite 269 passing. Codex retest doc at `CODEX_WAVE_4_3.md`. |
+| 4.4 | #112 | (pending merge) | Public `/status` + `/changelog` pages with hand-curated data files. Status page shows overall pill + per-subsystem health + recent incidents. Changelog page renders dated entries grouped by month with category chips + PR links. Links from Settings (About VolunteerCal section, visible to all org members) and the landing footer. Sitemap updated. No new tests — pure static content. |
 
 ### Intentionally skipped audits (deferred or replaced)
 
@@ -143,15 +145,15 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 - **`schedule.unpublish` / `schedule.delete`**: no dedicated server endpoint yet; client deletes go through generic `removeChurchDocument`. Add audits when a real route lands.
 - **`org.transfer_ownership`**: feature not built.
 
-### Codex retest doc
+### Codex retest docs
 
-`docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_1.md` — send to Codex after Vercel serves the post-merge build (2–5 min after squash merge).
+- `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_1.md` — Wave 4.1 audit coverage.
+- `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_3.md` — Notify Ministry Leads.
+- (Wave 4.4 doesn't need a Codex retest — pure static content. Visual confirmation on /status, /changelog, Settings → About VolunteerCal section, and landing footer is sufficient.)
 
-### Remaining Wave 4 items (not in this PR)
+### Remaining Wave 4 item (queued)
 
-- **4.2 MFA opt-in surface** in Account → Security (Firebase Auth TOTP)
-- **4.3 real "Notify Ministry Leads" endpoint** (Growth+) — currently a stub button
-- **4.4 `/status` + `/changelog` route** for the rollout receipt
+- **4.2 MFA opt-in surface** in Account → Security (Firebase Auth TOTP). Deferred from the overnight batch because Firebase Auth multi-factor enrollment has a multi-step UI (QR code, verification code, recovery codes) with cross-device sign-in implications — high-risk area where Jason should walk the rollout decisions before code lands. Pickup when Jason wakes.
 
 ---
 
