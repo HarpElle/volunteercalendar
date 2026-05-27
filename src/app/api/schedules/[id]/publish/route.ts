@@ -4,7 +4,7 @@ import { buildConfirmationEmail } from "@/lib/utils/emails";
 import { audit, userActor } from "@/lib/server/audit";
 import { enqueueOutboxEntry } from "@/lib/server/outbox";
 import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
-import { requireMembership } from "@/lib/server/authz";
+import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseBody, z } from "@/lib/server/validation";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
@@ -25,6 +25,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
   const body = await parseBody(req, BodySchema);
   if (body instanceof NextResponse) return body;
 

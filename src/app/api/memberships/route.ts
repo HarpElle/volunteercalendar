@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { requireMembership } from "@/lib/server/authz";
+import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseQuery, z } from "@/lib/server/validation";
 import { log } from "@/lib/log";
 
@@ -15,6 +15,9 @@ const QuerySchema = z.object({
  * Requires Bearer token from an active scheduler/admin/owner of the church.
  */
 export async function GET(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
   const query = parseQuery(req, QuerySchema);
   if (query instanceof NextResponse) return query;
 
