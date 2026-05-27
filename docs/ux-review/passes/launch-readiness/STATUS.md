@@ -11,10 +11,10 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 |------|-------|-----|-------------|--------|
 | **0** | Admin-aware org activity + marketing rollup | #87 #88 #89 #90 | `f2d2e2f` | ✅ Closed |
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
-| **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 | `065e92f` | 🟡 2.1 + 2.3 done; **2.2 in progress** |
-| **3** | Auth/validation library coverage (zod, route migration sweep) | — | — | ⏸ Queued |
+| **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
+| **3** | Auth/validation library coverage (zod, route migration sweep) | — | — | ⏸ Next |
 | **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | — | — | ⏸ Queued |
-| **5** | UX polish (a11y, focus, contrast, server components, image optimization, terminology) | — | — | ⏸ Queued |
+| **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
 | **8** | Customer comms + outreach + marketing | — | — | ⏸ Queued |
@@ -116,27 +116,29 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 
 `storage:rules` auto-deploy is still off (intentionally — see workflow comment). Re-add with a tiny PR if/when needed.
 
-### Active piece: 2.2 — schedule.status denorm
+### 2.2 — schedule.status denorm (split outcome)
 
-Codex flagged the per-read `get()` cost on the assignment rule. Current rule allows all active members to read all assignments (any status); draft-visibility lives at the application layer (My Schedule client filter + `/api/calendar` server filter). 
+| Sub-item | Status | Notes |
+|---|---|---|
+| **2.2a** writers + backfill | ✅ Merged (PR #99, `53da0a4`) + backfill run 2026-05-26 | 194 assignments populated, 18 already matching, 0 orphans. Codex PASS. |
+| **2.2b** rule tightening | ⏭ **Deferred to Wave 5** | See "Wave 5 prep notes" below for the saved rule wording + gotcha + test cases. |
 
-**Goal**: denormalize `schedule.status` onto each assignment as a `schedule_status` field, then tighten the firestore rule to check the denormalized field. Tighter security + no get() cost.
+**Why 2.2b moved to Wave 5**: trying to push the rule alone surfaced that Firestore's list-query semantics couple the rule shape to the client query shape. My Schedule's current client query (`where person_id == X, where service_date >= Y`) returns docs across all `schedule_status` values — including drafts the new rule denies — which makes the entire list query fail for ANY volunteer in an org with in-flight drafts. Fixing that requires updating every volunteer-facing client query to filter on `schedule_status`. Wave 5's planned server-side refactor of My Schedule (and the other hot dashboard pages) dissolves the issue by moving the data assembly to admin-SDK endpoints. Rather than ship the rule tightening + a partial My Schedule refactor in Wave 2.2b, we carry the rule change forward as part of Wave 5's coherent refactor.
 
-**Why this needs a Codex retest gate**: the previous attempt at tightening this exact rule (Pass G Codex Round 1) broke volunteers' My Schedule page entirely because Firestore's list-query rule engine couldn't statically prove the `get()` predicate safe. The denorm approach should avoid that pitfall, but Codex needs to confirm before the rule auto-deploys.
-
-**Status**: PR in flight; will not auto-merge until Codex PASS.
+**Risk of deferral**: zero new risk. The current rule (open read for active members) is what production has been running since launch; app-layer filtering in My Schedule + `/api/calendar` has been the actual line of defense and remains in place. The denormalized `schedule_status` field that Wave 2.2a landed is the prerequisite Wave 5 needs — that work isn't wasted.
 
 ---
 
 ## Open Codex findings
 
-None merged as of `065e92f`. Wave 2.2 PR will request a fresh Codex retest before merging.
+None merged as of `53da0a4`. Wave 2 is fully closed.
 
 ---
 
 ## Manual deploy log
 
 - 2026-05-26 14:22 UTC: First successful auto-deploy of `firestore.rules` (PR #96 + #97 chain). Wave 2.3 `cron_runs` rule live.
+- 2026-05-26 ~later: `scripts/backfill-assignment-schedule-status.ts` run against production with the github-actions-rules-deploy SA (+ Cloud Datastore User role granted that day). Wrote `schedule_status` to 194 assignments across 4 active orgs. Codex verified PASS (7 of 18 orgs covered by client-token spot-check; remaining 11 orgs unverifiable client-side but covered by the script's deterministic walk).
 
 ---
 
@@ -148,10 +150,60 @@ None merged as of `065e92f`. Wave 2.2 PR will request a fresh Codex retest befor
 
 ---
 
+## Wave 5 prep notes — Assignment rule tightening
+
+When Wave 5 picks up the My Schedule server-component refactor, the rule tightening should land in the SAME PR as the My Schedule refactor (not separately). Pre-built artifacts to reuse:
+
+### The rule (proven correct in emulator tests today)
+
+```
+match /assignments/{docId} {
+  // Use resource.data.get('schedule_status', '') — NOT
+  // resource.data.schedule_status — so the predicate is safe when
+  // the field is missing (legacy orphan whose parent schedule was
+  // deleted before backfill ran). Bare access throws on undefined
+  // during LIST queries because Firestore's rule engine evaluates
+  // the predicate for every collection doc, and a throw kills the
+  // whole list. .get(...) with a default returns '' which isn't in
+  // the allowlist → safe deny.
+  allow read: if isActiveMember(churchId) && (
+    isSchedulerOrAbove(churchId) ||
+    resource.data.get('schedule_status', '') in ['published', 'archived']
+  );
+  allow write: if isSchedulerOrAbove(churchId);
+}
+```
+
+### The list-query gotcha (would have shipped a regression without catching it)
+
+Firestore rejects a list query if ANY doc in the result set fails the rule. So adding the rule above without coordinated client-query changes breaks `getDocs(query(... where person_id == X, where service_date >= Y))` whenever ANY draft assignment matches the where-clauses. This is what blocked shipping 2.2b alone.
+
+Wave 5 fix path: route My Schedule's data fetch through a new server endpoint (`/api/my-schedule` or similar) that uses Admin SDK to bypass the rule. The endpoint can return whatever shape the page needs without the rule blocking it. The strict client-side rule then catches any future code path that tries to direct-read assignments without going through the endpoint — defense-in-depth.
+
+### Test cases worth porting (all green in emulator with the rule above + a small seed update)
+
+In `tests/rules/firestore.rules.test.ts`, seed: published / draft / archived schedules + matching assignments + one legacy orphan with no `schedule_status`. Then assert:
+
+1. Volunteer's My Schedule LIST query succeeds — proves list-query semantics work end-to-end
+2. Volunteer CAN read published assignment (single get)
+3. Volunteer CAN read archived assignment (single get)
+4. Volunteer CANNOT read draft assignment
+5. Volunteer CANNOT read legacy orphan (missing field)
+6. Volunteer in different church CANNOT read (cross-tenant)
+7. Admin CAN read draft assignment (scheduler+ bypass branch, single get)
+8. Admin CAN read all assignments via list query (scheduler+ bypass branch, list)
+
+For test 1 to pass, the test's seeded data must NOT include any draft assignments under the volunteer's person_id (or the query must filter them out). When Wave 5 refactors My Schedule to a server endpoint, this test reverts to "does the volunteer's LIST query against the volunteer-readable subset succeed" — which it will.
+
+### Known regression that goes away in Wave 5
+
+Self-service mode volunteers currently see their own draft-schedule claims on My Schedule (carve-out in `src/app/dashboard/my-schedule/page.tsx`). The rule tightening would block that at the rule layer with no way to replicate the carve-out without a get(). Wave 5's server endpoint can fetch the carve-out via admin SDK, restoring the behavior. **Don't ship the rule without the server endpoint** — that's what made the carve-out impossible in Wave 2.2b.
+
+---
+
 ## Next up
 
-**Wave 2.2** is the active piece (in progress). After it Codex-passes and merges:
-
-- Wave 2 closes
-- Wave 3 starts: extend `src/lib/server/authz.ts` + adopt `zod` + ~30 high-risk route migrations
-- Wave 1.2b CSP enforce flip lands ~2026-06-02 (calendar reminder)
+- **Wave 3 item 1**: extend `src/lib/server/authz.ts` with `requireUser` / `requireMembership` / `requirePlatformAdmin` / `requireStripeWebhook` helpers
+- **Wave 3 item 2**: adopt `zod` for body/query validation
+- **Wave 3 items 3–4**: migrate ~30 high-risk routes, then sweep the long tail
+- **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
