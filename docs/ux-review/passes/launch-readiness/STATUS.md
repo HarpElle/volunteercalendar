@@ -13,7 +13,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | — | — | ⏸ Next |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1 only) | (pending merge) | ⏳ In progress |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -126,6 +126,32 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 **Why 2.2b moved to Wave 5**: trying to push the rule alone surfaced that Firestore's list-query semantics couple the rule shape to the client query shape. My Schedule's current client query (`where person_id == X, where service_date >= Y`) returns docs across all `schedule_status` values — including drafts the new rule denies — which makes the entire list query fail for ANY volunteer in an org with in-flight drafts. Fixing that requires updating every volunteer-facing client query to filter on `schedule_status`. Wave 5's planned server-side refactor of My Schedule (and the other hot dashboard pages) dissolves the issue by moving the data assembly to admin-SDK endpoints. Rather than ship the rule tightening + a partial My Schedule refactor in Wave 2.2b, we carry the rule change forward as part of Wave 5's coherent refactor.
 
 **Risk of deferral**: zero new risk. The current rule (open read for active members) is what production has been running since launch; app-layer filtering in My Schedule + `/api/calendar` has been the actual line of defense and remains in place. The denormalized `schedule_status` field that Wave 2.2a landed is the prerequisite Wave 5 needs — that work isn't wasted.
+
+---
+
+## Wave 4 — In progress (4.1 in PR)
+
+### Closed pieces
+
+| Item | PR | Commit | Scope |
+|------|----|--------|-------|
+| 4.1 | #110 | (pending merge) | `audit_logs` coverage audit. New `/api/memberships/[id]` PATCH+DELETE absorbs direct-Firestore membership mutations from `firestore.ts` so every lifecycle change emits an audit row. `audit()` calls added across invite + batch invite + tier override + kiosk activate + kiosk checkout + org create + the three CSV export endpoints + short-link (allowlist external only). New AuditAction `membership.accept_invite`. 12 integration tests in `tests/integration/membership-mutations.test.ts`. Full suite 262 passing. |
+
+### Intentionally skipped audits (deferred or replaced)
+
+- **`kiosk.lookup`**: high-volume per Sunday; redundant with the existing `kiosk.medical_data_revealed` row.
+- **`schedule.unpublish` / `schedule.delete`**: no dedicated server endpoint yet; client deletes go through generic `removeChurchDocument`. Add audits when a real route lands.
+- **`org.transfer_ownership`**: feature not built.
+
+### Codex retest doc
+
+`docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_1.md` — send to Codex after Vercel serves the post-merge build (2–5 min after squash merge).
+
+### Remaining Wave 4 items (not in this PR)
+
+- **4.2 MFA opt-in surface** in Account → Security (Firebase Auth TOTP)
+- **4.3 real "Notify Ministry Leads" endpoint** (Growth+) — currently a stub button
+- **4.4 `/status` + `/changelog` route** for the rollout receipt
 
 ---
 
@@ -244,9 +270,9 @@ Self-service mode volunteers currently see their own draft-schedule claims on My
 
 ## Next up
 
-- **Wave 4 item 1**: `audit_logs` coverage audit — verify all 12 critical hooks (membership lifecycle, schedule lifecycle, billing events, org create/delete, kiosk events, data export) actually emit. Fill gaps.
-- **Wave 4 item 2**: MFA opt-in surface in Account → Security (Firebase Auth TOTP)
-- **Wave 4 item 3**: real "Notify Ministry Leads" endpoint (Growth+) — currently a stub button
-- **Wave 4 item 4**: `/status` + `/changelog` route for the rollout receipt
+- **Wave 4.1 Codex retest** (after PR #110 merges + Vercel deploys): use `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_1.md`
+- **Wave 4.2**: MFA opt-in surface in Account → Security (Firebase Auth TOTP)
+- **Wave 4.3**: real "Notify Ministry Leads" endpoint (Growth+) — currently a stub button
+- **Wave 4.4**: `/status` + `/changelog` route for the rollout receipt
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
 - **Wave 3.4 long-tail route sweep**: incremental as files get touched
