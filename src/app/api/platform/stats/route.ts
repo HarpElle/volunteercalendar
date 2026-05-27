@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requirePlatformAdmin } from "@/lib/server/authz";
 import { TIER_LIMITS } from "@/lib/constants";
 import {
   buildOrgSnapshot,
@@ -29,16 +29,11 @@ const VALID_TIERS: SubscriptionTier[] = [
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  void auth;
 
+  try {
     const [statsDoc, recentDoc] = await Promise.all([
       adminDb.doc("platform/stats").get(),
       adminDb.doc("platform/recent_activity").get(),
@@ -59,16 +54,11 @@ export async function GET(req: NextRequest) {
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  void auth;
 
+  try {
     const now = new Date();
     const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const d60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();

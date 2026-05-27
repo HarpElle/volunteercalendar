@@ -1,27 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requirePlatformAdmin } from "@/lib/server/authz";
+import { parseBody, parseQuery, z } from "@/lib/server/validation";
 import { sendEmail } from "@/lib/services/email";
 import type { FeedbackItem } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { log } from "@/lib/log";
 
+const GetQuerySchema = z.object({
+  platform_only: z
+    .string()
+    .optional()
+    .transform((v) => v !== "false"),
+  category: z.string().optional().default(""),
+  status: z.string().optional().default(""),
+});
+
+const PatchBodySchema = z.object({
+  church_id: z.string().min(1),
+  feedback_id: z.string().min(1),
+  platform_status: z.string().optional(),
+  platform_response: z.string().optional(),
+  platform_priority: z.string().optional(),
+  platform_internal_notes: z.string().optional(),
+  platform_tags: z.array(z.string()).optional(),
+  disposition: z.string().optional(),
+});
+
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  void auth;
 
-    const platformOnly = req.nextUrl.searchParams.get("platform_only") !== "false";
-    const categoryFilter = req.nextUrl.searchParams.get("category") || "";
-    const statusFilter = req.nextUrl.searchParams.get("status") || "";
+  const q = parseQuery(req, GetQuerySchema);
+  if (q instanceof NextResponse) return q;
+
+  try {
+    const { platform_only: platformOnly, category: categoryFilter, status: statusFilter } = q;
 
     // Build church name cache
     const churchesSnap = await adminDb.collection("churches").get();
@@ -83,17 +100,13 @@ export async function GET(req: NextRequest) {
 // ─── PATCH ────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
 
-    const body = await req.json();
+  const body = await parseBody(req, PatchBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  try {
     const {
       church_id,
       feedback_id,
@@ -104,13 +117,6 @@ export async function PATCH(req: NextRequest) {
       platform_tags,
       disposition,
     } = body;
-
-    if (!church_id || !feedback_id) {
-      return NextResponse.json(
-        { error: "Missing church_id or feedback_id" },
-        { status: 400 },
-      );
-    }
 
     const feedbackRef = adminDb
       .collection("churches")
@@ -127,7 +133,7 @@ export async function PATCH(req: NextRequest) {
     const now = new Date().toISOString();
 
     // Get actor name for activity log
-    const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
+    const userDoc = await adminDb.collection("users").doc(auth.uid).get();
     const actorName = userDoc.exists
       ? (userDoc.data()!.display_name as string) || ""
       : "";
@@ -152,7 +158,7 @@ export async function PATCH(req: NextRequest) {
         activities.push({
           feedback_id,
           type: `${key}_change`,
-          actor_user_id: decoded.uid,
+          actor_user_id: auth.uid,
           actor_name: actorName,
           previous_value:
             typeof existingData[key] === "object"
@@ -169,7 +175,7 @@ export async function PATCH(req: NextRequest) {
     // Set response metadata if platform_response is being set
     if (platform_response !== undefined && platform_response !== existingData.platform_response) {
       updateData.platform_response_at = now;
-      updateData.platform_response_by = decoded.uid;
+      updateData.platform_response_by = auth.uid;
     }
 
     // Batch: update feedback + add activities

@@ -1,26 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { requirePlatformAdmin } from "@/lib/server/authz";
 import { buildOrgSnapshot } from "@/lib/server/org-snapshot";
 import type { OrgSnapshot } from "@/lib/types/platform";
 import { log } from "@/lib/log";
-
-async function requirePlatformAdmin(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  let decoded;
-  try {
-    decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  } catch {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-  if (!isPlatformAdmin(decoded.uid)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  return decoded;
-}
 
 /**
  * GET /api/platform/orgs/[id]
@@ -42,6 +25,8 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "Missing org id" }, { status: 400 });
   }
+  // Suppress unused warning — auth is the proof we got past the gate.
+  void auth;
 
   try {
     const cachedDoc = await adminDb.doc(`platform_orgs/${id}`).get();
@@ -93,6 +78,7 @@ export async function POST(
 ) {
   const auth = await requirePlatformAdmin(req);
   if (auth instanceof NextResponse) return auth;
+  void auth;
 
   const { id } = await params;
   try {
