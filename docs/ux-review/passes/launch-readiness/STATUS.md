@@ -151,9 +151,28 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 - `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_3.md` — Notify Ministry Leads.
 - (Wave 4.4 doesn't need a Codex retest — pure static content. Visual confirmation on /status, /changelog, Settings → About VolunteerCal section, and landing footer is sufficient.)
 
-### Remaining Wave 4 item (queued)
+### Remaining Wave 4 item (queued — decisions locked, waiting on Codex Wave 4 retest before starting)
 
-- **4.2 MFA opt-in surface** in Account → Security (Firebase Auth TOTP). Deferred from the overnight batch because Firebase Auth multi-factor enrollment has a multi-step UI (QR code, verification code, recovery codes) with cross-device sign-in implications — high-risk area where Jason should walk the rollout decisions before code lands. Pickup when Jason wakes.
+**4.2 MFA opt-in surface** in Account → Security. Decisions baked in 2026-05-27 with Jason:
+
+| Decision | Choice |
+|---|---|
+| MFA method | **TOTP only** (no SMS — SIM-swap deprecation; matches GitHub/Stripe/Linear) |
+| Recovery codes | **8 codes, force confirmation during enrollment** — build our own (Firebase TOTP has none native): bcrypt-hashed in `user_recovery_codes/{uid}` Firestore collection (server-only via Admin SDK) |
+| Un-enroll auth | **Current MFA code + password** (industry standard) |
+| Tier gate | **Free for everyone, all tiers** (modern SaaS norm) |
+| Challenge cadence | **Every sign-in** (Firebase Auth default; no trusted-device complexity for v1) |
+| Authenticator app | **Brand-agnostic** (any TOTP app: Google Authenticator, 1Password, Authy) |
+| Location in app | **Account → Security**, sits next to the existing SecuritySection |
+
+Implementation scope (~12 hours focused work, single PR — half-baked MFA in production is worse than no MFA):
+
+- Backend (~3h): 4 API routes for recovery codes lifecycle + new AuditActions (`auth.mfa_enrolled`, `auth.mfa_disabled`, `auth.mfa_recovery_codes_regenerated`, `auth.mfa_recovery_code_used`)
+- Frontend (~5h): `MfaSetupModal` (3-step wizard), `MfaChallengeModal` (sign-in challenge with "use recovery code" toggle), `MfaSettingsCard` in Account → Security, `RecoveryCodesDownload` reusable component, disable-flow modal
+- Tests (~2h): integration for verify endpoint (correct/wrong/used), regenerate flow, enrollment audit
+- Polish (~2h): early-close-modal warning, copy, error states, mobile QR sizing
+
+Pickup trigger: after Codex returns Wave 4 retest results and any Sev 1/2 hotfixes land. Jason elected to wait rather than start 4.2 in parallel to avoid context-switching.
 
 ---
 
