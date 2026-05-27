@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import { MfaSettingsCard } from "@/components/account/mfa-settings-card";
+import { SecurityActivityCard } from "@/components/account/security-activity-card";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
@@ -791,11 +792,15 @@ export default function AccountPage() {
         </div>
       </section>
 
-      {/* Wave 4.2: Two-Factor Authentication */}
+      {/* Wave 4.2: Two-Factor Authentication + Security activity log.
+          MFA audit rows have church_id:null (user-scoped), so the org
+          Activity page can't see them — Security activity is the
+          user-visible surface for the auth.* trail. */}
       {user && (
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Security</h2>
+        <section className="mb-10 space-y-4">
+          <h2 className="text-lg font-semibold text-vc-indigo">Security</h2>
           <MfaSettingsCard user={user} />
+          <SecurityActivityCard user={user} />
         </section>
       )}
 
