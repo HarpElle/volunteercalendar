@@ -3,9 +3,16 @@
 import { Suspense, useState, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import {
+  getMultiFactorResolver,
+  type MultiFactorError,
+  type MultiFactorResolver,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MfaChallengeModal } from "@/components/auth/mfa-challenge-modal";
 
 export default function LoginPage() {
   return (
@@ -23,6 +30,16 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Wave 4.2: MFA challenge state. When sign-in throws
+  // auth/multi-factor-auth-required, we grab the resolver and show
+  // the challenge modal. After the user verifies (TOTP or recovery
+  // code), the modal completes the credential or signals a recovery
+  // retry; the page navigates the same way the no-MFA path does.
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(
+    null,
+  );
+  const [mfaOpen, setMfaOpen] = useState(false);
 
   // Already-signed-in case: if the user lands here with valid auth, send them along.
   useEffect(() => {
@@ -47,8 +64,39 @@ function LoginForm() {
         return;
       }
       setSubmitting(false);
-    } catch {
-      // error is set in context
+    } catch (err: unknown) {
+      // MFA required → open challenge modal. NOT a sign-in failure;
+      // clear the context error message so the user doesn't see a red
+      // banner while we're still asking for their second factor.
+      const errCode = (err as { code?: string })?.code;
+      if (errCode === "auth/multi-factor-auth-required") {
+        clearError();
+        const resolver = getMultiFactorResolver(auth, err as MultiFactorError);
+        setMfaResolver(resolver);
+        setMfaOpen(true);
+      }
+      setSubmitting(false);
+    }
+  }
+
+  async function handleMfaSuccess() {
+    setMfaOpen(false);
+    setMfaResolver(null);
+    router.replace(redirectTo || "/dashboard");
+  }
+
+  async function handleRecoverySuccess() {
+    // Server unenrolled MFA. Retry the original password sign-in;
+    // this time no MultiFactorError will fire.
+    setMfaOpen(false);
+    setMfaResolver(null);
+    setSubmitting(true);
+    try {
+      const signedInUser = await signIn(email, password);
+      if (signedInUser) {
+        router.replace(redirectTo || "/dashboard");
+      }
+    } finally {
       setSubmitting(false);
     }
   }
@@ -132,6 +180,18 @@ function LoginForm() {
           </Link>
         </p>
       </div>
+
+      <MfaChallengeModal
+        open={mfaOpen}
+        onClose={() => {
+          setMfaOpen(false);
+          setMfaResolver(null);
+        }}
+        resolver={mfaResolver}
+        email={email}
+        onSuccess={handleMfaSuccess}
+        onRecoverySuccess={handleRecoverySuccess}
+      />
     </div>
   );
 }

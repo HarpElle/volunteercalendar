@@ -65,6 +65,11 @@ export type AuditAction =
   | "export.attendance"
   // Short links
   | "short_link.create_external"
+  // Authentication / MFA (Wave 4.2)
+  | "auth.mfa_enrolled"
+  | "auth.mfa_disabled"
+  | "auth.mfa_recovery_codes_regenerated"
+  | "auth.mfa_recovery_code_used"
   // Generic catch-all so future ops can audit without a code change here
   | (string & { __brand?: "audit" });
 
