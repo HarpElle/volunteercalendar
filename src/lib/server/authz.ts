@@ -9,8 +9,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { verifyKioskToken } from "@/lib/server/kiosk";
-import type { KioskScope } from "@/lib/types";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { stripe } from "@/lib/stripe";
+import type { KioskScope, OrgRole } from "@/lib/types";
 import { log } from "@/lib/log";
+import type Stripe from "stripe";
 
 // ─── Kiosk token ────────────────────────────────────────────────────────────
 
@@ -159,6 +163,204 @@ export function requireCronSecret(req: NextRequest): NextResponse | null {
   }
   return null;
 }
+
+// ─── User auth (Wave 3.1) ───────────────────────────────────────────────────
+
+export interface AuthedUser {
+  uid: string;
+  email: string | null;
+  /** Raw decoded ID-token claims for callers that need extras (custom claims, name, etc.). */
+  claims: Record<string, unknown>;
+}
+
+/**
+ * Verify a Firebase ID token from `Authorization: Bearer <token>` and return
+ * the decoded user, or a 401 NextResponse on failure. Use as the first line
+ * of every authenticated route — composes into requireMembership /
+ * requirePlatformAdmin below.
+ *
+ * Existing routes that handle this inline can migrate by replacing the
+ * 5-line auth block with:
+ *
+ *   const auth = await requireUser(req);
+ *   if (auth instanceof NextResponse) return auth;
+ *   // ... use auth.uid, auth.email, auth.claims
+ */
+export async function requireUser(
+  req: NextRequest,
+): Promise<AuthedUser | NextResponse> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    return {
+      uid: decoded.uid,
+      email: (decoded.email as string | undefined) ?? null,
+      claims: decoded as unknown as Record<string, unknown>,
+    };
+  } catch (err) {
+    log.warn("requireUser token verification failed", { error: err });
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  }
+}
+
+// ─── Membership-gated routes (Wave 3.1) ─────────────────────────────────────
+
+/**
+ * Role hierarchy used for `minRole` threshold checks. Higher number = more
+ * privileged. owner > admin > scheduler > volunteer.
+ */
+const ROLE_RANK: Record<OrgRole, number> = {
+  volunteer: 0,
+  scheduler: 1,
+  admin: 2,
+  owner: 3,
+};
+
+export interface AuthedMembership extends AuthedUser {
+  /** The church the membership is scoped to. */
+  church_id: string;
+  /** Deterministic doc id format `${uid}_${churchId}`. */
+  membership_id: string;
+  role: OrgRole;
+  /** Always "active" — non-active memberships short-circuit with 403 above. */
+  status: "active";
+  /**
+   * Optional ministry-scope restriction for schedulers. Empty = "all
+   * ministries" (no restriction); populated = only these ministry IDs.
+   * Always present (defaults to []); callers check by .length === 0.
+   */
+  ministry_scope: string[];
+}
+
+/**
+ * Verify auth + membership + role threshold for `churchId`. Returns the
+ * membership info on success, or a NextResponse (401 missing token / 403
+ * not-a-member / 403 wrong role / 403 inactive membership) on failure.
+ *
+ * `minRole` defaults to "volunteer" — i.e., any active member of the
+ * church passes. Pass "admin" / "owner" / "scheduler" to require higher.
+ */
+export async function requireMembership(
+  req: NextRequest,
+  churchId: string,
+  minRole: OrgRole = "volunteer",
+): Promise<AuthedMembership | NextResponse> {
+  const user = await requireUser(req);
+  if (user instanceof NextResponse) return user;
+
+  const membershipId = `${user.uid}_${churchId}`;
+  const snap = await adminDb.doc(`memberships/${membershipId}`).get();
+  if (!snap.exists) {
+    return NextResponse.json({ error: "Not a member" }, { status: 403 });
+  }
+  const data = snap.data() ?? {};
+  const role = data.role as OrgRole | undefined;
+  const status = data.status as string | undefined;
+
+  if (status !== "active") {
+    return NextResponse.json(
+      { error: "Membership is not active" },
+      { status: 403 },
+    );
+  }
+  if (!role || ROLE_RANK[role] === undefined) {
+    return NextResponse.json(
+      { error: "Membership has no recognized role" },
+      { status: 403 },
+    );
+  }
+  if (ROLE_RANK[role] < ROLE_RANK[minRole]) {
+    return NextResponse.json(
+      { error: `Insufficient role: ${minRole} or higher required` },
+      { status: 403 },
+    );
+  }
+
+  return {
+    ...user,
+    church_id: churchId,
+    membership_id: membershipId,
+    role,
+    status: "active",
+    ministry_scope: (data.ministry_scope as string[]) ?? [],
+  };
+}
+
+// ─── Platform admin (Wave 3.1) ──────────────────────────────────────────────
+
+export interface AuthedPlatformAdmin extends AuthedUser {
+  is_platform_admin: true;
+}
+
+/**
+ * Verify auth + platform-admin status (env-var UID whitelist via
+ * `isPlatformAdmin`). 401 on missing/invalid token, 403 on
+ * authenticated-but-not-platform-admin.
+ *
+ * Use on every /api/platform/* route. The membership-based
+ * `requireMembership` is for org-scoped admin; this is for cross-org
+ * platform admin (Jason et al.).
+ */
+export async function requirePlatformAdmin(
+  req: NextRequest,
+): Promise<AuthedPlatformAdmin | NextResponse> {
+  const user = await requireUser(req);
+  if (user instanceof NextResponse) return user;
+
+  if (!isPlatformAdmin(user.uid)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return { ...user, is_platform_admin: true };
+}
+
+// ─── Stripe webhook signature verification (Wave 3.1) ───────────────────────
+
+export interface VerifiedStripeWebhook {
+  event: Stripe.Event;
+  /** Raw request body string — Stripe-verified, safe to use directly. */
+  rawBody: string;
+}
+
+/**
+ * Verify a Stripe webhook's signature using `STRIPE_WEBHOOK_SECRET`.
+ * Returns the parsed event + raw body on success, or a NextResponse on
+ * failure (503 if Stripe isn't configured, 400 on bad signature).
+ *
+ * Reads `req.text()` internally — caller MUST NOT have consumed the body
+ * already. Stripe signature verification requires the exact raw payload
+ * Stripe sent, character-for-character; deserialization corrupts it.
+ *
+ * Use at the top of every Stripe webhook route. Replaces the inline
+ * try/catch block in /api/billing/webhook (and any future webhook routes).
+ */
+export async function requireStripeWebhook(
+  req: NextRequest,
+): Promise<VerifiedStripeWebhook | NextResponse> {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return NextResponse.json(
+      { error: "Stripe not configured" },
+      { status: 503 },
+    );
+  }
+  const rawBody = await req.text();
+  const sig = req.headers.get("stripe-signature") ?? "";
+  try {
+    const event = stripe.webhooks.constructEvent(
+      rawBody,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET,
+    );
+    return { event, rawBody };
+  } catch (err) {
+    log.error("Stripe webhook signature verification failed", { error: err });
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+}
+
+// ─── Kiosk (existing) ───────────────────────────────────────────────────────
 
 /**
  * Enforce that the request's church_id matches the kiosk's bound church_id.
