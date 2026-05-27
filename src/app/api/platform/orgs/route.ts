@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requirePlatformAdmin } from "@/lib/server/authz";
+import { parseQuery, z } from "@/lib/server/validation";
 import { activeRiskBadges } from "@/lib/server/org-snapshot";
 import type { SubscriptionTier } from "@/lib/types";
 import type {
@@ -10,24 +11,27 @@ import type {
 } from "@/lib/types/platform";
 import { log } from "@/lib/log";
 
+const ListQuerySchema = z.object({
+  search: z.string().optional().default(""),
+  tier: z.string().optional().default(""),
+  status: z.string().optional().default(""),
+  has_checkin: z.string().optional().default(""),
+  sort: z.string().optional().default("created_at"),
+});
+
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  void auth;
 
-    const search = req.nextUrl.searchParams.get("search")?.toLowerCase() || "";
-    const tierFilter = req.nextUrl.searchParams.get("tier") || "";
-    const statusFilter = req.nextUrl.searchParams.get("status") || "";
-    const checkinFilter = req.nextUrl.searchParams.get("has_checkin") || "";
-    const sort = req.nextUrl.searchParams.get("sort") || "created_at";
+  const q = parseQuery(req, ListQuerySchema);
+  if (q instanceof NextResponse) return q;
+
+  try {
+    const search = q.search.toLowerCase();
+    const { tier: tierFilter, status: statusFilter, has_checkin: checkinFilter, sort } = q;
 
     const [churchesSnap, platformOrgsSnap] = await Promise.all([
       adminDb.collection("churches").get(),

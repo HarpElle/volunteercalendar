@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requirePlatformAdmin } from "@/lib/server/authz";
+import { parseQuery, z } from "@/lib/server/validation";
 import { log } from "@/lib/log";
+
+const QuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(30).default(7),
+});
 
 /**
  * GET /api/platform/cron-runs?days=7
@@ -11,21 +16,14 @@ import { log } from "@/lib/log";
  * Platform-admin only.
  */
 export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    if (!isPlatformAdmin(decoded.uid)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const auth = await requirePlatformAdmin(req);
+  if (auth instanceof NextResponse) return auth;
 
-    const days = Math.max(
-      1,
-      Math.min(30, parseInt(req.nextUrl.searchParams.get("days") ?? "7", 10) || 7),
-    );
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const query = parseQuery(req, QuerySchema);
+  if (query instanceof NextResponse) return query;
+
+  try {
+    const cutoff = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000).toISOString();
 
     const snap = await adminDb
       .collection("cron_runs")
@@ -35,7 +33,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     const runs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    return NextResponse.json({ runs, lookback_days: days });
+    return NextResponse.json({ runs, lookback_days: query.days });
   } catch (error) {
     log.error("GET /api/platform/cron-runs failed", { error });
     return NextResponse.json(
