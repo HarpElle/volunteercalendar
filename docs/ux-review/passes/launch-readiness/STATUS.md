@@ -13,7 +13,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4) | `5994089` + `d6c6f57` + `5b4b888` | ⏳ 4.1/4.3/4.4 Codex PASS; 4.2 MFA in progress |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` | ⏳ 4.1/4.3/4.4 Codex PASS; 4.2 MFA awaiting Codex retest |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -168,9 +168,11 @@ Three notes from the retest (all "rules are working" confirmations, not bugs):
 - `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_3.md` — Notify Ministry Leads.
 - (Wave 4.4 doesn't need a Codex retest — pure static content. Visual confirmation on /status, /changelog, Settings → About VolunteerCal section, and landing footer is sufficient.)
 
-### Remaining Wave 4 item (queued — decisions locked, waiting on Codex Wave 4 retest before starting)
+### 4.2 — Shipped 2026-05-27 (`ef25039`, PR #115); Codex retest pending
 
-**4.2 MFA opt-in surface** in Account → Security. Decisions baked in 2026-05-27 with Jason:
+Implemented per the 7 decisions captured below. Firebase Identity Platform upgrade required (Jason completed in console before merge). Codex retest doc at `CODEX_WAVE_4_2.md` — substantial manual + scripted scope; auth-touching surface warrants careful verification.
+
+Original decision table for reference:
 
 | Decision | Choice |
 |---|---|
