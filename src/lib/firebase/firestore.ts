@@ -14,7 +14,38 @@ import {
   type DocumentData,
   type QueryConstraint,
 } from "firebase/firestore";
-import { db } from "./config";
+import { db, auth } from "./config";
+
+/**
+ * Wave 4.1: helper for calling our own API with the user's ID token.
+ * Used by the membership lifecycle mutations below so they audit_logs
+ * on the server side instead of writing Firestore client-direct.
+ */
+async function callAuthedApi(
+  path: string,
+  method: "PATCH" | "DELETE" | "POST",
+  body?: unknown,
+): Promise<void> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    let err: { error?: string } = {};
+    try {
+      err = await res.json();
+    } catch {
+      // body wasn't JSON; fall through to generic message
+    }
+    throw new Error(err.error || `Request failed: ${res.status}`);
+  }
+}
 
 // ─── Client-side TTL cache for unconstrained subcollection reads ───
 const CACHE_TTL_MS = 60_000; // 60 seconds
@@ -181,31 +212,31 @@ export async function getChurchMemberships(churchId: string): Promise<Membership
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Membership);
 }
 
-/** Update a membership's status (e.g., accept invite, approve volunteer). */
+/**
+ * Update a membership's status (e.g., accept invite, approve volunteer).
+ * Wave 4.1: routes through PATCH /api/memberships/[id] so every
+ * lifecycle change writes to audit_logs.
+ */
 export async function updateMembershipStatus(
   membershipId: string,
   status: MembershipStatus,
 ): Promise<void> {
-  await updateDoc(doc(db, MEMBERSHIPS, membershipId), {
-    status,
-    updated_at: new Date().toISOString(),
-  });
+  await callAuthedApi(`/api/memberships/${membershipId}`, "PATCH", { status });
 }
 
-/** Update a membership's role. */
+/**
+ * Update a membership's role.
+ * Wave 4.1: routes through PATCH /api/memberships/[id] so role changes
+ * write to audit_logs (membership.role_change).
+ */
 export async function updateMembershipRole(
   membershipId: string,
   role: OrgRole,
   ministryScope?: string[],
 ): Promise<void> {
-  const data: Record<string, unknown> = {
-    role,
-    updated_at: new Date().toISOString(),
-  };
-  if (ministryScope !== undefined) {
-    data.ministry_scope = ministryScope;
-  }
-  await updateDoc(doc(db, MEMBERSHIPS, membershipId), data);
+  const body: Record<string, unknown> = { role };
+  if (ministryScope !== undefined) body.ministry_scope = ministryScope;
+  await callAuthedApi(`/api/memberships/${membershipId}`, "PATCH", body);
 }
 
 /** Update a membership's permission flags. */
@@ -219,14 +250,17 @@ export async function updateMembershipPermissions(
   });
 }
 
-/** Update a membership's reminder preferences. */
+/**
+ * Update a membership's reminder preferences.
+ * Wave 4.1: routes through PATCH /api/memberships/[id] for consistency.
+ * Reminder-pref changes intentionally NOT audited (user settings churn).
+ */
 export async function updateMembershipReminders(
   membershipId: string,
   channels: ReminderChannel[],
 ): Promise<void> {
-  await updateDoc(doc(db, MEMBERSHIPS, membershipId), {
+  await callAuthedApi(`/api/memberships/${membershipId}`, "PATCH", {
     reminder_preferences: { channels },
-    updated_at: new Date().toISOString(),
   });
 }
 
@@ -241,9 +275,13 @@ export async function linkMembershipToVolunteer(
   });
 }
 
-/** Delete a membership (remove member from org). */
+/**
+ * Delete a membership (remove member from org).
+ * Wave 4.1: routes through DELETE /api/memberships/[id] for audit trail
+ * (membership.remove).
+ */
 export async function deleteMembership(membershipId: string): Promise<void> {
-  await deleteDoc(doc(db, MEMBERSHIPS, membershipId));
+  await callAuthedApi(`/api/memberships/${membershipId}`, "DELETE");
 }
 
 // --- Event Signup helpers (top-level "event_signups" collection) ---

@@ -199,6 +199,24 @@ export async function POST(req: NextRequest) {
       role: "admin",
     });
 
+    // Wave 4.1: audit org creation for compliance trail.
+    void audit({
+      church_id: churchId,
+      actor: userActor(userId),
+      action: "org.create",
+      target_type: "church",
+      target_id: churchId,
+      metadata: {
+        name,
+        org_type,
+        workflow_mode,
+        timezone,
+        // Was this the user's first org (uid === churchId) or an additional one?
+        first_org: churchId === userId,
+      },
+      outcome: "ok",
+    });
+
     return NextResponse.json({ success: true, church_id: churchId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

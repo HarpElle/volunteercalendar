@@ -15,6 +15,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { TIER_LIMITS } from "@/lib/constants";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { ActivationError, consumeActivation } from "@/lib/server/kiosk";
+import { audit, kioskActor } from "@/lib/server/audit";
 import type { SubscriptionTier } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
@@ -75,6 +76,23 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+
+    // Wave 4.1: kiosk.activate is a sensitive lifecycle event — a station
+    // just successfully traded a one-time code for a long-lived token.
+    // Logged after the tier check so denied activations on free orgs don't
+    // pollute the feed (those return 403 above without writing this).
+    void audit({
+      church_id: station.church_id,
+      actor: kioskActor(station.id),
+      action: "kiosk.activate",
+      target_type: "station",
+      target_id: station.id,
+      metadata: {
+        station_name: station.name,
+        has_fingerprint: fingerprint !== null,
+      },
+      outcome: "ok",
+    });
 
     return NextResponse.json({
       token,

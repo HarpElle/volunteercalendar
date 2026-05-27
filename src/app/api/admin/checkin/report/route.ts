@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { loadChild } from "@/lib/server/checkin-helpers";
+import { audit, userActor } from "@/lib/server/audit";
 
 /**
  * GET /api/admin/checkin/report?church_id=...&type=...&date=...&from=...&to=...
@@ -54,6 +55,28 @@ export async function GET(req: NextRequest) {
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
+
+    // Wave 4.1: any CSV export of check-in data is a sensitive (children's
+    // data) export — audit at the top so all five CSV branches are covered
+    // by one call. JSON read paths intentionally aren't audited; they're
+    // dashboard rendering, not bulk extraction.
+    if (format === "csv") {
+      void audit({
+        church_id: churchId,
+        actor: userActor(userId),
+        action: "export.attendance",
+        target_type: "checkin_report",
+        target_id: null,
+        metadata: {
+          report_type: reportType,
+          date: date || null,
+          from: from || null,
+          to: to || null,
+          child_id: childId || null,
+        },
+        outcome: "ok",
+      });
+    }
 
     switch (reportType) {
       case "daily": {

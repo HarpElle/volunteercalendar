@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { audit, userActor } from "@/lib/server/audit";
 
 type DocRecord = Record<string, unknown> & { id: string };
 
@@ -126,6 +127,23 @@ export async function GET(req: NextRequest) {
         "\n"
       );
 
+      // Wave 4.1: bulk schedule data leaving the system as CSV — audit the
+      // export. JSON path below is render-for-print (PDF preview) which we
+      // also count as an export since it surfaces the same per-volunteer
+      // contact info; emitted regardless of format.
+      void audit({
+        church_id: churchId,
+        actor: userActor(userId),
+        action: "export.assignments",
+        target_type: "schedule",
+        target_id: scheduleId,
+        metadata: {
+          format: "csv",
+          assignment_count: schedAssignments.length,
+        },
+        outcome: "ok",
+      });
+
       return new NextResponse(csv, {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
@@ -151,6 +169,21 @@ export async function GET(req: NextRequest) {
         email: (vol?.email as string) || "",
         status: (a.status as string) || "draft",
       };
+    });
+
+    // Wave 4.1: also audit JSON exports — this path feeds the print-PDF UI
+    // which is functionally a download with the same contact info as CSV.
+    void audit({
+      church_id: churchId,
+      actor: userActor(userId),
+      action: "export.assignments",
+      target_type: "schedule",
+      target_id: scheduleId,
+      metadata: {
+        format: "json",
+        assignment_count: schedAssignments.length,
+      },
+      outcome: "ok",
     });
 
     return NextResponse.json({ success: true, data });

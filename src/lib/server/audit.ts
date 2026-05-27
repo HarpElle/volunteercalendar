@@ -28,6 +28,7 @@ export type AuditAction =
   // Membership lifecycle
   | "membership.invite"
   | "membership.approve"
+  | "membership.accept_invite"
   | "membership.role_change"
   | "membership.remove"
   | "membership.deactivate"
