@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { stripe } from "@/lib/stripe";
 import { buildOrgDeletedEmail, buildOrgDeletedMembersEmail } from "@/lib/utils/email-templates";
 import { cascadeDeleteOrg } from "@/lib/utils/org-cascade-delete";
@@ -13,6 +13,21 @@ import {
   isBetaTester,
   isBetaTesterEmail,
 } from "@/lib/server/abuse-caps";
+import { requireUser, requireMembership } from "@/lib/server/authz";
+import { parseBody, z } from "@/lib/server/validation";
+import { log } from "@/lib/log";
+
+const CreateBodySchema = z.object({
+  name: z.string().min(1),
+  org_type: z.string().min(1),
+  timezone: z.string().min(1),
+  workflow_mode: z.string().min(1),
+});
+
+const DeleteBodySchema = z.object({
+  church_id: z.string().min(1),
+  confirm_name: z.string().min(1),
+});
 
 /**
  * POST /api/organization
@@ -21,22 +36,20 @@ import {
  * first orgs (churchId === uid) and additional orgs (churchId === random UUID).
  */
 export async function POST(req: NextRequest) {
+  // Auth first — we need uid + email for rate-limiting + abuse caps even
+  // before reading the body. parseBody runs after so caller doesn't see
+  // a 400 leak about body shape if they're unauthenticated.
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const body = await parseBody(req, CreateBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const userId = auth.uid;
+  const callerEmail = auth.email;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
-    const callerEmail = decoded.email ?? null;
-
-    const body = await req.json();
     const { name, org_type, timezone, workflow_mode } = body;
-
-    if (!name || !org_type || !timezone || !workflow_mode) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
 
     // Pass G Phase 5: per-IP throttle on org creation. Catches IP-rotating
     // scripted multiplication. Beta-testers exempt.
@@ -133,8 +146,8 @@ export async function POST(req: NextRequest) {
     // Create person record so owner appears on the scheduling roster
     const userSnap = await adminDb.doc(`users/${userId}`).get();
     const userData = userSnap.data() || {};
-    const ownerName = (userData.display_name || decoded.name || decoded.email || "Owner") as string;
-    const ownerEmail = (decoded.email || userData.email || "") as string;
+    const ownerName = (userData.display_name || auth.claims.name || auth.email || "Owner") as string;
+    const ownerEmail = (auth.email || userData.email || "") as string;
     const nameParts = ownerName.split(" ");
     const volRef = adminDb.collection(`churches/${churchId}/people`).doc();
     await volRef.set({
@@ -189,7 +202,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, church_id: churchId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("POST /api/organization error:", message, err);
+    log.error("POST /api/organization failed", { error: err, user_id: userId });
     return NextResponse.json({ error: `Creation failed: ${message}` }, { status: 500 });
   }
 }
@@ -200,36 +213,18 @@ export async function POST(req: NextRequest) {
  * Requires: owner role, confirmed with org name in body.
  */
 export async function DELETE(req: NextRequest) {
+  const body = await parseBody(req, DeleteBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  // Owner-only gate. requireMembership 401s on missing token, 403s on
+  // non-member or non-owner.
+  const auth = await requireMembership(req, body.church_id, "owner");
+  if (auth instanceof NextResponse) return auth;
+
+  const { church_id, confirm_name } = body;
+  const userId = auth.uid;
+
   try {
-    // Verify auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
-
-    const body = await req.json();
-    const { church_id, confirm_name } = body;
-
-    if (!church_id || !confirm_name) {
-      return NextResponse.json(
-        { error: "Missing church_id or confirm_name" },
-        { status: 400 },
-      );
-    }
-
-    // Verify the user is the owner of this org
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists || membershipSnap.data()?.role !== "owner") {
-      return NextResponse.json(
-        { error: "Only the organization owner can delete it" },
-        { status: 403 },
-      );
-    }
-
     // Verify org exists and confirm_name matches
     const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
     if (!churchSnap.exists) {
@@ -307,7 +302,7 @@ export async function DELETE(req: NextRequest) {
     // Send notification emails (best-effort, don't block on failure)
     try {
       // Owner confirmation email
-      const ownerEmail = decoded.email;
+      const ownerEmail = auth.email;
       const ownerProfile = await adminDb.doc(`users/${userId}`).get();
       const ownerName = ownerProfile.data()?.display_name || ownerEmail || "there";
       if (ownerEmail) {
