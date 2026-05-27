@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireMembership } from "@/lib/server/authz";
+import { parseBody, z } from "@/lib/server/validation";
+import { log } from "@/lib/log";
+
+const BodySchema = z.object({
+  church_id: z.string().min(1),
+});
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -10,37 +17,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  const userId = decoded.uid;
+  const body = await parseBody(req, BodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+  void auth;
 
   try {
-    const { church_id } = await req.json();
-
-    if (!church_id) {
-      return NextResponse.json(
-        { error: "church_id is required" },
-        { status: 400 },
-      );
-    }
-
-    // Verify owner/admin role
-    const membershipId = `${userId}_${church_id}`;
-    const membership = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (
-      !membership.exists ||
-      !["owner", "admin"].includes(membership.data()?.role)
-    ) {
-      return NextResponse.json(
-        { error: "Insufficient permissions" },
-        { status: 403 },
-      );
-    }
-
-    const churchRef = adminDb.doc(`churches/${church_id}`);
+    const churchRef = adminDb.doc(`churches/${body.church_id}`);
     const churchSnap = await churchRef.get();
     if (!churchSnap.exists) {
       return NextResponse.json({ error: "Church not found" }, { status: 404 });
@@ -62,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    console.error("Portal error:", err);
+    log.error("POST /api/billing/portal failed", { error: err, church_id: body.church_id });
     return NextResponse.json(
       { error: "Failed to create portal session" },
       { status: 500 }

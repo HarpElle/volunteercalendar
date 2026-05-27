@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, TIER_TO_PRICE } from "@/lib/stripe";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireMembership } from "@/lib/server/authz";
+import { parseBody, z } from "@/lib/server/validation";
+import { log } from "@/lib/log";
+
+const BodySchema = z.object({
+  church_id: z.string().min(1),
+  tier: z.string().min(1),
+});
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -10,37 +18,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-  const userId = decoded.uid;
-  const userEmail = decoded.email ?? null;
+  const body = await parseBody(req, BodySchema);
+  if (body instanceof NextResponse) return body;
+
+  // Require admin+ membership on the church we're billing
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
 
   try {
-    const { church_id, tier } = await req.json();
-
-    if (!church_id || !tier) {
-      return NextResponse.json(
-        { error: "church_id and tier are required" },
-        { status: 400 },
-      );
-    }
-
-    // Verify owner/admin role
-    const membershipId = `${userId}_${church_id}`;
-    const membership = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (
-      !membership.exists ||
-      !["owner", "admin"].includes(membership.data()?.role)
-    ) {
-      return NextResponse.json(
-        { error: "Insufficient permissions" },
-        { status: 403 },
-      );
-    }
-
+    const { church_id, tier } = body;
     const priceId = TIER_TO_PRICE[tier];
     if (!priceId) {
       return NextResponse.json(
@@ -64,13 +50,13 @@ export async function POST(req: NextRequest) {
     // Stripe dashboard shows the church's name on the Customer record.
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: userEmail ?? undefined,
+        email: auth.email ?? undefined,
         name: (churchData.name as string) || undefined,
         metadata: {
           church_id,
           church_name: (churchData.name as string) ?? "",
-          user_id: userId,
-          user_email: userEmail ?? "",
+          user_id: auth.uid,
+          user_email: auth.email ?? "",
         },
       });
       customerId = customer.id;
@@ -94,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    console.error("Checkout error:", err);
+    log.error("POST /api/billing/checkout failed", { error: err, church_id: body.church_id, tier: body.tier });
     return NextResponse.json(
       { error: "Failed to create checkout session" },
       { status: 500 }

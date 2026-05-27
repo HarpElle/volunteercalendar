@@ -6,7 +6,7 @@ import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
 import { buildDowngradeNotificationEmail } from "@/lib/utils/emails/downgrade-notification";
 import { isDowngrade, computeLostFeatures, computeOverLimitItems } from "@/lib/utils/tier-enforcement";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
-import { Resend } from "resend";
+import { requireStripeWebhook } from "@/lib/server/authz";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
 
@@ -88,27 +88,9 @@ async function sendDowngradeEmail(churchId: string, oldTier: string, newTier: st
 }
 
 export async function POST(req: NextRequest) {
-  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json(
-      { error: "Stripe not configured" },
-      { status: 503 }
-    );
-  }
-
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature") || "";
-
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    log.error("Stripe webhook signature verification failed", { error: err });
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  }
+  const verified = await requireStripeWebhook(req);
+  if (verified instanceof NextResponse) return verified;
+  const { event } = verified;
 
   // Idempotency: Stripe retries webhook deliveries with the same event.id.
   // Record processed events and short-circuit duplicates so e.g. a tier upgrade
