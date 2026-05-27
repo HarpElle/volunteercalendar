@@ -13,7 +13,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4) | `5994089` + `d6c6f57` + (pending) | ⏳ In progress (only 4.2 MFA remains — queued for Jason's call) |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4) | `5994089` + `d6c6f57` + `5b4b888` | ⏳ 4.1/4.3/4.4 Codex PASS; 4.2 MFA in progress |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -129,7 +129,7 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 
 ---
 
-## Wave 4 — In progress (4.1 + 4.3 + 4.4 done; 4.2 MFA queued for Jason's call)
+## Wave 4 — 4.1 / 4.3 / 4.4 Closed (Codex PASS); 4.2 MFA next
 
 ### Closed pieces
 
@@ -137,7 +137,24 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 |------|----|--------|-------|
 | 4.1 | #110 | `5994089` | `audit_logs` coverage audit. New `/api/memberships/[id]` PATCH+DELETE absorbs direct-Firestore membership mutations from `firestore.ts` so every lifecycle change emits an audit row. `audit()` calls added across invite + batch invite + tier override + kiosk activate + kiosk checkout + org create + the three CSV export endpoints + short-link (allowlist external only). New AuditAction `membership.accept_invite`. 12 integration tests in `tests/integration/membership-mutations.test.ts`. Full suite 262 passing. Codex retest doc at `CODEX_WAVE_4_1.md`. |
 | 4.3 | #111 | `d6c6f57` | Real Notify Ministry Leads endpoint. New `/api/schedules/[id]/notify-leads` POST replaces the stub "Request Approval" button (was POSTing to `/approve` without ministry_id, silently 400'ing). Sends approval-request email per ministry lead with `lead_email` set via the existing outbox. New AuditAction `schedule.notify_leads` (one per call, not per email). 7 integration tests in `tests/integration/notify-leads.test.ts`. Full suite 269 passing. Codex retest doc at `CODEX_WAVE_4_3.md`. |
-| 4.4 | #112 | (pending merge) | Public `/status` + `/changelog` pages with hand-curated data files. Status page shows overall pill + per-subsystem health + recent incidents. Changelog page renders dated entries grouped by month with category chips + PR links. Links from Settings (About VolunteerCal section, visible to all org members) and the landing footer. Sitemap updated. No new tests — pure static content. |
+| 4.4 | #112 | `5b4b888` | Public `/status` + `/changelog` pages with hand-curated data files. Status page shows overall pill + per-subsystem health + recent incidents. Changelog page renders dated entries grouped by month with category chips + PR links. Links from Settings (About VolunteerCal section, visible to all org members) and the landing footer. Sitemap updated. No new tests — pure static content. |
+
+### Codex Wave 4 combined retest — PASS 2026-05-27
+
+PRs #110 + #111 + #112 retested in production at `233b0b9` (5b4b888 + the docs-only #113 commit). **No Sev 1-4 product findings.** Verification artifacts live in Codex's workspace:
+
+- `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_RESULTS.md`
+- `docs/ux-review/passes/launch-readiness/wave4-results.json`
+- `docs/ux-review/passes/launch-readiness/wave4-owner-cases-results.json`
+- `docs/ux-review/passes/launch-readiness/wave4-browser.json`
+- `docs/ux-review/passes/launch-readiness/wave4-settings-browser.json`
+- `docs/ux-review/passes/launch-readiness/wave4-gmail-summary.json`
+
+Three notes from the retest (all "rules are working" confirmations, not bugs):
+
+1. **kiosk.checkout audit fixture was source-verified** rather than runtime-exercised — Firestore rules correctly blocked Codex's attempt to client-seed `checkInSessions` docs. Good signal: the rule layer denies direct writes that should only flow from the kiosk-token-authenticated endpoint.
+2. **`notification_outbox` direct client reads blocked by rules** — Codex verified the schedule.notify_leads flow via endpoint response + audit row + cron drain + actual Gmail delivery to the lead's inbox.
+3. **GitHub main was at `233b0b9`** during the retest — one docs-only commit (#113 — Wave 4.2 MFA decisions) past the last code-bearing commit. No retest scope impact.
 
 ### Intentionally skipped audits (deferred or replaced)
 
