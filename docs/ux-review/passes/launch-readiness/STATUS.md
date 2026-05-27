@@ -12,8 +12,8 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **0** | Admin-aware org activity + marketing rollup | #87 #88 #89 #90 | `f2d2e2f` | ✅ Closed |
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
-| **3** | Auth/validation library coverage (zod, route migration sweep) | — | — | ⏸ Next |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | — | — | ⏸ Queued |
+| **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | — | — | ⏸ Next |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -129,9 +129,47 @@ Successful manual `workflow_dispatch` run at 2026-05-26 14:22 UTC. Wave 2.3's `c
 
 ---
 
+## Wave 3 — Closed
+
+Authz + zod library coverage shipped across 8 PRs. 19 high-risk routes migrated.
+
+| Item | PRs | Scope |
+|------|-----|-------|
+| 3.1 authz library | #101 | `requireUser`, `requireMembership(churchId, minRole)`, `requirePlatformAdmin`, `requireStripeWebhook` + 14 integration tests |
+| 3.2 zod validation | #102 | `parseBody(req, schema)` + `parseQuery(req, schema)` + 10 unit tests |
+| 3.3 batch 1 platform | #103 | 5 platform routes / 8 method handlers |
+| 3.3 batch 2 billing | #104 | checkout, portal, webhook |
+| 3.3 batch 3 schedule mutations | #105 | publish, approve |
+| 3.3 batch 4 membership/org | #106 | memberships, invites, organization (POST + DELETE) |
+| 3.3 batch 5 short-links | #107 | GET/POST/PATCH/DELETE + new `assertBearerToken` helper |
+| 3.3 hotfix auth-order | #108 | Retrofit `assertBearerToken` to 6 routes from batches 2–4 |
+
+Final production main: `75f97a4`.
+
+### Codex validation
+
+- Batches 1 + 2 PASS confirmed in first retest (all 11 cases green).
+- Batches 3 retested separately due to a deployment-lag false positive in the first round (Codex tested cc56b00 before Vercel had served it). Focused retest of batch 3 after production caught up: **PASS** (all 6 cases including the new auth-order fast-path).
+- Codex artifacts (in Codex's workspace, not committed to this repo):
+  - `docs/ux-review/passes/launch-readiness/CODEX_WAVE_3_3_BATCH_3_RETEST.md`
+  - `docs/ux-review/passes/launch-readiness/wave33-batch3-retest-results.json`
+  - `docs/ux-review/passes/launch-readiness/scripts/run-wave33-batch3-retest.mjs` — reusable test harness for future Wave 3 retests
+
+### Recurring bug class observed (Wave 3)
+
+**Auth-order regression** — bit us in batches 2/3/4 silently (not caught by tests until batch 5's short-links suite caught it). When a route needs body fields to call `requireMembership(req, body.church_id, role)`, the natural-feeling order is `parseBody → requireMembership`. But that returns 400 (body invalid) BEFORE 401 (no auth) for callers with no token AND no body. Subtle, but breaks defensive client code and leaks body-shape hints pre-auth. Fixed library-wide with `assertBearerToken` fast-path used before `parseBody`. Pattern captured below.
+
+### Items intentionally deferred from Wave 3
+
+- **Wave 3.4 long-tail sweep**: ~100 remaining lower-traffic routes get migrated incrementally as they're touched for other reasons. Not a single focused effort.
+- **`/api/reservations/*`** (3 routes, ~1,000 lines): has a custom local `getAuthorizedUser` helper that deserves more careful surgery. Migrate when the next reservations-related change comes through.
+- **`/api/cron/*` zod schemas**: cron routes already use `requireCronSecret`; adding zod body/query validation is a polish item with low ROI. Defer.
+
+---
+
 ## Open Codex findings
 
-None merged as of `53da0a4`. Wave 2 is fully closed.
+None merged as of `75f97a4`. Waves 0, 1, 2, 3 all closed.
 
 ---
 
@@ -139,6 +177,7 @@ None merged as of `53da0a4`. Wave 2 is fully closed.
 
 - 2026-05-26 14:22 UTC: First successful auto-deploy of `firestore.rules` (PR #96 + #97 chain). Wave 2.3 `cron_runs` rule live.
 - 2026-05-26 ~later: `scripts/backfill-assignment-schedule-status.ts` run against production with the github-actions-rules-deploy SA (+ Cloud Datastore User role granted that day). Wrote `schedule_status` to 194 assignments across 4 active orgs. Codex verified PASS (7 of 18 orgs covered by client-token spot-check; remaining 11 orgs unverifiable client-side but covered by the script's deterministic walk).
+- 2026-05-27 ~01:40 UTC: Wave 3.3 batch 3 retest confirmed PASS at production main `75f97a4` after deployment lag cleared.
 
 ---
 
@@ -147,6 +186,8 @@ None merged as of `53da0a4`. Wave 2 is fully closed.
 - **Cron-vs-manual drift**: when two paths produce the same field, extract the helper FIRST (don't fix the drift after the fact)
 - **Rules auto-deploy → no rollback window**: PRs that modify EXISTING rules (vs. add new ones) deserve a Codex retest gate before merge. Adding new collection rules with explicit-deny is safe to autonomously merge.
 - **GitHub status before assumption**: check https://www.githubstatus.com before diagnosing "account suspended"-style errors. Today's Wave 2.3 dispatch failure was caused by a GitHub-side Actions auth incident (2026-05-26 10:57 → 13:18 UTC), not anything on our side.
+- **Auth-order in route helpers**: when a route needs a body field for `requireMembership`, do `assertBearerToken` → `parseBody` → `requireMembership`. Reversing the first two returns 400 before 401, which is a subtle regression that breaks defensive clients and leaks body-shape pre-auth. Pattern from Wave 3.3 hotfix.
+- **Codex retest cache lag**: when a PR has just merged, give Vercel 2–5 minutes to deploy before sending Codex the retest prompt. Otherwise Codex tests an old build and reports false-positive regressions. Confirm production deploy first via `gh api repos/.../deployments`.
 
 ---
 
@@ -203,7 +244,9 @@ Self-service mode volunteers currently see their own draft-schedule claims on My
 
 ## Next up
 
-- **Wave 3 item 1**: extend `src/lib/server/authz.ts` with `requireUser` / `requireMembership` / `requirePlatformAdmin` / `requireStripeWebhook` helpers
-- **Wave 3 item 2**: adopt `zod` for body/query validation
-- **Wave 3 items 3–4**: migrate ~30 high-risk routes, then sweep the long tail
+- **Wave 4 item 1**: `audit_logs` coverage audit — verify all 12 critical hooks (membership lifecycle, schedule lifecycle, billing events, org create/delete, kiosk events, data export) actually emit. Fill gaps.
+- **Wave 4 item 2**: MFA opt-in surface in Account → Security (Firebase Auth TOTP)
+- **Wave 4 item 3**: real "Notify Ministry Leads" endpoint (Growth+) — currently a stub button
+- **Wave 4 item 4**: `/status` + `/changelog` route for the rollout receipt
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
+- **Wave 3.4 long-tail route sweep**: incremental as files get touched
