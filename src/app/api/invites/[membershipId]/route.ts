@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { requireUser } from "@/lib/server/authz";
+import { log } from "@/lib/log";
 
 /**
  * GET /api/invites/{membershipId}
@@ -12,22 +14,21 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
  * authoritative source for the invite-accept page.
  *
  * Caller must be signed in. The auth UID must match the membership's
- * user_id OR the membership must be in `pending_volunteer_approval` so an
- * existing user can preview the invite before accepting.
+ * user_id (anyone else gets a 403 with the invited user_id surfaced so
+ * the UI can prompt them to switch accounts). We intentionally don't
+ * use requireMembership here — the caller might not be a member of any
+ * org yet; they're being invited TO this one.
  */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ membershipId: string }> },
 ) {
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const uid = decoded.uid;
-    const { membershipId } = await params;
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
 
+  const { membershipId } = await params;
+
+  try {
     const memSnap = await adminDb.doc(`memberships/${membershipId}`).get();
     if (!memSnap.exists) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,7 +43,7 @@ export async function GET(
 
     // Owner or invitee can read; anyone else gets 403 (the invite link must
     // have been forwarded, which we don't support).
-    if (membership.user_id !== uid) {
+    if (membership.user_id !== auth.uid) {
       return NextResponse.json(
         { error: "Forbidden", wrong_user: true, invited_user_id: membership.user_id },
         { status: 403 },
@@ -68,7 +69,7 @@ export async function GET(
       },
     });
   } catch (err) {
-    console.error("GET /api/invites/[membershipId] error:", err);
+    log.error("GET /api/invites/[membershipId] failed", { error: err, membership_id: membershipId });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
