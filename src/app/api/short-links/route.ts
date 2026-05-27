@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { validateTargetUrl } from "@/lib/utils/short-link-target";
+import { assertBearerToken, requireMembership } from "@/lib/server/authz";
+import { parseBody, parseQuery, z } from "@/lib/server/validation";
+import { log } from "@/lib/log";
+
+const GetQuerySchema = z.object({
+  church_id: z.string().min(1),
+});
+
+const CreateBodySchema = z.object({
+  church_id: z.string().min(1),
+  slug: z.string().min(1),
+  target_url: z.string().min(1),
+  label: z.string().min(1),
+  expires_in_days: z.number().optional(),
+});
+
+const PatchBodySchema = z.object({
+  church_id: z.string().min(1),
+  link_id: z.string().min(1),
+  action: z.literal("expire_now"),
+});
+
+const DeleteBodySchema = z.object({
+  church_id: z.string().min(1),
+  link_id: z.string().min(1),
+});
 
 /** Slugs reserved by the app's own routes. */
 const RESERVED_SLUGS = new Set([
@@ -27,35 +53,27 @@ const DEFAULT_EXPIRY_DAYS = 30;
  * Lists active short links for a church.
  */
 export async function GET(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const query = parseQuery(req, GetQuerySchema);
+  if (query instanceof NextResponse) return query;
+
+  const auth = await requireMembership(req, query.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+  void auth;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
-
-    const churchId = req.nextUrl.searchParams.get("church_id");
-    if (!churchId) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify membership
-    const memSnap = await adminDb.doc(`memberships/${userId}_${churchId}`).get();
-    if (!memSnap.exists || !["owner", "admin"].includes(memSnap.data()?.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const snap = await adminDb
       .collection("short_links")
-      .where("church_id", "==", churchId)
+      .where("church_id", "==", query.church_id)
       .orderBy("created_at", "desc")
       .get();
 
     const links = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ links });
   } catch (err) {
-    console.error("GET /api/short-links error:", err);
+    log.error("GET /api/short-links failed", { error: err, church_id: query.church_id });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -66,24 +84,19 @@ export async function GET(req: NextRequest) {
  * Body: { church_id, slug, target_url, label, expires_in_days? }
  */
 export async function POST(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const body = await parseBody(req, CreateBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+
+  const { church_id, slug, target_url, label, expires_in_days } = body;
+  const userId = auth.uid;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
-
-    const body = await req.json();
-    const { church_id, slug, target_url, label, expires_in_days } = body;
-
-    if (!church_id || !slug || !target_url || !label) {
-      return NextResponse.json(
-        { error: "Missing required fields: church_id, slug, target_url, label" },
-        { status: 400 },
-      );
-    }
-
     // Validate target URL — relative app paths or trusted-domain URLs only.
     const normalizedTarget = validateTargetUrl(String(target_url));
     if (!normalizedTarget.ok) {
@@ -107,12 +120,6 @@ export async function POST(req: NextRequest) {
         { error: "This slug is reserved. Please choose a different one." },
         { status: 409 },
       );
-    }
-
-    // Verify membership (admin+ only for short link creation)
-    const memSnap = await adminDb.doc(`memberships/${userId}_${church_id}`).get();
-    if (!memSnap.exists || !["owner", "admin"].includes(memSnap.data()?.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Verify subscription tier
@@ -188,7 +195,7 @@ export async function POST(req: NextRequest) {
     // instead of an opaque 500.
     const code = (err as { code?: string | number })?.code;
     const message = (err as Error)?.message || "Internal error";
-    console.error("POST /api/short-links error:", err);
+    log.error("POST /api/short-links failed", { error: err, church_id: body.church_id, slug: body.slug });
     // Firebase admin returns "failed-precondition" as the code string for
     // missing composite indexes; the gRPC numeric form is 9.
     if (code === "failed-precondition" || code === 9) {
@@ -219,38 +226,19 @@ export async function POST(req: NextRequest) {
  * Body: { church_id, link_id, action: "expire_now" }
  */
 export async function PATCH(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const body = await parseBody(req, PatchBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+  void auth;
+
+  const { church_id, link_id } = body;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
-    const body = await req.json();
-    const { church_id, link_id, action } = body as {
-      church_id: string;
-      link_id: string;
-      action: string;
-    };
-
-    if (!church_id || !link_id || !action) {
-      return NextResponse.json(
-        { error: "Missing required fields: church_id, link_id, action" },
-        { status: 400 },
-      );
-    }
-    if (action !== "expire_now") {
-      return NextResponse.json(
-        { error: `Unsupported action: ${action}` },
-        { status: 400 },
-      );
-    }
-
-    const memSnap = await adminDb.doc(`memberships/${userId}_${church_id}`).get();
-    if (!memSnap.exists || !["owner", "admin"].includes(memSnap.data()?.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const linkRef = adminDb.collection("short_links").doc(link_id);
     const snap = await linkRef.get();
     if (!snap.exists || snap.data()?.church_id !== church_id) {
@@ -263,7 +251,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true, expires_at: expiredAt });
   } catch (err) {
-    console.error("PATCH /api/short-links error:", err);
+    log.error("PATCH /api/short-links failed", { error: err, link_id: body.link_id });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
@@ -273,28 +261,19 @@ export async function PATCH(req: NextRequest) {
  * Body: { church_id, link_id }
  */
 export async function DELETE(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const body = await parseBody(req, DeleteBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+  void auth;
+
+  const { church_id, link_id } = body;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
-    const userId = decoded.uid;
-
-    const body = await req.json();
-    const { church_id, link_id } = body;
-
-    if (!church_id || !link_id) {
-      return NextResponse.json({ error: "Missing church_id or link_id" }, { status: 400 });
-    }
-
-    // Verify membership
-    const memSnap = await adminDb.doc(`memberships/${userId}_${church_id}`).get();
-    if (!memSnap.exists || !["owner", "admin"].includes(memSnap.data()?.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Verify link belongs to this church
     const linkSnap = await adminDb.doc(`short_links/${link_id}`).get();
     if (!linkSnap.exists || linkSnap.data()?.church_id !== church_id) {
       return NextResponse.json({ error: "Link not found" }, { status: 404 });
@@ -303,7 +282,7 @@ export async function DELETE(req: NextRequest) {
     await adminDb.doc(`short_links/${link_id}`).delete();
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("DELETE /api/short-links error:", err);
+    log.error("DELETE /api/short-links failed", { error: err, link_id: body.link_id });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

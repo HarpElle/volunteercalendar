@@ -164,6 +164,39 @@ export function requireCronSecret(req: NextRequest): NextResponse | null {
   return null;
 }
 
+// ─── Fast auth-header pre-check (Wave 3.3) ──────────────────────────────────
+
+/**
+ * Cheap pre-check: returns a 401 NextResponse if no `Authorization: Bearer`
+ * header is present. Does NOT verify the token (use `requireUser` for that).
+ *
+ * Purpose: keep the existing "401 before 400" response ordering for routes
+ * that need to call `parseBody` (which reads body before validating auth) to
+ * extract a church_id for `requireMembership`. Without this fast-path, a
+ * caller with no token + no body would receive 400 instead of 401 — a
+ * subtle behavior regression that breaks defensive client code and leaks
+ * a hint about the body shape before authenticating.
+ *
+ * Usage pattern when route auth depends on body fields:
+ *
+ *   const noAuth = assertBearerToken(req);
+ *   if (noAuth) return noAuth;            // 401 if header missing
+ *   const body = await parseBody(req, S); // 400 if body bad
+ *   if (body instanceof NextResponse) return body;
+ *   const auth = await requireMembership(req, body.church_id, "admin");
+ *   if (auth instanceof NextResponse) return auth;  // 401/403 from full verify
+ *
+ * Routes whose auth doesn't need body fields can skip this and use
+ * `requireUser` / `requireMembership` / `requirePlatformAdmin` directly —
+ * those already 401 first on missing header.
+ */
+export function assertBearerToken(req: NextRequest): NextResponse | null {
+  if (!req.headers.get("Authorization")?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return null;
+}
+
 // ─── User auth (Wave 3.1) ───────────────────────────────────────────────────
 
 export interface AuthedUser {
