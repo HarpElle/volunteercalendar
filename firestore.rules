@@ -75,6 +75,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ─── MFA recovery codes (Wave 4.2) ───
+    // Server-only via Admin SDK. Doc id = user uid. Contains hashed
+    // (bcrypt) one-time recovery codes for users with TOTP MFA enabled.
+    // Clients never read or write directly; everything routes through
+    // /api/account/mfa/* endpoints so the audit_logs trail is reliable
+    // and the bcrypt hashes never leak.
+    match /user_recovery_codes/{userId} {
+      allow read, write: if false;
+    }
+
     // ─── User Profiles ───
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;

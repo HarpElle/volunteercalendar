@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
+import { MfaSettingsCard } from "@/components/account/mfa-settings-card";
 import { formatPhoneInput, normalizePhone } from "@/lib/utils/phone";
 import { Spinner } from "@/components/ui/spinner";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
@@ -789,6 +790,14 @@ export default function AccountPage() {
           </div>
         </div>
       </section>
+
+      {/* Wave 4.2: Two-Factor Authentication */}
+      {user && (
+        <section className="mb-10">
+          <h2 className="mb-4 text-lg font-semibold text-vc-indigo">Security</h2>
+          <MfaSettingsCard user={user} />
+        </section>
+      )}
 
       {/* Calendar Feeds Section */}
       <section className="mb-10">
