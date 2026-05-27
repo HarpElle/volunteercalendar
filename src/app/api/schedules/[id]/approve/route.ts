@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import type { Schedule } from "@/lib/types";
 import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
-import { requireMembership } from "@/lib/server/authz";
+import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseBody, z } from "@/lib/server/validation";
 
 const ApproveBodySchema = z.object({
@@ -23,6 +23,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
   const body = await parseBody(req, ApproveBodySchema);
   if (body instanceof NextResponse) return body;
 

@@ -13,7 +13,7 @@ import {
   isBetaTester,
   isBetaTesterEmail,
 } from "@/lib/server/abuse-caps";
-import { requireUser, requireMembership } from "@/lib/server/authz";
+import { assertBearerToken, requireUser, requireMembership } from "@/lib/server/authz";
 import { parseBody, z } from "@/lib/server/validation";
 import { log } from "@/lib/log";
 
@@ -213,6 +213,9 @@ export async function POST(req: NextRequest) {
  * Requires: owner role, confirmed with org name in body.
  */
 export async function DELETE(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
   const body = await parseBody(req, DeleteBodySchema);
   if (body instanceof NextResponse) return body;
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, TIER_TO_PRICE } from "@/lib/stripe";
 import { adminDb } from "@/lib/firebase/admin";
-import { requireMembership } from "@/lib/server/authz";
+import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseBody, z } from "@/lib/server/validation";
 import { log } from "@/lib/log";
 
@@ -17,6 +17,9 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     );
   }
+
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
 
   const body = await parseBody(req, BodySchema);
   if (body instanceof NextResponse) return body;
