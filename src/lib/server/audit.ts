@@ -25,6 +25,7 @@ export type AuditAction =
   | "schedule.publish"
   | "schedule.unpublish"
   | "schedule.delete"
+  | "schedule.notify_leads"
   // Membership lifecycle
   | "membership.invite"
   | "membership.approve"

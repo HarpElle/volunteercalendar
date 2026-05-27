@@ -1155,19 +1155,40 @@ export default function SchedulesPage() {
                 volunteers={volunteers}
                 churchTimezone={churchTimezone}
                 onRequestApproval={async () => {
-                  if (!user || !churchId) return;
+                  if (!user || !churchId || !activeScheduleId) return;
+                  // Wave 4.3: Notify each ministry lead via the new
+                  // /notify-leads endpoint (was previously a stub that
+                  // hit /approve PATCH without ministry_id and 400'd).
                   try {
                     const token = await user.getIdToken();
-                    await fetch(`/api/schedules/${activeScheduleId}/approve`, {
-                      method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
+                    const res = await fetch(
+                      `/api/schedules/${activeScheduleId}/notify-leads`,
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ church_id: churchId }),
                       },
-                      body: JSON.stringify({ church_id: churchId }),
-                    });
+                    );
+                    if (res.ok) {
+                      const data = await res.json();
+                      const skippedNote =
+                        data.skipped > 0
+                          ? ` (${data.skipped} skipped — fill in team lead emails on the Teams page)`
+                          : "";
+                      setNotifyResult(
+                        `Sent approval request to ${data.sent} team lead${data.sent === 1 ? "" : "s"}.${skippedNote}`,
+                      );
+                    } else {
+                      const data = await res.json().catch(() => ({}));
+                      setNotifyResult(
+                        data.error || "Could not notify ministry leads. Please try again.",
+                      );
+                    }
                   } catch {
-                    // handled by panel
+                    setNotifyResult("Could not notify ministry leads. Please try again.");
                   }
                 }}
                 loading={transitioning}
