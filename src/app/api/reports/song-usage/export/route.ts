@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { TIER_LIMITS } from "@/lib/constants";
+import { audit, userActor } from "@/lib/server/audit";
 import type { SongUsageRecord } from "@/lib/types";
 
 /**
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     // Codex Phase 6 Pass A pattern: gate by tier BEFORE other lookups.
     const gate = await requireModuleTier(req, "worship");
     if (!gate.ok) return gate.response;
-    const { churchId, role } = gate.ctx;
+    const { churchId, role, userId } = gate.ctx;
 
     const { searchParams } = req.nextUrl;
     const from = searchParams.get("from");
@@ -83,6 +84,24 @@ export async function GET(req: NextRequest) {
 
       const csv = [header, ...rows].join("\n");
       const dateLabel = from && to ? `${from}_to_${to}` : "all";
+
+      // Wave 4.1: CCLI CSV export is a sensitive (licensing-trail) export
+      // that gates on Growth+ — worth its own row in the Activity feed so
+      // org admins can see who pulled the report each cycle.
+      void audit({
+        church_id: churchId,
+        actor: userActor(userId),
+        action: "export.song_usage",
+        target_type: "song_usage_report",
+        target_id: null,
+        metadata: {
+          from: from || null,
+          to: to || null,
+          record_count: records.length,
+          format: "csv",
+        },
+        outcome: "ok",
+      });
 
       return new NextResponse(csv, {
         headers: {

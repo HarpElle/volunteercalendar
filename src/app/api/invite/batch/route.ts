@@ -4,6 +4,7 @@ import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { buildInviteEmail } from "@/lib/utils/email-templates";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { audit, userActor } from "@/lib/server/audit";
 
 /** Hard cap on items per batch request — also bounds invite fan-out per call. */
 const MAX_BATCH_ITEMS = 50;
@@ -199,6 +200,23 @@ export async function POST(req: NextRequest) {
                 volunteer_id: volunteerId,
                 updated_at: now,
               });
+              // Wave 4.1: batch-approval is still a membership.approve event;
+              // audit each one so the Activity feed shows per-person approvals
+              // rather than a single opaque "batch ran".
+              void audit({
+                church_id,
+                actor: userActor(inviterUid),
+                action: "membership.approve",
+                target_type: "membership",
+                target_id: existingMemId,
+                metadata: {
+                  email,
+                  role: role || "volunteer",
+                  path: "batch_approved_self_registered",
+                  queue_item_id: queueId,
+                },
+                outcome: "ok",
+              });
               await queueRef.update({ status: "sent", sent_at: now, volunteer_id: volunteerId });
               sent++;
               continue;
@@ -220,6 +238,23 @@ export async function POST(req: NextRequest) {
           });
 
           acceptUrl = `${baseUrl}/invites/${existingMemId}`;
+
+          // Wave 4.1: audit the invite (existing-user path).
+          void audit({
+            church_id,
+            actor: userActor(inviterUid),
+            action: "membership.invite",
+            target_type: "membership",
+            target_id: existingMemId,
+            metadata: {
+              email,
+              role: role || "volunteer",
+              invitee_user_id: inviteeUid,
+              path: "batch_existing_user",
+              queue_item_id: queueId,
+            },
+            outcome: "ok",
+          });
         } else {
           // Store pre-invite for when they register
           const placeholderDocId = `invite_${Buffer.from(email).toString("base64url")}_${church_id}`;
@@ -234,6 +269,22 @@ export async function POST(req: NextRequest) {
           });
 
           acceptUrl = `${baseUrl}/register?redirect=/join/${church_id}&email=${encodeURIComponent(email)}`;
+
+          // Wave 4.1: audit the invite (pre-registration path).
+          void audit({
+            church_id,
+            actor: userActor(inviterUid),
+            action: "membership.invite",
+            target_type: "pending_invite",
+            target_id: placeholderDocId,
+            metadata: {
+              email,
+              role: role || "volunteer",
+              path: "batch_pending_registration",
+              queue_item_id: queueId,
+            },
+            outcome: "ok",
+          });
         }
 
         // Send invite email

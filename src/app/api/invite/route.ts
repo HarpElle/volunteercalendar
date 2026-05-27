@@ -4,6 +4,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { audit, userActor } from "@/lib/server/audit";
 
 /**
  * POST /api/invite
@@ -116,6 +117,22 @@ export async function POST(request: NextRequest) {
             invited_by: inviterUid,
             updated_at: new Date().toISOString(),
           });
+          // Wave 4.1: approving a self-registered user IS an admin
+          // membership.approve event (different from a fresh invite).
+          void audit({
+            church_id: churchId,
+            actor: userActor(inviterUid),
+            action: "membership.approve",
+            target_type: "membership",
+            target_id: existingId,
+            metadata: {
+              email,
+              role,
+              ministry_scope: ministryScope || [],
+              path: "invite_approved_self_registered",
+            },
+            outcome: "ok",
+          });
           return NextResponse.json({ success: true, action: "approved_existing" });
         }
       }
@@ -162,6 +179,22 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Wave 4.1: audit the invite (existing-user path).
+      void audit({
+        church_id: churchId,
+        actor: userActor(inviterUid),
+        action: "membership.invite",
+        target_type: "membership",
+        target_id: membershipId,
+        metadata: {
+          email,
+          role,
+          ministry_scope: ministryScope || [],
+          invitee_user_id: inviteeUid,
+        },
+        outcome: "ok",
+      });
+
       return NextResponse.json({ success: true, membershipId });
     } else {
       // User doesn't exist yet — store a "pre-invite" that will be matched on registration
@@ -199,6 +232,23 @@ export async function POST(request: NextRequest) {
           text: emailContent.text,
         });
       }
+
+      // Wave 4.1: audit the invite (pre-registration path —
+      // target is the pending_invites doc since membership doesn't exist yet).
+      void audit({
+        church_id: churchId,
+        actor: userActor(inviterUid),
+        action: "membership.invite",
+        target_type: "pending_invite",
+        target_id: placeholderDocId,
+        metadata: {
+          email,
+          role,
+          ministry_scope: ministryScope || [],
+          path: "pending_registration",
+        },
+        outcome: "ok",
+      });
 
       return NextResponse.json({ success: true, pending: true });
     }

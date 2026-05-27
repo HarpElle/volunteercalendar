@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { validateTargetUrl } from "@/lib/utils/short-link-target";
 import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseBody, parseQuery, z } from "@/lib/server/validation";
+import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
 
 const GetQuerySchema = z.object({
@@ -180,6 +181,29 @@ export async function POST(req: NextRequest) {
       created_at: now,
       expires_at: expiresAt,
     });
+
+    // Wave 4.1: only audit creation when the target lives off our own
+    // domain (the "allowlist" trusted-external kind). Relative app paths
+    // and same-domain volunteercal links aren't "external" in the sense
+    // that matters for compliance / abuse triage. Keeps the Activity feed
+    // signal-rich instead of flooded with internal-link creates.
+    if (normalizedTarget.kind === "allowlist") {
+      void audit({
+        church_id,
+        actor: userActor(userId),
+        action: "short_link.create_external",
+        target_type: "short_link",
+        target_id: docRef.id,
+        metadata: {
+          slug: normalizedSlug,
+          target_url: normalizedTarget.value,
+          target_kind: normalizedTarget.kind,
+          label,
+          expires_at: expiresAt,
+        },
+        outcome: "ok",
+      });
+    }
 
     return NextResponse.json({
       id: docRef.id,

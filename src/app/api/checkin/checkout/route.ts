@@ -4,6 +4,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
+import { audit, kioskActor, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { timingSafeEqual } from "crypto";
 import type { CheckInSession, CheckInAlert } from "@/lib/types";
 
@@ -58,7 +59,15 @@ export async function POST(req: NextRequest) {
 
     // --- Mode 1: Session-specific checkout ---
     if (session_id) {
-      return checkoutSession(churchRef, church_id, session_id, security_code, volunteer_user_id, now);
+      return checkoutSession(
+        churchRef,
+        church_id,
+        session_id,
+        security_code,
+        volunteer_user_id,
+        now,
+        kiosk.station_id,
+      );
     }
 
     // --- Mode 2: Code-only kiosk checkout ---
@@ -146,6 +155,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Wave 4.1: child-data event — checkout is the second half of the
+    // chain-of-custody pair that started at kiosk.checkin. One audit row
+    // per session checked out so compliance auditors can reconstruct who
+    // released each child and when.
+    for (let i = 0; i < activeSessions.length; i++) {
+      const sessionDoc = activeSessions[i];
+      void audit({
+        church_id,
+        actor: kiosk.station_id ? kioskActor(kiosk.station_id) : SYSTEM_ACTOR,
+        action: "kiosk.checkout",
+        target_type: "checkin_session",
+        target_id: sessionDoc.id,
+        metadata: {
+          child_id: childIds[i],
+          checked_out_by_user_id: volunteer_user_id || null,
+          mode: "code_only_batch",
+          batch_size: activeSessions.length,
+        },
+        outcome: "ok",
+      });
+    }
+
     return NextResponse.json({
       success: true,
       children,
@@ -170,6 +201,7 @@ async function checkoutSession(
   securityCode: string,
   volunteerUserId: string | undefined,
   now: Date,
+  stationId: string | null,
 ) {
   const sessionSnap = await churchRef
     .collection("checkInSessions")
@@ -249,6 +281,21 @@ async function checkoutSession(
   if (session.household_id) {
     sendGuardianCheckoutSms(churchRef, churchId, session.household_id, children).catch(() => {});
   }
+
+  // Wave 4.1: child-data event for the session-specific path.
+  void audit({
+    church_id: churchId,
+    actor: stationId ? kioskActor(stationId) : SYSTEM_ACTOR,
+    action: "kiosk.checkout",
+    target_type: "checkin_session",
+    target_id: sessionId,
+    metadata: {
+      child_id: session.child_id,
+      checked_out_by_user_id: volunteerUserId || null,
+      mode: "session_specific",
+    },
+    outcome: "ok",
+  });
 
   return NextResponse.json({
     success: true,
