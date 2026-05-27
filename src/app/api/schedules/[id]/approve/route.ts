@@ -1,57 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import type { Schedule, ApprovalStatus } from "@/lib/types";
+import { adminDb } from "@/lib/firebase/admin";
+import type { Schedule } from "@/lib/types";
 import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
+import { requireMembership } from "@/lib/server/authz";
+import { parseBody, z } from "@/lib/server/validation";
 
-interface ApproveBody {
-  church_id: string;
-  ministry_id: string;
-  status: ApprovalStatus;
-  notes?: string;
-}
+const ApproveBodySchema = z.object({
+  church_id: z.string().min(1),
+  ministry_id: z.string().min(1),
+  status: z.enum(["pending", "approved", "rejected"]),
+  notes: z.string().optional(),
+});
 
 /**
  * PATCH /api/schedules/{id}/approve
  *
  * Mark a ministry's assignments as approved (or rejected) in the schedule.
- * Requires the caller to be a ministry lead for the specified ministry.
+ * Requires the caller to be a ministry lead for the specified ministry,
+ * OR a scheduler scoped to this ministry, OR admin/owner.
  */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const body = await parseBody(req, ApproveBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  // Authenticate the caller as ANY active member of the church first;
+  // the ministry-lead / ministry-scheduler check happens below since
+  // it's more nuanced than a simple role threshold.
+  const auth = await requireMembership(req, body.church_id, "volunteer");
+  if (auth instanceof NextResponse) return auth;
+
+  const { id: scheduleId } = await params;
+  const { church_id, ministry_id, status, notes } = body;
+  const userId = auth.uid;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
-    const { id: scheduleId } = await params;
-
-    const body = (await req.json()) as ApproveBody;
-    const { church_id, ministry_id, status, notes } = body;
-
-    if (!church_id || !ministry_id || !status) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
-
-    // Verify membership + permissions
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const membership = membershipSnap.data()!;
-    const role = membership.role as string;
-    const ministryScope = (membership.ministry_scope as string[]) || [];
 
     // Must be admin/owner OR a scheduler with scope for this ministry
-    const isAdmin = ["owner", "admin"].includes(role);
+    const isAdmin = auth.role === "admin" || auth.role === "owner";
     const isMinistryScheduler =
-      role === "scheduler" &&
-      (ministryScope.length === 0 || ministryScope.includes(ministry_id));
+      auth.role === "scheduler" &&
+      (auth.ministry_scope.length === 0 || auth.ministry_scope.includes(ministry_id));
 
     // Also allow if they're the ministry lead
     const churchRef = adminDb.collection("churches").doc(church_id);

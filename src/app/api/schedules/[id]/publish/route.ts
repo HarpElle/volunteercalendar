@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { buildConfirmationEmail } from "@/lib/utils/emails";
 import { audit, userActor } from "@/lib/server/audit";
 import { enqueueOutboxEntry } from "@/lib/server/outbox";
 import { fanOutScheduleStatus } from "@/lib/server/schedule-status-fanout";
+import { requireMembership } from "@/lib/server/authz";
+import { parseBody, z } from "@/lib/server/validation";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+
+const BodySchema = z.object({
+  church_id: z.string().min(1),
+});
 
 /**
  * POST /api/schedules/{id}/publish
@@ -19,34 +25,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const body = await parseBody(req, BodySchema);
+  if (body instanceof NextResponse) return body;
+
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+
+  const { id: scheduleId } = await params;
+  const { church_id } = body;
+  const userId = auth.uid;
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userId = decoded.uid;
-    const { id: scheduleId } = await params;
-
-    const body = await req.json();
-    const { church_id } = body as { church_id: string };
-
-    if (!church_id) {
-      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
-    }
-
-    // Verify admin role
-    const membershipId = `${userId}_${church_id}`;
-    const membershipSnap = await adminDb.doc(`memberships/${membershipId}`).get();
-    if (!membershipSnap.exists) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-    const role = membershipSnap.data()!.role as string;
-    if (!["owner", "admin"].includes(role)) {
-      return NextResponse.json({ error: "Only admins can publish schedules" }, { status: 403 });
-    }
-
     const churchRef = adminDb.collection("churches").doc(church_id);
     const scheduleRef = churchRef.collection("schedules").doc(scheduleId);
     const [scheduleSnap, churchSnap] = await Promise.all([
