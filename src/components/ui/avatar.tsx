@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import type { OrgEligibility } from "@/lib/utils/eligibility";
 
 const SIZE_MAP = {
@@ -8,6 +9,17 @@ const SIZE_MAP = {
   md: "h-10 w-10 text-sm",
   lg: "h-14 w-14 text-base",
   xl: "h-20 w-20 text-xl",
+} as const;
+
+// Wave 5 H.6: next/image wants explicit width/height. These mirror
+// the Tailwind h-* / w-* classes above (8 = 32px, 10 = 40px, 14 = 56px,
+// 20 = 80px) so the rendered + intrinsic sizes match. Same dimensions
+// drive the srcset hint for proper retina-density delivery.
+const SIZE_PX_MAP = {
+  sm: 32,
+  md: 40,
+  lg: 56,
+  xl: 80,
 } as const;
 
 const ELIGIBILITY_DOTS: Record<string, { color: string; ring: string; label: string } | null> = {
@@ -58,10 +70,16 @@ export function Avatar({
       onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } } : undefined}
     >
       {showPhoto ? (
-        <img
+        <Image
           src={photoUrl!}
           alt={name}
+          width={SIZE_PX_MAP[size]}
+          height={SIZE_PX_MAP[size]}
           onError={() => setImgError(true)}
+          // unoptimized only for non-Firebase non-Google hosts (e.g.
+          // if a user pasted in an external URL). For Firebase Storage
+          // + Google Photos / Gravatar, next/image's optimizer + CDN
+          // are doing real work — keep that on.
           className={`rounded-full object-cover ${SIZE_MAP[size]}`}
         />
       ) : (

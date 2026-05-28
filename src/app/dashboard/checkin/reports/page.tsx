@@ -1,17 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/lib/context/auth-context";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+
+// Wave 5 H.6: recharts is ~95KB gzipped. Both charts live in
+// `_charts.tsx`; dynamic-importing them keeps the dependency out of
+// the dashboard's initial bundle and defers it to the moment an admin
+// opens a chart-bearing report (Attendance over time, Per-room
+// breakdown). The two named imports share the same generated chunk,
+// so picking either chart pays the cost only once.
+const ChartFallback = () => (
+  <div className="flex h-[200px] w-full items-center justify-center">
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
+  </div>
+);
+const AttendanceChart = dynamic(
+  () => import("./_charts").then((m) => m.AttendanceChart),
+  { ssr: false, loading: ChartFallback },
+);
+const RoomChart = dynamic(
+  () => import("./_charts").then((m) => m.RoomChart),
+  { ssr: false, loading: ChartFallback },
+);
 
 type ReportType = "daily" | "attendance" | "room" | "first_time";
 
@@ -72,10 +83,8 @@ const REPORT_LABELS: Record<ReportType, string> = {
   first_time: "First-Time Visitors",
 };
 
-// Brand colors
-const VC_CORAL = "#E07A5F";
-const VC_SAGE = "#7FA67D";
-const VC_INDIGO = "#2D3047";
+// Brand colors moved into `./_charts.tsx` alongside the recharts
+// usage (Wave 5 H.6 lazy-load). Left no constants in this file.
 
 /**
  * /dashboard/checkin/reports — Visual attendance reports with charts and tables.
@@ -517,42 +526,7 @@ function AttendanceReportView({ data }: { data: AttendanceReport }) {
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-vc-border-light p-5">
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={entries} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E8E4DE" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: "#8E8A82" }}
-                tickLine={false}
-                axisLine={{ stroke: "#E8E4DE" }}
-                interval={entries.length > 14 ? Math.floor(entries.length / 10) : 0}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "#8E8A82" }}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 12,
-                  border: "1px solid #E8E4DE",
-                  fontSize: 13,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                }}
-                labelFormatter={(label) => `${label}`}
-                formatter={(value) => [String(value), "Check-ins"]}
-              />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                {entries.map((entry) => (
-                  <Cell
-                    key={entry.date}
-                    fill={entry.count === peak ? VC_CORAL : `${VC_CORAL}99`}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <AttendanceChart entries={entries} peak={peak} />
         </div>
       )}
     </div>
@@ -592,40 +566,7 @@ function RoomReportView({ data }: { data: RoomReport }) {
         <>
           {/* Horizontal stacked bar chart */}
           <div className="bg-white rounded-xl border border-vc-border-light p-5 mb-5">
-            <ResponsiveContainer width="100%" height={Math.max(180, rooms.length * 48 + 40)}>
-              <BarChart
-                data={rooms}
-                layout="vertical"
-                margin={{ top: 8, right: 16, bottom: 4, left: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8E4DE" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11, fill: "#8E8A82" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#E8E4DE" }}
-                  allowDecimals={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 12, fill: VC_INDIGO }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={120}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 12,
-                    border: "1px solid #E8E4DE",
-                    fontSize: 13,
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                  }}
-                />
-                <Bar dataKey="stillIn" name="Still In" stackId="a" fill={VC_CORAL} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="checkedOut" name="Checked Out" stackId="a" fill={VC_SAGE} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <RoomChart rooms={rooms} />
           </div>
 
           {/* Detail table */}

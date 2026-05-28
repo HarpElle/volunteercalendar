@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 interface ChildCardProps {
   id: string;
   name: string;
@@ -55,11 +57,15 @@ export function ChildCard({
         )}
       </div>
 
-      {/* Avatar */}
+      {/* Avatar (Wave 5 H.6: next/image — kiosk renders many of these
+          in a grid, so optimization + lazy-load matters more here than
+          almost anywhere else). */}
       {photoUrl ? (
-        <img
+        <Image
           src={photoUrl}
           alt={name}
+          width={64}
+          height={64}
           className="w-16 h-16 rounded-full object-cover"
         />
       ) : (
