@@ -7,8 +7,10 @@ import {
   where,
   limit,
   onSnapshot,
+  type FirestoreError,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { log } from "@/lib/log";
 
 /**
  * Lightweight real-time listener for unread notification presence.
@@ -39,9 +41,14 @@ export function useNotifications(
       (snapshot) => {
         setHasUnread(!snapshot.empty);
       },
-      (error) => {
-        console.error("useNotifications listener error:", error);
+      (error: FirestoreError) => {
         setHasUnread(false);
+        // permission-denied is transient during auth-state transitions (token refresh, sign-out, org switch); the listener recovers on its own.
+        if (error.code === "permission-denied") {
+          log.debug("useNotifications listener permission-denied (transient)", { error });
+          return;
+        }
+        log.error("useNotifications listener error", { error, code: error.code });
       },
     );
 

@@ -369,6 +369,6 @@ All steps landed and were verified by Codex in production. Closing summary:
 - **Wave 6 — annual billing** (20% off, "2 months free") + custom Firebase auth domain (`auth.volunteercal.com`). Stripe live keys present; needs 3 yearly Price objects (by lookup key) + a monthly/annual pricing toggle + `subscription_interval` on the church doc. Sequencing TBD with Jason before any code lands.
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
 - **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf, no security dependency; revisit post-launch.
-- **Console-noise cleanup**: quiet the benign `useNotifications` permission-denied on the volunteer dashboard (flagged 2026-05-28; not a blocker).
+- **Console-noise cleanup — DONE (2026-05-28)**: `useNotifications` onSnapshot error handler now treats `permission-denied` as benign (routed to `log.debug` instead of `console.error`) and only surfaces genuinely unexpected listener errors via `log.error`. No console permission warning on the volunteer dashboard during normal load / org switch. (`src/lib/hooks/use-notifications.ts`)
 - **Wave 3.4 long-tail route sweep**: incremental as files get touched
 - **Polish item from Wave 4.2 retest**: clearer UI copy when MFA enrollment fails because the user's email isn't verified — currently surfaces as a Firebase error code. Fold into Wave 5 H.1 a11y pass or carry as standalone polish.
