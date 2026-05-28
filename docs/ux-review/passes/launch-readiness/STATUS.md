@@ -14,7 +14,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
 | **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2), #117 (4.2 hotfix) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` + `65ca484` | ✅ Closed (all sub-items Codex PASS) |
-| **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
+| **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | #119–#128 | `9f76668` | ✅ Closed — Batches A–D + E phase 1 + E phase 3 (incl. 2.2b rule lockdown) merged & Codex-verified; E phase 2 (admin-page perf) deferred to post-launch |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
 | **8** | Customer comms + outreach + marketing | — | — | ⏸ Queued |
@@ -347,30 +347,28 @@ Self-service mode volunteers currently see their own draft-schedule claims on My
 | E design doc | #123 | ✅ Merged |
 | E phase 1 — `/api/dashboard-summary` + consumer + Data Cache fix | #124, #125 | ✅ Merged (Codex PASS; Sev 4 cache finding fixed via unstable_cache) |
 | **E phase 2 — Schedules + Service Day server endpoints** | — | ⏸ **DEFERRED to post-launch** (decision 2026-05-27). Pure admin-page perf; no security/correctness dependency. Pattern proven by phase 1. Not a crumb — a conscious scope call. |
-| **E phase 3 — My Schedule endpoint + 2.2b rule lockdown** | (in progress) | 🚧 Endpoint built + tested; page-rewire + rule pending |
+| **E phase 3 — My Schedule endpoint + 2.2b rule lockdown** | #126, #127, #128 | ✅ **Merged + verified in prod.** Rule live (deploy-rules green on `caf03f0`); Codex security retest PASS. Check-in-window hotfix (#127 helper + #128 route wiring) — Codex retest PASS in America/Chicago. |
 
-### Batch E phase 3 — precise state (resumable)
+### Batch E phase 3 — SHIPPED (2026-05-28)
 
-**Done + verified (this session):**
-- `src/app/api/my-schedule/route.ts` — the authorized server read path. Multi-church aggregation via the caller's own active memberships (no church_id param → no cross-tenant surface). Preserves the self-signup carve-out (own self_signup claims visible on drafts; scheduler-pushed assignments only visible once published). Returns `{ assignments, teamAssignments, services, ministries, events, selfServiceSchedules, volunteers, orgPrereqsByChurch, myPersonByChurch, myMinistryIds, myVolunteerId }`. Not cached (per-user, mutation-sensitive).
-- `tests/integration/my-schedule.test.ts` — 7 cases, all green. Locks in the SECURITY-CRITICAL carve-out (self-signup-draft visible, scheduler-draft hidden, published visible), team-assignment aggregation, self-service-schedule filtering, and cross-user isolation.
+All steps landed and were verified by Codex in production. Closing summary:
 
-**Remaining (high-risk — do with fresh context, NOT rushed):**
-1. Rewire `src/app/dashboard/my-schedule/page.tsx` to consume `/api/my-schedule` instead of its 5 client assignment reads:
-   - `loadForChurch` per-church loop → single fetch, map response into existing state setters
-   - `refetchChurchState` (after claim) 2 reads → re-fetch the endpoint
-   - open-slot computation: feed from `data.teamAssignments` (already returned) instead of re-reading
-2. Apply the assignment-rule lockdown to `firestore.rules` (verbatim from the prep notes block above) — this is the LAST commit, gated on step 1 being verified, because the rule denies the very client reads step 1 removes.
-3. Port the 8 emulator rule test cases into `tests/rules/firestore.rules.test.ts` (the 8 cases are listed in the prep notes above).
-4. Cleanup any now-dead client assignment-read imports in the page.
+- **`/api/my-schedule`** (#126) — authorized Admin-SDK read path. Multi-church aggregation from the caller's own active memberships (no church_id param → no cross-tenant surface), self-signup carve-out preserved server-side. `tests/integration/my-schedule.test.ts` (7 cases) locks the carve-out + cross-user isolation.
+- **My Schedule page rewired** (#126) — `loadAll` + `refetchChurchState` now consume the endpoint; the 5 client assignment reads are gone.
+- **Assignment-rule lockdown** (#126) — `firestore.rules` `/assignments` (top-level + nested) now denies volunteer client reads of non-published work via the denormalized `schedule_status` (`resource.data.get('schedule_status','') in ['published','archived']`), scheduler+ bypass. `tests/rules/firestore.rules.test.ts` gained 12 lockdown assertions (published-filtered list succeeds, unfiltered fails, draft/legacy-orphan denied, cross-tenant denied, scheduler/admin bypass). Live via deploy-rules on `caf03f0`. **Codex security retest PASS.**
+- **Pre-lockdown audit** — only two volunteer-facing client assignment reads existed: the My Schedule page (→ endpoint) and `SmartCheckInBanner` (→ now filters `where('schedule_status','==','published')`, #126). Service Day / Schedules / People analytics are scheduler+ (bypass branch); confirm/cron/iCal use the Admin SDK.
 
-**Why it's safe to be parked here**: the endpoint is additive — nothing consumes it yet, the page still uses client reads, and the rule is unchanged. Production behaves exactly as before. The rule (the only irreversible-feeling change) is explicitly the last step, gated on the page rewire landing + verifying first.
+**Follow-up — check-in window timezone bug (Codex Sev 2, separate from the rule):** `SmartCheckInBanner` prompted but `POST /api/check-in/self` 403'd "window closed" off-UTC. Root cause was a runtime-local-zone `new Date()` parse that ignored the church timezone. Fixed by the shared deterministic helper `src/lib/utils/check-in-window.ts` (#127, 14 unit tests) — but #127's commit message overstated scope and **never actually wired the server route**; #128 finished the wiring. **Codex retest PASS in America/Chicago** (happy path + outside-window negative control).
+
+**Known non-blocker (flagged separately):** the volunteer dashboard logs a benign `permission-denied` from the `useNotifications` onSnapshot listener during auth/org-switch transitions — pre-existing, unrelated to the rule work, console-noise only.
 
 ---
 
 ## Next up
 
-- **Wave 5 — UX polish + assignment-rule tightening** (4-5 days). 8 polish items per the plan + the deferred 2.2b rule lock-down that now requires the My Schedule server-component refactor. Sequencing TBD with Jason before any code lands.
+- **Wave 6 — annual billing** (20% off, "2 months free") + custom Firebase auth domain (`auth.volunteercal.com`). Stripe live keys present; needs 3 yearly Price objects (by lookup key) + a monthly/annual pricing toggle + `subscription_interval` on the church doc. Sequencing TBD with Jason before any code lands.
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
+- **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf, no security dependency; revisit post-launch.
+- **Console-noise cleanup**: quiet the benign `useNotifications` permission-denied on the volunteer dashboard (flagged 2026-05-28; not a blocker).
 - **Wave 3.4 long-tail route sweep**: incremental as files get touched
 - **Polish item from Wave 4.2 retest**: clearer UI copy when MFA enrollment fails because the user's email isn't verified — currently surfaces as a Firebase error code. Fold into Wave 5 H.1 a11y pass or carry as standalone polish.
