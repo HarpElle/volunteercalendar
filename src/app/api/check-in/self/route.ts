@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { checkInWindowStatus } from "@/lib/utils/check-in-window";
 import type { ChurchSettings } from "@/lib/types";
 
 const DEFAULT_WINDOW_BEFORE = 60; // minutes
@@ -113,29 +114,31 @@ export async function POST(req: NextRequest) {
     const windowBefore = settings.check_in_window_before ?? DEFAULT_WINDOW_BEFORE;
     const windowAfter = settings.check_in_window_after ?? DEFAULT_WINDOW_AFTER;
 
-    const serviceDateTime = new Date(
-      new Date(`${assignment.service_date}T${service.start_time || "09:00"}`).toLocaleString("en-US", { timeZone: timezone })
-    );
-    // Use a more reliable timezone approach
-    const now = new Date();
-    const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
-    const serviceInTz = new Date(
-      new Date(`${assignment.service_date}T${service.start_time || "09:00"}`).toLocaleString("en-US", { timeZone: timezone })
-    );
+    // Wave 5 Batch E phase 3 follow-up (Codex Sev 2): use the SHARED
+    // deterministic helper so the server agrees with the SmartCheckInBanner.
+    // The old inline calc parsed `${service_date}T${start_time}` with
+    // `new Date(...)`, which interprets a suffix-less timestamp in the
+    // RUNTIME's local zone — UTC on Vercel — so it ignored the church
+    // timezone and rejected valid check-ins by the whole UTC↔church gap
+    // (~4h for America/New_York in summer → "Check-in window has closed").
+    // checkInWindowStatus() converts the wall-clock start in the church tz
+    // to an absolute instant and diffs against now (absolute-vs-absolute),
+    // so banner and endpoint always agree. PR #127 shipped this helper +
+    // wired the banner but never actually wired this route.
+    const { open, diffMinutes } = checkInWindowStatus({
+      serviceDate: assignment.service_date,
+      startTime: service.start_time || "09:00",
+      timeZone: timezone,
+      windowBefore,
+      windowAfter,
+    });
 
-    const diffMinutes = (nowInTz.getTime() - serviceInTz.getTime()) / 60000;
-
-    if (diffMinutes < -windowBefore) {
-      return NextResponse.json(
-        { error: `Check-in window opens ${windowBefore} minutes before service` },
-        { status: 403 },
-      );
-    }
-    if (diffMinutes > windowAfter) {
-      return NextResponse.json(
-        { error: "Check-in window has closed" },
-        { status: 403 },
-      );
+    if (!open) {
+      const error =
+        diffMinutes < -windowBefore
+          ? `Check-in window opens ${windowBefore} minutes before service`
+          : "Check-in window has closed";
+      return NextResponse.json({ error }, { status: 403 });
     }
 
     // Mark attendance
