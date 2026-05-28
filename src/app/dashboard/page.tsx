@@ -3,15 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
-import { getChurchDocuments } from "@/lib/firebase/firestore";
-import { where } from "firebase/firestore";
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
+import { useActiveCampus } from "@/lib/context/campus-context";
 import { Spinner } from "@/components/ui/spinner";
-import type { Schedule, Assignment, Service, Ministry, Person } from "@/lib/types";
-import { getServiceMinistryIds, getAllServiceRoles } from "@/lib/utils/service-helpers";
 import { isAdmin } from "@/lib/utils/permissions";
-import { calculateRetentionSummary, type RetentionSummary } from "@/lib/services/retention-analytics";
+import type { RetentionSummary } from "@/lib/services/retention-analytics";
 
 interface DashboardStats {
   volunteers: number;
@@ -39,137 +34,33 @@ export default function DashboardPage() {
 
   const churchId = activeMembership?.church_id || profile?.default_church_id || profile?.church_id;
   const hasOrg = !!churchId;
+  const { activeCampusId } = useActiveCampus();
 
+  // Wave 5 Batch E step 2: dashboard home consumes /api/dashboard-summary
+  // instead of running 6 parallel Firestore reads + ~120 lines of
+  // post-fetch computation on every mount. The endpoint does the same
+  // work server-side, caches the result at the edge for 60s, and
+  // returns a single shaped { stats, retention } response that this
+  // page renders directly. Step 3 (RSC conversion) is a follow-up
+  // that moves the fetch into the server-component tree itself.
   useEffect(() => {
-    if (!churchId) return;
+    if (!churchId || !user) return;
     async function load() {
       setError(false);
       try {
-        // Only load active volunteers and recent assignments (last 90 days)
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        const cutoffDate = ninetyDaysAgo.toISOString().split("T")[0];
-
-        const [peopleDocs, mins, svcs, scheds, assigns, churchSnap] = await Promise.all([
-          getChurchDocuments(churchId!, "people",
-            where("is_volunteer", "==", true),
-            where("status", "==", "active"),
-          ),
-          getChurchDocuments(churchId!, "ministries"),
-          getChurchDocuments(churchId!, "services"),
-          getChurchDocuments(churchId!, "schedules"),
-          getChurchDocuments(churchId!, "assignments",
-            where("service_date", ">=", cutoffDate),
-          ),
-          getDoc(doc(db, "churches", churchId!)),
-        ]);
-
-        const volunteers: Person[] = (peopleDocs as unknown as Person[])
-          .filter((d) => d.is_volunteer);
-        const ministries = mins as unknown as Ministry[];
-        const orgPrereqs = churchSnap.exists() ? (churchSnap.data().org_prerequisites || []) : [];
-        const hasPrereqs = orgPrereqs.length > 0 || ministries.some((m) => m.prerequisites && m.prerequisites.length > 0);
-        const services = svcs as unknown as Service[];
-        const schedules = scheds as unknown as Schedule[];
-        const assignments = assigns as unknown as Assignment[];
-
-        const ministryMap = new Map(ministries.map((m) => [m.id, m]));
-        const serviceMap = new Map(services.map((s) => [s.id, s]));
-
-        // Active = published or in_review or approved
-        const activeScheds = schedules.filter((s) =>
-          s.status === "published" || s.status === "in_review" || s.status === "approved"
-        );
-        const activeSchedIds = new Set(activeScheds.map((s) => s.id));
-        const activeAssignments = assignments.filter((a) => activeSchedIds.has(a.schedule_id));
-
-        // Fill rate: total role slots across active schedules vs filled
-        const totalSlots = activeScheds.reduce((sum, sched) => {
-          // Count unique service-date combos in assignments for this schedule
-          const schedAssigns = assignments.filter((a) => a.schedule_id === sched.id);
-          const serviceDates = new Set(schedAssigns.map((a) => `${a.service_id}:${a.service_date}`));
-          let slots = 0;
-          for (const sd of serviceDates) {
-            const serviceId = sd.split(":")[0];
-            const svc = serviceMap.get(serviceId);
-            if (svc) slots += svc.roles.reduce((r, role) => r + role.count, 0);
-          }
-          return sum + slots;
-        }, 0);
-
-        const confirmed = activeAssignments.filter((a) => a.status === "confirmed").length;
-        const declined = activeAssignments.filter((a) => a.status === "declined").length;
-        const pendingCount = activeAssignments.filter((a) => a.status === "draft").length;
-
-        // Volunteer equity — count assignments per volunteer
-        const volCounts = new Map<string, number>();
-        for (const a of activeAssignments) {
-          const vid = a.person_id;
-          volCounts.set(vid, (volCounts.get(vid) || 0) + 1);
-        }
-        const topVolunteers = Array.from(volCounts.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([vid, count]) => ({
-            name: volunteers.find((v) => v.id === vid)?.name || "Unknown",
-            count,
-          }));
-
-        const scheduledVolIds = new Set(activeAssignments.map((a) => a.person_id));
-        const unscheduledVolunteers = volunteers.filter((v) => !scheduledVolIds.has(v.id)).length;
-
-        // Upcoming services (next 14 days)
-        const today = new Date();
-        const twoWeeks = new Date(today);
-        twoWeeks.setDate(twoWeeks.getDate() + 14);
-        const todayStr = today.toISOString().split("T")[0];
-        const twoWeeksStr = twoWeeks.toISOString().split("T")[0];
-
-        const upcoming = activeAssignments
-          .filter((a) => a.service_date >= todayStr && a.service_date <= twoWeeksStr)
-          .reduce<Map<string, { serviceId: string; date: string; count: number }>>((acc, a) => {
-            const key = `${a.service_id}:${a.service_date}`;
-            if (!acc.has(key)) acc.set(key, { serviceId: a.service_id || "", date: a.service_date, count: 0 });
-            acc.get(key)!.count++;
-            return acc;
-          }, new Map());
-
-        const upcomingServices = Array.from(upcoming.values())
-          .sort((a, b) => a.date.localeCompare(b.date))
-          .slice(0, 6)
-          .map((u) => {
-            const svc = serviceMap.get(u.serviceId);
-            const svcMinistryIds = svc ? getServiceMinistryIds(svc) : [];
-            const ministry = svcMinistryIds.length > 0 ? ministryMap.get(svcMinistryIds[0]) : null;
-            const needed = svc ? getAllServiceRoles(svc).reduce((r, role) => r + role.count, 0) : 0;
-            return {
-              name: svc?.name || "Service",
-              date: u.date,
-              ministryColor: ministry?.color || "#9A9BB5",
-              assigned: u.count,
-              needed,
-            };
-          });
-
-        setStats({
-          volunteers: volunteers.length,
-          ministries: ministries.length,
-          services: services.length,
-          activeSchedules: activeScheds.length,
-          fillRate: totalSlots > 0 ? Math.round((activeAssignments.length / totalSlots) * 100) : 0,
-          confirmed,
-          declined,
-          pending: pendingCount,
-          totalAssignments: activeAssignments.length,
-          topVolunteers,
-          unscheduledVolunteers,
-          upcomingServices,
-          hasPrerequisites: hasPrereqs,
+        const token = await user!.getIdToken();
+        const params = new URLSearchParams({ church_id: churchId! });
+        if (activeCampusId) params.set("campus_id", activeCampusId);
+        const res = await fetch(`/api/dashboard-summary?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
-
-        // Calculate retention summary for the health card
-        const minList = ministries.map((m) => ({ id: m.id, name: m.name }));
-        setRetention(calculateRetentionSummary(volunteers, assignments, minList));
+        if (!res.ok) throw new Error("dashboard-summary fetch failed");
+        const data = (await res.json()) as {
+          stats: DashboardStats;
+          retention: RetentionSummary;
+        };
+        setStats(data.stats);
+        setRetention(data.retention);
       } catch {
         setStats(null);
         setError(true);
@@ -178,7 +69,7 @@ export default function DashboardPage() {
       }
     }
     load();
-  }, [churchId]);
+  }, [churchId, user, activeCampusId]);
 
   // Fetch pending approvals for admin notification banner
   useEffect(() => {
