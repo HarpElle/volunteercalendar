@@ -34,6 +34,7 @@ const OWNER_A = "owner-a";
 const ADMIN_A = "admin-a";
 const VOLUNTEER_A = "volunteer-a";
 const VOLUNTEER_B = "volunteer-b";
+const SCHEDULER_A = "scheduler-a";
 
 let testEnv: RulesTestEnvironment;
 
@@ -78,6 +79,12 @@ beforeEach(async () => {
       role: "volunteer",
       status: "active",
     });
+    await set(`memberships/${SCHEDULER_A}_${CHURCH_A}`, {
+      user_id: SCHEDULER_A,
+      church_id: CHURCH_A,
+      role: "scheduler",
+      status: "active",
+    });
     await set(`memberships/${VOLUNTEER_B}_${CHURCH_B}`, {
       user_id: VOLUNTEER_B,
       church_id: CHURCH_B,
@@ -100,9 +107,10 @@ beforeEach(async () => {
     await set(`churches/${CHURCH_A}/ministries/m1`, { name: "Worship" });
     await set(`churches/${CHURCH_A}/services/s1`, { name: "Sunday" });
 
-    // Codex QA 2026-05-15 — assignment reads now require the parent schedule
-    // to be `published` for non-scheduler members. Seed both a published and a
-    // draft schedule so the new tests can exercise both branches.
+    // Wave 2.2b (2026-05-28) — the assignment read rule now keys off the
+    // DENORMALIZED `schedule_status` field stamped onto each assignment (not a
+    // cross-doc get on the parent schedule). Seed the parent schedules for
+    // realism, but the rule only ever reads assignment.schedule_status.
     await set(`churches/${CHURCH_A}/schedules/sched_published`, {
       church_id: CHURCH_A,
       status: "published",
@@ -111,23 +119,45 @@ beforeEach(async () => {
       church_id: CHURCH_A,
       status: "draft",
     });
+    // a1, a2 — published (volunteer-readable)
     await set(`churches/${CHURCH_A}/assignments/a1`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
       service_date: "2026-06-01",
       schedule_id: "sched_published",
+      schedule_status: "published",
     });
     await set(`churches/${CHURCH_A}/assignments/a2`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
       service_date: "2026-06-08",
       schedule_id: "sched_published",
+      schedule_status: "published",
     });
+    // a_draft — non-published scheduler-pushed work (volunteer must NOT read)
     await set(`churches/${CHURCH_A}/assignments/a_draft`, {
       person_id: VOLUNTEER_A,
       service_id: "s1",
       service_date: "2026-06-15",
       schedule_id: "sched_draft",
+      schedule_status: "draft",
+    });
+    // a_archived — archived schedules stay readable (historical view)
+    await set(`churches/${CHURCH_A}/assignments/a_archived`, {
+      person_id: VOLUNTEER_A,
+      service_id: "s1",
+      service_date: "2026-05-01",
+      schedule_id: "sched_published",
+      schedule_status: "archived",
+    });
+    // a_legacy — pre-backfill orphan with NO schedule_status field. The
+    // defaulted accessor resource.data.get('schedule_status','') treats this
+    // as non-published → denied to volunteers (the safe default).
+    await set(`churches/${CHURCH_A}/assignments/a_legacy`, {
+      person_id: VOLUNTEER_A,
+      service_id: "s1",
+      service_date: "2026-06-22",
+      schedule_id: "sched_published",
     });
 
     // Codex QA 2026-05-15 — calendar_feeds are now owner-scoped (read/write).
@@ -400,26 +430,36 @@ describe("Firestore rules — calendar_feeds owner scoping (Codex QA Layer 1)", 
 });
 
 /**
- * Codex QA 2026-05-15 + Run 2 2026-05-16 — Assignment access semantics.
+ * Wave 2.2b (2026-05-28) — Assignment read lockdown at the RULE layer.
  *
  * History:
- *   Round 1 tried to deny non-published assignments at the rule layer via
- *   cross-doc get(). That broke volunteer My Schedule queries (Run 2 blocker).
+ *   Round 1 (05-15) tried cross-doc get() on the parent schedule → broke
+ *   volunteer list queries (Run 2 blocker).
+ *   Round 2 (05-16) reverted to "any active member reads all assignments" and
+ *   hid drafts only at the app layer (a stopgap, not real enforcement).
+ *   Wave 2.2b reads a DENORMALIZED `schedule_status` field off each assignment
+ *   via resource.data.get('schedule_status',''), which is list-query-safe.
  *
- *   Round 2 keeps the rule open (any active member can read assignments in
- *   their church) and enforces draft-hiding at the application layer:
- *     • my-schedule page filters by published schedule client-side
- *     • iCal route filters server-side
+ * The rule:
+ *   allow read: if isActiveMember(churchId) && (
+ *     isSchedulerOrAbove(churchId) ||
+ *     resource.data.get('schedule_status','') in ['published','archived']
+ *   );
  *
- *   This test set verifies the rule SHAPE that's actually deployed.
- *   Cross-tenant denial is covered by the volunteer-access describe
- *   block above.
+ * Volunteers:  may client-read only published/archived assignments. Their own
+ *   draft/self_signup claims surface through the Admin SDK endpoint
+ *   /api/my-schedule, NOT raw client queries. The one surviving volunteer
+ *   client query (SmartCheckInBanner) constrains itself with
+ *   where('schedule_status','==','published') to stay rule-legal.
+ * Scheduler+: keep full read access via the isSchedulerOrAbove branch (admin
+ *   pages: Service Day, Schedules, People analytics).
  */
-describe("Firestore rules — assignment reads (Codex QA Run 2)", () => {
-  it("Volunteer's My Schedule query (getDocs) succeeds", async () => {
-    // The blocker from Run 2: the previous rule (with cross-doc get) made
-    // this throw. This test fails immediately if anyone re-introduces a rule
-    // shape that breaks list queries.
+describe("Firestore rules — assignment read lockdown (Wave 2.2b)", () => {
+  // ── Case 1: volunteer list queries ──────────────────────────────────────
+  it("Volunteer published-filtered LIST query succeeds (the SmartCheckInBanner pattern)", async () => {
+    // A list query is allowed only when its constraints guarantee every
+    // matched doc passes the rule. Filtering on schedule_status==published
+    // excludes the draft/legacy docs, so the query is rule-legal.
     const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
     const assignmentsRef = collection(
       ctx.firestore(),
@@ -428,26 +468,89 @@ describe("Firestore rules — assignment reads (Codex QA Run 2)", () => {
     const q = query(
       assignmentsRef,
       where("person_id", "==", VOLUNTEER_A),
-      where("service_date", ">=", "2026-01-01"),
+      where("schedule_status", "==", "published"),
     );
     await assertSucceeds(getDocs(q));
   });
 
-  it("Volunteer CAN read individual published assignment", async () => {
+  it("Volunteer UNFILTERED LIST query fails (would expose draft/legacy docs)", async () => {
+    // Without the schedule_status constraint the query could return a_draft
+    // and a_legacy, which the volunteer cannot read → whole query denied.
+    // This is the core lockdown: it fails the moment someone removes the
+    // client-side schedule_status filter from a volunteer-facing read.
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    const assignmentsRef = collection(
+      ctx.firestore(),
+      `churches/${CHURCH_A}/assignments`,
+    );
+    await assertFails(
+      getDocs(query(assignmentsRef, where("person_id", "==", VOLUNTEER_A))),
+    );
+  });
+
+  // ── Cases 2-3: volunteer single-get on readable statuses ─────────────────
+  it("Volunteer CAN read a published assignment (single get)", async () => {
     const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
     await assertSucceeds(
       getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a1`)),
     );
   });
 
-  it("Volunteer in another church CANNOT read assignments", async () => {
+  it("Volunteer CAN read an archived assignment (single get)", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_archived`)),
+    );
+  });
+
+  // ── Cases 4-5: volunteer single-get on hidden docs ───────────────────────
+  it("Volunteer CANNOT read a draft assignment (the leak this rule closes)", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    );
+  });
+
+  it("Volunteer CANNOT read a legacy orphan missing schedule_status (safe default)", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertFails(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_legacy`)),
+    );
+  });
+
+  // ── Case 6: cross-tenant ─────────────────────────────────────────────────
+  it("Volunteer in another church CANNOT read assignments (cross-tenant)", async () => {
     const ctx = testEnv.authenticatedContext(VOLUNTEER_B);
     await assertFails(
       getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a1`)),
     );
   });
 
-  it("Admin CAN read all assignments via list query", async () => {
+  // ── Cases 7-8: scheduler+ bypass branch ──────────────────────────────────
+  it("Scheduler CAN read a draft assignment (single get — bypass branch)", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    );
+  });
+
+  it("Admin CAN read a draft assignment (single get — bypass branch)", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/assignments/a_draft`)),
+    );
+  });
+
+  it("Scheduler CAN read ALL assignments via unfiltered list query (bypass branch)", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    const assignmentsRef = collection(
+      ctx.firestore(),
+      `churches/${CHURCH_A}/assignments`,
+    );
+    await assertSucceeds(getDocs(assignmentsRef));
+  });
+
+  it("Admin CAN read ALL assignments via unfiltered list query (bypass branch)", async () => {
     const ctx = testEnv.authenticatedContext(ADMIN_A);
     const assignmentsRef = collection(
       ctx.firestore(),
