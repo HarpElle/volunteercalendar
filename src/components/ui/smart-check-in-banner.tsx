@@ -59,13 +59,25 @@ export function SmartCheckInBanner() {
       const dd = String(nowInTz.getDate()).padStart(2, "0");
       const today = `${yyyy}-${mm}-${dd}`;
 
-      // Load today's confirmed assignments for this volunteer
+      // Load today's confirmed assignments for this volunteer.
+      //
+      // The `schedule_status == "published"` filter is REQUIRED, not just an
+      // optimization: the Wave 2.2b assignment rule only lets a volunteer
+      // client-read assignments whose denormalized schedule_status is
+      // published/archived (scheduler+ bypass that branch). A Firestore list
+      // query must be at least as restrictive as the read rule, so without
+      // this clause the whole query is rejected (permission-denied) the moment
+      // the volunteer has ANY non-published claim today — which would hide the
+      // check-in prompt for their legitimately-published assignment too.
+      // Semantically this is also correct: you only smart-check-in for a
+      // published service, never a draft/self-service-claim slot.
       const assignments = (await getChurchDocuments(
         churchId,
         "assignments",
         where("volunteer_id", "==", volunteerId),
         where("service_date", "==", today),
         where("status", "==", "confirmed"),
+        where("schedule_status", "==", "published"),
       )) as (Assignment & { id: string })[];
 
       // Filter: not yet attended, not dismissed, has service_id

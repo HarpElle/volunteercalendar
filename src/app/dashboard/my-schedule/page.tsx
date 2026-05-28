@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import Link from "next/link";
 import { getChurchDocuments, getUserEventSignups } from "@/lib/firebase/firestore";
 import { where } from "firebase/firestore";
-import { Spinner } from "@/components/ui/spinner";
+import type { MyScheduleResponse } from "@/app/api/my-schedule/route";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
@@ -27,13 +27,10 @@ import type {
 } from "@/lib/types";
 import {
   generateOccurrences,
-  normalizeWorkflowMode,
   canServeInMinistry,
   hasCompletedPrerequisites,
 } from "@/lib/services/scheduler";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase/config";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function formatDate(iso: string): string {
@@ -173,198 +170,88 @@ export default function MySchedulePage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Load schedule data (assignments + event signups)
+  // Load schedule data via the server endpoint (Wave 5 Batch E phase 3).
+  //
+  // Previously this ran a per-church loop with 5 client-side assignment
+  // reads (own + team + open-slot fill + 2 claim-refetch reads). All of
+  // those cross the tightened assignment read rule, so they now flow
+  // through /api/my-schedule, which does the multi-church aggregation +
+  // the self-signup carve-out server-side via the Admin SDK. The endpoint
+  // is the authorized read path that lets the rule deny direct volunteer
+  // reads of non-published assignments.
+  //
+  // Event signups (collectionGroup, owner-scoped) and calendar feeds
+  // (owner-scoped) are NOT assignment reads — the rule doesn't touch
+  // them — so they stay client-side here.
   useEffect(() => {
+    if (!user) return;
+    const currentUser = user;
     async function loadAll() {
       setFetchError(false);
-      let loadedAnyOrg = false;
-      const myAssignments: Assignment[] = [];
-      const serviceMap = new Map<string, Service>();
-      const ministryMap = new Map<string, Ministry>();
-      const eventMap = new Map<string, Event>();
-      const volMap = new Map<string, Person>();
-      let ministryIds: string[] = [];
-      let volId = "";
+      let resolvedVolId = "";
+      try {
+        const token = await currentUser.getIdToken();
+        const res = await fetch("/api/my-schedule", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("my-schedule fetch failed");
+        const data = (await res.json()) as MyScheduleResponse;
+        resolvedVolId = data.myVolunteerId ?? "";
 
-      // Only load assignments from the last 30 days forward
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
+        // The endpoint already applied the self-signup carve-out to
+        // `assignments`; `teamAssignments` is the unfiltered all-church
+        // set that feeds the team view + open-slot fill computation.
+        setAssignments(data.assignments);
+        setServices(new Map(data.services.map((s) => [s.id, s] as const)));
+        setMinistries(new Map(data.ministries.map((m) => [m.id, m] as const)));
+        setEvents(new Map(data.events.map((e) => [e.id, e] as const)));
+        setVolunteerMap(new Map(data.volunteers.map((v) => [v.id, v] as const)));
+        setMyMinistryIds(data.myMinistryIds);
+        setMyVolunteerId(resolvedVolId);
+        setSelfServiceSchedules(data.selfServiceSchedules);
+        setOrgPrereqsByChurch(new Map(Object.entries(data.orgPrereqsByChurch)));
+        setMyPersonByChurch(new Map(Object.entries(data.myPersonByChurch)));
+        setAllChurchAssignments(data.teamAssignments);
+      } catch {
+        setFetchError(true);
+        setLoading(false);
+        return;
+      }
 
+      // Event signups — collectionGroup query, owner-scoped, not
+      // assignment-rule-restricted, so it stays a client read.
+      try {
+        const allSignups = await getUserEventSignups(currentUser.uid);
+        setEventSignups(allSignups);
+      } catch {
+        // silent — rules may reject if no signups exist
+      }
+
+      // Calendar feeds — owner-scoped client read (rule rejects any
+      // read that isn't owner-matched), also rule-safe. Needs the
+      // resolved volunteer id from the endpoint response.
       const activeMembers = memberships.filter((m) => m.status === "active");
-      // PR #35: collect across all loaded orgs for the Open Slots tab.
-      const ssSchedules: Schedule[] = [];
-      const orgPrereqsMap = new Map<string, OnboardingStep[]>();
-      const personByChurchMap = new Map<string, Person>();
-
-      async function loadForChurch(churchId: string, memberVolunteerId: string | null) {
-        // Phase 1: fetch people to determine this user's person ID
-        const vols = await getChurchDocuments(churchId, "people",
-          where("is_volunteer", "==", true),
-          where("status", "==", "active"),
-        ) as unknown[];
-
-        const people = vols as Person[];
-        for (const p of people) {
-          volMap.set(p.id, p);
-        }
-
-        let myPersonId: string | null = memberVolunteerId || null;
-        if (!myPersonId || !volMap.has(myPersonId)) {
-          const myPerson = people.find((p) => p.user_id === user?.uid);
-          if (myPerson) myPersonId = myPerson.id;
-        }
-
-        // Phase 2: fetch my assignments (indexed by person_id) + supporting data + schedules + church doc in parallel
-        const [assigns, svcs, mins, evts, schedules, churchSnap] = await Promise.all([
-          myPersonId
-            ? getChurchDocuments(churchId, "assignments",
-                where("person_id", "==", myPersonId),
-                where("service_date", ">=", cutoffDate),
-              ) as Promise<unknown[]>
-            : Promise.resolve([] as unknown[]),
-          getChurchDocuments(churchId, "services") as Promise<unknown[]>,
-          getChurchDocuments(churchId, "ministries") as Promise<unknown[]>,
-          getChurchDocuments(churchId, "events") as Promise<unknown[]>,
-          getChurchDocuments(churchId, "schedules") as Promise<unknown[]>,
-          // PR #35: org-wide prerequisites for the Open Slots eligibility check.
-          getDoc(doc(db, "churches", churchId)),
-        ]);
-
-        if (myPersonId) {
-          // SECURITY (Codex QA 2026-05-15): volunteers must not see
-          // SCHEDULER-PUSHED assignments belonging to draft/in_review/
-          // approved schedules. Only published scheduler-pushed
-          // assignments surface in My Schedule — so admin drafts can't
-          // leak into the volunteer view before the org approves them.
-          //
-          // SELF-SIGNUP CARVE-OUT (PR #37, Phase 6 follow-up retest):
-          // the volunteer's OWN claims on Self-Service drafts should
-          // always be visible to them on Upcoming. They just clicked
-          // "Sign Up" and got a 200 back — hiding the assignment until
-          // the schedule gets published would erase that confirmation.
-          // The query above already restricts to person_id == myPersonId,
-          // so a self-signup carve-out only widens THE CLAIMANT'S view of
-          // their own opt-in records, not anyone else's draft work.
-          const publishedScheduleIds = new Set(
-            (schedules as { id: string; status?: string }[])
-              .filter((s) => s.status === "published")
-              .map((s) => s.id),
-          );
-          const visibleAssigns = (assigns as Assignment[]).filter((a) => {
-            if (a.signup_type === "self_signup") return true;
-            return publishedScheduleIds.has(a.schedule_id as string);
-          });
-          myAssignments.push(...visibleAssigns);
-          const myVol = volMap.get(myPersonId);
-          if (myVol) {
-            ministryIds = myVol.ministry_ids || [];
-            volId = myVol.id;
-            personByChurchMap.set(churchId, myVol);
-          }
-        }
-
-        // PR #35: keep self-service schedules in draft/in_review for Open Slots.
-        for (const s of schedules as Schedule[]) {
-          if (
-            normalizeWorkflowMode(s.workflow_mode) === "self-service" &&
-            (s.status === "draft" || s.status === "in_review")
-          ) {
-            ssSchedules.push(s);
-          }
-        }
-        if (churchSnap.exists()) {
-          const data = churchSnap.data();
-          orgPrereqsMap.set(churchId, (data.org_prerequisites as OnboardingStep[]) || []);
-        }
-
-        for (const s of svcs as Service[]) serviceMap.set(s.id, s);
-        for (const min of mins as Ministry[]) ministryMap.set(min.id, min);
-        for (const e of evts as Event[]) eventMap.set(e.id, e);
-        return true;
-      }
-
-      for (const m of activeMembers) {
-        try {
-          await loadForChurch(m.church_id, m.volunteer_id);
-          loadedAnyOrg = true;
-        } catch {
-          // Skip orgs that fail to load
-        }
-      }
-
-      // Fallback: legacy profile church_id
-      if (activeMembers.length === 0 && profile?.church_id) {
-        try {
-          await loadForChurch(profile.church_id, null);
-          loadedAnyOrg = true;
-        } catch {
-          // silent
-        }
-      }
-
-      // Load event signups for the current user
-      let allSignups: EventSignup[] = [];
-      if (user) {
-        try {
-          allSignups = await getUserEventSignups(user.uid);
-        } catch {
-          // silent — security rules may reject if no signups exist
-        }
-      }
-
-      // Load calendar feeds for the active membership's church.
-      // SECURITY (Codex QA 2026-05-15): scope to feeds the current user created.
-      // The Firestore rule rejects any read that isn't owner-matched, so the
-      // explicit `where` is required.
-      let feeds: CalendarFeed[] = [];
       const feedChurchId = activeMembers[0]?.church_id || profile?.church_id;
-      if (feedChurchId && volId && user?.uid) {
+      if (feedChurchId && resolvedVolId && currentUser.uid) {
         try {
-          const feedDocs = await getChurchDocuments(
+          const feedDocs = (await getChurchDocuments(
             feedChurchId,
             "calendar_feeds",
-            where("created_by_user_id", "==", user.uid),
-          ) as unknown[];
-          feeds = (feedDocs as CalendarFeed[]).filter((f) => f.target_id === volId);
+            where("created_by_user_id", "==", currentUser.uid),
+          )) as unknown[];
+          setCalendarFeeds(
+            (feedDocs as CalendarFeed[]).filter(
+              (f) => f.target_id === resolvedVolId,
+            ),
+          );
         } catch {
           // silent
         }
       }
 
-      setAssignments(myAssignments);
-      setServices(serviceMap);
-      setMinistries(ministryMap);
-      setEventSignups(allSignups);
-      setEvents(eventMap);
-      setVolunteerMap(volMap);
-      setMyMinistryIds(ministryIds);
-      setMyVolunteerId(volId);
-      setCalendarFeeds(feeds);
-      setSelfServiceSchedules(ssSchedules);
-      setOrgPrereqsByChurch(orgPrereqsMap);
-      setMyPersonByChurch(personByChurchMap);
-      if (!loadedAnyOrg && activeMembers.length > 0) setFetchError(true);
       setLoading(false);
-
-      // Background: load all-church assignments for team view (non-blocking)
-      const teamAssigns: Assignment[] = [];
-      const teamChurches = activeMembers.length > 0
-        ? activeMembers.map((m) => m.church_id)
-        : profile?.church_id ? [profile.church_id] : [];
-      for (const churchId of teamChurches) {
-        try {
-          const assigns = await getChurchDocuments(churchId, "assignments",
-            where("service_date", ">=", cutoffDate),
-          ) as unknown[];
-          teamAssigns.push(...(assigns as Assignment[]));
-        } catch {
-          // skip
-        }
-      }
-      setAllChurchAssignments(teamAssigns);
     }
-    if (user) loadAll();
+    loadAll();
   }, [user, profile, memberships]);
 
   // Codex Run 3 retest (2026-05-17): availability_request notifications drive
@@ -652,31 +539,23 @@ export default function MySchedulePage() {
      * Upcoming until the schedule got published.
      */
     async function refetchChurchState() {
+      // Wave 5 Batch E phase 3: after a claim, re-fetch /api/my-schedule
+      // wholesale instead of the old 2 client assignment reads. The
+      // endpoint returns ALL churches with the self-signup carve-out
+      // already applied, so a full replacement is both simpler and
+      // correct (no per-church slicing needed). The just-claimed slot
+      // surfaces on Upcoming because the carve-out keeps the volunteer's
+      // own self_signup claim visible even on the still-draft schedule.
+      if (!user) return;
       try {
-        const [fresh, mine] = await Promise.all([
-          getChurchDocuments(churchId!, "assignments",
-            where("service_date", ">=", today),
-          ) as Promise<unknown[]>,
-          (async () => {
-            const me = myPersonByChurch.get(churchId!);
-            if (!me) return [];
-            return await getChurchDocuments(churchId!, "assignments",
-              where("person_id", "==", me.id),
-            ) as unknown[];
-          })(),
-        ]);
-        setAllChurchAssignments((prev) => {
-          const others = prev.filter((a) => a.church_id !== churchId);
-          return [...others, ...(fresh as Assignment[])];
+        const token = await user.getIdToken();
+        const res = await fetch("/api/my-schedule", {
+          headers: { Authorization: `Bearer ${token}` },
         });
-        // Replace this church's slice in `assignments` (the Upcoming/Past
-        // source). Mirrors the page-load filter: self_signup OR published.
-        const sched = selfServiceSchedules; // current snapshot used for is-published lookup not needed here — we trust API status writes
-        void sched;
-        setAssignments((prev) => {
-          const others = prev.filter((a) => a.church_id !== churchId);
-          return [...others, ...(mine as Assignment[])];
-        });
+        if (!res.ok) return;
+        const data = (await res.json()) as MyScheduleResponse;
+        setAssignments(data.assignments);
+        setAllChurchAssignments(data.teamAssignments);
       } catch {
         // best-effort
       }

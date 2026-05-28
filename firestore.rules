@@ -189,39 +189,56 @@ service cloud.firestore {
         allow read: if isActiveMember(churchId);
         allow write: if isSchedulerOrAbove(churchId);
 
-        // Nested assignments under a schedule (collection group queries elsewhere)
+        // Nested assignments under a schedule. Assignments actually live at
+        // the top-level churches/{churchId}/assignments subcollection; this
+        // path is kept rule-consistent with the same schedule_status gate as
+        // defense-in-depth in case any doc is ever written here.
         match /assignments/{assignmentId} {
-          allow read: if isActiveMember(churchId);
+          allow read: if isActiveMember(churchId) && (
+            isSchedulerOrAbove(churchId)
+            || resource.data.get('schedule_status', '') in ['published', 'archived']
+          );
           allow write: if isSchedulerOrAbove(churchId);
         }
       }
 
       // ─── Assignments ───
-      // SECURITY HISTORY (Codex QA 2026-05-15 → Run 2 2026-05-16):
+      // SECURITY HISTORY (Codex QA 2026-05-15 → Run 2 2026-05-16 → Wave 2.2b 2026-05-28):
       //
-      //   Round 1 tightened this rule to deny non-published assignments to
+      //   Round 1 (05-15) tried to deny non-published assignments to
       //   volunteers via `get(/.../schedules/$(resource.data.schedule_id))`.
-      //   That works for single-doc reads but fails for list queries —
-      //   Firestore's rule engine throws "schedule_id is undefined" when
-      //   evaluating a list query because the predicate can't be statically
-      //   proven safe for all possible matching docs. Volunteers' My Schedule
-      //   page (which calls getDocs) was blocked completely.
+      //   That works for single-doc reads but BREAKS list queries — a
+      //   cross-document get() can't be statically proven safe for every
+      //   matching doc, so the volunteer My Schedule getDocs() was rejected
+      //   outright ("schedule_id is undefined").
       //
-      //   Round 2 reverts the rule to the pre-tightening shape (active member
-      //   reads all assignments in their church). Draft-visibility defense
-      //   now lives at the application layer:
-      //     • src/app/dashboard/my-schedule/page.tsx filters drafts client-side
-      //     • src/app/api/calendar/route.ts filters drafts server-side
-      //     • All other consumers go through admin endpoints that filter
+      //   Round 2 (05-16) reverted to "any active member reads all
+      //   assignments" and pushed draft-hiding to the app layer as a stopgap.
       //
-      //   TODO: for true rule-layer enforcement, denormalize the parent
-      //   schedule's status onto each assignment (`schedule_status` field)
-      //   and update this rule to `... && resource.data.schedule_status ==
-      //   'published'`. That avoids the get() and works for list queries.
-      //   Tracked as a follow-up; not urgent because the leak is closed at
-      //   every realistic access point.
+      //   Wave 2.2b (05-28) does the real rule-layer fix: the parent
+      //   schedule's status is denormalized onto every assignment as
+      //   `schedule_status` (src/lib/server/schedule-status-fanout.ts, the
+      //   claim route, and auto-reschedule all stamp it; a one-time backfill
+      //   covered legacy docs). The rule reads that field with a DEFAULTED map
+      //   accessor — resource.data.get('schedule_status', '') — which is safe
+      //   inside list queries (no cross-doc get) and treats a missing-field
+      //   legacy orphan as non-published, i.e. denied to volunteers (the safe
+      //   default).
+      //
+      //   Volunteer-visible reads now flow through the Admin SDK endpoint
+      //   /api/my-schedule, which re-applies the self-signup carve-out the
+      //   rule intentionally omits (own self_signup claims on a draft schedule
+      //   stay visible there, but NOT via raw client query). The one remaining
+      //   volunteer CLIENT read — SmartCheckInBanner — constrains its query
+      //   with where('schedule_status','==','published') so it stays
+      //   rule-legal. Scheduler+ keep full read access via the
+      //   isSchedulerOrAbove branch (admin pages: Service Day, Schedules,
+      //   People analytics).
       match /assignments/{docId} {
-        allow read: if isActiveMember(churchId);
+        allow read: if isActiveMember(churchId) && (
+          isSchedulerOrAbove(churchId)
+          || resource.data.get('schedule_status', '') in ['published', 'archived']
+        );
         allow write: if isSchedulerOrAbove(churchId);
       }
 
