@@ -336,6 +336,38 @@ Self-service mode volunteers currently see their own draft-schedule claims on My
 
 ---
 
+## Wave 5 — Batches A-D closed; Batch E in phased delivery
+
+| Batch | PRs | Status |
+|------|-----|--------|
+| A quick wins (setup-guide auto-dismiss, warm empty state, MFA email-verify) | #119 | ✅ Merged |
+| B a11y sweep (form aria, focus traps, coral-deep contrast, nav semantics) | #120 | ✅ Merged |
+| C Teams/Ministries rename (user-facing copy; code identifiers unchanged) | #121 | ✅ Merged |
+| D perf (lazy-load Cropper + recharts, next/image avatars) | #122 | ✅ Merged |
+| E design doc | #123 | ✅ Merged |
+| E phase 1 — `/api/dashboard-summary` + consumer + Data Cache fix | #124, #125 | ✅ Merged (Codex PASS; Sev 4 cache finding fixed via unstable_cache) |
+| **E phase 2 — Schedules + Service Day server endpoints** | — | ⏸ **DEFERRED to post-launch** (decision 2026-05-27). Pure admin-page perf; no security/correctness dependency. Pattern proven by phase 1. Not a crumb — a conscious scope call. |
+| **E phase 3 — My Schedule endpoint + 2.2b rule lockdown** | (in progress) | 🚧 Endpoint built + tested; page-rewire + rule pending |
+
+### Batch E phase 3 — precise state (resumable)
+
+**Done + verified (this session):**
+- `src/app/api/my-schedule/route.ts` — the authorized server read path. Multi-church aggregation via the caller's own active memberships (no church_id param → no cross-tenant surface). Preserves the self-signup carve-out (own self_signup claims visible on drafts; scheduler-pushed assignments only visible once published). Returns `{ assignments, teamAssignments, services, ministries, events, selfServiceSchedules, volunteers, orgPrereqsByChurch, myPersonByChurch, myMinistryIds, myVolunteerId }`. Not cached (per-user, mutation-sensitive).
+- `tests/integration/my-schedule.test.ts` — 7 cases, all green. Locks in the SECURITY-CRITICAL carve-out (self-signup-draft visible, scheduler-draft hidden, published visible), team-assignment aggregation, self-service-schedule filtering, and cross-user isolation.
+
+**Remaining (high-risk — do with fresh context, NOT rushed):**
+1. Rewire `src/app/dashboard/my-schedule/page.tsx` to consume `/api/my-schedule` instead of its 5 client assignment reads:
+   - `loadForChurch` per-church loop → single fetch, map response into existing state setters
+   - `refetchChurchState` (after claim) 2 reads → re-fetch the endpoint
+   - open-slot computation: feed from `data.teamAssignments` (already returned) instead of re-reading
+2. Apply the assignment-rule lockdown to `firestore.rules` (verbatim from the prep notes block above) — this is the LAST commit, gated on step 1 being verified, because the rule denies the very client reads step 1 removes.
+3. Port the 8 emulator rule test cases into `tests/rules/firestore.rules.test.ts` (the 8 cases are listed in the prep notes above).
+4. Cleanup any now-dead client assignment-read imports in the page.
+
+**Why it's safe to be parked here**: the endpoint is additive — nothing consumes it yet, the page still uses client reads, and the rule is unchanged. Production behaves exactly as before. The rule (the only irreversible-feeling change) is explicitly the last step, gated on the page rewire landing + verifying first.
+
+---
+
 ## Next up
 
 - **Wave 5 — UX polish + assignment-rule tightening** (4-5 days). 8 polish items per the plan + the deferred 2.2b rule lock-down that now requires the My Schedule server-component refactor. Sequencing TBD with Jason before any code lands.
