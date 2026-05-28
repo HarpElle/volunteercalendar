@@ -23,6 +23,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { adminDb } from "@/lib/firebase/admin";
 import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseQuery, z } from "@/lib/server/validation";
@@ -66,20 +67,26 @@ export interface DashboardSummary {
   retention: RetentionSummary;
 }
 
-export async function GET(req: NextRequest) {
-  const noAuth = assertBearerToken(req);
-  if (noAuth) return noAuth;
-
-  const query = parseQuery(req, QuerySchema);
-  if (query instanceof NextResponse) return query;
-
-  const auth = await requireMembership(req, query.church_id, "volunteer");
-  if (auth instanceof NextResponse) return auth;
-  void auth;
-
-  const { church_id, campus_id } = query;
-
-  try {
+/**
+ * Church-scoped read + compute. Wrapped in `unstable_cache` below
+ * (getCachedDashboardSummary) keyed on (church_id, campus_id) with a
+ * 60s TTL.
+ *
+ * Why a server-side Data Cache and not the `s-maxage` HTTP header:
+ * Vercel's CDN refuses to edge-cache any response whose request
+ * carries an `Authorization` header (it treats auth'd requests as
+ * personalized → `x-vercel-cache: BYPASS`). Codex caught this in the
+ * Batch E phase 1 retest. The expensive part here is the 6 Firestore
+ * reads + computation, not the auth check — so we cache exactly that
+ * at the Next Data Cache layer, which is unaffected by the
+ * Authorization header. Auth still runs on every request in the GET
+ * handler; only this church-scoped result is cached + shared across
+ * the org's admins.
+ */
+async function computeDashboardSummary(
+  church_id: string,
+  campus_id: string | null,
+): Promise<DashboardSummary> {
     // Only load assignments from the last 90 days; matches the legacy
     // client filter and bounds retention-analytics input size.
     const ninetyDaysAgo = new Date();
@@ -288,18 +295,47 @@ export async function GET(req: NextRequest) {
     const minList = ministries.map((m) => ({ id: m.id, name: m.name }));
     const retention = calculateRetentionSummary(volunteers, assignments, minList);
 
-    const body: DashboardSummary = { stats, retention };
+    return { stats, retention };
+}
 
-    // Per Wave 5 Batch E design: 60s edge cache. revalidatePath
-    // from mutation handlers bumps fresh on demand.
-    return NextResponse.json(body, {
-      headers: {
-        "Cache-Control":
-          "private, max-age=0, s-maxage=60, stale-while-revalidate=300",
-      },
-    });
+/**
+ * Next Data Cache wrapper. Keys on the function args + the key array,
+ * so each (church_id, campus_id) pair caches independently for 60s.
+ * Tagged "dashboard-summary" so a future mutation handler can
+ * `revalidateTag("dashboard-summary")` to bust fresh on demand; until
+ * that's wired, the 60s TTL bounds staleness (Jason signed off on 60s).
+ */
+const getCachedDashboardSummary = unstable_cache(
+  computeDashboardSummary,
+  ["dashboard-summary"],
+  { revalidate: 60, tags: ["dashboard-summary"] },
+);
+
+export async function GET(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const query = parseQuery(req, QuerySchema);
+  if (query instanceof NextResponse) return query;
+
+  // Auth runs on EVERY request — never cached. Only the church-scoped
+  // read + compute (getCachedDashboardSummary) is cached + shared
+  // across the org's admins.
+  const auth = await requireMembership(req, query.church_id, "volunteer");
+  if (auth instanceof NextResponse) return auth;
+  void auth;
+
+  try {
+    const body = await getCachedDashboardSummary(
+      query.church_id,
+      query.campus_id ?? null,
+    );
+    return NextResponse.json(body);
   } catch (err) {
-    log.error("[GET /api/dashboard-summary]", { error: err, church_id });
+    log.error("[GET /api/dashboard-summary]", {
+      error: err,
+      church_id: query.church_id,
+    });
     return NextResponse.json(
       { error: "Failed to load dashboard summary" },
       { status: 500 },
