@@ -226,7 +226,7 @@ function SetupContent() {
         </h1>
         <p className="mt-1 text-vc-text-secondary">
           {step === 4 && orgType === "church"
-            ? "Choose ministries to get started quickly."
+            ? "Choose teams to get started quickly."
             : "Tell us about your organization so we can configure scheduling for you."}
         </p>
       </div>
@@ -405,7 +405,7 @@ function SetupContent() {
             <Button type="submit" loading={loading} size="lg">
               {orgType === "church"
                 ? selectedTemplates.size > 0
-                  ? `Create Church with ${selectedTemplates.size} ${selectedTemplates.size === 1 ? "Ministry" : "Ministries"}`
+                  ? `Create Church with ${selectedTemplates.size} ${selectedTemplates.size === 1 ? "Team" : "Teams"}`
                   : "Create Church"
                 : "Create Organization"}
             </Button>

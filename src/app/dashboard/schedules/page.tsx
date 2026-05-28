@@ -1019,7 +1019,7 @@ export default function SchedulesPage() {
                   variant="outline"
                   onClick={() => setShowReview(!showReview)}
                 >
-                  {showReview ? "Hide Review" : "Ministry Review"}
+                  {showReview ? "Hide Review" : "Team Review"}
                 </Button>
               )}
               {nextStatuses.map((next) => {

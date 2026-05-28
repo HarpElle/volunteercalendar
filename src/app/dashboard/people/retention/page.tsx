@@ -301,7 +301,7 @@ export default function RetentionDashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs font-medium text-vc-text-muted">
-                    <th className="pb-2">Ministry</th>
+                    <th className="pb-2">Team</th>
                     <th className="pb-2">Role</th>
                     <th className="pb-2 text-center">Qualified</th>
                     <th className="pb-2 text-center">Slots/Wk</th>

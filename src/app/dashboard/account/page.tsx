@@ -511,7 +511,7 @@ export default function AccountPage() {
     if (feed.type === "org") return "All Volunteers";
     if (feed.type === "ministry") {
       const m = ministries.find((m) => m.id === feed.target_id);
-      return m?.name || "Ministry";
+      return m?.name || "Team";
     }
     if (feed.type === "personal") {
       const v = volunteers.find((v) => v.id === feed.target_id);
@@ -590,7 +590,7 @@ export default function AccountPage() {
 
   const feedTypeLabels: Record<CalendarFeedType, string> = {
     personal: "Personal (one volunteer)",
-    ministry: "Ministry (all in one ministry)",
+    ministry: "Team (all volunteers in one team)",
     team: "Team",
     org: "Organization (everyone)",
   };
@@ -914,7 +914,7 @@ export default function AccountPage() {
 
               {feedType === "ministry" && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-vc-text">Ministry</label>
+                  <label className="mb-1 block text-sm font-medium text-vc-text">Team</label>
                   <select
                     value={targetId}
                     onChange={(e) => setTargetId(e.target.value)}
@@ -1272,9 +1272,9 @@ export default function AccountPage() {
             {ministries.length > 1 && (
               <div className="space-y-3 border-t border-vc-border-light pt-4">
                 <div>
-                  <h3 className="text-sm font-medium text-vc-indigo">Ministry Scope</h3>
+                  <h3 className="text-sm font-medium text-vc-indigo">Team Scope</h3>
                   <p className="text-xs text-vc-text-muted">
-                    Limit notifications to specific ministries. Leave all unchecked to receive notifications for all ministries.
+                    Limit notifications to specific teams. Leave all unchecked to receive notifications for all teams.
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">

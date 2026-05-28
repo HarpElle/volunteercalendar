@@ -106,7 +106,7 @@ export function MinistryReviewPanel({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-vc-indigo">Ministry Review</h3>
+        <h3 className="text-lg font-semibold text-vc-indigo">Team Review</h3>
         {allApproved && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-vc-sage/10 px-3 py-1 text-sm font-medium text-vc-sage">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

@@ -132,7 +132,7 @@ export function VolunteerEditModal({
         {ministries.length > 0 && (
           <div>
             <label className="mb-1.5 block text-sm font-medium text-vc-text">
-              {getMinistryName("__label__") === "__label__" ? "Teams" : "Ministries"}
+              Teams
             </label>
             <div className="flex flex-wrap gap-2">
               {[...ministries].sort((a, b) => a.name.localeCompare(b.name)).map((m) => (

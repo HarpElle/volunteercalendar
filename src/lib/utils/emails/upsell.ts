@@ -21,7 +21,7 @@ function featureList(): string {
                       </tr>
                       <tr>
                         <td style="padding-bottom:10px;font-size:14px;color:#4A4A6A;">
-                          &#10003; Multiple ministries (up to unlimited)
+                          &#10003; Multiple teams (up to unlimited)
                         </td>
                       </tr>
                       <tr>
@@ -56,7 +56,7 @@ export function buildUpsellEmail(data: UpsellData): {
               <p ${P}>
                 ${nearLimit
                   ? `${escapeHtml(data.churchName)} now has <strong ${BOLD}>${data.volunteerCount} of ${data.volunteerLimit}</strong> volunteers on the Free plan. Once you hit the limit, you won't be able to add more until you upgrade.`
-                  : `${escapeHtml(data.churchName)} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "ministry" : "ministries"}. Here's what you could unlock with a paid plan:`}
+                  : `${escapeHtml(data.churchName)} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "team" : "teams"}. Here's what you could unlock with a paid plan:`}
               </p>
 
               ${detailCard(featureList())}
@@ -87,11 +87,11 @@ Hi ${firstName},
 
 ${nearLimit
     ? `${data.churchName} now has ${data.volunteerCount} of ${data.volunteerLimit} volunteers on the Free plan. Once you hit the limit, you won't be able to add more until you upgrade.`
-    : `${data.churchName} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "ministry" : "ministries"}. Here's what you could unlock with a paid plan:`}
+    : `${data.churchName} is making great use of VolunteerCal with ${data.volunteerCount} volunteers and ${data.ministryCount} ${data.ministryCount === 1 ? "team" : "teams"}. Here's what you could unlock with a paid plan:`}
 
 What you get:
 - More volunteers (up to 500)
-- Multiple ministries (up to unlimited)
+- Multiple teams (up to unlimited)
 - SMS reminders
 - Analytics & advanced scheduling
 

@@ -611,7 +611,7 @@ const featureGuides: HelpSection[] = [
             </dd>
           </div>
           <div>
-            <dt className="font-medium text-vc-text">Ministry Scope</dt>
+            <dt className="font-medium text-vc-text">Team Scope</dt>
             <dd className="mt-1">
               Optionally limit notifications to specific teams. Leave empty to
               receive alerts for all teams you manage.
