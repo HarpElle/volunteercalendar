@@ -129,6 +129,25 @@ const cspString = Object.entries(cspDirectives)
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@napi-rs/canvas"],
+  // Wave 5 H.6: next/image needs explicit remotePatterns for any
+  // off-origin host it will optimize. Firebase Storage hosts all our
+  // user-uploaded photos (avatars, child photos, org logos); the
+  // bucket-suffixed subdomain pattern covers volunteercalendar-mvp
+  // and any future projects with the same convention.
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "firebasestorage.googleapis.com",
+        pathname: "/v0/b/**",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        pathname: "/**",
+      },
+    ],
+  },
   async headers() {
     return [
       {

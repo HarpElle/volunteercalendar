@@ -1,10 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import Cropper from "react-easy-crop";
-import type { Area } from "react-easy-crop";
+import dynamic from "next/dynamic";
+import type { Area, CropperProps } from "react-easy-crop";
 import { Button } from "./button";
+
+// Wave 5 H.6: react-easy-crop is ~50KB gzipped and pulls in the
+// canvas-rendering helpers it needs at module load. It's only ever
+// used inside this modal, which itself only mounts when a user is
+// actively cropping a photo. Lazy-loading it via next/dynamic keeps
+// the initial dashboard JS bundle leaner and defers the cost to the
+// rare moment someone uploads a profile picture.
+//
+// ssr:false because the cropper relies on browser-only APIs (canvas,
+// DOM measurement) and would crash if Next tried to render it on the
+// server. Loading fallback is a small spinner inside the crop area
+// — the modal chrome (header, actions, slider) still renders sync.
+//
+// The `as` cast is necessary because next/dynamic strips the original
+// component's optional-props typing and infers a stricter signature
+// that flags all CropperProps as required. The real component (and
+// the wrapper) accept partial props — the cast restores that.
+const Cropper = dynamic(() => import("react-easy-crop"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-vc-coral border-t-transparent" />
+    </div>
+  ),
+}) as ComponentType<Partial<CropperProps> & Pick<CropperProps, "image" | "crop" | "zoom" | "aspect" | "onCropChange" | "onZoomChange" | "onCropComplete">>;
 
 interface ImageCropModalProps {
   /** The file to crop */
