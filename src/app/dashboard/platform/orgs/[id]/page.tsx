@@ -297,7 +297,7 @@ export default function PlatformOrgDetailPage({
           <ConfigRow ok={s.configuration.has_rooms} label="Rooms" count={s.counts.rooms} />
           <ConfigRow ok={s.configuration.has_calendar_feeds} label="Calendar feeds" count={s.counts.calendar_feeds} />
           <ConfigRow ok={s.configuration.has_short_links} label="Short links" count={s.counts.short_links} />
-          <ConfigRow ok={s.counts.ministries > 0} label="Ministries" count={s.counts.ministries} />
+          <ConfigRow ok={s.counts.ministries > 0} label="Teams" count={s.counts.ministries} />
           <ConfigRow ok={s.configuration.has_facility_groups} label="Facility groups" />
         </Card>
 

@@ -41,7 +41,7 @@ export function buildConfirmationEmail(data: ConfirmationEmailData): {
               ${detailCard(`<table width="100%" cellpadding="0" cellspacing="0">
                       ${detailRow("Date", formattedDate)}
                       ${detailRow("Service", data.serviceName, data.startTime)}
-                      ${detailRow("Ministry", data.ministryName)}
+                      ${detailRow("Team", data.ministryName)}
                       <tr>
   <td>
     <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#9A9BB5;">Your Role</span><br>
@@ -78,7 +78,7 @@ You've been scheduled to serve:
 
   Date: ${formattedDate}
   Service: ${data.serviceName} \u00b7 ${data.startTime}
-  Ministry: ${data.ministryName}
+  Team: ${data.ministryName}
   Role: ${data.roleTitle}
 
 Confirm or decline here (no login required):

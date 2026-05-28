@@ -67,7 +67,7 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 <strong>Scheduling preferences</strong> — availability,
-                blackout dates, ministry assignments, and role preferences.
+                blackout dates, team assignments, and role preferences.
               </li>
               <li>
                 <strong>Organization data</strong> — church or organization

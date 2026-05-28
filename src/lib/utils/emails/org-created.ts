@@ -34,7 +34,11 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
   text: string;
 } {
   const firstName = data.userName.split(" ")[0] || "there";
-  const teamWord = data.orgType === "church" ? "ministries" : "teams";
+  // Wave 5 H.8: standardized on "teams" / "team" for all org types
+  // (was branched on orgType). orgType prop is preserved on the input
+  // shape for backward compatibility but no longer steers copy.
+  const teamWord = "teams";
+  const teamSingular = "team";
 
   const subject = `${data.orgName} is live on VolunteerCal`;
 
@@ -64,7 +68,7 @@ export function buildOrgCreatedEmail(data: OrgCreatedEmailData): {
                   <td style="padding:16px 20px;">
                     <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#2D3047;text-transform:uppercase;letter-spacing:0.5px;">Next steps</p>
                     <table width="100%" cellpadding="0" cellspacing="0">
-                      ${nextStep(1, `Create your first ${teamWord === "ministries" ? "ministry" : "team"}`, `Organize volunteers into ${teamWord} with color-coded labels.`)}
+                      ${nextStep(1, `Create your first ${teamSingular}`, `Organize volunteers into ${teamWord} with color-coded labels.`)}
                       ${nextStep(2, "Add your volunteers", "Import from a CSV, paste from your ChMS, or add them one by one.")}
                       ${nextStep(3, "Set up a service or event", "Define recurring services with roles, or create one-time events.")}
                       ${nextStep(4, "Generate a schedule", "Pick a date range and let the algorithm draft a fair rotation.")}
@@ -97,7 +101,7 @@ Done:
 \u2713 ${data.orgName} organization set up
 
 Next steps:
-1. Create your first ${teamWord === "ministries" ? "ministry" : "team"} \u2014 organize volunteers into ${teamWord} with color-coded labels.
+1. Create your first ${teamSingular} \u2014 organize volunteers into ${teamWord} with color-coded labels.
 2. Add your volunteers \u2014 import from a CSV, paste from your ChMS, or add them one by one.
 3. Set up a service or event \u2014 define recurring services with roles, or create one-time events.
 4. Generate a schedule \u2014 pick a date range and let the algorithm draft a fair rotation.

@@ -121,7 +121,7 @@ export function PrerequisiteEditor({
               <option value="class">Class / Training</option>
               <option value="background_check">Background Check</option>
               <option value="minimum_service">Min. Service Count</option>
-              <option value="ministry_tenure">Ministry Tenure</option>
+              <option value="ministry_tenure">Team Tenure</option>
               <option value="shadow">Shadow / Observe</option>
               <option value="custom">Custom</option>
             </select>

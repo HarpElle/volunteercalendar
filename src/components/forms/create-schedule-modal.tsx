@@ -51,7 +51,7 @@ function defaultDueDate() {
   return d.toISOString().split("T")[0];
 }
 
-const STEPS = ["Workflow", "Ministry Scope", "Coverage Period", "Review"] as const;
+const STEPS = ["Workflow", "Team Scope", "Coverage Period", "Review"] as const;
 
 export function CreateScheduleModal({
   open,
@@ -378,7 +378,7 @@ export function CreateScheduleModal({
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-vc-text-muted">Ministry Scope</span>
+                <span className="text-vc-text-muted">Team Scope</span>
                 <span className="font-medium text-vc-indigo">{selectedMinistryNames}</span>
               </div>
               <div className="flex justify-between text-sm">

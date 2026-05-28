@@ -50,7 +50,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): {
                   <td style="padding:20px 24px;">
                     <table width="100%" cellpadding="0" cellspacing="0">
                       ${stepRow(1, "Set up your organization", "Name, timezone, and scheduling preferences.")}
-                      ${stepRow(2, "Add a team or ministry", "Create your first team and assign it a color.")}
+                      ${stepRow(2, "Add a team", "Create your first team and assign it a color.")}
                       ${stepRow(3, "Add your volunteers", "Import from CSV or add them one at a time.")}
                       ${stepRow(4, "Generate your first schedule", "Pick a date range and let the scheduler do the rest.", true)}
                     </table>
@@ -80,7 +80,7 @@ Thanks for creating your account. VolunteerCal was built to take the guesswork o
 Here's how to get started:
 
 1. Set up your organization \u2014 name, timezone, and scheduling preferences.
-2. Add a team or ministry \u2014 create your first team and assign it a color.
+2. Add a team \u2014 create your first team and assign it a color.
 3. Add your volunteers \u2014 import from CSV or add them one at a time.
 4. Generate your first schedule \u2014 pick a date range and let the scheduler do the rest.
 
