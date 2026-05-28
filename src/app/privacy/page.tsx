@@ -163,7 +163,7 @@ export default function PrivacyPolicyPage() {
               settings or by contacting us at{" "}
               <a
                 href="mailto:info@volunteercal.com"
-                className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+                className="text-vc-coral-deep underline underline-offset-2 transition-colors hover:text-vc-coral-dark"
               >
                 info@volunteercal.com
               </a>
@@ -212,7 +212,7 @@ export default function PrivacyPolicyPage() {
               To exercise any of these rights, please contact us at{" "}
               <a
                 href="mailto:info@volunteercal.com"
-                className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+                className="text-vc-coral-deep underline underline-offset-2 transition-colors hover:text-vc-coral-dark"
               >
                 info@volunteercal.com
               </a>
@@ -260,7 +260,7 @@ export default function PrivacyPolicyPage() {
                 Email:{" "}
                 <a
                   href="mailto:info@volunteercal.com"
-                  className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+                  className="text-vc-coral-deep underline underline-offset-2 transition-colors hover:text-vc-coral-dark"
                 >
                   info@volunteercal.com
                 </a>

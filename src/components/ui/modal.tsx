@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 interface ModalProps {
   open: boolean;
@@ -22,6 +23,14 @@ export function Modal({
   maxWidth = "max-w-2xl",
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Wave 5 H.2: stable id so aria-labelledby on the dialog can point
+  // at the title h2.
+  const titleId = useId();
+
+  // Wave 5 H.2: trap focus inside the dialog while open + restore focus
+  // to the trigger on close. See use-focus-trap.ts for details.
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +60,10 @@ export function Modal({
           }}
         >
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             className={`relative mx-4 flex max-h-[85vh] w-full flex-col rounded-2xl border border-vc-border-light bg-white shadow-xl ${maxWidth}`}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -60,14 +73,16 @@ export function Modal({
             {/* Header */}
             <div className="flex items-start justify-between border-b border-vc-border-light px-6 py-4">
               <div>
-                <h2 className="font-display text-xl text-vc-indigo">{title}</h2>
+                <h2 id={titleId} className="font-display text-xl text-vc-indigo">
+                  {title}
+                </h2>
                 {subtitle && (
                   <p className="mt-0.5 text-sm text-vc-text-secondary">{subtitle}</p>
                 )}
               </div>
               <button
                 onClick={onClose}
-                className="ml-4 -mr-1 -mt-1 flex h-11 w-11 items-center justify-center rounded-lg text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                className="ml-4 -mr-1 -mt-1 flex h-11 w-11 items-center justify-center rounded-lg text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo focus:outline-none focus-visible:ring-2 focus-visible:ring-vc-coral focus-visible:ring-offset-2"
                 aria-label="Close"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

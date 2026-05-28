@@ -32,6 +32,11 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --vc-coral: #E07A5F;
   --vc-coral-light: #F4A68E;
   --vc-coral-dark: #C4603F;
+  /* Wave 5 H.3: coral-deep for text on warm/sand backgrounds where
+     coral and coral-dark don't reach WCAG AA (4.5:1) against bg-warm.
+     Visually still "warm coral" but dark enough to read cleanly.
+     vs #FBF7F0 ≈ 5.5:1; vs #F2CC8F sand ≈ 4.7:1. */
+  --vc-coral-deep: #8A3B23;
   --vc-coral-glow: #E07A5F1A;
 
   /* Sage — calm, growth, success */
@@ -88,6 +93,7 @@ h1, h2, h3, h4, h5, h6, p, label, figcaption, blockquote, li {
   --color-vc-coral: var(--vc-coral);
   --color-vc-coral-light: var(--vc-coral-light);
   --color-vc-coral-dark: var(--vc-coral-dark);
+  --color-vc-coral-deep: var(--vc-coral-deep);
   --color-vc-coral-glow: var(--vc-coral-glow);
 
   --color-vc-sage: var(--vc-sage);
