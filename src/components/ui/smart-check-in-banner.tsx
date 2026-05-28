@@ -6,6 +6,10 @@ import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments, getDocument } from "@/lib/firebase/firestore";
 import { where } from "firebase/firestore";
 import { getCurrentPosition, isWithinRadius } from "@/lib/utils/geolocation";
+import {
+  checkInWindowStatus,
+  dateStringInTimeZone,
+} from "@/lib/utils/check-in-window";
 import type { Assignment, Service, Campus, ChurchSettings } from "@/lib/types";
 
 /** How often (ms) we re-evaluate whether to show the banner */
@@ -52,12 +56,9 @@ export function SmartCheckInBanner() {
       const proximityEnabled = settings.proximity_check_in_enabled === true;
       const proximityRadius = settings.proximity_radius_meters ?? DEFAULT_PROXIMITY_RADIUS;
 
-      // Today's date in church timezone
-      const nowInTz = new Date(new Date().toLocaleString("en-US", { timeZone: timezone }));
-      const yyyy = nowInTz.getFullYear();
-      const mm = String(nowInTz.getMonth() + 1).padStart(2, "0");
-      const dd = String(nowInTz.getDate()).padStart(2, "0");
-      const today = `${yyyy}-${mm}-${dd}`;
+      // Today's date in the church timezone (shared helper — replaces the
+      // old toLocaleString round-trip).
+      const today = dateStringInTimeZone(timezone);
 
       // Load today's confirmed assignments for this volunteer.
       //
@@ -114,12 +115,18 @@ export function SmartCheckInBanner() {
         if (!serviceDoc) continue;
 
         const startTime = serviceDoc.start_time || "09:00";
-        const serviceInTz = new Date(
-          new Date(`${today}T${startTime}`).toLocaleString("en-US", { timeZone: timezone }),
-        );
-        const diffMinutes = (nowInTz.getTime() - serviceInTz.getTime()) / 60_000;
+        // Same deterministic window math the server uses (see
+        // src/lib/utils/check-in-window.ts) so the banner never shows a
+        // prompt the endpoint would then reject.
+        const { open } = checkInWindowStatus({
+          serviceDate: assignment.service_date,
+          startTime,
+          timeZone: timezone,
+          windowBefore,
+          windowAfter,
+        });
 
-        if (diffMinutes >= -windowBefore && diffMinutes <= windowAfter) {
+        if (open) {
           // Format display time
           const [h, m] = startTime.split(":");
           const hour = parseInt(h, 10);
