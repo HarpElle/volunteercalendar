@@ -192,7 +192,7 @@ export default function TermsOfServicePage() {
                   href="https://www.twilio.com/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+                  className="text-vc-coral-deep underline underline-offset-2 transition-colors hover:text-vc-coral-dark"
                 >
                   Twilio&apos;s Privacy Policy
                 </a>{" "}
@@ -306,7 +306,7 @@ export default function TermsOfServicePage() {
                 Email:{" "}
                 <a
                   href="mailto:info@volunteercal.com"
-                  className="text-vc-coral transition-colors hover:text-vc-coral-dark"
+                  className="text-vc-coral-deep underline underline-offset-2 transition-colors hover:text-vc-coral-dark"
                 >
                   info@volunteercal.com
                 </a>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 
 interface DrawerProps {
   open: boolean;
@@ -22,6 +23,14 @@ export function Drawer({
   maxWidth = "max-w-xl",
 }: DrawerProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  // Wave 5 H.2: see modal.tsx for rationale + use-focus-trap.ts for the
+  // implementation. Drawer behaves like a side-anchored dialog from an
+  // assistive-tech standpoint, so it gets the same role/aria-modal/
+  // focus-trap treatment.
+  useFocusTrap(dialogRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +60,10 @@ export function Drawer({
           }}
         >
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             className={`fixed inset-y-0 right-0 flex w-full flex-col border-l border-vc-border-light bg-white shadow-xl ${maxWidth}`}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -60,7 +73,9 @@ export function Drawer({
             {/* Header */}
             <div className="flex items-start justify-between border-b border-vc-border-light px-6 py-4">
               <div>
-                <h2 className="font-display text-xl text-vc-indigo">{title}</h2>
+                <h2 id={titleId} className="font-display text-xl text-vc-indigo">
+                  {title}
+                </h2>
                 {subtitle && (
                   <p className="mt-0.5 text-sm text-vc-text-secondary">
                     {subtitle}
@@ -69,7 +84,7 @@ export function Drawer({
               </div>
               <button
                 onClick={onClose}
-                className="ml-4 -mr-1 -mt-1 rounded-lg p-2.5 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo"
+                className="ml-4 -mr-1 -mt-1 rounded-lg p-2.5 text-vc-text-muted transition-colors hover:bg-vc-bg-warm hover:text-vc-indigo focus:outline-none focus-visible:ring-2 focus-visible:ring-vc-coral focus-visible:ring-offset-2"
                 aria-label="Close"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

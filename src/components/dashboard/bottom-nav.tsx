@@ -191,6 +191,12 @@ export function BottomNav({
             <Link
               key={tab.href}
               href={tab.href}
+              // Wave 5 H.4: aria-current="page" tells screen readers
+              // which nav item maps to the active route. Visual cue is
+              // the coral top bar + indigo color; aria-current is the
+              // assistive-tech equivalent.
+              aria-current={active ? "page" : undefined}
+              aria-label={showBadge ? `${tab.label} (unread)` : undefined}
               className={`relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 ${
                 active ? "text-vc-indigo" : "text-vc-text-muted"
               }`}
@@ -207,6 +213,7 @@ export function BottomNav({
                   viewBox="0 0 24 24"
                   strokeWidth={active ? 2 : 1.5}
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -215,7 +222,10 @@ export function BottomNav({
                   />
                 </svg>
                 {showBadge && (
-                  <span className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-vc-coral" />
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-vc-coral"
+                  />
                 )}
               </span>
 
