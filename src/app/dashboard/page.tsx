@@ -225,6 +225,31 @@ export default function DashboardPage() {
     localStorage.setItem("vc_setup_guide_dismissed", "true");
   }, []);
 
+  // Wave 5 H.7: bump the rendered-session counter once per mount.
+  // Must declare hooks BEFORE the !hasOrg early return; we no-op
+  // when the guide isn't actually showing (no org, no stats yet, or
+  // already dismissed) so the counter only advances on real views.
+  const guideRenderCountedRef = useRef(false);
+  const guideMightShow =
+    hasOrg && !!stats && !guideDismissed;
+  useEffect(() => {
+    if (!guideMightShow || guideRenderCountedRef.current) return;
+    // Defer the allDone check to read time — we don't have requiredSteps
+    // until after the early return. For counter purposes "the guide
+    // would render absent the allDone short-circuit" is close enough;
+    // allDone users hit the celebration banner instead and don't need
+    // the 3-session counter to do anything.
+    guideRenderCountedRef.current = true;
+    const current = parseInt(
+      localStorage.getItem("vc_setup_guide_render_count") ?? "0",
+      10,
+    ) || 0;
+    localStorage.setItem(
+      "vc_setup_guide_render_count",
+      String(current + 1),
+    );
+  }, [guideMightShow]);
+
   if (!hasOrg) {
     // Wave 5 H.7: warmer, more inviting empty state. Previous copy
     // ("No Organization") read like a dead-end error; now it frames
@@ -296,23 +321,6 @@ export default function DashboardPage() {
   const completedSteps = setupSteps.filter((s) => s.done).length;
   const allDone = requiredSteps.length > 0 && requiredSteps.every((s) => s.done);
   const showGuide = stats && !guideDismissed && !allDone;
-
-  // Wave 5 H.7: bump the rendered-session counter once when the guide first
-  // renders this mount. The hook ref ensures we don't double-count a
-  // re-render within the same mount (e.g. on stats reload).
-  const guideRenderCountedRef = useRef(false);
-  useEffect(() => {
-    if (!showGuide || guideRenderCountedRef.current) return;
-    guideRenderCountedRef.current = true;
-    const current = parseInt(
-      localStorage.getItem("vc_setup_guide_render_count") ?? "0",
-      10,
-    ) || 0;
-    localStorage.setItem(
-      "vc_setup_guide_render_count",
-      String(current + 1),
-    );
-  }, [showGuide]);
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + "T12:00:00");
