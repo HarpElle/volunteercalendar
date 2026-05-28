@@ -13,7 +13,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **1** | Observability + safety nets (`log.ts`, CSP report-to, Firestore backups) | #92 #93 #94 | `fa20385` | ✅ Closed except 1.2b (CSP enforce, ~1 wk wait) |
 | **2** | Make writes survive failure (reminder idempotency, assignment-rule denorm, cron_runs) | #95 #96 #97 #99 | `53da0a4` | ✅ Closed (2.2b rule-tightening carried to Wave 5) |
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
-| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` | ⏳ 4.1/4.3/4.4 Codex PASS; 4.2 MFA awaiting Codex retest |
+| **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2), #117 (4.2 hotfix) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` + `65ca484` | ✅ Closed (all sub-items Codex PASS) |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | — | — | ⏸ Queued |
 | **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
@@ -168,9 +168,37 @@ Three notes from the retest (all "rules are working" confirmations, not bugs):
 - `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_3.md` — Notify Ministry Leads.
 - (Wave 4.4 doesn't need a Codex retest — pure static content. Visual confirmation on /status, /changelog, Settings → About VolunteerCal section, and landing footer is sufficient.)
 
-### 4.2 — Shipped 2026-05-27 (`ef25039`, PR #115); Codex retest pending
+### 4.2 — Shipped 2026-05-27 (`ef25039` + `65ca484`); Codex PASS WITH NOTES
 
-Implemented per the 7 decisions captured below. Firebase Identity Platform upgrade required (Jason completed in console before merge). Codex retest doc at `CODEX_WAVE_4_2.md` — substantial manual + scripted scope; auth-touching surface warrants careful verification.
+| PR | Commit | Scope |
+|----|--------|-------|
+| #115 | `ef25039` | TOTP MFA opt-in with 8 force-confirmed recovery codes. New `/api/account/mfa/recovery-codes` (POST/DELETE) and `/api/account/mfa/verify-recovery-code` (unauthed, rate-limited). MfaSetupModal + MfaDisableModal + MfaChallengeModal + MfaSettingsCard + RecoveryCodesDisplay. 4 new AuditActions. 12 integration tests. Required Firebase Identity Platform upgrade. |
+| #117 | `65ca484` | Hotfix: per-user Security activity card on /dashboard/account surfaces user-scoped MFA audit rows that the church-scoped /dashboard/settings/activity can't see. New `/api/account/activity` endpoint + new `audit_logs (actor, created_at)` composite index. 6 integration tests. |
+
+**Codex retest PASS 2026-05-27** after a multi-round environment-blocker debug (see Recurring bug class below). Results: all enrollment / sign-in challenge / disable / regenerate / recovery-code / Security activity flows verified end-to-end against production.
+
+Three notes from Codex (none launch-blocking):
+1. Firebase enforces `emailVerified=true` before TOTP enrollment — Codex verified disposable test accounts through Firebase's email-verification flow before retesting. Worth surfacing to users in our UI copy if MFA enrollment fails for this reason; today it would surface as a Firebase error code. (Polish item — file for Wave 5.)
+2. The `/api/account/mfa/verify-recovery-code` per-IP limit (10/hr) was warmed during the retest run; per-email (5/hr) was source-verified but Codex didn't wait an hour for a cold-IP confirmation of the exact 5-wrong-then-429 sequence. Source-verified is sufficient given the implementation matches.
+3. Codex's `.txt` recovery-code artifacts were removed from the docs tree and not copied to SharedTestingDocuments — clean hygiene.
+
+### Recurring bug class observed (Wave 4.2 environment)
+
+Multi-round debug of `auth/operation-not-allowed` cost two retest cycles. Captured for the next session:
+
+1. **Firebase TOTP MFA is NOT enabled via the Console UI.** The Console only has the Identity Platform upgrade button + SMS-MFA toggles. TOTP-specific MFA must be enabled via either (a) the Admin SDK's `projectConfigManager().updateProjectConfig(...)` call or (b) a PATCH to `identitytoolkit.googleapis.com/admin/v2/projects/{id}/config?updateMask=mfa`. The docs are explicit; the Console UI is misleading because it implies TOTP could exist there.
+2. **Two state flags must BOTH be `ENABLED`.** Identity Platform's MFA config has both `mfa.state` (project-wide) and `mfa.providerConfigs[].state` (per-provider). A PATCH that only sets the provider but omits the top-level state leaves project-wide MFA `DISABLED`, and TOTP enrollment still 403s. The first PATCH attempt landed the provider config but left the top-level state untouched (defaulted to DISABLED). Second PATCH explicitly set both.
+3. **Project ID matters.** Production volunteercal.com uses Firebase project `volunteercalendar-mvp`. Any Console changes done on a sibling project won't affect production. Verified by grepping the production JS bundle for `projectId:"volunteercalendar-mvp"`.
+
+Working canonical curl saved for future reference:
+```bash
+curl -X PATCH \
+  "https://identitytoolkit.googleapis.com/admin/v2/projects/volunteercalendar-mvp/config?updateMask=mfa" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -H "X-Goog-User-Project: volunteercalendar-mvp" \
+  -d '{ "mfa": { "state": "ENABLED", "providerConfigs": [{ "state": "ENABLED", "totpProviderConfig": { "adjacentIntervals": 5 } }] } }'
+```
 
 Original decision table for reference:
 
@@ -310,9 +338,7 @@ Self-service mode volunteers currently see their own draft-schedule claims on My
 
 ## Next up
 
-- **Wave 4.1 Codex retest** (after PR #110 merges + Vercel deploys): use `docs/ux-review/passes/launch-readiness/CODEX_WAVE_4_1.md`
-- **Wave 4.2**: MFA opt-in surface in Account → Security (Firebase Auth TOTP)
-- **Wave 4.3**: real "Notify Ministry Leads" endpoint (Growth+) — currently a stub button
-- **Wave 4.4**: `/status` + `/changelog` route for the rollout receipt
+- **Wave 5 — UX polish + assignment-rule tightening** (4-5 days). 8 polish items per the plan + the deferred 2.2b rule lock-down that now requires the My Schedule server-component refactor. Sequencing TBD with Jason before any code lands.
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
 - **Wave 3.4 long-tail route sweep**: incremental as files get touched
+- **Polish item from Wave 4.2 retest**: clearer UI copy when MFA enrollment fails because the user's email isn't verified — currently surfaces as a Firebase error code. Fold into Wave 5 H.1 a11y pass or carry as standalone polish.
