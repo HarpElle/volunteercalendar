@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { getChurchDocuments } from "@/lib/firebase/firestore";
@@ -203,9 +203,21 @@ export default function DashboardPage() {
 
   // Hooks must run before any early returns. Setup-guide state lives here so
   // the no-org early return below doesn't violate rules-of-hooks.
+  //
+  // Wave 5 H.7: auto-dismiss after 3 sessions the guide has rendered (in
+  // addition to the existing `allDone` and manual-dismiss triggers). A
+  // "session" is one fresh page load — we increment per mount and persist
+  // the count in localStorage. Three rendered sessions is enough for a new
+  // admin to learn the steps; beyond that the guide is clutter for someone
+  // who clearly wants to skip the on-rails path.
   const [guideDismissed, setGuideDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem("vc_setup_guide_dismissed") === "true";
+    if (localStorage.getItem("vc_setup_guide_dismissed") === "true") return true;
+    const renderCount = parseInt(
+      localStorage.getItem("vc_setup_guide_render_count") ?? "0",
+      10,
+    ) || 0;
+    return renderCount >= 3;
   });
   const [guideCollapsed, setGuideCollapsed] = useState(false);
   const dismissGuide = useCallback(() => {
@@ -213,35 +225,81 @@ export default function DashboardPage() {
     localStorage.setItem("vc_setup_guide_dismissed", "true");
   }, []);
 
+  // Wave 5 H.7: bump the rendered-session counter once per mount.
+  // Must declare hooks BEFORE the !hasOrg early return; we no-op
+  // when the guide isn't actually showing (no org, no stats yet, or
+  // already dismissed) so the counter only advances on real views.
+  const guideRenderCountedRef = useRef(false);
+  const guideMightShow =
+    hasOrg && !!stats && !guideDismissed;
+  useEffect(() => {
+    if (!guideMightShow || guideRenderCountedRef.current) return;
+    // Defer the allDone check to read time — we don't have requiredSteps
+    // until after the early return. For counter purposes "the guide
+    // would render absent the allDone short-circuit" is close enough;
+    // allDone users hit the celebration banner instead and don't need
+    // the 3-session counter to do anything.
+    guideRenderCountedRef.current = true;
+    const current = parseInt(
+      localStorage.getItem("vc_setup_guide_render_count") ?? "0",
+      10,
+    ) || 0;
+    localStorage.setItem(
+      "vc_setup_guide_render_count",
+      String(current + 1),
+    );
+  }, [guideMightShow]);
+
   if (!hasOrg) {
+    // Wave 5 H.7: warmer, more inviting empty state. Previous copy
+    // ("No Organization") read like a dead-end error; now it frames
+    // the moment as "ready to start" with a curved building icon and
+    // a confident primary CTA. Also surfaces the "join an existing
+    // org" pathway since some users land here while waiting for an
+    // invite from a teammate.
     return (
-      <div className="mx-auto max-w-lg py-16 text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-vc-sand/30">
-          <svg className="h-8 w-8 text-vc-indigo/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+      <div className="mx-auto max-w-xl py-16 text-center">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-vc-coral/15 to-vc-sand/30">
+          <svg
+            className="h-10 w-10 text-vc-coral"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75Z"
+            />
           </svg>
         </div>
-        <h1 className="font-display text-2xl text-vc-indigo">
-          No Organization
+        <h1 className="font-display text-3xl text-vc-indigo">
+          Welcome to VolunteerCal
         </h1>
-        <p className="mt-2 text-vc-text-secondary">
-          You&apos;re not currently part of any organization. Create a new one to
-          start scheduling volunteers, or delete your account if you no longer
-          need the service.
+        <p className="mx-auto mt-3 max-w-md text-vc-text-secondary">
+          You&apos;re all set up. The next step is to create an organization
+          for your church or nonprofit — or join one you&apos;ve been invited
+          to.
         </p>
         <div className="mt-8 flex flex-col items-center gap-3">
           <Link
             href="/dashboard/settings/setup"
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-6 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-vc-coral px-6 text-sm font-semibold text-white shadow-sm transition-all hover:bg-vc-coral-dark hover:shadow-md"
           >
-            Create a New Organization
+            Create your organization
           </Link>
-          <Link
-            href="/dashboard/account"
-            className="text-sm text-vc-text-muted underline underline-offset-2 hover:text-vc-indigo"
-          >
-            Manage account settings
-          </Link>
+          <p className="text-xs text-vc-text-muted">
+            Waiting on an invite?{" "}
+            <Link
+              href="/dashboard/account"
+              className="underline underline-offset-2 hover:text-vc-indigo"
+            >
+              Check your account
+            </Link>{" "}
+            — invitations show up there.
+          </p>
         </div>
       </div>
     );

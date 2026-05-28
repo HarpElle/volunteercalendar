@@ -75,12 +75,30 @@ export function MfaSetupModal({
       setManualSecret(result.manualSecret);
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
+      const message = (err as { message?: string })?.message ?? "";
       if (code === "auth/requires-recent-login") {
         setError(
           "For security, please sign out and sign back in, then try enabling MFA again.",
         );
+      } else if (
+        code === "auth/unverified-email" ||
+        // Firebase sometimes returns auth/operation-not-allowed with the
+        // string "Unverified email" embedded — surface the same hint.
+        message.toLowerCase().includes("unverified email")
+      ) {
+        setError(
+          "Verify your email address first. Close this dialog and use the 'Send verification email' button on the Security card.",
+        );
+      } else if (code === "auth/operation-not-allowed") {
+        // Distinct copy from the unverified-email case: this is a
+        // project-level config gap (TOTP MFA not enabled on the
+        // Firebase project). Should never happen in production but
+        // surfaces a clear next step if it does.
+        setError(
+          "Two-factor authentication isn't enabled on this project. Contact support.",
+        );
       } else {
-        setError((err as Error)?.message ?? "Could not start MFA setup.");
+        setError(message || "Could not start MFA setup.");
       }
     } finally {
       setLoading(false);
