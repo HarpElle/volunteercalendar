@@ -37,25 +37,26 @@ Wave 8 (customer comms + marketing).
 
 | # | Feature | Owner | Status | Date | By | Notes |
 |---|---------|-------|:------:|------|----|-------|
-| 1 | Sign up + email/pw login | Codex | ⬜ | | | |
-| 2 | Volunteer invite + join | Codex | ⬜ | | | |
-| 3 | Schedule create → publish → notify | Codex | ⬜ | | | |
-| 4 | Volunteer self-service availability | Codex | ⬜ | | | |
-| 5 | Children's check-in (kiosk) | Codex + Jason | ⬜ | | | |
-| 6 | Room reservation | Codex | ⬜ | | | |
-| 7 | Calendar feed (iCal) | Codex + Jason | ⬜ | | | |
-| 8 | Short links | Codex | ⬜ | | | |
-| 9 | Stripe checkout → upgrade (monthly + annual + trial) | Codex + Jason | ⬜ | | | |
-| 10 | Stripe customer portal | Codex + Jason | ⬜ | | | |
-| 11 | Stripe webhook idempotency | Codex | ⬜ | | | |
-| 12 | Notifications inbox | Codex | ⬜ | | | |
-| 13 | Reminders cron | Codex | ⬜ | | | |
-| 14 | Stats refresh cron | Codex | ⬜ | | | |
-| 15 | Worship planning + ProPresenter export | Codex + Jason | ⬜ | | | |
-| 16 | Audit log | Codex | ⬜ | | | |
-| 17 | Account / org deletion | Codex + Jason | ⬜ | | | |
+| 1 | Sign up + email/pw login | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 2 | Volunteer invite + join | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 3 | Schedule create → publish → notify | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 4 | Volunteer self-service availability | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 5 | Children's check-in (kiosk) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (PR #136 + residual #139); **Jason pending: label print on real printer** |
+| 6 | Room reservation | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 7 | Calendar feed (iCal) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (.ics + rotation); **Jason pending: Apple/Google Calendar subscribe** |
+| 8 | Short links | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS; Sev 3 interstitial adjudicated **working-as-designed** |
+| 9 | Stripe checkout → upgrade (monthly + annual + trial) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (wiring); **Jason pending: live monthly + annual + trial smoke** |
+| 10 | Stripe customer portal | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (portal session); **Jason pending: live update/cancel/interval switch** |
+| 11 | Stripe webhook idempotency | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 12 | Notifications inbox | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 13 | Reminders cron | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 14 | Stats refresh cron | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 15 | Worship planning + ProPresenter export | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (export file generation); **Jason pending: ProPresenter import + play** |
+| 16 | Audit log | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
+| 17 | Account / org deletion | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (PR #136 purge + index fix); **Jason pending: Stripe customer/sub canceled confirmation** |
 
-**Overall sign-off:** ⬜ — _Jason, date: _____________
+**Overall sign-off:** ⬜ — _Jason, date: _____________  
+_All Codex-side rows ✅ as of 2026-05-29 (PR #136 remediation + residual). Final sign-off pending the 6 Jason-half rows (label print, calendar subscribe, Stripe live × 2, ProPresenter, Stripe customer cleanup). These can be knocked out at any pace — gating only Wave 8 customer comms._
 
 ---
 

@@ -371,7 +371,12 @@ export async function POST(req: NextRequest) {
         room_name: s.room_name,
         checked_in_at: s.checked_in_at,
       })),
-      security_code: securityCode,
+      // Codex Wave 7 Row 5 (retest residual): suppress the freshly-generated
+      // security_code when no new sessions were created — a no-op duplicate
+      // shouldn't surface a code that maps to nothing. A future "lost sticker:
+      // re-show me my code" workflow would return existing session codes;
+      // that's intentionally NOT this path.
+      security_code: sessions.length > 0 ? securityCode : null,
       label_payloads: labelPayloads,
       // Codex Wave 7 Row 5: children skipped because they were already
       // actively checked in for this service_date (no duplicate session made).
