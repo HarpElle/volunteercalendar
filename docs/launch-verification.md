@@ -105,9 +105,10 @@ Wave 8 (customer comms + marketing).
 
 ### 8. Short links
 - **Owner:** Codex
-- **Happy:** An internal short link redirects correctly; an external target requires the allowlist + shows the interstitial.
-- **Failure:** A disallowed external URL is rejected.
+- **Happy:** An internal short link redirects correctly; an **allowlisted** external target redirects directly.
+- **Failure:** A disallowed (non-allowlisted) external URL is rejected (404/notFound).
 - **Audit:** `short_link.create_external` when an external target is created.
+- **Adjudicated (2026-05-28, Codex Wave 7 Sev 3):** there is intentionally **no interstitial** — the security model is allowlist-or-reject (`validateTargetUrl` → `relative | volunteercal | allowlist`, else rejected). A trusted (allowlisted) host redirects directly; an untrusted one never redirects at all. The original "shows the interstitial" expectation was an incorrect assumption. A "you're leaving VolunteerCal" interstitial for external links is an **optional future UX nicety**, not a security requirement — Jason's call whether to add it.
 
 ### 9. Stripe checkout → upgrade (monthly + annual + trial) — _Wave 6_
 - **Owner:** Codex + Jason — _Codex: session creation, redirect, and tier-enforcement logic, WITHOUT completing a live payment. Jason: one real paid upgrade in live mode (monthly + annual), confirming `subscription_interval` + the 14-day trial._

@@ -29,6 +29,16 @@ export async function GET(
   void auth;
 
   try {
+    // Codex Wave 7 Row 17: never serve a snapshot for a church that no longer
+    // exists. A recent cached snapshot would otherwise keep a deleted org
+    // addressable here even though it's gone from the list. Verify existence up
+    // front and purge any lingering snapshot.
+    const churchExists = (await adminDb.doc(`churches/${id}`).get()).exists;
+    if (!churchExists) {
+      await adminDb.doc(`platform_orgs/${id}`).delete().catch(() => {});
+      return NextResponse.json({ error: "Org not found" }, { status: 404 });
+    }
+
     const cachedDoc = await adminDb.doc(`platform_orgs/${id}`).get();
     const cached = cachedDoc.exists ? (cachedDoc.data() as OrgSnapshot) : null;
 

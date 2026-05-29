@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
     const sessions: CheckInSession[] = [];
     const labelPayloads: LabelPayload[] = [];
     const childNames: string[] = [];
+    const alreadyCheckedIn: string[] = [];
     let anyAlerts = false;
 
     for (const childId of child_ids) {
@@ -154,6 +155,24 @@ export async function POST(req: NextRequest) {
       // created sessions even though the kiosk UI showed success.
       const child = await loadChild(churchRef, childId);
       if (!child) continue;
+
+      // Idempotency (Codex Wave 7 Row 5): if this child already has an active
+      // (not-checked-out) session for this service_date, skip — a repeated
+      // check-in must NOT create a second session / security code. Query is two
+      // equality filters (index-safe); checked_out_at is filtered in-memory
+      // since the per-child/date result set is tiny.
+      const existingSessions = await churchRef
+        .collection("checkInSessions")
+        .where("child_id", "==", childId)
+        .where("service_date", "==", service_date)
+        .get();
+      const hasActiveSession = existingSessions.docs.some(
+        (d) => (d.data().checked_out_at ?? null) === null,
+      );
+      if (hasActiveSession) {
+        alreadyCheckedIn.push(childId);
+        continue;
+      }
 
       // Resolve room. Precedence:
       //   1. Operator override (per-child selection on the kiosk)
@@ -354,6 +373,9 @@ export async function POST(req: NextRequest) {
       })),
       security_code: securityCode,
       label_payloads: labelPayloads,
+      // Codex Wave 7 Row 5: children skipped because they were already
+      // actively checked in for this service_date (no duplicate session made).
+      already_checked_in: alreadyCheckedIn,
       print_server_url: printerConfig?.print_server_url || null,
       // Native kiosk app uses this to route to Brother SDK / AirPrint
       ...(printerConfig
