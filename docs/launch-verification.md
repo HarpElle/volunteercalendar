@@ -44,7 +44,7 @@ Wave 8 (customer comms + marketing).
 | 5 | Children's check-in (kiosk) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (PR #136 + residual #139); **Jason pending: label print on real printer** |
 | 6 | Room reservation | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
 | 7 | Calendar feed (iCal) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (.ics + rotation); **Jason pending: Apple/Google Calendar subscribe** |
-| 8 | Short links | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS; Sev 3 interstitial adjudicated **working-as-designed** |
+| 8 | Short links | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS; allowlisted-external interstitial shipped 2026-05-29 (PR #140) |
 | 9 | Stripe checkout → upgrade (monthly + annual + trial) | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (wiring); **Jason pending: live monthly + annual + trial smoke** |
 | 10 | Stripe customer portal | Codex + Jason | ⬜ | | | Codex ✅ 2026-05-29 (portal session); **Jason pending: live update/cancel/interval switch** |
 | 11 | Stripe webhook idempotency | Codex | ✅ | 2026-05-29 | Codex | Wave 7 PASS |
@@ -106,10 +106,10 @@ _All Codex-side rows ✅ as of 2026-05-29 (PR #136 remediation + residual). Fina
 
 ### 8. Short links
 - **Owner:** Codex
-- **Happy:** An internal short link redirects correctly; an **allowlisted** external target redirects directly.
+- **Happy:** An internal short link redirects correctly; an **allowlisted** external target shows a "You're leaving VolunteerCal" interstitial displaying the destination domain with Continue / Cancel.
 - **Failure:** A disallowed (non-allowlisted) external URL is rejected (404/notFound).
 - **Audit:** `short_link.create_external` when an external target is created.
-- **Adjudicated (2026-05-28, Codex Wave 7 Sev 3):** there is intentionally **no interstitial** — the security model is allowlist-or-reject (`validateTargetUrl` → `relative | volunteercal | allowlist`, else rejected). A trusted (allowlisted) host redirects directly; an untrusted one never redirects at all. The original "shows the interstitial" expectation was an incorrect assumption. A "you're leaving VolunteerCal" interstitial for external links is an **optional future UX nicety**, not a security requirement — Jason's call whether to add it.
+- **History:** Codex Wave 7 (2026-05-28) initially adjudicated this Sev 3 as "no interstitial — allowlist-or-reject is the protection." On 2026-05-29 the interstitial was shipped as an opt-in UX nicety: allowlisted externals now show the confirmation page (server-rendered, no JS); internal + volunteercal.com URLs still direct-redirect.
 
 ### 9. Stripe checkout → upgrade (monthly + annual + trial) — _Wave 6_
 - **Owner:** Codex + Jason — _Codex: session creation, redirect, and tier-enforcement logic, WITHOUT completing a live payment. Jason: one real paid upgrade in live mode (monthly + annual), confirming `subscription_interval` + the 14-day trial._
