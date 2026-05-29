@@ -88,6 +88,22 @@ Items Jason should test before inviting beta users. See `docs/TEST_PLAN.md` for 
 | Denormalize signup counts | Write `active_signup_count` on Event docs via Cloud Function trigger |
 | Push notification content | FCM infrastructure is in place (Phase 23); need to wire it into reminder delivery and shift swap notifications |
 
+### Check-In Enhancements
+
+These build on the kiosk + pre-check-in SMS (`/api/admin/checkin/sms/pre-checkin`, Pro tier) already shipped. They deepen the parent-facing experience and reduce kiosk-queue friction.
+
+#### Remote Check-In
+
+Let parents check their children in **before arriving** instead of at the kiosk. Today's pre-check-in SMS is only a *reminder* — the actual session, label, and security code still require a kiosk tap. Remote check-in would: include a tokened deep link in the pre-check-in SMS / family QR card → open a guardian-facing web page (likely `/checkin/family?token=…`) listing the family's children with their assigned rooms → parent taps "Check Us In" → the backend creates active `checkInSessions` with `pre_checked_in: true` and issues a digital security code shown on the parent's phone.
+
+**Open design choices (decide before building):**
+- **Labels:** print at the parent's nearest kiosk on arrival (operator scans the family QR and labels print) vs. skip physical labels in favor of digital-code-only (faster, but no physical label is a check-in/check-out UX regression for some churches).
+- **Geofence:** optionally require the parent be within N meters of the church to confirm (mitigates "checked in but didn't show up"), vs. trust the parent (simpler, faster).
+- **Arrival confirmation:** kiosk-tap-confirm on arrival (preserves the kiosk as the source of truth, blocks no-show ghosts) vs. fully bypass (faster but harder to reconcile).
+- **Audit:** session creation goes through a guardian-auth'd endpoint (not kiosk token); audit action could be `kiosk.checkin` with a method flag, or a new `kiosk.remote_checkin`.
+
+Reportedly a deterrent for Breeze users per a church contact (2026-05-29) — worth tracking as a competitive feature once the first cohort is happy and we have real usage to inform the label/geofence choice. Minimum-viable spec lift: ~3–5 days (digital-code-only, no geofence, no kiosk arrival confirm).
+
 ### Onboarding & Journey Enhancements
 
 These build on the prerequisite/onboarding pipeline (Phase 27) and the volunteer My Journey page (Phase 32). They deepen the volunteer equipping experience and reduce admin overhead.
