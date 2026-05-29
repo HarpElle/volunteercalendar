@@ -15,7 +15,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **3** | Auth/validation library coverage (zod, route migration sweep) | #101 #102 #103 #104 #105 #106 #107 #108 | `75f97a4` | ✅ Closed (3.4 long-tail sweep deferred — incremental as files get touched) |
 | **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2), #117 (4.2 hotfix) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` + `65ca484` | ✅ Closed (all sub-items Codex PASS) |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | #119–#128 | `9f76668` | ✅ Closed — Batches A–D + E phase 1 + E phase 3 (incl. 2.2b rule lockdown) merged & Codex-verified; E phase 2 (admin-page perf) deferred to post-launch |
-| **6** | Annual billing (20% off) + custom Firebase auth domain | — | — | ⏸ Queued |
+| **6** | Annual billing (20% off / "2 months free") + 14-day trial; custom auth domain N/A | #131 #132 | `a651501` | ✅ Closed — billing + trial shipped; custom auth domain dropped (N/A for an email/password app) |
 | **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
 | **8** | Customer comms + outreach + marketing | — | — | ⏸ Queued |
 
@@ -364,9 +364,29 @@ All steps landed and were verified by Codex in production. Closing summary:
 
 ---
 
+## Wave 6 — Closed (annual billing + trial; custom auth domain N/A)
+
+| Item | PR | Commit | Scope |
+|------|----|--------|-------|
+| Annual billing | #131 | `42d085c` | Interval-aware Stripe **lookup-key** resolution (`resolvePriceId` / `parseLookupKey` / `resolveTierAndInterval`) replacing the env-var Price maps; checkout accepts `interval`; webhook writes `subscription_interval`; `Church.subscription_interval` type; monthly/annual toggle on in-app billing + public pricing; "· Billed annually" badge; annual amounts **$278 / $662 / $1,142** (20% off). 188 unit tests incl. new `stripe-price-resolution` suite. |
+| 14-day trial | #132 | `a651501` | `subscription_data.trial_period_days: 14` at checkout (Stripe-recommended; per-Price trials are deprecated). Gated to NEW subs (free→paid) so existing paid orgs don't get a fresh trial. Makes the "Start Free Trial" copy honest. |
+
+### Stripe dashboard (Jason — done)
+- 3 annual Prices ($278 / $662 / $1,142/yr) on the existing products; six lookup keys `{starter,growth,pro}_{monthly,annual}` (confirmed matching the code constant); Customer Portal updated with the annual Prices for plan switching.
+- No trial on any Price (per-Price trials now "Legacy") → trial lives at checkout instead.
+
+### Custom auth domain — N/A (not "deferred")
+`auth.volunteercal.com` was listed to fix the Safari ITP issue "at the root." Investigation closed it out:
+- The app signs in with **email/password only** (`signInWithEmailAndPassword`) — no OAuth popup/redirect. The client `authDomain` config is only consumed by those flows + the auth-state iframe they load, **neither of which this app uses**; email/password talks directly to Google's identity API and never routes through the auth domain.
+- The real Safari issue (PR #86) was a **Firestore** long-polling thing — different mechanism, already fixed.
+- DNS pre-flight confirmed `https://auth.volunteercal.com/__/auth/handler` has no TLS cert (a bare CNAME to `firebaseapp.com` doesn't provision one — that needs a Firebase Hosting domain connection). Since nothing routes through that domain, the cert is moot.
+- **Decision (2026-05-28): skip it.** `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` stays `volunteercalendar-mvp.firebaseapp.com`. The unused `auth` CNAME at Hover can be deleted; the Authorized-domains entry is harmless. Revisit only if social/OAuth login is ever added.
+
+---
+
 ## Next up
 
-- **Wave 6 — annual billing** (20% off, "2 months free") + custom Firebase auth domain (`auth.volunteercal.com`). Stripe live keys present; needs 3 yearly Price objects (by lookup key) + a monthly/annual pricing toggle + `subscription_interval` on the church doc. Sequencing TBD with Jason before any code lands.
+- **Wave 7 — production verification matrix**: walk all 17 features (happy + one failure path each) on the live deployment using a throwaway live church; mark pass only when `audit_logs` is written where applicable. Living doc: `docs/launch-verification.md`. The next substantive wave.
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
 - **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf, no security dependency; revisit post-launch.
 - **Console-noise cleanup — DONE (2026-05-28)**: `useNotifications` onSnapshot error handler now treats `permission-denied` as benign (routed to `log.debug` instead of `console.error`) and only surfaces genuinely unexpected listener errors via `log.error`. No console permission warning on the volunteer dashboard during normal load / org switch. (`src/lib/hooks/use-notifications.ts`)
