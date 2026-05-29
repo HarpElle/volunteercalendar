@@ -22,7 +22,11 @@ interface CheckInResult {
 
 interface CheckInSuccessProps {
   result: CheckInResult;
+  /** Names of children who were newly checked in — same length & order as `result.sessions`. */
   childNames: string[];
+  /** Names of children skipped because they already had an active session
+   *  for today (server dedupe). Optional for callers that don't pass it. */
+  alreadyCheckedInNames?: string[];
   churchName?: string;
   onReset: () => void;
   onActivity: () => void;
@@ -41,11 +45,16 @@ interface CheckInSuccessProps {
 export function CheckInSuccess({
   result,
   childNames,
+  alreadyCheckedInNames = [],
   churchName,
   onReset,
   onActivity,
   onSetupPrinter,
 }: CheckInSuccessProps) {
+  // When the kiosk operator selected children who were ALL already checked in
+  // earlier today (server skipped every one), we have no new sessions to show —
+  // swap the headline + suppress the security-code/rooms/print blocks.
+  const hasNewSessions = result.sessions.length > 0;
   const printPath = detectPrintPath(
     result.printer_config,
     result.print_server_url,
@@ -112,25 +121,38 @@ export function CheckInSuccess({
         <p className="text-sm text-vc-text-secondary font-medium mb-1">{churchName}</p>
       )}
       <h2 className="text-3xl font-bold text-vc-indigo font-display mb-2">
-        Checked In!
+        {hasNewSessions ? "Checked In!" : "Already Checked In"}
       </h2>
 
-      <p className="text-gray-500 text-lg mb-8">
-        {childNames.join(", ")} {childNames.length === 1 ? "is" : "are"} all set
-      </p>
+      {hasNewSessions && (
+        <p className="text-gray-500 text-lg mb-8">
+          {childNames.join(", ")} {childNames.length === 1 ? "is" : "are"} all set
+        </p>
+      )}
+
+      {/* Already-checked-in notice — surfaces the server-side dedupe so the
+          operator knows why a selected child didn't get a label or code. */}
+      {alreadyCheckedInNames.length > 0 && (
+        <p className="mb-6 max-w-md text-center text-sm text-vc-text-secondary">
+          {alreadyCheckedInNames.join(", ")}{" "}
+          {alreadyCheckedInNames.length === 1 ? "was" : "were"} already checked in earlier today.
+        </p>
+      )}
 
       {/* Security code — large and prominent */}
-      <div className="bg-white rounded-2xl border-2 border-vc-indigo/20 p-8 mb-6 text-center shadow-sm">
-        <p className="text-sm text-gray-500 font-medium mb-2 uppercase tracking-wide">
-          Security Code
-        </p>
-        <p className="text-5xl font-mono font-bold text-vc-indigo tracking-[0.3em]">
-          {result.security_code}
-        </p>
-        <p className="text-sm text-gray-400 mt-3">
-          You&apos;ll need this code for pickup
-        </p>
-      </div>
+      {hasNewSessions && (
+        <div className="bg-white rounded-2xl border-2 border-vc-indigo/20 p-8 mb-6 text-center shadow-sm">
+          <p className="text-sm text-gray-500 font-medium mb-2 uppercase tracking-wide">
+            Security Code
+          </p>
+          <p className="text-5xl font-mono font-bold text-vc-indigo tracking-[0.3em]">
+            {result.security_code}
+          </p>
+          <p className="text-sm text-gray-400 mt-3">
+            You&apos;ll need this code for pickup
+          </p>
+        </div>
+      )}
 
       {/* Room assignments */}
       <div className="flex flex-wrap gap-2 justify-center mb-6">
@@ -144,8 +166,9 @@ export function CheckInSuccess({
         ))}
       </div>
 
-      {/* Print status */}
-      <div className="mb-8">
+      {/* Print status — nothing to print in the all-duplicate case. */}
+      {hasNewSessions && (
+        <div className="mb-8">
         {printStatus === "sending" && (
           <p className="text-gray-500 flex items-center gap-2">
             <span className="w-4 h-4 border-2 border-gray-300 border-t-vc-coral rounded-full animate-spin" />
@@ -184,7 +207,8 @@ export function CheckInSuccess({
         {printStatus === "no_printer" && !onSetupPrinter && (
           <p className="text-gray-400 text-sm">No printer configured</p>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Auto-reset */}
       <button

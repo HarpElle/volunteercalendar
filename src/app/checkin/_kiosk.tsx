@@ -55,6 +55,9 @@ interface CheckInResult {
   security_code: string;
   label_payloads: { format: string; data: string; printer_id: string }[];
   print_server_url: string | null;
+  /** Children skipped because they already had an active session for today
+   *  (the server's dedupe — see /api/checkin/checkin route comment). */
+  already_checked_in: string[];
 }
 
 interface ServiceOption {
@@ -437,11 +440,20 @@ function CheckInKioskInner() {
     }} />;
   }
 
-  // Get selected child names for success screen
-  const selectedChildNames =
-    household?.children
-      .filter((c) => selectedChildIds.includes(c.id))
-      .map((c) => c.preferred_name || c.first_name) || [];
+  // Names derived from the API response so the success screen reflects what
+  // ACTUALLY happened: any children skipped because they were already checked
+  // in earlier today get listed separately, and the "checked in now" list
+  // matches result.sessions order (so the room badges line up).
+  const nameOf = (id: string): string => {
+    const c = household?.children.find((x) => x.id === id);
+    return c?.preferred_name || c?.first_name || "";
+  };
+  const newlyCheckedInNames = (checkInResult?.sessions ?? [])
+    .map((s) => nameOf(s.child_id))
+    .filter(Boolean);
+  const alreadyCheckedInNames = (checkInResult?.already_checked_in ?? [])
+    .map(nameOf)
+    .filter(Boolean);
 
   return (
     <div className="relative h-full">
@@ -577,7 +589,8 @@ function CheckInKioskInner() {
       {screen === "success" && checkInResult && (
         <CheckInSuccess
           result={checkInResult}
-          childNames={selectedChildNames}
+          childNames={newlyCheckedInNames}
+          alreadyCheckedInNames={alreadyCheckedInNames}
           churchName={churchName}
           onReset={resetKiosk}
           onActivity={onActivity}
