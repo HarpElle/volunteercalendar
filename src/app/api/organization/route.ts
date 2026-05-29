@@ -288,16 +288,22 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    // Check if members have other orgs (for email content)
+    // Check if members have other orgs (for email content).
+    // Codex Wave 7 Row 5: the previous `where("church_id", "!=", church_id)`
+    // combined with the user_id equality required a composite index that
+    // wasn't deployed, so deletion 500'd whenever a non-owner member existed.
+    // A single-equality query is always index-served; filter the other-org
+    // check in memory (a user has very few memberships).
     const memberOtherOrgs = new Map<string, boolean>();
     for (const m of memberNotifyList) {
-      const otherMems = await adminDb
+      const allMems = await adminDb
         .collection("memberships")
         .where("user_id", "==", m.uid)
-        .where("church_id", "!=", church_id)
-        .limit(1)
         .get();
-      memberOtherOrgs.set(m.uid, !otherMems.empty);
+      const hasOtherOrg = allMems.docs.some(
+        (d) => d.data()?.church_id !== church_id,
+      );
+      memberOtherOrgs.set(m.uid, hasOtherOrg);
     }
 
     // Audit BEFORE cascade so we capture the org name + member count before
@@ -319,6 +325,12 @@ export async function DELETE(req: NextRequest) {
 
     // Cascade-delete all org data (subcollections, memberships, signups, etc.)
     await cascadeDeleteOrg(adminDb, church_id);
+
+    // Codex Wave 7 Row 17: purge the platform-admin snapshot cache so the
+    // deleted org stops being addressable via /api/platform/orgs/[id] (the
+    // detail route serves a recent cached snapshot without re-checking the
+    // church exists).
+    await adminDb.doc(`platform_orgs/${church_id}`).delete().catch(() => {});
 
     // Send notification emails (best-effort, don't block on failure)
     try {

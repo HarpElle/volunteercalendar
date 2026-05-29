@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { rateLimitDistributed } from "@/lib/server/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
+import { audit, kioskActor } from "@/lib/server/audit";
 import { assignRoomByGrade, type AssignedRoom } from "@/lib/server/checkin-helpers";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
@@ -46,6 +47,23 @@ export async function POST(req: NextRequest) {
 
     const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
     if (churchMismatch) return churchMismatch;
+
+    // Codex Wave 7 Row 5: audit the household lookup (the matrix expects a
+    // kiosk.lookup entry). Fire-and-forget; gated on a real search param so we
+    // don't log the empty/invalid 400 case.
+    if (qr_token || phone_last4 || phone_full) {
+      void audit({
+        church_id,
+        actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+        action: "kiosk.lookup",
+        target_type: "checkin_household_lookup",
+        target_id: church_id,
+        metadata: {
+          method: qr_token ? "qr_token" : phone_last4 ? "phone_last4" : "phone_full",
+        },
+        outcome: "ok",
+      });
+    }
 
     const churchRef = adminDb.collection("churches").doc(church_id);
 
