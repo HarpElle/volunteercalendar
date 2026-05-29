@@ -69,6 +69,13 @@ export async function POST(req: NextRequest) {
       await churchRef.update({ stripe_customer_id: customerId });
     }
 
+    // 14-day free trial for NEW subscriptions only (upgrading from free).
+    // Existing paid orgs switching plans don't get a fresh trial. Stripe
+    // recommends setting trials at checkout — per-Price trials are deprecated
+    // and incompatible with Checkout. Applies to both monthly and annual.
+    const trialDays =
+      ((churchData.subscription_tier as string) || "free") === "free" ? 14 : undefined;
+
     // Create checkout session
     const origin = req.headers.get("origin") || "http://localhost:3000";
     const session = await stripe.checkout.sessions.create({
@@ -80,6 +87,7 @@ export async function POST(req: NextRequest) {
       metadata: { church_id, tier, interval },
       subscription_data: {
         metadata: { church_id, tier, interval },
+        ...(trialDays ? { trial_period_days: trialDays } : {}),
       },
       allow_promotion_codes: true,
     });
