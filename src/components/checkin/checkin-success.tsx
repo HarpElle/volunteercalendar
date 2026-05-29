@@ -14,7 +14,8 @@ interface CheckInResult {
     room_name: string;
     checked_in_at: string;
   }[];
-  security_code: string;
+  /** Null when no new sessions were created (server dedupe). */
+  security_code: string | null;
   label_payloads: { format: string; data: string; printer_id: string }[];
   print_server_url: string | null;
   printer_config?: KioskPrinterConfig | null;

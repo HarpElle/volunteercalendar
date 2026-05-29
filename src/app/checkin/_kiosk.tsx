@@ -52,7 +52,9 @@ interface CheckInResult {
     room_name: string;
     checked_in_at: string;
   }[];
-  security_code: string;
+  /** Null when no new sessions were created (all selected children were
+   *  already checked in earlier today). */
+  security_code: string | null;
   label_payloads: { format: string; data: string; printer_id: string }[];
   print_server_url: string | null;
   /** Children skipped because they already had an active session for today
