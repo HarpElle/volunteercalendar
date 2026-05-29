@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { adminDb } from "@/lib/firebase/admin";
 import { validateTargetUrl } from "@/lib/utils/short-link-target";
@@ -75,6 +76,52 @@ export default async function ShortLinkPage({ params }: Props) {
   const result = validateTargetUrl(target);
   if (!result.ok) {
     notFound();
+  }
+
+  // Allowlisted external destinations get a "you're leaving VolunteerCal"
+  // interstitial so users see the destination domain before navigating
+  // off-site. Relative paths and volunteercal.com URLs redirect directly —
+  // those stay on-brand and need no confirmation. Server-rendered, no JS.
+  if (result.kind === "allowlist") {
+    let destinationHost = result.value;
+    try {
+      destinationHost = new URL(result.value).hostname;
+    } catch {
+      // fall back to the raw URL — validateTargetUrl already vetted it
+    }
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-vc-bg p-6">
+        <div className="w-full max-w-md text-center">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-vc-coral">
+            External link
+          </p>
+          <h1 className="font-display text-3xl font-semibold text-vc-indigo sm:text-4xl">
+            You&apos;re leaving VolunteerCal
+          </h1>
+          <p className="mt-4 text-base text-vc-text-secondary">
+            This link will take you to
+          </p>
+          <p className="mt-1 break-all text-lg font-medium text-vc-indigo">
+            {destinationHost}
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <a
+              href={result.value}
+              rel="noopener noreferrer"
+              className="w-full max-w-xs rounded-full bg-vc-coral px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-vc-coral-dark active:scale-[0.98]"
+            >
+              Continue →
+            </a>
+            <Link
+              href="/"
+              className="text-sm text-vc-text-muted transition hover:text-vc-indigo"
+            >
+              Cancel · Back to VolunteerCal
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   redirect(result.value);
