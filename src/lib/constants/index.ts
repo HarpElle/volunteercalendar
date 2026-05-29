@@ -90,6 +90,8 @@ export const PRICING_TIERS: {
   tier: SubscriptionTier;
   name: string;
   price: string;
+  /** Annual total billed yearly (20% off monthly×12), e.g. "$278". Wave 6. */
+  priceAnnual?: string;
   volunteers: string;
   ministries: string;
   features: string[];
@@ -115,6 +117,7 @@ export const PRICING_TIERS: {
     tier: "starter",
     name: "Starter",
     price: "$29/mo",
+    priceAnnual: "$278",
     volunteers: "100",
     ministries: "5",
     features: [
@@ -131,6 +134,7 @@ export const PRICING_TIERS: {
     tier: "growth",
     name: "Growth",
     price: "$69/mo",
+    priceAnnual: "$662",
     volunteers: "250",
     ministries: "15",
     highlighted: true,
@@ -154,6 +158,7 @@ export const PRICING_TIERS: {
     tier: "pro",
     name: "Pro",
     price: "$119/mo",
+    priceAnnual: "$1,142",
     volunteers: "500",
     ministries: "Unlimited",
     features: [

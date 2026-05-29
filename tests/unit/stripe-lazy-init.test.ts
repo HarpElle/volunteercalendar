@@ -43,12 +43,16 @@ describe("stripe lazy init", () => {
     expect(() => stripe.checkout).toThrow(/STRIPE_SECRET_KEY is not set/);
   });
 
-  it("PRICE_TO_TIER and TIER_TO_PRICE module-level exports work without key", async () => {
+  it("parseLookupKey is a pure helper that works without the Stripe SDK / key", async () => {
     delete process.env.STRIPE_SECRET_KEY;
-    const { PRICE_TO_TIER, TIER_TO_PRICE } = await import("@/lib/stripe");
-    // These are pure env-var lookups; they should never need Stripe SDK.
-    expect(typeof PRICE_TO_TIER).toBe("object");
-    expect(typeof TIER_TO_PRICE).toBe("object");
+    const { parseLookupKey } = await import("@/lib/stripe");
+    // Pure string parse of `${tier}_${monthly|annual}` — never touches the SDK.
+    expect(parseLookupKey("starter_monthly")).toEqual({ tier: "starter", interval: "month" });
+    expect(parseLookupKey("growth_annual")).toEqual({ tier: "growth", interval: "year" });
+    expect(parseLookupKey("pro_annual")).toEqual({ tier: "pro", interval: "year" });
+    expect(parseLookupKey("bogus")).toBeNull();
+    expect(parseLookupKey(null)).toBeNull();
+    expect(parseLookupKey(undefined)).toBeNull();
   });
 
   it("accessing stripe properties succeeds when key is set", async () => {

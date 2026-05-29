@@ -51,23 +51,78 @@ export const stripe = new Proxy({} as Stripe, {
 });
 
 /**
- * Map Stripe Price IDs to subscription tiers.
- * Set these in .env.local after creating products in Stripe Dashboard.
+ * Wave 6 — interval-aware price resolution via Stripe LOOKUP KEYS.
  *
- * Note: these are evaluated at module-load (cheap string reads). When env
- * vars are missing, the entries collapse to `""` keys — harmless, just
- * means no Price ID will ever match.
+ * Replaces the old env-var Price-ID maps (STRIPE_PRICE_STARTER/GROWTH/PRO).
+ * Lookup keys are assigned in the Stripe dashboard on each Price, so Prices can
+ * be rotated/replaced without a Vercel env change. Each paid tier has a monthly
+ * and an annual Price, keyed `${tier}_${monthly|annual}`.
+ *
+ * These strings MUST match the lookup keys set on the live (and test) Stripe
+ * Prices EXACTLY — a mismatch makes checkout fail with "no price configured".
+ * Confirm against the dashboard before shipping.
  */
-export const PRICE_TO_TIER: Record<string, string> = {
-  [process.env.STRIPE_PRICE_STARTER || ""]: "starter",
-  [process.env.STRIPE_PRICE_GROWTH || ""]: "growth",
-  [process.env.STRIPE_PRICE_PRO || ""]: "pro",
+export type BillingInterval = "month" | "year";
+
+const LOOKUP_KEYS: Record<string, Record<BillingInterval, string>> = {
+  starter: { month: "starter_monthly", year: "starter_annual" },
+  growth: { month: "growth_monthly", year: "growth_annual" },
+  pro: { month: "pro_monthly", year: "pro_annual" },
 };
 
-export const TIER_TO_PRICE: Record<string, string> = {
-  starter: process.env.STRIPE_PRICE_STARTER || "",
-  growth: process.env.STRIPE_PRICE_GROWTH || "",
-  pro: process.env.STRIPE_PRICE_PRO || "",
+const SUFFIX_TO_INTERVAL: Record<string, BillingInterval> = {
+  monthly: "month",
+  annual: "year",
 };
+
+/** Parse a `${tier}_${monthly|annual}` lookup key into { tier, interval }. */
+export function parseLookupKey(
+  lookupKey: string | null | undefined,
+): { tier: string; interval: BillingInterval } | null {
+  if (!lookupKey) return null;
+  const m = /^(starter|growth|pro)_(monthly|annual)$/.exec(lookupKey);
+  if (!m) return null;
+  return { tier: m[1], interval: SUFFIX_TO_INTERVAL[m[2]] };
+}
+
+// Module-level cache: lookup key -> Price ID. Lookup keys are stable; the
+// underlying Price ID only changes if a Price is rotated in the dashboard,
+// which is rare and self-heals on the next cold start.
+const _priceIdByLookupKey = new Map<string, string>();
+
+/**
+ * Resolve the Stripe Price ID for a (tier, interval) via its lookup key.
+ * Returns null if the tier/interval is unknown or no active Price carries that
+ * lookup key (e.g. the dashboard Price isn't set up in this Stripe mode yet).
+ */
+export async function resolvePriceId(
+  tier: string,
+  interval: BillingInterval,
+): Promise<string | null> {
+  const key = LOOKUP_KEYS[tier]?.[interval];
+  if (!key) return null;
+  const cached = _priceIdByLookupKey.get(key);
+  if (cached) return cached;
+  const res = await stripe.prices.list({
+    lookup_keys: [key],
+    active: true,
+    limit: 1,
+  });
+  const id = res.data[0]?.id ?? null;
+  if (id) _priceIdByLookupKey.set(key, id);
+  return id;
+}
+
+/**
+ * Reverse: a Stripe Price ID (from a webhook subscription item) into { tier,
+ * interval }. Prefer the price's own `lookup_key` carried on the webhook
+ * payload; this retrieve is the robust fallback when that field is absent.
+ */
+export async function resolveTierAndInterval(
+  priceId: string,
+): Promise<{ tier: string; interval: BillingInterval } | null> {
+  const price = await stripe.prices.retrieve(priceId);
+  return parseLookupKey(price.lookup_key);
+}
 
 export { TIER_LIMITS } from "@/lib/constants";

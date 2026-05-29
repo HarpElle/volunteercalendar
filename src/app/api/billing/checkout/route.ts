@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, TIER_TO_PRICE } from "@/lib/stripe";
+import { stripe, resolvePriceId } from "@/lib/stripe";
 import { adminDb } from "@/lib/firebase/admin";
 import { assertBearerToken, requireMembership } from "@/lib/server/authz";
 import { parseBody, z } from "@/lib/server/validation";
@@ -8,6 +8,9 @@ import { log } from "@/lib/log";
 const BodySchema = z.object({
   church_id: z.string().min(1),
   tier: z.string().min(1),
+  // Wave 6: billing interval. Defaults to monthly for backward compatibility
+  // with any caller that doesn't send it.
+  interval: z.enum(["month", "year"]).default("month"),
 });
 
 export async function POST(req: NextRequest) {
@@ -29,11 +32,11 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { church_id, tier } = body;
-    const priceId = TIER_TO_PRICE[tier];
+    const { church_id, tier, interval } = body;
+    const priceId = await resolvePriceId(tier, interval);
     if (!priceId) {
       return NextResponse.json(
-        { error: `No Stripe price configured for tier: ${tier}` },
+        { error: `No Stripe price configured for tier: ${tier} (${interval})` },
         { status: 400 },
       );
     }
@@ -74,9 +77,9 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/dashboard/billing?success=true`,
       cancel_url: `${origin}/dashboard/billing?canceled=true`,
-      metadata: { church_id, tier },
+      metadata: { church_id, tier, interval },
       subscription_data: {
-        metadata: { church_id, tier },
+        metadata: { church_id, tier, interval },
       },
       allow_promotion_codes: true,
     });

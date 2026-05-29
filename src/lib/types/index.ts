@@ -118,6 +118,9 @@ export type OrgType = "church" | "nonprofit" | "other";
 
 export type SubscriptionSource = "stripe" | "manual";
 
+/** Billing cadence of a paid subscription (Wave 6 — annual billing). */
+export type SubscriptionInterval = "month" | "year";
+
 export interface Church {
   id: string;
   name: string;
@@ -130,6 +133,8 @@ export interface Church {
   subscription_tier: SubscriptionTier;
   /** How the tier was set — absent defaults to "stripe" */
   subscription_source?: SubscriptionSource;
+  /** Billing cadence of the active paid subscription (Wave 6). Absent = monthly (legacy subs). */
+  subscription_interval?: SubscriptionInterval;
   stripe_customer_id: string | null;
   settings: ChurchSettings;
   /** Org-wide prerequisites that apply to ALL teams */

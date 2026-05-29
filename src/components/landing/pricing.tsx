@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { AnimateIn } from "./animate-in";
 import { PRICING_TIERS } from "@/lib/constants";
 
 export function Pricing() {
+  const [annual, setAnnual] = useState(false);
   return (
     <section id="pricing" className="relative bg-vc-bg px-6 py-24">
       <div className="mx-auto max-w-6xl">
@@ -19,7 +21,41 @@ export function Pricing() {
           </p>
         </AnimateIn>
 
-        <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
+        <AnimateIn delay={0.1}>
+          <div className="mt-10 flex items-center justify-center">
+            <div
+              role="group"
+              aria-label="Billing interval"
+              className="inline-flex items-center gap-1 rounded-full border border-vc-border-light bg-white p-1 text-sm shadow-sm"
+            >
+              <button
+                type="button"
+                onClick={() => setAnnual(false)}
+                aria-pressed={!annual}
+                className={`rounded-full px-4 py-1.5 font-semibold transition-colors ${
+                  !annual ? "bg-vc-indigo text-white" : "text-vc-text-secondary hover:text-vc-indigo"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnnual(true)}
+                aria-pressed={annual}
+                className={`rounded-full px-4 py-1.5 font-semibold transition-colors ${
+                  annual ? "bg-vc-indigo text-white" : "text-vc-text-secondary hover:text-vc-indigo"
+                }`}
+              >
+                Annual{" "}
+                <span className={annual ? "text-white/80" : "text-vc-coral"}>
+                  · 2 months free
+                </span>
+              </button>
+            </div>
+          </div>
+        </AnimateIn>
+
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
           {PRICING_TIERS.map((tier, i) => (
             <AnimateIn key={tier.tier} delay={0.05 + i * 0.08}>
               <div
@@ -47,9 +83,13 @@ export function Pricing() {
                   ) : (
                     <>
                       <span className="font-display text-3xl text-vc-indigo">
-                        {tier.price.split("/")[0]}
+                        {annual && tier.priceAnnual
+                          ? tier.priceAnnual
+                          : tier.price.split("/")[0]}
                       </span>
-                      <span className="text-sm text-vc-text-muted">/mo</span>
+                      <span className="text-sm text-vc-text-muted">
+                        {annual && tier.priceAnnual ? "/yr" : "/mo"}
+                      </span>
                     </>
                   )}
                 </div>

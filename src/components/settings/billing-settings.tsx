@@ -48,6 +48,8 @@ export function BillingSettings({
 }: BillingSettingsProps) {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  // Wave 6: monthly/annual toggle driving which Price the upgrade cards buy.
+  const [billingInterval, setBillingInterval] = useState<"month" | "year">("month");
 
   // Platform admin state
   const [overrideTier, setOverrideTier] = useState<string>("free");
@@ -70,17 +72,24 @@ export function BillingSettings({
     activeEventCount >= limits.active_events * 0.8;
   const subscriptionSource: SubscriptionSource =
     church?.subscription_source || "stripe";
+  // Wave 6: current subscription billing cadence (absent = monthly legacy).
+  const currentIsAnnual = church?.subscription_interval === "year";
+  const currentPlanDef = PRICING_TIERS.find((t) => t.tier === currentTier);
+  const currentPriceLabel =
+    currentIsAnnual && currentPlanDef?.priceAnnual
+      ? `${currentPlanDef.priceAnnual}/yr`
+      : currentPlanDef?.price || "$0";
 
   // --- Billing handlers ---
 
-  async function handleCheckout(tier: string) {
+  async function handleCheckout(tier: string, interval: "month" | "year") {
     setCheckoutLoading(tier);
     try {
       const token = await getAuth().currentUser?.getIdToken();
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ church_id: churchId, tier }),
+        body: JSON.stringify({ church_id: churchId, tier, interval }),
       });
       const data = await res.json();
       if (data.url) {
@@ -284,9 +293,9 @@ export function BillingSettings({
                   </Badge>
                 </div>
                 <p className="text-sm text-vc-text-secondary">
-                  {PRICING_TIERS.find((t) => t.tier === currentTier)?.price ||
-                    "$0"}{" "}
-                  {currentTier !== "free" && "· Billed monthly"}
+                  {currentPriceLabel}{" "}
+                  {currentTier !== "free" &&
+                    (currentIsAnnual ? "· Billed annually" : "· Billed monthly")}
                 </p>
               </div>
               {currentTier !== "free" && (
@@ -406,9 +415,44 @@ export function BillingSettings({
           </div>
 
           {/* Plan comparison */}
-          <h3 className="mb-4 font-semibold text-vc-indigo">
-            {currentTier === "free" ? "Upgrade Your Plan" : "All Plans"}
-          </h3>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="font-semibold text-vc-indigo">
+              {currentTier === "free" ? "Upgrade Your Plan" : "All Plans"}
+            </h3>
+            <div
+              role="group"
+              aria-label="Billing interval"
+              className="inline-flex items-center gap-1 rounded-full border border-vc-border-light bg-white p-1 text-sm"
+            >
+              <button
+                type="button"
+                onClick={() => setBillingInterval("month")}
+                aria-pressed={billingInterval === "month"}
+                className={`rounded-full px-3 py-1 font-medium transition-colors ${
+                  billingInterval === "month"
+                    ? "bg-vc-indigo text-white"
+                    : "text-vc-text-secondary hover:text-vc-indigo"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingInterval("year")}
+                aria-pressed={billingInterval === "year"}
+                className={`rounded-full px-3 py-1 font-medium transition-colors ${
+                  billingInterval === "year"
+                    ? "bg-vc-indigo text-white"
+                    : "text-vc-text-secondary hover:text-vc-indigo"
+                }`}
+              >
+                Annual{" "}
+                <span className={billingInterval === "year" ? "text-white/80" : "text-vc-sage"}>
+                  · 2 months free
+                </span>
+              </button>
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {PRICING_TIERS.map((plan) => {
               const isCurrent = plan.tier === currentTier;
@@ -440,7 +484,14 @@ export function BillingSettings({
                     )}
                   </div>
                   <p className="text-2xl font-bold text-vc-indigo mb-1">
-                    {plan.price}
+                    {billingInterval === "year" && plan.priceAnnual ? (
+                      <>
+                        {plan.priceAnnual}
+                        <span className="text-sm font-medium text-vc-text-muted">/yr</span>
+                      </>
+                    ) : (
+                      plan.price
+                    )}
                   </p>
                   <p className="text-xs text-vc-text-muted mb-4">
                     {plan.volunteers} volunteers · {plan.ministries}{" "}
@@ -475,7 +526,7 @@ export function BillingSettings({
                       variant={plan.highlighted ? "primary" : "outline"}
                       className="w-full"
                       loading={checkoutLoading === plan.tier}
-                      onClick={() => handleCheckout(plan.tier)}
+                      onClick={() => handleCheckout(plan.tier, billingInterval)}
                     >
                       {currentTier === "free" ? "Start Free Trial" : "Upgrade"}
                     </Button>
