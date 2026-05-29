@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, PRICE_TO_TIER } from "@/lib/stripe";
+import { stripe, parseLookupKey, resolveTierAndInterval } from "@/lib/stripe";
 import { adminDb } from "@/lib/firebase/admin";
 import type Stripe from "stripe";
 import { buildPurchaseThankYouEmail } from "@/lib/utils/email-templates";
@@ -138,9 +138,13 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        const checkoutInterval = session.metadata?.interval;
         await adminDb.doc(`churches/${churchId}`).update({
           subscription_tier: tier,
           stripe_customer_id: session.customer as string,
+          ...(checkoutInterval === "month" || checkoutInterval === "year"
+            ? { subscription_interval: checkoutInterval }
+            : {}),
         });
 
         void audit({
@@ -190,8 +194,15 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        const priceId = subscription.items.data[0]?.price?.id || "";
-        const tier = PRICE_TO_TIER[priceId] || "free";
+        const price = subscription.items.data[0]?.price;
+        const priceId = price?.id || "";
+        // Wave 6: derive tier + interval from the Price's lookup key
+        // (`${tier}_${monthly|annual}`). The webhook payload carries the
+        // expanded Price (with lookup_key); the retrieve is a rare fallback.
+        let resolved = parseLookupKey(price?.lookup_key);
+        if (!resolved && priceId) resolved = await resolveTierAndInterval(priceId);
+        const tier = resolved?.tier || "free";
+        const interval = resolved?.interval ?? null;
         const isActive =
           subscription.status === "active" ||
           subscription.status === "trialing";
@@ -200,6 +211,7 @@ export async function POST(req: NextRequest) {
 
         await adminDb.doc(`churches/${churchId}`).update({
           subscription_tier: newTier,
+          ...(isActive && interval ? { subscription_interval: interval } : {}),
           ...(isDowngrade(currentTier, newTier)
             ? { previous_tier: currentTier, tier_changed_at: new Date().toISOString() }
             : {}),
