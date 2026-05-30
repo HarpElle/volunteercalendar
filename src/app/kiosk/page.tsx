@@ -85,13 +85,25 @@ export default function KioskActivationPage() {
 
       const data = (await res.json()) as {
         token: string;
-        station: { id: string; church_id: string; name: string };
+        station: {
+          id: string;
+          church_id: string;
+          name: string;
+          type?: "self_service" | "staffed";
+        };
+        allowed_scopes?: string[];
       };
 
       setKioskCredentials({
         token: data.token,
         church_id: data.station.church_id,
         station_id: data.station.id,
+        station_type: data.station.type,
+        // Server-derived scope set — drives kiosk UI affordances. Server
+        // still enforces scope on every request regardless of UI state.
+        allowed_scopes: data.allowed_scopes as
+          | import("@/lib/types").KioskScope[]
+          | undefined,
       });
       setStationName(data.station.name);
 

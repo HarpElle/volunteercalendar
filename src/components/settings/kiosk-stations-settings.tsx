@@ -14,7 +14,13 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import type { KioskStation } from "@/lib/types";
+import type { KioskStation, KioskStationType } from "@/lib/types";
+
+function stationTypeLabel(type: KioskStationType | undefined): string {
+  if (type === "staffed") return "Staffed";
+  // Legacy or self_service both render as the relevant label.
+  return type === "self_service" ? "Self-service" : "Staffed (legacy)";
+}
 
 interface ActivationToShow {
   stationName: string;
@@ -28,6 +34,10 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  // P0-1: station type drives token scope. Default to "self_service" — the
+  // safer default (excludes "checkout" from the kiosk's capabilities until
+  // an admin explicitly enrolls a staffed station for releases).
+  const [newType, setNewType] = useState<KioskStationType>("self_service");
   const [creating, setCreating] = useState(false);
   const [activationToShow, setActivationToShow] =
     useState<ActivationToShow | null>(null);
@@ -72,7 +82,11 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ church_id: churchId, name: newName.trim() }),
+        body: JSON.stringify({
+          church_id: churchId,
+          name: newName.trim(),
+          type: newType,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -85,11 +99,60 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
         expiresAt: data.activation_expires_at,
       });
       setNewName("");
+      setNewType("self_service");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleChangeType(
+    stationId: string,
+    stationName: string,
+    currentType: KioskStationType | undefined,
+  ) {
+    if (!user) return;
+    const targetType: KioskStationType =
+      currentType === "staffed" ? "self_service" : "staffed";
+    const targetLabel = stationTypeLabel(targetType);
+    if (
+      !confirm(
+        `Change "${stationName}" to a ${targetLabel} station? ` +
+          `This will revoke the current device's access and you'll need to ` +
+          `re-activate it with a new code. The kiosk goes dark until then.`,
+      )
+    )
+      return;
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/kiosk/stations/${stationId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          action: "change_type",
+          type: targetType,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to change station type");
+      }
+      const data = await res.json();
+      setActivationToShow({
+        stationName,
+        code: data.activation_code,
+        expiresAt: data.activation_expires_at,
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
     }
   }
 
@@ -167,28 +230,85 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
           immediately disables that device.
         </p>
 
-        <form
-          onSubmit={handleCreate}
-          className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
-          <div className="flex-1">
-            <Input
-              label="Station name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Lobby Kiosk"
-              required
-              maxLength={60}
-              disabled={creating}
-            />
+        <form onSubmit={handleCreate} className="mt-5 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Input
+                label="Station name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Lobby Kiosk"
+                required
+                maxLength={60}
+                disabled={creating}
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={creating || !newName.trim()}
+              variant="primary"
+            >
+              {creating ? "Enrolling…" : "Enroll new station"}
+            </Button>
           </div>
-          <Button
-            type="submit"
-            disabled={creating || !newName.trim()}
-            variant="primary"
+
+          {/* P0-1: station type selector */}
+          <fieldset
+            className="rounded-lg border border-vc-border-light p-4"
+            disabled={creating}
           >
-            {creating ? "Enrolling…" : "Enroll new station"}
-          </Button>
+            <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+              Station type
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors ${
+                  newType === "self_service"
+                    ? "border-vc-indigo bg-vc-indigo/5"
+                    : "border-vc-border-light hover:border-vc-indigo/40"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="station-type"
+                    value="self_service"
+                    checked={newType === "self_service"}
+                    onChange={() => setNewType("self_service")}
+                    className="text-vc-indigo"
+                  />
+                  <strong className="text-vc-indigo">Self-service</strong>
+                </span>
+                <span className="text-xs text-vc-text-secondary">
+                  Unattended kiosk in the lobby. Children are checked IN here;
+                  checkout happens at a staffed station only.
+                </span>
+              </label>
+              <label
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors ${
+                  newType === "staffed"
+                    ? "border-vc-indigo bg-vc-indigo/5"
+                    : "border-vc-border-light hover:border-vc-indigo/40"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="station-type"
+                    value="staffed"
+                    checked={newType === "staffed"}
+                    onChange={() => setNewType("staffed")}
+                    className="text-vc-indigo"
+                  />
+                  <strong className="text-vc-indigo">Staffed</strong>
+                </span>
+                <span className="text-xs text-vc-text-secondary">
+                  Operated by a check-in volunteer. Handles both check-in and
+                  checkout. Use for the children&apos;s wing release station.
+                </span>
+              </label>
+            </div>
+          </fieldset>
         </form>
 
         {error && (
@@ -230,7 +350,23 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
                 className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
               >
                 <div className="flex-1 min-w-[200px]">
-                  <p className="font-medium text-vc-indigo">{s.name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-vc-indigo">{s.name}</p>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                        s.type === "staffed"
+                          ? "bg-vc-coral/10 text-vc-coral"
+                          : "bg-vc-indigo/10 text-vc-indigo"
+                      }`}
+                      title={
+                        s.type === "staffed"
+                          ? "Handles both check-in and checkout"
+                          : "Check-in only — checkout at staffed station"
+                      }
+                    >
+                      {stationTypeLabel(s.type)}
+                    </span>
+                  </div>
                   <p className="text-xs text-vc-text-muted">
                     {s.status === "revoked" ? (
                       <span className="text-vc-coral">Revoked</span>
@@ -246,7 +382,17 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
                   </p>
                 </div>
                 {s.status === "active" && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleChangeType(s.id, s.name, s.type)}
+                      className="rounded-lg border border-vc-border-light px-3 py-1.5 text-xs font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm"
+                      title="Switch between self-service and staffed (revokes the device's current activation)"
+                    >
+                      {s.type === "staffed"
+                        ? "Change to Self-service"
+                        : "Change to Staffed"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleReissue(s.id, s.name)}

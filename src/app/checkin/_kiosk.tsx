@@ -4,8 +4,10 @@ import { Suspense, useCallback, useEffect, useRef, useState, type RefObject } fr
 import { useSearchParams, useRouter } from "next/navigation";
 import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 import {
+  getStoredKioskAllowedScopes,
   getStoredKioskChurchId,
   getStoredKioskStationId,
+  getStoredKioskStationType,
   getStoredKioskToken,
   kioskFetch,
 } from "@/lib/kiosk-client";
@@ -192,6 +194,17 @@ function CheckInKioskInner() {
   }, []);
 
   const [mode, setMode] = useState<KioskMode>("checkin");
+  // P0-1: self-service stations don't carry "checkout" in their token scope.
+  // We hide the Check Out toggle on those so the operator can't switch modes.
+  // Server still 403s any checkout request if it somehow makes it through
+  // (defense in depth). Legacy stations with no stored scopes → permit
+  // checkout for back-compat (their token has full scope from pre-P0-1).
+  const [canCheckout] = useState(() => {
+    const scopes = getStoredKioskAllowedScopes();
+    if (scopes.length === 0) return true;
+    return scopes.includes("checkout");
+  });
+  const [stationType] = useState(() => getStoredKioskStationType());
   const [screen, setScreen] = useState<KioskScreen>("lookup");
   const [household, setHousehold] = useState<HouseholdResult | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
@@ -510,24 +523,33 @@ function CheckInKioskInner() {
             </span>
           </div>
 
-          {/* Right: Mode toggle */}
-          <button
-            type="button"
-            onClick={() => { toggleMode(); onActivity(); }}
-            className={`
-              inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px]
-              font-semibold transition-colors
-              ${mode === "checkin"
-                ? "text-vc-sage hover:bg-vc-sage/10"
-                : "text-vc-coral hover:bg-vc-coral/10"
-              }
-            `}
-          >
-            {mode === "checkin" ? "Check Out" : "Check In"}
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-            </svg>
-          </button>
+          {/* Right: Mode toggle — hidden on self-service stations (P0-1). */}
+          {canCheckout ? (
+            <button
+              type="button"
+              onClick={() => { toggleMode(); onActivity(); }}
+              className={`
+                inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px]
+                font-semibold transition-colors
+                ${mode === "checkin"
+                  ? "text-vc-sage hover:bg-vc-sage/10"
+                  : "text-vc-coral hover:bg-vc-coral/10"
+                }
+              `}
+            >
+              {mode === "checkin" ? "Check Out" : "Check In"}
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+            </button>
+          ) : (
+            <span
+              className="text-[10px] uppercase tracking-wider text-vc-text-muted"
+              title="This is a self-service station. Children are checked out at a staffed station only."
+            >
+              {stationType === "self_service" ? "Self-service" : ""}
+            </span>
+          )}
         </div>
       )}
 
