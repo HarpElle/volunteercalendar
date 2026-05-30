@@ -64,6 +64,11 @@ export type AuditAction =
   | "pickup.blocked_updated"
   | "pickup.blocked_removed"
   | "pickup.blocked_photo_added"
+  | "pickup.blocked_photo_removed"
+  /** Court-order PDF / supporting document attached to a blocked-pickup entry. */
+  | "pickup.blocked_document_added"
+  | "pickup.blocked_document_removed"
+  | "pickup.authorized_photo_removed"
   /** Owner reduced the scope of a block (e.g. "this person is allowed
    *  for THIS Sunday only"). Distinct from the routine list edit. */
   | "pickup.blocked_override_granted"
