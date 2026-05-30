@@ -408,6 +408,20 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Wave 9 P0-2 — Blocked-pickup contacts (the "Not Authorized" list).
+      //
+      // Stored in its own subcollection rather than embedded on the child
+      // Person doc because `people/{docId}` is volunteer-readable (line 174);
+      // embedding custody-order data there would leak the most sensitive
+      // surface in the system to every active member. Server-only access
+      // matches `checkInSessions` / `check_in_codes` / `checkinAlerts`.
+      //
+      // Each doc carries `scope: "child" | "household"` and the relevant
+      // `child_id` / `household_id`. See `BlockedPickup` in src/lib/types.
+      match /checkin_blocked_pickups/{docId} {
+        allow read, write: if false; // Admin SDK only via /api/admin/checkin/*
+      }
+
       // Settings + rooms config: org-admin readable for setup screens.
       match /checkinSettings/{docId} {
         allow read: if isOrgAdmin(churchId);
