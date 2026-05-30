@@ -7,20 +7,7 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import QRCode from "qrcode";
-import type {
-  CheckInHousehold,
-  Child,
-  ChildGrade,
-  PersonAuthorizedPickup,
-} from "@/lib/types";
-import { AuthorizedPickupPanel } from "@/components/checkin/authorized-pickup-panel";
-
-/** Wave 9 P0-2: the household-detail API extends the Child shape with
- *  `authorized_pickups`. Local extension keeps the legacy Child type
- *  untouched while letting the panel consume the new field. */
-interface ChildWithPickups extends Child {
-  authorized_pickups?: PersonAuthorizedPickup[];
-}
+import type { CheckInHousehold, Child, ChildGrade } from "@/lib/types";
 
 const GRADES: { value: ChildGrade; label: string }[] = [
   { value: "nursery", label: "Nursery" },
@@ -46,7 +33,7 @@ export default function HouseholdDetailPage() {
   const churchId = activeMembership?.church_id;
 
   const [household, setHousehold] = useState<CheckInHousehold | null>(null);
-  const [children, setChildren] = useState<ChildWithPickups[]>([]);
+  const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
@@ -399,31 +386,6 @@ export default function HouseholdDetailPage() {
           </div>
         )}
       </div>
-
-      {/* Wave 9 P0-2: Authorized-pickup management per child.
-          Separate section so the compact children list above stays
-          scannable. Each child gets a panel with add / edit / delete /
-          photo capture. */}
-      {children.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-            Authorized pickup contacts
-          </h2>
-          {children.map((child) => (
-            <div key={`pickup-${child.id}`} className="space-y-2">
-              <p className="text-sm font-medium text-vc-indigo">
-                {child.preferred_name || child.first_name} {child.last_name}
-              </p>
-              <AuthorizedPickupPanel
-                childPersonId={child.id}
-                childDisplayName={child.preferred_name || child.first_name}
-                initialPickups={child.authorized_pickups ?? []}
-                onChanged={() => fetchData()}
-              />
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Modals */}
       <AnimatePresence>

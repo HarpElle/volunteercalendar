@@ -47,10 +47,6 @@ export async function resetFirestore(db: Firestore): Promise<void> {
     "ministries",
     "services",
     "events",
-    // Wave 9 P0-2 sub-PR B: pickup-management routes touch these.
-    "households",
-    "checkin_blocked_pickups",
-    "checkinSettings",
   ];
 
   const churchSnap = await db.collection("churches").get();
