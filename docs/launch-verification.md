@@ -87,43 +87,10 @@ _All Codex-side rows ✅ as of 2026-05-29 (PR #136 remediation + residual). Fina
 - **Audit:** ➖ none expected (availability edits aren't audited).
 
 ### 5. Children's check-in (kiosk)
-- **Owner:** Codex + Jason — _Codex: the activate/lookup/checkin/checkout API flow + audits + revoked-token handling + station-type enforcement. Jason: physical label printing on a real printer + the Wave 9 at-church safety walkthrough below._
+- **Owner:** Codex + Jason — _Codex: the activate/lookup/checkin/checkout API flow + audits + revoked-token handling. Jason: physical label printing on a real printer._
 - **Happy:** Activate a kiosk station; look up a household; check a child in; print a label; check out.
 - **Failure:** Checking in the same child twice is prevented; a revoked kiosk token ends the session cleanly.
 - **Audit:** `kiosk.activate`, `kiosk.lookup`, `kiosk.checkin`, `kiosk.checkout` (+ `kiosk.station_revoke`, `kiosk.medical_data_revealed` if exercised).
-
-#### 5a. Wave 9 P0-1 station type architecture (Codex PASS 2026-05-30)
-- **Owner:** Codex — _verified on `52b5e6d`; full report at `docs/ux-review/passes/launch-readiness/CODEX_CHECKIN_P01.md`._
-- **Self-service kiosk:** activation response carries `station.type === "self_service"` + `allowed_scopes` excluding `checkout`; kiosk UI hides the Check Out toggle (renders "Self-service" label); direct `POST /api/checkin/checkout` returns 403 `{ error: "Token does not authorize checkout" }`.
-- **Staffed kiosk:** activation response carries `station.type === "staffed"` + `allowed_scopes` including `checkout`; Check Out toggle renders normally; direct checkout succeeds.
-- **Change-type flow:** admin "Change to Staffed" on a self-service station returns a new activation code + revokes the in-flight token; previously-activated kiosk bounces to `/kiosk` on next request; re-activation grants full scope.
-- **Audit:** `kiosk.checkout_blocked_self_service` (outcome: denied), `kiosk.station_type_changed` (`metadata.from_type` + `metadata.to_type`).
-
-#### 5b. Wave 9 P0-2 authorized-pickup photos + block list + ERT (Jason at-church walkthrough — pending P0-2 ship)
-Jason walks these on a real Sunday with a real church (or with a tabletop volunteer playing the not-authorized role). All paths must succeed AND the audit trail must be intact.
-- **Authorized-pickup photo capture:** at registration, capture or upload a guardian photo. Photo renders on the household page; thumbnail visible at staffed checkout. Verify the photo is served via a signed URL (no public Storage URL).
-- **Authorized-pickup confirmation at checkout:** at a staffed station, present an authorized adult — operator sees their photo + name + relationship and explicitly taps "This is the right person" before release.
-- **Blocked-pickup attempt at staffed station:** add a not-authorized person to a child's block list (with optional photo + reason). Attempt to check out using that person's details. System pauses the session, shows full-screen alert + audio cue, fires SMS to the owner AND every configured Emergency Response Team number. Operator cannot self-override — release requires owner-approved unblock.
-- **Parent self-service pickup-list edit:** a household primary guardian edits the authorized-pickup list from `/dashboard/account/family/pickups`. Change does NOT take effect immediately — sits in a 24h cooling-off bucket; both household primary guardians receive notification.
-- **Audit:** `pickup.authorized_added`, `pickup.authorized_removed`, `pickup.authorized_photo_added`, `pickup.blocked_added`, `pickup.blocked_removed`, `pickup.blocked_photo_added`, `kiosk.pickup_person_confirmed`, `kiosk.blocked_pickup_attempted` (the legally material event), `kiosk.ert_notified` (one row per ERT recipient).
-
-#### 5c. Wave 9 P0-3 restrictions + SOR + bg-check expiry (Jason at-church walkthrough — pending P0-3 ship)
-- **Restriction enforcement:** add a `cannot_serve_with_children: true` restriction to a volunteer; the scheduler matrix blocks suggesting them for any children's-ministry role and shows a hard-red lock badge.
-- **SOR check field:** mark `sor_checked: true`, `sor_match: false` for a volunteer; field surfaces on the Safety panel.
-- **Background-check expiry cron:** with a volunteer whose `background_check.expires_at` is within 60 days, run the prerequisite cron manually — notification email arrives; expired bg-check gets auto-flagged `status: "expired"`.
-- **Audit:** `volunteer.restriction_added`, `volunteer.restriction_removed`, `volunteer.background_check_initiated`, `volunteer.background_check_completed`, `volunteer.background_check_expired_auto`, `volunteer.sor_check_logged`.
-
-#### 5d. Wave 9 P0-4 HIPAA-aware medical visibility (Jason at-church walkthrough — pending P0-4 ship)
-- **Per-field visibility:** in CheckInSettings → "Medical privacy", set allergies to label+roster, medications to roster-only-with-tap-to-reveal. Verify label print shows allergies but NOT medications; roster shows medications hidden behind a "tap to reveal" affordance; tap fires `kiosk.medical_data_revealed`.
-- **Audit:** `kiosk.alert_acknowledged`, `kiosk.medical_data_revealed`.
-
-#### 5e. Wave 9 P0-5 ratio enforcement + worker check-in (Jason at-church walkthrough — pending P0-5 ship)
-- **Ratio policy editor:** per-room policy with `min_volunteers`, `max_children_per_volunteer`, `min_unrelated_adults: 2`.
-- **Volunteer check-in:** check a volunteer into a room (operator tap or QR scan); the room dashboard's traffic-light strip flips green.
-- **Ratio warning at threshold:** child check-in past the warning threshold shows an amber banner — operator can proceed.
-- **Ratio block at violation:** child check-in that would violate the ratio is blocked at a self-service station; staffed station shows a 2-tap override with reason chip.
-- **Two-deep enforcement:** with only a parent + their own child in the room, the rule denies satisfying `min_unrelated_adults` (parent's `related_to` excludes them from counting against the policy).
-- **Audit:** `kiosk.capacity_warning_shown`, `kiosk.ratio_violation_override` (with `overridden_by_user_id`), `room.volunteer_checked_in`, `room.volunteer_checked_out`.
 
 ### 6. Room reservation
 - **Owner:** Codex

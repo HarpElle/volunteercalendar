@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
-import { audit, userActor } from "@/lib/server/audit";
 import type { CheckInSettings } from "@/lib/types";
 
 /**
@@ -85,10 +84,6 @@ export async function PUT(req: NextRequest) {
       "breeze_import_grade_mapping",
       "guardian_sms_on_checkin",
       "guardian_sms_on_checkout",
-      // Wave 9 P0-2: Emergency Response Team for blocked-pickup attempts.
-      // Owner retains override authority; ERT recipients are SMS-paged in
-      // parallel as a tripwire. Audit separately below.
-      "emergency_notification_numbers",
     ];
 
     const updates: Record<string, unknown> = {
@@ -102,44 +97,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // Validate ERT array shape if supplied — drop anything malformed so
-    // we never persist a phone number we can't actually dial.
-    if ("emergency_notification_numbers" in updates) {
-      const raw = updates.emergency_notification_numbers;
-      if (raw !== undefined && raw !== null && !Array.isArray(raw)) {
-        return NextResponse.json(
-          { error: "emergency_notification_numbers must be an array" },
-          { status: 400 },
-        );
-      }
-      const cleaned = Array.isArray(raw)
-        ? raw
-            .map((entry: unknown) => {
-              if (
-                !entry ||
-                typeof entry !== "object" ||
-                Array.isArray(entry)
-              ) {
-                return null;
-              }
-              const obj = entry as Record<string, unknown>;
-              const name = typeof obj.name === "string" ? obj.name.trim() : "";
-              const phone =
-                typeof obj.phone === "string" ? obj.phone.trim() : "";
-              if (!name || !phone) return null;
-              const role =
-                typeof obj.role === "string" && obj.role.trim().length > 0
-                  ? obj.role.trim()
-                  : null;
-              return { name, phone, role };
-            })
-            .filter((e): e is { name: string; phone: string; role: string | null } => e !== null)
-        : [];
-      updates.emergency_notification_numbers = cleaned;
-    }
-
     const snap = await settingsRef.get();
-    const before = snap.data() as CheckInSettings | undefined;
     if (snap.exists) {
       await settingsRef.update(updates);
     } else {
@@ -151,36 +109,6 @@ export async function PUT(req: NextRequest) {
         printers: [],
         ...updates,
       });
-    }
-
-    // Audit ERT mutations separately from the catch-all settings save —
-    // ERT membership is a legally material signal worth its own row.
-    if ("emergency_notification_numbers" in updates) {
-      const after = (updates.emergency_notification_numbers ??
-        []) as CheckInSettings["emergency_notification_numbers"];
-      const beforeList = before?.emergency_notification_numbers ?? [];
-      const afterList = after ?? [];
-      // Only emit if the set actually changed (compare normalized JSON).
-      const beforeKey = JSON.stringify(
-        beforeList.map((e) => `${e.phone}|${e.name}|${e.role ?? ""}`).sort(),
-      );
-      const afterKey = JSON.stringify(
-        afterList.map((e) => `${e.phone}|${e.name}|${e.role ?? ""}`).sort(),
-      );
-      if (beforeKey !== afterKey) {
-        void audit({
-          church_id: churchId,
-          actor: userActor(userId),
-          action: "checkin.ert_settings_updated",
-          target_type: "checkinSettings",
-          target_id: "config",
-          metadata: {
-            before_count: beforeList.length,
-            after_count: afterList.length,
-          },
-          outcome: "ok",
-        });
-      }
     }
 
     const updated = await settingsRef.get();

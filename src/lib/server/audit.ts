@@ -55,35 +55,6 @@ export type AuditAction =
   // P0-1: station type architecture
   | "kiosk.station_type_changed"
   | "kiosk.checkout_blocked_self_service"
-  // P0-2: authorized-pickup contacts + blocked-pickup list + ERT
-  | "pickup.authorized_added"
-  | "pickup.authorized_updated"
-  | "pickup.authorized_removed"
-  | "pickup.authorized_photo_added"
-  | "pickup.blocked_added"
-  | "pickup.blocked_updated"
-  | "pickup.blocked_removed"
-  | "pickup.blocked_photo_added"
-  | "pickup.blocked_photo_removed"
-  /** Court-order PDF / supporting document attached to a blocked-pickup entry. */
-  | "pickup.blocked_document_added"
-  | "pickup.blocked_document_removed"
-  | "pickup.authorized_photo_removed"
-  /** Owner reduced the scope of a block (e.g. "this person is allowed
-   *  for THIS Sunday only"). Distinct from the routine list edit. */
-  | "pickup.blocked_override_granted"
-  /** ERT settings updated — add/remove notification numbers, change name/role. */
-  | "checkin.ert_settings_updated"
-  /** Operator confirmed the on-site pickup person matches an authorized
-   *  contact at the staffed-station checkout step. */
-  | "kiosk.pickup_person_confirmed"
-  /** A blocked-pickup person attempted to take a child home. Legally
-   *  material — this is the row that proves the church recognized the
-   *  block. Metadata includes blocked_pickup_id + session_id. */
-  | "kiosk.blocked_pickup_attempted"
-  /** Emergency Response Team contact was paged by SMS following a
-   *  blocked-pickup attempt. One row per recipient. */
-  | "kiosk.ert_notified"
   | "kiosk.activate"
   | "kiosk.lookup"
   | "kiosk.checkin"
