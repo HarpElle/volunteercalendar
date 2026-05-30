@@ -11,6 +11,7 @@ import { timingSafeEqual } from "node:crypto";
 import { verifyKioskToken } from "@/lib/server/kiosk";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { isPlatformAdmin } from "@/lib/utils/platform-admin";
+import { audit, kioskActor } from "@/lib/server/audit";
 import { stripe } from "@/lib/stripe";
 import type { KioskScope, OrgRole } from "@/lib/types";
 import { log } from "@/lib/log";
@@ -69,14 +70,34 @@ export async function requireKioskToken(
   if (presented.includes(".") && presented.startsWith("kt_")) {
     const verified = await verifyKioskToken(presented);
     if (verified && verified.station.church_id) {
-      // Default scope set is broad; reserved for future per-token narrowing.
+      // P0-1: enforce the token's actual persisted scope (derived from
+      // station type at activation). Previously this was hardcoded to
+      // ALL_SCOPES, which masked the per-station narrowing — now a
+      // self-service kiosk's token genuinely cannot authorize "checkout".
       const principal: KioskPrincipal = {
         mode: "station",
         church_id: verified.station.church_id,
         station_id: verified.station.id,
-        scope: ALL_SCOPES,
+        scope: verified.scope,
       };
       if (!principal.scope.includes(scope)) {
+        // Defense-in-depth audit: a self-service kiosk that somehow tried
+        // to call a checkout route is worth recording. Cheap signal — the
+        // UI hides the Check Out button so this should never fire under
+        // normal use.
+        if (scope === "checkout") {
+          void audit({
+            church_id: verified.station.church_id,
+            actor: kioskActor(verified.station.id),
+            action: "kiosk.checkout_blocked_self_service",
+            target_type: "kiosk_station",
+            target_id: verified.station.id,
+            metadata: {
+              station_type: verified.station.type ?? "staffed",
+            },
+            outcome: "denied",
+          });
+        }
         return NextResponse.json(
           { error: `Token does not authorize ${scope}` },
           { status: 403 },

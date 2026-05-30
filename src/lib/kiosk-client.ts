@@ -7,16 +7,23 @@
  *   redirects the kiosk to the activation page.
  *
  * localStorage keys:
- *   vc_kiosk_token       — full credential `${tokenId}.${secret}`, set on activation
- *   vc_kiosk_church_id   — church_id this kiosk is bound to
- *   vc_kiosk_station_id  — station_id (for station-aware printer routing)
- *   vc_kiosk_name        — friendly name (existing key, used for printer-station hint)
- *   vc_kiosk_printer     — printer config (existing key)
+ *   vc_kiosk_token         — full credential `${tokenId}.${secret}`, set on activation
+ *   vc_kiosk_church_id     — church_id this kiosk is bound to
+ *   vc_kiosk_station_id    — station_id (for station-aware printer routing)
+ *   vc_kiosk_station_type  — "self_service" | "staffed" (P0-1)
+ *   vc_kiosk_allowed_scopes — JSON-encoded KioskScope[] (P0-1) — drives UI
+ *                             gating (e.g. hide Check Out on self-service)
+ *   vc_kiosk_name          — friendly name (existing key, used for printer-station hint)
+ *   vc_kiosk_printer       — printer config (existing key)
  */
+
+import type { KioskScope, KioskStationType } from "@/lib/types";
 
 export const KIOSK_TOKEN_KEY = "vc_kiosk_token";
 export const KIOSK_CHURCH_ID_KEY = "vc_kiosk_church_id";
 export const KIOSK_STATION_ID_KEY = "vc_kiosk_station_id";
+export const KIOSK_STATION_TYPE_KEY = "vc_kiosk_station_type";
+export const KIOSK_ALLOWED_SCOPES_KEY = "vc_kiosk_allowed_scopes";
 
 export function getStoredKioskToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -33,15 +40,47 @@ export function getStoredKioskStationId(): string | null {
   return window.localStorage.getItem(KIOSK_STATION_ID_KEY);
 }
 
+export function getStoredKioskStationType(): KioskStationType {
+  if (typeof window === "undefined") return "staffed";
+  const raw = window.localStorage.getItem(KIOSK_STATION_TYPE_KEY);
+  // Legacy / missing → "staffed" matches the back-compat default for stations
+  // that pre-date P0-1 (token already has full scope).
+  return raw === "self_service" || raw === "staffed" ? raw : "staffed";
+}
+
+export function getStoredKioskAllowedScopes(): KioskScope[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(KIOSK_ALLOWED_SCOPES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as KioskScope[];
+  } catch {
+    // ignore — caller treats missing scopes the same as "no opinion".
+  }
+  return [];
+}
+
 export function setKioskCredentials(opts: {
   token: string;
   church_id: string;
   station_id: string;
+  station_type?: KioskStationType;
+  allowed_scopes?: KioskScope[];
 }): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(KIOSK_TOKEN_KEY, opts.token);
   window.localStorage.setItem(KIOSK_CHURCH_ID_KEY, opts.church_id);
   window.localStorage.setItem(KIOSK_STATION_ID_KEY, opts.station_id);
+  if (opts.station_type) {
+    window.localStorage.setItem(KIOSK_STATION_TYPE_KEY, opts.station_type);
+  }
+  if (opts.allowed_scopes) {
+    window.localStorage.setItem(
+      KIOSK_ALLOWED_SCOPES_KEY,
+      JSON.stringify(opts.allowed_scopes),
+    );
+  }
 }
 
 export function clearKioskCredentials(): void {
@@ -49,6 +88,8 @@ export function clearKioskCredentials(): void {
   window.localStorage.removeItem(KIOSK_TOKEN_KEY);
   window.localStorage.removeItem(KIOSK_CHURCH_ID_KEY);
   window.localStorage.removeItem(KIOSK_STATION_ID_KEY);
+  window.localStorage.removeItem(KIOSK_STATION_TYPE_KEY);
+  window.localStorage.removeItem(KIOSK_ALLOWED_SCOPES_KEY);
 }
 
 /**

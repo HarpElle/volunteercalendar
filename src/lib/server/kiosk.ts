@@ -13,12 +13,27 @@ import type {
   KioskActivation,
   KioskScope,
   KioskStation,
+  KioskStationType,
   KioskToken,
 } from "@/lib/types";
 
 const ACTIVATION_TTL_MS = 10 * 60 * 1000;
 
-const DEFAULT_SCOPES: KioskScope[] = [
+// ─── Station-type → token-scope mapping ─────────────────────────────────────
+// Self-service kiosks excludes "checkout" by design — release always happens
+// at a staffed station per the industry pattern (PCO docs: "checkout is not
+// available on self stations"). See plan P0-1.
+
+const SELF_SERVICE_SCOPES: KioskScope[] = [
+  "lookup",
+  "checkin",
+  "register",
+  "print",
+  "services",
+  "room",
+];
+
+const STAFFED_SCOPES: KioskScope[] = [
   "lookup",
   "checkin",
   "checkout",
@@ -27,6 +42,20 @@ const DEFAULT_SCOPES: KioskScope[] = [
   "services",
   "room",
 ];
+
+/** Derive the allowed token scopes for a given station type. */
+export function scopesForStationType(type: KioskStationType): KioskScope[] {
+  return type === "staffed" ? STAFFED_SCOPES : SELF_SERVICE_SCOPES;
+}
+
+/**
+ * Read a station's type from the doc, defaulting to "staffed" for legacy
+ * stations that pre-date this field. Staffed = full scope = preserves the
+ * pre-P0-1 behavior for any existing kiosks.
+ */
+function stationTypeOrLegacyDefault(station: KioskStation): KioskStationType {
+  return station.type ?? "staffed";
+}
 
 // ─── ID + token generation ──────────────────────────────────────────────────
 
@@ -57,6 +86,7 @@ export function hashSecret(secret: string): string {
 export async function createStation(opts: {
   church_id: string;
   name: string;
+  type: KioskStationType;
   created_by_uid: string;
 }): Promise<{ station: KioskStation; activation: KioskActivation; code: string }> {
   const stationId = generateStationId();
@@ -67,6 +97,7 @@ export async function createStation(opts: {
     id: stationId,
     church_id: opts.church_id,
     name: opts.name.trim(),
+    type: opts.type,
     status: "active",
     created_at: now,
     created_by_uid: opts.created_by_uid,
@@ -198,7 +229,13 @@ export class ActivationError extends Error {
 export async function consumeActivation(opts: {
   code: string;
   device_fingerprint?: string | null;
-}): Promise<{ token: string; station: KioskStation }> {
+}): Promise<{
+  token: string;
+  station: KioskStation;
+  /** Derived from station.type at activation time. Surfaced to the kiosk
+   *  client so its UI can hide affordances for scopes it doesn't have. */
+  allowed_scopes: KioskScope[];
+}> {
   const { tokenId, secret } = generateTokenIdAndSecret();
   const tokenHash = hashSecret(secret);
   const code = opts.code.toUpperCase();
@@ -226,12 +263,16 @@ export async function consumeActivation(opts: {
     }
 
     const now = new Date().toISOString();
+    // P0-1: derive token scope from station type. Self-service kiosks get a
+    // narrower scope set without "checkout"; staffed get the full set.
+    // Legacy stations (no type field) default to "staffed" → no regression.
+    const stationType = stationTypeOrLegacyDefault(station);
     const newToken: KioskToken = {
       id: tokenId,
       token_hash: tokenHash,
       station_id: station.id,
       church_id: station.church_id,
-      scope: DEFAULT_SCOPES,
+      scope: scopesForStationType(stationType),
       created_at: now,
       last_used_at: null,
       revoked_at: null,
@@ -257,10 +298,86 @@ export async function consumeActivation(opts: {
       consumed_by_device: opts.device_fingerprint ?? null,
     });
 
-    return station;
+    return { station, allowed_scopes: newToken.scope };
   });
 
-  return { token: `${tokenId}.${secret}`, station: result };
+  return {
+    token: `${tokenId}.${secret}`,
+    station: result.station,
+    allowed_scopes: result.allowed_scopes,
+  };
+}
+
+// ─── Type change (P0-1) ─────────────────────────────────────────────────────
+
+/**
+ * Change a station's type. Atomically:
+ *   1. Updates the station's `type` field.
+ *   2. Revokes the currently active token (if any) — the existing token's
+ *      scope is now wrong relative to the new type.
+ *   3. Issues a fresh activation code so the admin can re-enroll the device.
+ *
+ * Returns the updated station + new activation code. The kiosk operator will
+ * be prompted to re-activate on the next request (kioskFetch handles the 401
+ * by redirecting to /kiosk).
+ */
+export async function changeStationType(opts: {
+  station_id: string;
+  church_id: string;
+  new_type: KioskStationType;
+  changed_by_uid: string;
+}): Promise<{
+  station: KioskStation;
+  activation: KioskActivation;
+  code: string;
+} | null> {
+  const stationRef = adminDb.doc(`kiosk_stations/${opts.station_id}`);
+  const code = generateActivationCode();
+  const now = new Date().toISOString();
+
+  const result = await adminDb.runTransaction(async (tx) => {
+    const stationSnap = await tx.get(stationRef);
+    if (!stationSnap.exists) return null;
+    const station = stationSnap.data() as KioskStation;
+    if (station.church_id !== opts.church_id) return null;
+    if (station.status === "revoked") return null;
+
+    // 1. Update station.type + clear active_token_id (it's about to be revoked).
+    tx.update(stationRef, {
+      type: opts.new_type,
+      active_token_id: null,
+    });
+
+    // 2. Revoke the existing active token, if any.
+    if (station.active_token_id) {
+      tx.update(adminDb.doc(`kiosk_tokens/${station.active_token_id}`), {
+        revoked_at: now,
+      });
+    }
+
+    // 3. Issue a fresh activation code for re-enrollment.
+    const activation: KioskActivation = {
+      code,
+      station_id: opts.station_id,
+      church_id: opts.church_id,
+      expires_at: new Date(Date.now() + ACTIVATION_TTL_MS).toISOString(),
+      consumed_at: null,
+      consumed_by_device: null,
+      created_at: now,
+      created_by_uid: opts.changed_by_uid,
+    };
+    tx.set(adminDb.doc(`kiosk_activations/${code}`), activation);
+
+    const updatedStation: KioskStation = {
+      ...station,
+      type: opts.new_type,
+      active_token_id: null,
+    };
+    return { station: updatedStation, activation };
+  });
+
+  if (!result) return null;
+  return { station: result.station, activation: result.activation, code };
 }
 
 // ─── Token verification (used by requireKioskToken) ─────────────────────────
@@ -268,6 +385,8 @@ export async function consumeActivation(opts: {
 export interface VerifiedKioskToken {
   station: KioskStation;
   tokenId: string;
+  /** The token's persisted scope (derived from station type at activation). */
+  scope: KioskScope[];
 }
 
 export async function verifyKioskToken(
@@ -310,5 +429,5 @@ export async function verifyKioskToken(
     .update({ last_used_at: FieldValue.serverTimestamp() })
     .catch(() => {});
 
-  return { station, tokenId };
+  return { station, tokenId, scope: tok.scope };
 }

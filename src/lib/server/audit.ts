@@ -52,6 +52,9 @@ export type AuditAction =
   | "kiosk.station_create"
   | "kiosk.station_revoke"
   | "kiosk.station_reissue_code"
+  // P0-1: station type architecture
+  | "kiosk.station_type_changed"
+  | "kiosk.checkout_blocked_self_service"
   | "kiosk.activate"
   | "kiosk.lookup"
   | "kiosk.checkin"

@@ -66,14 +66,14 @@ export async function POST(req: NextRequest) {
   const block = await assertActiveMembership(userId, churchId, role);
   if (block) return block;
 
-  let body: { church_id?: string; name?: string };
+  let body: { church_id?: string; name?: string; type?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { name } = body;
+  const { name, type } = body;
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json(
       { error: "Missing or invalid church_id / name" },
@@ -87,10 +87,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // P0-1: station type drives token scope. Default to "self_service" — the
+  // safer default for unattended setup. Admins choose "staffed" explicitly.
+  const stationType: "self_service" | "staffed" =
+    type === "staffed" ? "staffed" : "self_service";
+
   try {
     const { station, code, activation } = await createStation({
       church_id: churchId,
       name: name.trim(),
+      type: stationType,
       created_by_uid: userId,
     });
     void audit({
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest) {
       action: "kiosk.station_create",
       target_type: "kiosk_station",
       target_id: station.id,
-      metadata: { name: station.name },
+      metadata: { name: station.name, type: station.type },
       outcome: "ok",
     });
     return NextResponse.json({

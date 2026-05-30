@@ -1846,12 +1846,30 @@ export type KioskScope =
 
 export type KioskStationStatus = "active" | "revoked";
 
+/**
+ * Determines the kiosk token's allowed scopes at activation time.
+ *
+ *   self_service — unattended kiosk in the lobby. Excludes "checkout" — release
+ *                  always happens at a staffed station, matching the PCO /
+ *                  KidCheck industry pattern. This is the new default.
+ *   staffed       — manned kiosk operated by a check-in volunteer. Full scope
+ *                   including "checkout" (single station handles release).
+ *
+ * `roster_display` is reserved for a future read-only signage station (P1-10).
+ *
+ * Legacy stations created before this field existed default to "staffed" at
+ * read time so existing churches see no behavior change.
+ */
+export type KioskStationType = "self_service" | "staffed";
+
 /** A registered kiosk device. Doc ID = stable station_id. */
 export interface KioskStation {
   id: string;
   church_id: string;
   /** Operator-friendly label, e.g. "Lobby Kiosk" or "Children's Wing iPad". */
   name: string;
+  /** Drives the token scope at activation (and re-activation after type change). */
+  type: KioskStationType;
   status: KioskStationStatus;
   created_at: string;
   created_by_uid: string;

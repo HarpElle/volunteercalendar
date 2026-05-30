@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       : null;
 
   try {
-    const { token, station } = await consumeActivation({
+    const { token, station, allowed_scopes } = await consumeActivation({
       code,
       device_fingerprint: fingerprint,
     });
@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
       target_id: station.id,
       metadata: {
         station_name: station.name,
+        station_type: station.type ?? "staffed",
         has_fingerprint: fingerprint !== null,
       },
       outcome: "ok",
@@ -100,7 +101,15 @@ export async function POST(req: NextRequest) {
         id: station.id,
         church_id: station.church_id,
         name: station.name,
+        // P0-1: surface station type so the kiosk client can render UI
+        // affordances appropriate to its capabilities (e.g. hide Check Out
+        // on self-service stations).
+        type: station.type ?? "staffed",
       },
+      // The token's actual scope, server-enforced. The kiosk uses this to
+      // decide which buttons/tiles to render. Server still 403s on any
+      // out-of-scope request regardless of UI state (defense in depth).
+      allowed_scopes,
     });
   } catch (err) {
     if (err instanceof ActivationError) {
