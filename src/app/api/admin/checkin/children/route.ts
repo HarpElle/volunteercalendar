@@ -89,6 +89,12 @@ export async function GET(req: NextRequest) {
           has_alerts: cp.has_alerts || false,
           allergies: cp.allergies || null,
           medical_notes: cp.medical_notes || null,
+          // Wave 9 P0-2: surface authorized-pickup contacts so the
+          // household admin UI can render the per-child panel from
+          // one fetch.
+          authorized_pickups: Array.isArray(cp.authorized_pickups)
+            ? cp.authorized_pickups
+            : [],
           is_active: d.status === "active",
           created_at: d.created_at,
           updated_at: d.updated_at,

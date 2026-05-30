@@ -118,6 +118,12 @@ async function loadUnifiedHousehold(
         has_alerts: cp.has_alerts || false,
         allergies: cp.allergies || null,
         medical_notes: cp.medical_notes || null,
+        // Wave 9 P0-2: include authorized-pickup contacts so the
+        // household admin UI can render the per-child panel without
+        // a second Firestore round-trip.
+        authorized_pickups: Array.isArray(cp.authorized_pickups)
+          ? cp.authorized_pickups
+          : [],
         is_active: c.data.status === "active",
         created_at: c.data.created_at,
         updated_at: c.data.updated_at,
