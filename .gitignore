@@ -43,3 +43,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local agent / tooling workspaces (machine-specific, not committed)
+.agents/
+VolunteerCalTestingByCodex/
+
+# Firestore emulator runtime log (regenerated on every emulator run)
+firestore-debug.log
