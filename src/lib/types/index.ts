@@ -1285,6 +1285,23 @@ export interface CheckInSettings {
   guardian_sms_on_checkin?: boolean;
   /** Send SMS to guardian on checkout confirmation (Growth+ tier) */
   guardian_sms_on_checkout?: boolean;
+  /**
+   * Wave 9 P0-2: Emergency Response Team. When a blocked-pickup attempt is
+   * detected at the kiosk, SMS is sent to the owner AND every number in
+   * this list in parallel. Owner retains sole override authority — operators
+   * on-site cannot self-override regardless of who responds first.
+   *
+   * Stored on the admin-only `checkinSettings` doc (see firestore.rules).
+   * Empty / undefined → ERT fan-out skipped, owner-only notification.
+   */
+  emergency_notification_numbers?: {
+    /** Human label for the recipient (e.g. "Deacon Joe Smith"). */
+    name: string;
+    /** E.164-formatted phone (Twilio requirement). */
+    phone: string;
+    /** Optional role tag for filtering/display (e.g. "Safety Team Lead"). */
+    role: string | null;
+  }[];
   updated_by: string;
   updated_at: string;
 }
@@ -1554,11 +1571,74 @@ export interface ChildProfile {
   photo_url: string | null;
 }
 
-/** An authorized pickup contact for a child. */
+/**
+ * An authorized pickup contact for a child.
+ *
+ * Wave 9 P0-2 added `id` / `photo_url` / `added_at` / `added_by_user_id` to
+ * support visual ID at pickup and an audit trail of who added each contact.
+ * All four new fields are optional so legacy records that pre-date P0-2
+ * remain valid; API routes backfill the missing fields the next time the
+ * household is edited.
+ */
 export interface PersonAuthorizedPickup {
+  /** Stable identifier for edit/delete. Backfilled by the API on first
+   *  write after P0-2; required on all new records. */
+  id?: string;
   name: string;
   phone: string | null;
   relationship: string | null;
+  /**
+   * Optional photo for visual identification at pickup. Stored at
+   * `churches/{churchId}/checkin-photos/authorized/{id}.jpg`. Reads go
+   * through a server endpoint (Admin SDK + signed URL); no direct client
+   * Storage reads — see `storage.rules`.
+   */
+  photo_url?: string | null;
+  /** ISO timestamp; optional on legacy records. */
+  added_at?: string;
+  /** Firebase Auth UID of the admin who added this contact; optional on
+   *  legacy records. */
+  added_by_user_id?: string;
+}
+
+/**
+ * A blocked pickup contact — a person who is NOT permitted to take the
+ * child / sibling group home.
+ *
+ * Stored as a top-level subcollection at
+ * `churches/{churchId}/checkin_blocked_pickups/{id}` rather than embedded
+ * on `ChildProfile` so the most sensitive surface in the system (custody
+ * disputes, court orders) lives behind an Admin-SDK-only privacy boundary
+ * — distinct from `people/{personId}` which is volunteer-readable. The
+ * scope discriminator lets a single block-list query cover both per-child
+ * blocks and household-wide custody orders that apply to all siblings.
+ */
+export interface BlockedPickup {
+  id: string;
+  church_id: string;
+  /** "child" → applies to a single child only. "household" → applies to
+   *  every child in the household (sibling-wide custody order). */
+  scope: "child" | "household";
+  /** Required when `scope === "child"`; null otherwise. */
+  child_id: string | null;
+  /** Required when `scope === "household"`; null otherwise. */
+  household_id: string | null;
+  name: string;
+  phone: string | null;
+  /** Photo for visual identification at the kiosk's staffed-checkout
+   *  confirmation step. Stored at
+   *  `churches/{churchId}/checkin-photos/blocked/{id}.jpg`. */
+  photo_url: string | null;
+  reason: "court_order" | "household_decision" | "other";
+  /** Free-form admin notes. DO NOT paste court-order quotations here —
+   *  store the URL of the uploaded order in `document_url` instead. */
+  notes: string | null;
+  /** Storage URL of the supporting document (e.g. PDF of custody order). */
+  document_url: string | null;
+  /** Optional ISO expiry. Used for time-limited orders ("until 2026-12-01"). */
+  expires_at: string | null;
+  added_at: string;
+  added_by_user_id: string;
 }
 
 /**
