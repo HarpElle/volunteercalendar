@@ -422,6 +422,17 @@ service cloud.firestore {
         allow read, write: if false; // Admin SDK only via /api/admin/checkin/*
       }
 
+      // Wave 9 P0-5 — Worker (volunteer) room check-ins.
+      //
+      // Tracks the ADULTS responsible for a room throughout the
+      // service (distinct from checkInSessions which tracks CHILDREN).
+      // Server-only access via the /api/checkin/room-volunteer-*
+      // routes — clients never read or write directly. Matches the
+      // checkInSessions / checkinAlerts privacy boundary.
+      match /roomVolunteerCheckins/{docId} {
+        allow read, write: if false;
+      }
+
       // Settings + rooms config: org-admin readable for setup screens.
       match /checkinSettings/{docId} {
         allow read: if isOrgAdmin(churchId);

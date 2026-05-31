@@ -8,7 +8,16 @@ import {
   resolveMedicalVisibility,
   type RosterFieldState,
 } from "@/lib/server/medical-visibility";
-import type { CheckInSession, CheckInSettings } from "@/lib/types";
+import {
+  evaluateRatio,
+  DEFAULT_RATIO_WARNING_PERCENT,
+} from "@/lib/server/ratio";
+import type {
+  CheckInSession,
+  CheckInSettings,
+  Room,
+  RoomVolunteerCheckIn,
+} from "@/lib/types";
 
 /**
  * GET /api/checkin/room/[roomId]
@@ -205,6 +214,33 @@ export async function GET(
       return a.child_name.localeCompare(b.child_name);
     });
 
+    // Wave 9 P0-5 sub-PR B: ratio evaluation for the roster tile.
+    // The dashboard wall view (sub-PR E) renders this as a traffic-
+    // light status; the kiosk uses it to decide whether to show the
+    // amber warning banner on the next check-in screen. Pure read —
+    // doesn't enforce the gate; that happens in the check-in route
+    // (sub-PR C).
+    const totalCheckedInChildren = children.filter(
+      (c) => !c.checked_out_at,
+    ).length;
+    const volSnap = await churchRef
+      .collection("roomVolunteerCheckins")
+      .where("room_id", "==", roomId)
+      .where("service_date", "==", date)
+      .get();
+    const activeVolunteers = volSnap.docs
+      .map((d) => d.data() as RoomVolunteerCheckIn)
+      .filter((v) => (v.checked_out_at ?? null) === null);
+    const warningPercent =
+      (settings?.ratio_warning_threshold_percent as number | undefined) ??
+      DEFAULT_RATIO_WARNING_PERCENT;
+    const ratio = evaluateRatio(
+      { ratio_policy: (room as Room).ratio_policy },
+      totalCheckedInChildren,
+      activeVolunteers,
+      warningPercent,
+    );
+
     return NextResponse.json({
       room: {
         id: roomId,
@@ -213,8 +249,13 @@ export async function GET(
       },
       date,
       children,
-      total_checked_in: children.filter((c) => !c.checked_out_at).length,
+      total_checked_in: totalCheckedInChildren,
       total_checked_out: children.filter((c) => c.checked_out_at).length,
+      // Per-room ratio status. The exact RatioEvaluation shape is
+      // exported from `@/lib/server/ratio` so clients (roster page,
+      // dashboard wall view, future kiosk banner) consume it
+      // without re-deriving the math.
+      ratio,
     });
   } catch (error) {
     console.error("[GET /api/checkin/room]", error);
