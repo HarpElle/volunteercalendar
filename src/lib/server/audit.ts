@@ -104,6 +104,26 @@ export type AuditAction =
    * legibility gap the HIPAA-aware visibility config closes.
    */
   | "kiosk.alert_acknowledged"
+  /**
+   * Wave 9 P0-5: ratio enforcement + worker check-in.
+   *
+   * - `room.volunteer_checked_in` / `_checked_out`: tracks the
+   *   adults responsible for a room throughout the service.
+   *   Distinct from `kiosk.checkin` (which tracks CHILDREN) — these
+   *   are the people the policy gate counts.
+   * - `kiosk.ratio_warning_shown`: emitted when a check-in attempt
+   *   crosses the warning threshold but is still below the hard
+   *   violation line. Lets the kiosk show an amber banner; surfaces
+   *   in platform monitoring as a per-org signal.
+   * - `kiosk.ratio_violation_override`: emitted when an over-ratio
+   *   check-in is allowed via the staffed-station-signed
+   *   `X-Ratio-Override` header. Legally material — the row that
+   *   proves a human operator made the call to exceed the policy.
+   */
+  | "room.volunteer_checked_in"
+  | "room.volunteer_checked_out"
+  | "kiosk.ratio_warning_shown"
+  | "kiosk.ratio_violation_override"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
