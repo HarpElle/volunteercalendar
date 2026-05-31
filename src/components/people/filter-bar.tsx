@@ -46,6 +46,16 @@ export interface FilterBarProps {
   filterEligibility: "all" | "cleared" | "pending";
   onFilterEligibilityChange: (e: "all" | "cleared" | "pending") => void;
 
+  /**
+   * Wave 9 P0-3 sub-PR E — safety filters. Each is an independent
+   * toggle (orthogonal to eligibility), surfaced as a chip in a new
+   * "Safety" sub-section of the filter drawer.
+   */
+  filterBgExpiring: boolean;
+  onFilterBgExpiringChange: (v: boolean) => void;
+  filterRestrictedChildren: boolean;
+  onFilterRestrictedChildrenChange: (v: boolean) => void;
+
   activeFilterCount: number;
 
   ministries: Ministry[];
@@ -74,6 +84,10 @@ export function FilterBar({
   onFilterOrgRolesChange,
   filterEligibility,
   onFilterEligibilityChange,
+  filterBgExpiring,
+  onFilterBgExpiringChange,
+  filterRestrictedChildren,
+  onFilterRestrictedChildrenChange,
   activeFilterCount,
   ministries,
   uniqueRoles,
@@ -112,6 +126,8 @@ export function FilterBar({
     onFilterRolesChange([]);
     onFilterOrgRolesChange([]);
     onFilterEligibilityChange("all");
+    onFilterBgExpiringChange(false);
+    onFilterRestrictedChildrenChange(false);
     onFilterStatusChange("active");
     onFilterTeamChange("all");
   }
@@ -255,6 +271,42 @@ export function FilterBar({
               </div>
             </div>
           )}
+
+          {/* Wave 9 P0-3 sub-PR E — Safety filter chips. Independent of
+              Eligibility so admins can triage safety surface separately. */}
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vc-text-muted">
+              Safety
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onFilterBgExpiringChange(!filterBgExpiring)}
+                className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                  filterBgExpiring
+                    ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                    : "border-vc-border text-vc-text-secondary hover:border-vc-coral/30"
+                }`}
+                aria-pressed={filterBgExpiring}
+              >
+                Background expiring (60d)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onFilterRestrictedChildrenChange(!filterRestrictedChildren)
+                }
+                className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
+                  filterRestrictedChildren
+                    ? "border-vc-coral bg-vc-coral/10 text-vc-coral"
+                    : "border-vc-border text-vc-text-secondary hover:border-vc-coral/30"
+                }`}
+                aria-pressed={filterRestrictedChildren}
+              >
+                Restricted from children
+              </button>
+            </div>
+          </div>
 
           {/* Clear all */}
           {activeFilterCount > 0 && (
