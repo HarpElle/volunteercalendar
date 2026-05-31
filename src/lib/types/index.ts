@@ -287,6 +287,18 @@ export interface Ministry {
   requires_background_check?: boolean;
   /** Prerequisites volunteers must complete before serving in this ministry */
   prerequisites?: OnboardingStep[];
+  /**
+   * Category tag from the setup wizard's `CHURCH_MINISTRY_TEMPLATES`.
+   * Optional because legacy ministries may not carry it. The Wave 9 P0-3
+   * children-restriction enforcement keys off `category === "children_youth"`
+   * — see `isChildrenMinistry()` in `src/lib/services/scheduler.ts`.
+   * Allowed values mirror `MINISTRY_CATEGORY_LABELS` in
+   * `src/lib/constants/index.ts`:
+   *   "worship" | "children_youth" | "hospitality" |
+   *   "operations" | "outreach" | "fellowship"
+   * Stored as plain string so future categories don't break the type.
+   */
+  category?: string;
   created_at: string;
 }
 
@@ -1664,6 +1676,39 @@ export interface BlockedPickup {
 }
 
 /**
+ * Wave 9 P0-3: a single hard restriction on a volunteer.
+ *
+ * Stored as an array on `Person.restrictions` (append-only history). A
+ * restriction is "active" when `lifted_at === null`. The scheduler's
+ * `hasNoChildrenRestriction()` gate denies any assignment in a
+ * children-category ministry when an active restriction with
+ * `cannot_serve_with_children === true` exists.
+ *
+ * `reason` enum keeps the schema tight for compliance reporting:
+ *   - "sor_match"            → the volunteer matched a sex-offender
+ *                              registry entry (ECAP Indicator 3.15)
+ *   - "policy"               → org-level policy decision unrelated to SOR
+ *   - "other"                → free-form (paired with `notes`)
+ *
+ * Only owners can add or lift restrictions (server-side gate at the
+ * /api/people/[id]/restrictions endpoints — Sub-PR B).
+ */
+export interface PersonRestriction {
+  id: string;
+  cannot_serve_with_children: boolean;
+  reason: "sor_match" | "policy" | "other";
+  /** Free-form admin notes. Avoid storing PII details (e.g., specific
+   *  offense codes) — reference an external document URL instead if needed. */
+  notes?: string | null;
+  documented_by_user_id: string;
+  documented_at: string;
+  /** When set, the restriction is no longer active. Append-only —
+   *  rather than deleting a row, owners "lift" it by setting this field. */
+  lifted_at?: string | null;
+  lifted_by_user_id?: string | null;
+}
+
+/**
  * Unified Person document — replaces Volunteer, CheckInHousehold guardian,
  * and Child as separate entities.
  * Firestore: churches/{churchId}/people/{personId}
@@ -1716,7 +1761,36 @@ export interface Person {
     expires_at: string | null;
     provider: string | null;
     checked_at: string | null;
+    /**
+     * Wave 9 P0-3: explicit Sex Offender Registry check.
+     * Distinct from generic background_check so admins can require it
+     * even when the general bg-check is pending or not_required.
+     *
+     * - `sor_checked`: was an SOR check performed in the lifecycle?
+     *   (Implicit from last_sor_check_at !== null; kept explicit for
+     *   audit-trail readability.)
+     * - `sor_match`: result of the most recent SOR check. null = no check
+     *   has run; true = the volunteer matched a registry entry; false =
+     *   cleared (no match).
+     * - `last_sor_check_at`: ISO timestamp of the most recent SOR check.
+     */
+    sor_checked?: boolean;
+    sor_match?: boolean | null;
+    last_sor_check_at?: string | null;
   } | null;
+  /**
+   * Wave 9 P0-3: per-volunteer hard restrictions. Append-only history;
+   * a restriction is "lifted" by setting `lifted_at` rather than deleting
+   * the row (legal artifact + audit trail). The scheduler's
+   * `hasNoChildrenRestriction()` gate denies assignments to ministries
+   * with `category === "children_youth"` when ANY active restriction
+   * (lifted_at === null) has `cannot_serve_with_children === true`.
+   *
+   * Designed around ECAP Indicator 3.15 (sex-offender categorical
+   * exclusion from children's ministry) but the schema accommodates
+   * any "this volunteer is barred from children's roles" policy.
+   */
+  restrictions?: PersonRestriction[];
   role_constraints: {
     conditional_roles: ConditionalRole[];
     allow_multi_role: boolean;

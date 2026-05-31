@@ -9,8 +9,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { canServeInMinistry } from "@/lib/services/scheduler";
-import type { Person } from "@/lib/types";
+import {
+  canServeInMinistry,
+  hasActiveChildrenRestriction,
+  isChildrenMinistry,
+} from "@/lib/services/scheduler";
+import type { Ministry, Person, PersonRestriction } from "@/lib/types";
 
 function makePerson(overrides: Partial<Person>): Person {
   // Minimal Person fixture — `canServeInMinistry` only reads `ministry_ids`.
@@ -73,5 +77,92 @@ describe("canServeInMinistry — strict eligibility", () => {
     // Caller should normalize before calling.
     const v = makePerson({ ministry_ids: ["worship"] });
     expect(canServeInMinistry(v, "Worship")).toBe(false);
+  });
+});
+
+// Wave 9 P0-3 — restriction gate.
+
+function makeRestriction(overrides: Partial<PersonRestriction> = {}): PersonRestriction {
+  return {
+    id: "r1",
+    cannot_serve_with_children: true,
+    reason: "sor_match",
+    notes: null,
+    documented_by_user_id: "u-owner",
+    documented_at: "2026-05-31T00:00:00Z",
+    lifted_at: null,
+    lifted_by_user_id: null,
+    ...overrides,
+  };
+}
+
+function makeMinistry(overrides: Partial<Ministry> = {}): Ministry {
+  return {
+    id: "m1",
+    church_id: "c1",
+    name: "Test Ministry",
+    color: "#000",
+    description: "",
+    lead_user_id: "u-lead",
+    lead_email: "lead@example.com",
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("isChildrenMinistry", () => {
+  it("returns true for category=children_youth", () => {
+    expect(isChildrenMinistry(makeMinistry({ category: "children_youth" }))).toBe(true);
+  });
+  it("returns false for any other category", () => {
+    expect(isChildrenMinistry(makeMinistry({ category: "worship" }))).toBe(false);
+    expect(isChildrenMinistry(makeMinistry({ category: "hospitality" }))).toBe(false);
+    expect(isChildrenMinistry(makeMinistry({ category: "operations" }))).toBe(false);
+  });
+  it("returns false when category is missing", () => {
+    expect(isChildrenMinistry(makeMinistry())).toBe(false);
+  });
+  it("returns false when ministry doc is undefined", () => {
+    expect(isChildrenMinistry(undefined)).toBe(false);
+  });
+});
+
+describe("hasActiveChildrenRestriction", () => {
+  it("returns false when restrictions array is missing", () => {
+    expect(hasActiveChildrenRestriction(makePerson({}))).toBe(false);
+  });
+  it("returns false when restrictions array is empty", () => {
+    expect(hasActiveChildrenRestriction(makePerson({ restrictions: [] }))).toBe(false);
+  });
+  it("returns true when an active sor_match restriction exists", () => {
+    const v = makePerson({ restrictions: [makeRestriction({ reason: "sor_match" })] });
+    expect(hasActiveChildrenRestriction(v)).toBe(true);
+  });
+  it("returns true regardless of reason — any active children-restriction counts", () => {
+    const v = makePerson({ restrictions: [makeRestriction({ reason: "policy" })] });
+    expect(hasActiveChildrenRestriction(v)).toBe(true);
+    const v2 = makePerson({ restrictions: [makeRestriction({ reason: "other" })] });
+    expect(hasActiveChildrenRestriction(v2)).toBe(true);
+  });
+  it("returns false when the only restriction is lifted", () => {
+    const v = makePerson({
+      restrictions: [makeRestriction({ lifted_at: "2026-05-30T00:00:00Z", lifted_by_user_id: "u-owner" })],
+    });
+    expect(hasActiveChildrenRestriction(v)).toBe(false);
+  });
+  it("returns true when at least one active restriction exists alongside lifted ones", () => {
+    const v = makePerson({
+      restrictions: [
+        makeRestriction({ id: "r-old", lifted_at: "2026-05-30T00:00:00Z" }),
+        makeRestriction({ id: "r-new" }),
+      ],
+    });
+    expect(hasActiveChildrenRestriction(v)).toBe(true);
+  });
+  it("returns false when cannot_serve_with_children is false (defensive — should never be persisted that way, but the gate must be honest about its inputs)", () => {
+    const v = makePerson({
+      restrictions: [makeRestriction({ cannot_serve_with_children: false })],
+    });
+    expect(hasActiveChildrenRestriction(v)).toBe(false);
   });
 });
