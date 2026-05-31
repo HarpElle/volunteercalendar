@@ -96,6 +96,14 @@ export type AuditAction =
   | "kiosk.checkout"
   | "kiosk.register_visitor"
   | "kiosk.medical_data_revealed"
+  /**
+   * Wave 9 P0-4: operator acknowledged the medical-alert modal at
+   * check-in. Distinct from `kiosk.medical_data_revealed` (tap-to-
+   * expand on the roster). Lets reports distinguish "alert delivered
+   * + acknowledged" vs. "alert delivered, never confirmed" — the
+   * legibility gap the HIPAA-aware visibility config closes.
+   */
+  | "kiosk.alert_acknowledged"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
