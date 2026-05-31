@@ -89,6 +89,11 @@ export async function PUT(req: NextRequest) {
       // Owner retains override authority; ERT recipients are SMS-paged in
       // parallel as a tripwire. Audit separately below.
       "emergency_notification_numbers",
+      // Wave 9 P0-4: HIPAA-aware per-field visibility for the medical
+      // surface. Server validates shape below — only persists if it
+      // matches the expected { allergies, medical_notes, medications }
+      // × { label, roster, expand_on_tap_only } structure.
+      "medical_visibility",
     ];
 
     const updates: Record<string, unknown> = {
@@ -136,6 +141,41 @@ export async function PUT(req: NextRequest) {
             .filter((e): e is { name: string; phone: string; role: string | null } => e !== null)
         : [];
       updates.emergency_notification_numbers = cleaned;
+    }
+
+    // Wave 9 P0-4: medical_visibility shape validation. Reject any
+    // body whose `medical_visibility` doesn't match the expected
+    // structure rather than silently coercing — admins seeing a
+    // 400 immediately know their settings UI sent malformed data,
+    // versus a coerced write that "succeeded" but lost their intent.
+    if ("medical_visibility" in updates) {
+      const raw = updates.medical_visibility;
+      if (raw === null || raw === undefined) {
+        // Explicit clear → revert to default behavior.
+        updates.medical_visibility = null;
+      } else {
+        const fieldsOk = (
+          ["allergies", "medical_notes", "medications"] as const
+        ).every((f) => {
+          const c = (raw as Record<string, unknown>)?.[f];
+          if (!c || typeof c !== "object") return false;
+          const cf = c as Record<string, unknown>;
+          return (
+            typeof cf.label === "boolean" &&
+            typeof cf.roster === "boolean" &&
+            typeof cf.expand_on_tap_only === "boolean"
+          );
+        });
+        if (!fieldsOk) {
+          return NextResponse.json(
+            {
+              error:
+                "medical_visibility must include allergies, medical_notes, medications, each with boolean label/roster/expand_on_tap_only",
+            },
+            { status: 400 },
+          );
+        }
+      }
     }
 
     const snap = await settingsRef.get();
