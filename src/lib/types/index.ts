@@ -1616,8 +1616,11 @@ export interface PersonAuthorizedPickup {
    * are filtered at read time.
    */
   pending_remove_at?: string | null;
-  /** UID of the guardian who requested the removal. Audit aid. */
-  pending_remove_by_user_id?: string;
+  /** UID of the guardian who requested the removal. Audit aid.
+   *  Nullable because cancel-removal clears it alongside
+   *  pending_remove_at — Firestore rejects `undefined` in nested
+   *  arrays, so we write `null` rather than deleting the key. */
+  pending_remove_by_user_id?: string | null;
 }
 
 /**

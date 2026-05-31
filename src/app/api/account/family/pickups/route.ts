@@ -137,6 +137,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Read-time filter for elapsed cooling-off entries: any pickup
+    // whose `pending_remove_at` is in the past is considered "removed"
+    // from the parent surface even though the doc still has the row
+    // (G v2 will add a cron to physically prune). This is the
+    // canonical filter for parent reads; the admin endpoint
+    // intentionally returns elapsed entries so admins can see history.
+    const now = Date.now();
+    const filterElapsed = (
+      list: PersonAuthorizedPickup[],
+    ): PersonAuthorizedPickup[] =>
+      list.filter((p) => {
+        if (!p.pending_remove_at) return true;
+        const t = Date.parse(p.pending_remove_at);
+        return Number.isNaN(t) || t > now;
+      });
+
     // Group children by household.
     const households = Array.from(householdsById.values()).map((h) => ({
       ...h,
@@ -148,14 +164,15 @@ export async function GET(req: NextRequest) {
         .map((cd) => {
           const d = cd.data();
           const cp = d.child_profile || {};
+          const raw = Array.isArray(cp.authorized_pickups)
+            ? (cp.authorized_pickups as PersonAuthorizedPickup[])
+            : [];
           return {
             id: cd.id,
             first_name: d.first_name,
             preferred_name: d.preferred_name || null,
             last_name: d.last_name,
-            authorized_pickups: Array.isArray(cp.authorized_pickups)
-              ? (cp.authorized_pickups as PersonAuthorizedPickup[])
-              : [],
+            authorized_pickups: filterElapsed(raw),
           };
         }),
     }));
