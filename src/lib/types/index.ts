@@ -1213,6 +1213,14 @@ export interface Child {
   has_alerts: boolean;
   allergies?: string;
   medical_notes?: string;
+  /**
+   * Wave 9 P0-4: medications split out from `medical_notes` so the
+   * HIPAA-aware visibility config can hide it independently. Legacy
+   * Child records without this field still work — sub-PR B reads
+   * with a `?? null` fallback, and admins can split content during
+   * a normal edit.
+   */
+  medications?: string;
   imported_from?: "breeze" | "pco" | "generic" | "manual";
   external_id?: string;
   is_active: boolean;
@@ -1240,7 +1248,28 @@ export interface CheckInSession {
   checked_out_at?: string;
   checked_out_by_user_id?: string;
   alerts_acknowledged: boolean;
+  /**
+   * Legacy concatenated alert snapshot: `[allergies, medical_notes]
+   * .filter(Boolean).join(" | ")`. Kept for back-compat through
+   * Wave 9 P0-4; new readers should prefer `medical_snapshot` which
+   * preserves per-field structure for the HIPAA-aware visibility gate.
+   */
   alert_snapshot?: string;
+  /**
+   * Wave 9 P0-4: structured medical snapshot captured at check-in.
+   * Distinct from `alert_snapshot` (legacy concatenated string) so
+   * the kiosk roster + label generator can apply per-field visibility
+   * (`CheckInSettings.medical_visibility`) without re-parsing.
+   *
+   * Fields are nullable independently — a child with only an allergy
+   * has `{ allergies: "peanuts", medical_notes: null, medications: null }`.
+   * Sessions for children without `has_alerts` skip this field entirely.
+   */
+  medical_snapshot?: {
+    allergies: string | null;
+    medical_notes: string | null;
+    medications: string | null;
+  };
   created_at: string;
 }
 
@@ -1297,6 +1326,44 @@ export interface CheckInSettings {
   guardian_sms_on_checkin?: boolean;
   /** Send SMS to guardian on checkout confirmation (Growth+ tier) */
   guardian_sms_on_checkout?: boolean;
+  /**
+   * Wave 9 P0-4: per-field medical-data visibility, applied at the
+   * three surfaces where alerts surface (printed child label, kiosk
+   * room roster, admin reports). Lets churches dial in their HIPAA
+   * posture without affecting the underlying medical data itself.
+   *
+   * Semantics per field:
+   *   - `label`: include this field on the printed child label
+   *   - `roster`: include this field on the kiosk room-roster view
+   *   - `expand_on_tap_only`: when true on the roster, the field is
+   *     hidden until an operator explicitly taps to expand (firing
+   *     the existing `kiosk.medical_data_revealed` audit). Ignored
+   *     when `roster` is false.
+   *
+   * Sub-PR B applies these gates in the label generator + roster
+   * renderer. Sub-PR C surfaces the toggles in Settings.
+   *
+   * Default (when the field is undefined on the settings doc): every
+   * field is rendered everywhere, no tap-to-expand — matches today's
+   * behavior. Churches choosing a stricter posture override.
+   */
+  medical_visibility?: {
+    allergies: {
+      label: boolean;
+      roster: boolean;
+      expand_on_tap_only: boolean;
+    };
+    medical_notes: {
+      label: boolean;
+      roster: boolean;
+      expand_on_tap_only: boolean;
+    };
+    medications: {
+      label: boolean;
+      roster: boolean;
+      expand_on_tap_only: boolean;
+    };
+  };
   /**
    * Wave 9 P0-2: Emergency Response Team. When a blocked-pickup attempt is
    * detected at the kiosk, SMS is sent to the owner AND every number in
@@ -1581,6 +1648,14 @@ export interface ChildProfile {
   has_alerts: boolean;
   authorized_pickups: PersonAuthorizedPickup[];
   photo_url: string | null;
+  /**
+   * Wave 9 P0-4: medications split from `medical_notes` so the
+   * HIPAA-aware visibility config can hide it independently. null
+   * (rather than missing) for explicit "no medications recorded";
+   * legacy ChildProfile records without this field treat it as null
+   * via `?? null` in readers.
+   */
+  medications?: string | null;
 }
 
 /**

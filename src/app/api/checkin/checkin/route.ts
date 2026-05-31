@@ -254,6 +254,19 @@ export async function POST(req: NextRequest) {
       const sessionId = adminDb
         .collection("_")
         .doc().id;
+      // Wave 9 P0-4: dual-write structured medical_snapshot alongside
+      // the legacy concatenated alert_snapshot string. Downstream
+      // surfaces (kiosk roster, label generator, reports) read the
+      // structured field with `CheckInSettings.medical_visibility`
+      // applied; legacy readers that haven't migrated keep working
+      // off alert_snapshot for one release window.
+      //
+      // Note: `(child as { medications?: string }).medications` reads
+      // the new field whether the child doc has it or not. Legacy
+      // docs without `medications` resolve to null; new docs that
+      // populate it (Sub-PR B form work) include it.
+      const childMedications =
+        (child as { medications?: string }).medications ?? null;
       const session: CheckInSession = {
         id: sessionId,
         church_id,
@@ -270,9 +283,18 @@ export async function POST(req: NextRequest) {
         alerts_acknowledged: !!alerts_acknowledged,
         ...(child.has_alerts
           ? {
-              alert_snapshot: [child.allergies, child.medical_notes]
+              alert_snapshot: [
+                child.allergies,
+                child.medical_notes,
+                childMedications,
+              ]
                 .filter(Boolean)
                 .join(" | "),
+              medical_snapshot: {
+                allergies: child.allergies ?? null,
+                medical_notes: child.medical_notes ?? null,
+                medications: childMedications,
+              },
             }
           : {}),
         created_at: now.toISOString(),
