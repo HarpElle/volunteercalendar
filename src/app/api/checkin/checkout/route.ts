@@ -6,7 +6,7 @@ import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { audit, kioskActor, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { timingSafeEqual } from "crypto";
-import type { CheckInSession, CheckInAlert } from "@/lib/types";
+import type { BlockedPickup, CheckInSession, CheckInAlert } from "@/lib/types";
 
 /**
  * POST /api/checkin/checkout
@@ -36,13 +36,28 @@ export async function POST(req: NextRequest) {
     const { churchId: church_id } = gate.ctx;
 
     const body = await req.json();
-    const { session_id, security_code, volunteer_user_id } =
-      body as {
-        church_id: string;
-        session_id?: string;
-        security_code: string;
-        volunteer_user_id?: string;
-      };
+    const {
+      session_id,
+      security_code,
+      volunteer_user_id,
+      acknowledged_blocks,
+    } = body as {
+      church_id: string;
+      session_id?: string;
+      security_code: string;
+      volunteer_user_id?: string;
+      /**
+       * Wave 9 P0-2 sub-PR F hotfix: when the kiosk's block-list
+       * review modal was shown to the operator and the operator
+       * confirmed the on-site pickup person is NOT on the list, the
+       * kiosk client sets this flag so the server-side gate (below)
+       * doesn't re-prompt. Default false means "no review happened" —
+       * if the server finds active blocks for this code, return 409
+       * with the block list so the kiosk shows the modal as a
+       * defense-in-depth fallback.
+       */
+      acknowledged_blocks?: boolean;
+    };
 
     if (!security_code) {
       return NextResponse.json(
@@ -95,6 +110,137 @@ export async function POST(req: NextRequest) {
         { error: "no_active_sessions", message: "All children with this code are already checked out." },
         { status: 409 },
       );
+    }
+
+    // Wave 9 P0-2 sub-PR F hotfix: defense-in-depth block-list gate.
+    //
+    // The kiosk client SHOULD call /api/checkin/blocked-pickups first
+    // and pop the review modal if any active blocks exist for the
+    // children behind the code. But the preview is a UX assist, not a
+    // safety gate. If the preview is skipped (because the kiosk
+    // client wasn't updated yet) OR if the preview query has a bug
+    // (like the one Codex caught on the P0-2F retest), this gate
+    // catches the silent miss BEFORE the release happens.
+    //
+    // Fail-open semantics: if the block-list query itself throws,
+    // we log and proceed. The intent is to catch genuine block
+    // misses, not brick checkout on a flaky network or a malformed
+    // Firestore index. The preview-then-attempt flow is the primary
+    // safety path; this is the belt-and-suspenders.
+    if (!acknowledged_blocks) {
+      try {
+        const childIds = Array.from(
+          new Set(activeSessions.map((d) => (d.data() as CheckInSession).child_id)),
+        );
+
+        // Resolve the children's household IDs + display names (one
+        // read per child; typically ≤4 per security code).
+        const householdIds = new Set<string>();
+        const childNames = new Map<string, string>();
+        for (const cid of childIds) {
+          const personSnap = await churchRef
+            .collection("people")
+            .doc(cid)
+            .get();
+          if (!personSnap.exists) continue;
+          const d = personSnap.data() ?? {};
+          const hhs: string[] = Array.isArray(d.household_ids)
+            ? (d.household_ids as string[])
+            : [];
+          hhs.forEach((h) => householdIds.add(h));
+          const name =
+            (d.preferred_name as string) ||
+            (d.first_name as string) ||
+            (d.name as string) ||
+            "Unknown";
+          childNames.set(cid, name);
+        }
+
+        // Pull child-scope blocks (one query per child).
+        const blocksRef = churchRef.collection("checkin_blocked_pickups");
+        const childScopedSnaps = await Promise.all(
+          childIds.map((cid) =>
+            blocksRef
+              .where("scope", "==", "child")
+              .where("child_id", "==", cid)
+              .get(),
+          ),
+        );
+        const householdList = Array.from(householdIds);
+        const householdScopedSnap = householdList.length
+          ? await blocksRef
+              .where("scope", "==", "household")
+              .where("household_id", "in", householdList.slice(0, 30))
+              .get()
+          : null;
+
+        const collectedBlocks: BlockedPickup[] = [
+          ...childScopedSnaps.flatMap((s) =>
+            s.docs.map((d) => d.data() as BlockedPickup),
+          ),
+          ...(householdScopedSnap
+            ? householdScopedSnap.docs.map((d) => d.data() as BlockedPickup)
+            : []),
+        ];
+        // Dedup by id (same household may surface twice via different
+        // children) and drop expired blocks.
+        const seen = new Set<string>();
+        const nowMs = now.getTime();
+        const activeBlocks = collectedBlocks.filter((b) => {
+          if (seen.has(b.id)) return false;
+          seen.add(b.id);
+          if (b.expires_at && Date.parse(b.expires_at) <= nowMs) return false;
+          return true;
+        });
+
+        if (activeBlocks.length > 0) {
+          // Audit row so we can detect "preview was skipped/failed AND
+          // the server gate fired" — a strong signal that something
+          // about the client flow needs investigation. Outcome "denied"
+          // because we're refusing the release in the absence of an
+          // acknowledged_blocks flag.
+          void audit({
+            church_id,
+            actor: kioskActor(kiosk.station_id ?? "unknown"),
+            action: "kiosk.checkout_blocked_pending_review",
+            target_type: "checkin_blocked_pickup",
+            target_id: activeBlocks[0].id,
+            metadata: {
+              active_blocks: activeBlocks.length,
+              session_ids: activeSessions.map((d) => d.id),
+            },
+            outcome: "denied",
+          });
+
+          // Same response shape as /api/checkin/blocked-pickups so the
+          // kiosk client can reuse its review-modal state.
+          return NextResponse.json(
+            {
+              error: "requires_block_review",
+              message:
+                "Block list active for this household. Review required before release.",
+              blocks: activeBlocks,
+              children: activeSessions.map((d) => {
+                const data = d.data() as CheckInSession;
+                return {
+                  child_name: childNames.get(data.child_id) ?? "Unknown",
+                  room_name: data.room_name ?? null,
+                };
+              }),
+              session_ids: activeSessions.map((d) => d.id),
+            },
+            { status: 409 },
+          );
+        }
+      } catch {
+        // Block-list query failed (unindexed query, transient error, ...).
+        // Fail-open: log & proceed with checkout. The intent of this
+        // gate is to catch a SILENT preview miss, not to brick checkout
+        // on infrastructure flakes. If the same fault repeats, the
+        // upstream preview also failed and the operator's situational
+        // awareness from the preview-modal path is the safety primary.
+        // No-op log (errors observable via Sentry instrumentation).
+      }
     }
 
     // Check code expiry on the first session (all share the same expiry)

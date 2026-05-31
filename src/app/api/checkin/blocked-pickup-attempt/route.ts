@@ -122,16 +122,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Find the matching session(s) for the security code.
+    //
+    // IMPORTANT (Sev 1 fix on Codex P0-2F retest): the previous query
+    // filtered on `status == "checked_in"`, but the `checkInSessions`
+    // doc schema does NOT have a `status` field — active vs.
+    // checked-out is determined by whether `checked_out_at` is null.
+    // The wrong predicate matched zero docs, so the audit metadata's
+    // `session_ids` array was always empty. Fixed by switching to the
+    // same query shape as /api/checkin/checkout (two equality filters,
+    // active-session filter in code).
     const today = new Date().toISOString().split("T")[0];
     const sessionsSnap = await adminDb
       .collection("churches")
       .doc(churchId)
       .collection("checkInSessions")
-      .where("security_code", "==", securityCode)
       .where("service_date", "==", today)
-      .where("status", "==", "checked_in")
+      .where("security_code", "==", securityCode)
       .get();
-    const sessionIds = sessionsSnap.docs.map((d) => d.id);
+    const sessionIds = sessionsSnap.docs
+      .filter((d) => !d.data().checked_out_at)
+      .map((d) => d.id);
 
     // Pull check-in settings to get the ERT list.
     const settingsSnap = await adminDb
