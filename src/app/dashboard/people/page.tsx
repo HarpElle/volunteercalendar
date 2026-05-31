@@ -158,6 +158,9 @@ function PeopleContent() {
   const [filterTeam, setFilterTeam] = useState<"all" | "on-team" | "no-team">("all");
   const [filterOrgRoles, setFilterOrgRoles] = useState<OrgRole[]>([]);
   const [filterEligibility, setFilterEligibility] = useState<"all" | "cleared" | "pending">("all");
+  // Wave 9 P0-3 sub-PR E — Safety filter chips. Independent of eligibility.
+  const [filterBgExpiring, setFilterBgExpiring] = useState(false);
+  const [filterRestrictedChildren, setFilterRestrictedChildren] = useState(false);
   const [orgPrereqs, setOrgPrereqs] = useState<OnboardingStep[]>([]);
   const [sidebarMinistry, setSidebarMinistry] = useState<string | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<{ volunteer: Person; membership: Membership | null } | null>(null);
@@ -377,6 +380,23 @@ function PeopleContent() {
       if (filterEligibility === "cleared" && elig !== "cleared" && elig !== "no_prereqs") return false;
       if (filterEligibility === "pending" && elig !== "in_progress" && elig !== "not_started") return false;
     }
+    // Wave 9 P0-3 sub-PR E — Safety filters
+    if (filterBgExpiring) {
+      const exp = v.background_check?.expires_at;
+      if (!exp) return false;
+      const sixtyDays = new Date(Date.now() + 60 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      // include both "approaching" and "already past" — the latter
+      // matters because the cron may not have run yet
+      if (exp > sixtyDays) return false;
+    }
+    if (filterRestrictedChildren) {
+      const hasActive = (v.restrictions ?? []).some(
+        (r) => r.cannot_serve_with_children === true && !r.lifted_at,
+      );
+      if (!hasActive) return false;
+    }
     return true;
   });
 
@@ -384,7 +404,9 @@ function PeopleContent() {
     + (filterStatus !== "active" ? 1 : 0)
     + (filterTeam !== "all" ? 1 : 0)
     + filterOrgRoles.length
-    + (filterEligibility !== "all" ? 1 : 0);
+    + (filterEligibility !== "all" ? 1 : 0)
+    + (filterBgExpiring ? 1 : 0)
+    + (filterRestrictedChildren ? 1 : 0);
 
   // Helpers
   function getMinistryName(id: string) {
@@ -773,6 +795,10 @@ function PeopleContent() {
             onFilterOrgRolesChange={setFilterOrgRoles}
             filterEligibility={filterEligibility}
             onFilterEligibilityChange={setFilterEligibility}
+            filterBgExpiring={filterBgExpiring}
+            onFilterBgExpiringChange={setFilterBgExpiring}
+            filterRestrictedChildren={filterRestrictedChildren}
+            onFilterRestrictedChildrenChange={setFilterRestrictedChildren}
             activeFilterCount={activeFilterCount}
             ministries={ministries}
             uniqueRoles={uniqueRoles}
