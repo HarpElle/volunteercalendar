@@ -2,6 +2,9 @@
 
 import { useRef, useState } from "react";
 import { kioskFetch } from "@/lib/kiosk-client";
+import { BlockedPickupReview } from "./blocked-pickup-review";
+import { BlockedPickupAlert } from "./blocked-pickup-alert";
+import type { BlockedPickup } from "@/lib/types";
 
 interface CheckoutEntryProps {
   churchId: string;
@@ -14,6 +17,17 @@ interface CheckoutEntryProps {
 export interface CheckoutResult {
   children: { child_name: string; room_name: string }[];
   checked_out_at: string;
+}
+
+interface BlockListPreview {
+  blocks: BlockedPickup[];
+  children: { child_name: string; room_name?: string | null }[];
+  securityCode: string;
+}
+
+interface BlockedAttemptResult {
+  name: string;
+  fanout: { attempted: number; success: number; failed: number };
 }
 
 /**
@@ -31,6 +45,14 @@ export function CheckoutEntry({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Wave 9 P0-2 sub-PR F: block-list review state. When the entered
+  // security code matches sessions with active block-list entries, the
+  // operator sees the review modal before any checkout call.
+  const [blockListPreview, setBlockListPreview] =
+    useState<BlockListPreview | null>(null);
+  const [blockedAttempt, setBlockedAttempt] =
+    useState<BlockedAttemptResult | null>(null);
 
   const handleInput = (index: number, value: string) => {
     onActivity();
@@ -57,17 +79,10 @@ export function CheckoutEntry({
     }
   };
 
-  const handleSubmit = async (codeStr?: string) => {
-    const securityCode = codeStr || code.join("");
-    if (securityCode.length !== 4) {
-      setError("Please enter all 4 characters");
-      return;
-    }
-
+  const proceedWithCheckout = async (securityCode: string) => {
     setSubmitting(true);
     setError("");
     onActivity();
-
     try {
       const res = await kioskFetch("/api/checkin/checkout", {
         method: "POST",
@@ -86,7 +101,9 @@ export function CheckoutEntry({
         } else if (data.error === "code_mismatch") {
           setError("Code doesn't match. Check your receipt and try again.");
         } else if (data.error === "no_active_sessions") {
-          setError("No children found with this code. They may already be checked out.");
+          setError(
+            "No children found with this code. They may already be checked out.",
+          );
         } else {
           setError(data.message || data.error || "Checkout failed");
         }
@@ -96,7 +113,10 @@ export function CheckoutEntry({
       }
 
       onSuccess({
-        children: data.children || [{ child_name: data.child_name, room_name: data.room_name }],
+        children:
+          data.children || [
+            { child_name: data.child_name, room_name: data.room_name },
+          ],
         checked_out_at: data.checked_out_at,
       });
     } catch {
@@ -106,6 +126,107 @@ export function CheckoutEntry({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (codeStr?: string) => {
+    const securityCode = codeStr || code.join("");
+    if (securityCode.length !== 4) {
+      setError("Please enter all 4 characters");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    onActivity();
+
+    // Wave 9 P0-2 sub-PR F: check the block list BEFORE attempting
+    // checkout. If any active blocks apply to the children behind this
+    // code, show the operator the review modal.
+    try {
+      const previewRes = await kioskFetch("/api/checkin/blocked-pickups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          church_id: churchId,
+          security_code: securityCode,
+        }),
+      });
+      if (previewRes.ok) {
+        const previewData = (await previewRes.json()) as {
+          blocks: BlockedPickup[];
+          children: { child_name: string; room_name?: string | null }[];
+        };
+        if (previewData.blocks && previewData.blocks.length > 0) {
+          setBlockListPreview({
+            blocks: previewData.blocks,
+            children: previewData.children ?? [],
+            securityCode,
+          });
+          setSubmitting(false);
+          return;
+        }
+      }
+      // No blocks (or the preview endpoint failed — fail-open: proceed
+      // with checkout. The preview is a SAFETY ASSIST, not a SAFETY GATE.
+      // The server-side checkout endpoint is the source of truth for
+      // release authorization; this UI step gives the operator a chance
+      // to detect attempted blocked pickups, but a network failure here
+      // shouldn't strand parents who have valid security codes).
+    } catch {
+      // Preview failed — proceed with checkout. See fail-open note above.
+    }
+
+    await proceedWithCheckout(securityCode);
+  };
+
+  const handleConfirmNotOnList = async () => {
+    if (!blockListPreview) return;
+    const { securityCode } = blockListPreview;
+    setBlockListPreview(null);
+    await proceedWithCheckout(securityCode);
+  };
+
+  const handleAttempt = async (blockedPickupId: string) => {
+    if (!blockListPreview) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await kioskFetch(
+        "/api/checkin/blocked-pickup-attempt",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            church_id: churchId,
+            security_code: blockListPreview.securityCode,
+            blocked_pickup_id: blockedPickupId,
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || data.error || "Could not record attempt");
+        return;
+      }
+      const matchedBlock = blockListPreview.blocks.find(
+        (b) => b.id === blockedPickupId,
+      );
+      setBlockedAttempt({
+        name: matchedBlock?.name ?? "Person on the block list",
+        fanout: data.fanout ?? { attempted: 0, success: 0, failed: 0 },
+      });
+      setBlockListPreview(null);
+    } catch {
+      setError("Network error recording attempt. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAlertDismiss = () => {
+    setBlockedAttempt(null);
+    setCode(["", "", "", ""]);
+    onBack();
   };
 
   return (
@@ -170,6 +291,28 @@ export function CheckoutEntry({
           &larr; Back to Check-In
         </button>
       </div>
+
+      {/* Wave 9 P0-2 sub-PR F: block-list review + blocked-attempt alert */}
+      {blockListPreview && (
+        <BlockedPickupReview
+          blocks={blockListPreview.blocks}
+          childPreview={blockListPreview.children}
+          onConfirmNotOnList={handleConfirmNotOnList}
+          onAttempt={handleAttempt}
+          onCancel={() => {
+            setBlockListPreview(null);
+            setCode(["", "", "", ""]);
+          }}
+          submitting={submitting}
+        />
+      )}
+      {blockedAttempt && (
+        <BlockedPickupAlert
+          blockedPickupName={blockedAttempt.name}
+          fanout={blockedAttempt.fanout}
+          onDismiss={handleAlertDismiss}
+        />
+      )}
     </div>
   );
 }
