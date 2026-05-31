@@ -386,6 +386,68 @@ function hasValidBackgroundCheck(volunteer: Person, ministryId: string, ministri
   return true;
 }
 
+/**
+ * Wave 9 P0-3: pure helper — does the ministry doc represent a children-
+ * touching ministry that the restriction gate cares about?
+ *
+ * Keys off `Ministry.category === "children_youth"`, populated by the
+ * setup wizard's `CHURCH_MINISTRY_TEMPLATES` for the standard Children's
+ * Ministry / Youth Ministry / Nursery templates. Admins can manually
+ * set this on custom ministries via Settings (Sub-PR C).
+ *
+ * Exported for unit tests + for downstream UI surfaces (Sub-PR D's
+ * schedule-matrix lock badge) that need the same definition.
+ */
+export function isChildrenMinistry(ministry: Ministry | undefined): boolean {
+  return ministry?.category === "children_youth";
+}
+
+/**
+ * Wave 9 P0-3: does the volunteer have an active `cannot_serve_with_children`
+ * restriction?  Active = `lifted_at` is null / undefined.
+ *
+ * Pure helper, no ministry context. Used by the scheduler's children-
+ * ministry gate AND by the person-detail "Safety" panel (Sub-PR C) to
+ * render the current state.
+ */
+export function hasActiveChildrenRestriction(volunteer: Person): boolean {
+  const restrictions = volunteer.restrictions;
+  if (!restrictions || restrictions.length === 0) return false;
+  return restrictions.some(
+    (r) => r.cannot_serve_with_children === true && !r.lifted_at,
+  );
+}
+
+/**
+ * Wave 9 P0-3: scheduler gate — returns `false` (NOT eligible) when the
+ * ministry is a children-touching ministry AND the volunteer has an
+ * active `cannot_serve_with_children` restriction.
+ *
+ * Conservative defaults:
+ *   - No `ministries` array passed → gate is bypassed (mirrors the
+ *     existing `hasValidBackgroundCheck` pattern; callers that care
+ *     about restrictions MUST pass ministries).
+ *   - Ministry doc missing from the array → gate is bypassed (caller
+ *     bug; not a security gap because the eligibility check upstream
+ *     would also fail).
+ *   - Ministry is NOT children_youth → gate is bypassed.
+ *   - Restriction exists but is `lifted_at` → gate is bypassed.
+ *
+ * Returns true when the volunteer is OK to serve (i.e., no restriction
+ * applies). The naming intentionally mirrors `hasValidBackgroundCheck`
+ * so the `isEligible` call-site reads consistently.
+ */
+function hasNoChildrenRestriction(
+  volunteer: Person,
+  ministryId: string,
+  ministries?: Ministry[],
+): boolean {
+  if (!ministries) return true;
+  const ministry = ministries.find((m) => m.id === ministryId);
+  if (!isChildrenMinistry(ministry)) return true;
+  return !hasActiveChildrenRestriction(volunteer);
+}
+
 // --- Scoring ---
 
 function fairnessScore(counts: VolunteerAssignmentCount, volunteerIds: string[]): number {
@@ -516,7 +578,7 @@ export function generateDraftSchedule(
   detectConflicts(assignments, volunteers, households, counts, conflicts);
 
   // --- Phase 3: Local Search for Fairness ---
-  improveFairness(assignments, volunteers, households, counts, 50);
+  improveFairness(assignments, volunteers, households, counts, 50, ministries);
 
   const filledSlots = assignments.length;
   const volunteerIds = volunteers.map((v) => v.id);
@@ -611,6 +673,10 @@ function isEligible(
   if (!canServeAtCampus(v, service)) return false;
   // Must have valid background check if ministry requires it
   if (!hasValidBackgroundCheck(v, ministryId, ministries)) return false;
+  // Wave 9 P0-3: hard children-restriction gate (ECAP Indicator 3.15).
+  // Active `cannot_serve_with_children` restriction → ineligible for any
+  // children_youth-category ministry, regardless of bg-check status.
+  if (!hasNoChildrenRestriction(v, ministryId, ministries)) return false;
   // Must have completed all prerequisites (org-wide + ministry-specific, scope-aware)
   if (!hasCompletedPrerequisites(v, ministryId, ministries, orgPrerequisites, role.role_id)) return false;
   // Not blocked out
@@ -678,6 +744,7 @@ function improveFairness(
   households: Household[],
   counts: VolunteerAssignmentCount,
   maxIterations: number,
+  ministries?: Ministry[],
 ): void {
   const volunteerIds = volunteers.map((v) => v.id);
   let currentScore = fairnessScore(counts, volunteerIds);
@@ -699,12 +766,12 @@ function improveFairness(
     if (maxCount - minCount <= 1) break;
 
     // Try to swap one assignment from max to min
-    const swapped = trySwap(assignments, volunteers, households, counts, maxId, minId);
+    const swapped = trySwap(assignments, volunteers, households, counts, maxId, minId, ministries);
     if (swapped) {
       const newScore = fairnessScore(counts, volunteerIds);
       if (newScore <= currentScore) {
         // Revert if no improvement
-        trySwap(assignments, volunteers, households, counts, minId, maxId);
+        trySwap(assignments, volunteers, households, counts, minId, maxId, ministries);
       } else {
         currentScore = newScore;
       }
@@ -719,6 +786,7 @@ function trySwap(
   counts: VolunteerAssignmentCount,
   fromId: string,
   toId: string,
+  ministries?: Ministry[],
 ): boolean {
   const toVol = volunteers.find((v) => v.id === toId);
   if (!toVol) return false;
@@ -731,6 +799,11 @@ function trySwap(
     // Check if toId can take this slot
     if (!canServeInMinistry(toVol, a.ministry_id)) continue;
     if (!canServeInRole(toVol, a.role_id)) continue;
+    // Wave 9 P0-3: fairness swap must respect the children-restriction gate.
+    // Without this, a restricted volunteer could be swapped INTO a
+    // children-ministry slot that the isEligible pass had correctly
+    // denied them in the initial assignment phase.
+    if (!hasNoChildrenRestriction(toVol, a.ministry_id, ministries)) continue;
     if (isBlockedOut(toVol, a.service_date)) continue;
     if (isRecurringUnavailable(toVol, new Date(a.service_date).getDay())) continue;
     if (hasHouseholdConflict(toVol, a.service_date, a.service_id || "", households, assignments)) continue;

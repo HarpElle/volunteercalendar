@@ -96,6 +96,17 @@ export type AuditAction =
   | "kiosk.checkout"
   | "kiosk.register_visitor"
   | "kiosk.medical_data_revealed"
+  /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
+   *  Together these form the legal-defensibility trail for the "cannot
+   *  serve with children" gate (ECAP Indicator 3.15). */
+  | "volunteer.restriction_added"
+  | "volunteer.restriction_lifted"
+  | "volunteer.background_check_initiated"
+  | "volunteer.background_check_completed"
+  /** Raw bg-check expiry cron auto-marked status="expired". */
+  | "volunteer.background_check_expired_auto"
+  /** Explicit Sex Offender Registry check logged. */
+  | "volunteer.sor_check_logged"
   // Data export
   | "export.people"
   | "export.assignments"
