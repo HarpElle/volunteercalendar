@@ -117,10 +117,14 @@ export async function POST(
       }
       targetName = existing[idx].name;
       const updated = existing.slice();
+      // NOTE: Firestore rejects `undefined` in nested array values
+      // (the document write is wrapped as `{authorized_pickups: [...]}`
+      // and the SDK serializer throws on undefined). We MUST write
+      // `null` to clear the pending markers, not omit the key.
       updated[idx] = {
         ...updated[idx],
         pending_remove_at: null,
-        pending_remove_by_user_id: undefined,
+        pending_remove_by_user_id: null,
       };
       tx.update(personRef, {
         "child_profile.authorized_pickups": updated,
