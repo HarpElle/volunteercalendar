@@ -3,12 +3,14 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireCronSecret } from "@/lib/server/authz";
 import { buildExpiryWarningEmail } from "@/lib/utils/emails/prerequisite-expiry-warning";
 import { buildPrerequisiteNudgeEmail } from "@/lib/utils/emails/prerequisite-nudge";
+import { buildBackgroundCheckExpiryEmail } from "@/lib/utils/emails/background-check-expiry";
 import type { OnboardingStep, VolunteerJourneyStep } from "@/lib/types";
 import { ORG_WIDE_MINISTRY_ID } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
 import { withCronRun } from "@/lib/server/cron-runs";
+import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 
 export const maxDuration = 300;
 
@@ -16,6 +18,13 @@ export const maxDuration = 300;
 const EXPIRY_WARNING_DAYS = 30;
 /** How many days of "in_progress" before sending a nudge. */
 const STALLED_DAYS = 30;
+/**
+ * Wave 9 P0-3 sub-PR D: how many days before raw `background_check.
+ * expires_at` to send the bg-check renewal warning. Distinct from
+ * EXPIRY_WARNING_DAYS only so the two cadences can be tuned
+ * independently in the future.
+ */
+const BG_CHECK_WARNING_DAYS = 30;
 
 /**
  * GET /api/cron/prerequisite-check
@@ -49,8 +58,17 @@ export async function GET(request: NextRequest) {
       church_name: string;
       expiry_warnings: number;
       nudges: number;
+      /** Wave 9 P0-3 sub-PR D: raw bg-check expiry counters. */
+      bg_check_warnings: number;
+      bg_check_auto_expired: number;
       errors: string[];
     }[] = [];
+
+    const bgWarningCutoff = new Date(
+      now.getTime() + BG_CHECK_WARNING_DAYS * 86400000,
+    )
+      .toISOString()
+      .slice(0, 10);
 
     for (const churchDoc of churchesSnap.docs) {
       const churchId = churchDoc.id;
@@ -59,6 +77,8 @@ export async function GET(request: NextRequest) {
 
       let expiryWarnings = 0;
       let nudges = 0;
+      let bgCheckWarnings = 0;
+      let bgCheckAutoExpired = 0;
       const errors: string[] = [];
 
       // Fetch ministries for prereqs + names
@@ -214,17 +234,201 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // ────────────────────────────────────────────────────────────
+      // Wave 9 P0-3 sub-PR D: raw bg-check expiry pass.
+      //
+      // Independent of the journey-step loop above because raw
+      // `background_check.expires_at` lives on the Person doc, not
+      // on `volunteer_journey[]`. We process every active volunteer
+      // whose bg-check has an `expires_at`:
+      //
+      //   1. If today >= expires_at AND status === "cleared":
+      //      auto-mark "expired", emit
+      //      `volunteer.background_check_expired_auto`, send the
+      //      "expired" variant email + an in-app notification.
+      //
+      //   2. Else if within BG_CHECK_WARNING_DAYS of expires_at
+      //      AND the most recent warning wasn't sent for the SAME
+      //      `expires_at` value: send the approaching-expiry
+      //      warning email + in-app notification, then cache
+      //      `expiry_warning_sent_for: expires_at`. If admin
+      //      renews and bumps expires_at, the cache becomes stale
+      //      automatically and the next pass re-warns.
+      // ────────────────────────────────────────────────────────────
+      for (const volDoc of volunteersSnap.docs) {
+        const volData = volDoc.data();
+        if (volData.status === "archived") continue;
+        const bg = volData.background_check as
+          | {
+              status?: string;
+              expires_at?: string | null;
+              expiry_warning_sent_for?: string | null;
+            }
+          | null
+          | undefined;
+        if (!bg?.expires_at) continue;
+
+        const volunteerName = (volData.name as string) || "Volunteer";
+        const volunteerEmail = volData.email as string;
+        const personRef = adminDb.doc(
+          `churches/${churchId}/people/${volDoc.id}`,
+        );
+
+        // Case 1 — auto-expire
+        if (bg.expires_at < todayStr && bg.status === "cleared") {
+          try {
+            await personRef.update({
+              "background_check.status": "expired",
+              updated_at: new Date().toISOString(),
+            });
+            bgCheckAutoExpired++;
+            void audit({
+              church_id: churchId,
+              actor: SYSTEM_ACTOR,
+              action: "volunteer.background_check_expired_auto",
+              target_type: "person",
+              target_id: volDoc.id,
+              metadata: { expires_at: bg.expires_at },
+              outcome: "ok",
+            });
+
+            // Send "expired" email + in-app, fire-and-forget.
+            if (volunteerEmail) {
+              const daysPast = -Math.ceil(
+                (new Date(bg.expires_at + "T12:00:00").getTime() -
+                  now.getTime()) /
+                  86400000,
+              );
+              const { subject, html, text } = buildBackgroundCheckExpiryEmail({
+                volunteerName,
+                churchName,
+                expiresAt: bg.expires_at,
+                daysRemaining: -daysPast,
+                variant: "expired",
+                dashboardUrl: "https://volunteercal.com/dashboard/my-journey",
+              });
+              try {
+                await resend.emails.send({
+                  from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+                  to: volunteerEmail,
+                  subject,
+                  html,
+                  text,
+                });
+              } catch (err) {
+                errors.push(
+                  `bg-check expired email to ${volunteerEmail}: ${(err as Error).message}`,
+                );
+              }
+            }
+            try {
+              const volUserId = await resolveUserId(churchId, volDoc.id);
+              if (volUserId) {
+                await createUserNotification({
+                  user_id: volUserId,
+                  church_id: churchId,
+                  type: "prerequisite_expiry",
+                  title: "Your background check has expired",
+                  body: "Renew it to stay eligible for scheduled assignments.",
+                  metadata: { link_href: "/dashboard/my-journey" },
+                });
+              }
+            } catch (notifErr) {
+              log.error("bg-check expired user notification failed", {
+                error: notifErr,
+              });
+            }
+          } catch (err) {
+            errors.push(
+              `bg-check auto-expire for ${volDoc.id}: ${(err as Error).message}`,
+            );
+          }
+          continue;
+        }
+
+        // Case 2 — approaching-expiry warning. Skip if outside the
+        // warning window OR we've already warned for this exact
+        // expires_at value.
+        if (
+          bg.expires_at >= todayStr &&
+          bg.expires_at <= bgWarningCutoff &&
+          bg.expiry_warning_sent_for !== bg.expires_at
+        ) {
+          if (!volunteerEmail) continue;
+          const daysRemaining = Math.ceil(
+            (new Date(bg.expires_at + "T12:00:00").getTime() -
+              now.getTime()) /
+              86400000,
+          );
+          try {
+            const { subject, html, text } = buildBackgroundCheckExpiryEmail({
+              volunteerName,
+              churchName,
+              expiresAt: bg.expires_at,
+              daysRemaining,
+              variant: "approaching",
+              dashboardUrl: "https://volunteercal.com/dashboard/my-journey",
+            });
+            await resend.emails.send({
+              from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+              to: volunteerEmail,
+              subject,
+              html,
+              text,
+            });
+            bgCheckWarnings++;
+            await personRef.update({
+              "background_check.expiry_warning_sent_for": bg.expires_at,
+              "background_check.expiry_warning_sent_at":
+                new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+            try {
+              const volUserId = await resolveUserId(churchId, volDoc.id);
+              if (volUserId) {
+                await createUserNotification({
+                  user_id: volUserId,
+                  church_id: churchId,
+                  type: "prerequisite_expiry",
+                  title: "Your background check expires soon",
+                  body: `Expires in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`,
+                  metadata: { link_href: "/dashboard/my-journey" },
+                });
+              }
+            } catch (notifErr) {
+              log.error("bg-check warning user notification failed", {
+                error: notifErr,
+              });
+            }
+          } catch (err) {
+            errors.push(
+              `bg-check warning to ${volunteerEmail}: ${(err as Error).message}`,
+            );
+          }
+        }
+      }
+
       results.push({
         church_id: churchId,
         church_name: churchName,
         expiry_warnings: expiryWarnings,
         nudges,
+        bg_check_warnings: bgCheckWarnings,
+        bg_check_auto_expired: bgCheckAutoExpired,
         errors,
       });
     }
 
     const totalExpiry = results.reduce((s, r) => s + r.expiry_warnings, 0);
     const totalNudges = results.reduce((s, r) => s + r.nudges, 0);
+    const totalBgWarnings = results.reduce(
+      (s, r) => s + r.bg_check_warnings,
+      0,
+    );
+    const totalBgAutoExpired = results.reduce(
+      (s, r) => s + r.bg_check_auto_expired,
+      0,
+    );
     const failedCount = results.reduce((s, r) => s + r.errors.length, 0);
 
       return {
@@ -233,12 +437,19 @@ export async function GET(request: NextRequest) {
           churches_processed: results.length,
           total_expiry_warnings: totalExpiry,
           total_nudges: totalNudges,
+          total_bg_check_warnings: totalBgWarnings,
+          total_bg_check_auto_expired: totalBgAutoExpired,
           results,
         }),
         summary: {
           processed: results.length,
           failed: failedCount,
-          metadata: { total_expiry_warnings: totalExpiry, total_nudges: totalNudges },
+          metadata: {
+            total_expiry_warnings: totalExpiry,
+            total_nudges: totalNudges,
+            total_bg_check_warnings: totalBgWarnings,
+            total_bg_check_auto_expired: totalBgAutoExpired,
+          },
         },
       };
     });
