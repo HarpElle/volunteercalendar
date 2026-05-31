@@ -11,6 +11,7 @@ import { StepTypeIcon } from "@/components/ui/step-type-icon";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
+import { SafetyPanel } from "@/components/people/safety-panel";
 import { normalizePhone, formatPhone, formatPhoneInput } from "@/lib/utils/phone";
 import { updateChurchDocument, updateMembershipPermissions } from "@/lib/firebase/firestore";
 import { getOrgEligibility } from "@/lib/utils/eligibility";
@@ -56,6 +57,15 @@ interface PersonDetailDrawerProps {
   orgPrereqs: OnboardingStep[];
   availableRoles: { role_id: string; title: string; ministry_id: string }[];
   canManage: boolean;
+  /**
+   * Wave 9 P0-3 sub-PR C: gates owner-only Safety affordances (add /
+   * lift restriction, log SOR check). Admin + scheduler get a read-only
+   * view of the same data when `canManage` is true; they don't see the
+   * edit buttons. Volunteer-tier viewers don't see the panel at all
+   * because the Eligibility section that contains it is `canManage`-
+   * gated upstream.
+   */
+  isOwner: boolean;
   getMinistryName: (id: string) => string;
   getMinistryColor: (id: string) => string;
   onVolunteerUpdated: (v: Person) => void;
@@ -75,6 +85,7 @@ export function PersonDetailDrawer({
   orgPrereqs,
   availableRoles,
   canManage,
+  isOwner,
   getMinistryName,
   getMinistryColor,
   onVolunteerUpdated,
@@ -826,6 +837,16 @@ export function PersonDetailDrawer({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Wave 9 P0-3 sub-PR C: Safety panel (restrictions + SOR check). */}
+            {canManage && !isArchived && (
+              <SafetyPanel
+                volunteer={volunteer}
+                churchId={churchId}
+                isOwner={isOwner}
+                onVolunteerUpdated={onVolunteerUpdated}
+              />
             )}
           </section>
         )}

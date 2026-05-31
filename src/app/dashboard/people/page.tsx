@@ -18,7 +18,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { isAdmin, isScheduler } from "@/lib/utils/permissions";
+import { isAdmin, isOwner, isScheduler } from "@/lib/utils/permissions";
 import { PeopleShell } from "@/components/dashboard/people-shell";
 import { InviteQueueDrawer } from "@/components/forms/invite-queue-drawer";
 import { getOrgTerms } from "@/lib/utils/org-terms";
@@ -116,6 +116,10 @@ function PeopleContent() {
 
   const canManage = isAdmin(activeMembership);
   const canViewRoster = isScheduler(activeMembership);
+  // Wave 9 P0-3 sub-PR C: owner-only Safety panel affordances
+  // (add / lift restriction, log SOR check). Read-only fall-through
+  // for admin/scheduler is handled inside the panel itself.
+  const isOwnerHere = isOwner(activeMembership);
 
   // Pass H Phase 3: when a campus is active in the sidebar, scope the
   // roster + families + invite-queue counts to people whose campus_ids
@@ -889,6 +893,7 @@ function PeopleContent() {
               orgPrereqs={orgPrereqs}
               availableRoles={uniqueRoles}
               canManage={canManage}
+              isOwner={isOwnerHere}
               getMinistryName={getMinistryName}
               getMinistryColor={getMinistryColor}
               onVolunteerUpdated={(updated) => {
