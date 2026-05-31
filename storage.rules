@@ -13,6 +13,22 @@ service firebase.storage {
       allow write: if false; // All uploads go through Admin SDK in API routes
     }
 
+    // Children's check-in photos (Wave 9 P0-2): authorized-pickup contacts
+    // + blocked-pickup contacts. This is the most sensitive surface in the
+    // app — custody disputes, court orders, faces of people the household
+    // does NOT want to pick the child up. NEVER expose unsigned URLs.
+    //
+    // Reads: Admin SDK only via /api/admin/checkin/photo/* or the
+    // staffed-station-scoped kiosk endpoint (`signed URLs returned per
+    // request, short TTL`). Direct client reads are denied here.
+    //
+    // Writes: Admin SDK only (API routes apply admin-membership + scope
+    // checks before persisting).
+    match /churches/{churchId}/checkin-photos/{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Default: deny all
     match /{allPaths=**} {
       allow read, write: if false;

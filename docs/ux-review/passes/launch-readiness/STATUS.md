@@ -16,8 +16,9 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **4** | Audit coverage + MFA + Notify Ministry Leads + `/status` page | #110 (4.1), #111 (4.3), #112 (4.4), #115 (4.2), #117 (4.2 hotfix) | `5994089` + `d6c6f57` + `5b4b888` + `ef25039` + `65ca484` | ✅ Closed (all sub-items Codex PASS) |
 | **5** | UX polish + **assignment-rule tightening** (a11y, focus, contrast, server components, image optimization, terminology, My Schedule refactor + rule lock-down) | #119–#128 | `9f76668` | ✅ Closed — Batches A–D + E phase 1 + E phase 3 (incl. 2.2b rule lockdown) merged & Codex-verified; E phase 2 (admin-page perf) deferred to post-launch |
 | **6** | Annual billing (20% off / "2 months free") + 14-day trial; custom auth domain N/A | #131 #132 | `a651501` | ✅ Closed — billing + trial shipped; custom auth domain dropped (N/A for an email/password app) |
-| **7** | Production verification matrix (17 features × happy + failure) | — | — | ⏸ Queued |
-| **8** | Customer comms + outreach + marketing | — | — | ⏸ Queued |
+| **7** | Production verification matrix (17 features × happy + failure) | #133 #134 #135 #136 #137 #139 #140 #141 | `2f315bf` | ✅ Closed — all 11 Codex-owned rows PASS in prod; 6 Jason halves (label print, calendar subscribe, Stripe live × 2, ProPresenter, Stripe customer cleanup) intentionally left open and tracked in `launch-verification.md` |
+| **8** | Customer comms + outreach + marketing | — | — | ⏸ Parked behind Wave 9 |
+| **9** | **Best-in-class Child Check-In safety** (Outreach Magazine + ECAP + PCO research; P0-1 → P0-5) — pre-launch | P0-1: #142 | `52b5e6d` | 🟢 Active — P0-1 PASS in prod; P0-2 in progress |
 
 ---
 
@@ -384,11 +385,95 @@ All steps landed and were verified by Codex in production. Closing summary:
 
 ---
 
+## Wave 7 — Closed
+
+**Codex PASS on the full Codex-owned matrix (11 rows), 2026-05-29.** Production head at closure: `2f315bf` (also includes #140 short-link interstitial and #141 artifact cleanup which landed alongside the matrix).
+
+Closure receipt (rows that Codex verified end-to-end on production):
+
+| Row | Feature | PRs that fixed regressions during the matrix | Status |
+|-----|---------|---|---|
+| 1 | Sign-up + email/password login | — | ✅ |
+| 2 | Volunteer invite + join | — | ✅ |
+| 3 | Schedule create → publish → notify | — | ✅ |
+| 4 | Volunteer self-service availability | — | ✅ |
+| 5 | Kiosk happy + revoked-token + duplicate-prevention + lookup audit | #133, #136, #139 | ✅ (Codex half; Jason half = label print on a real printer) |
+| 6 | Room reservation | — | ✅ |
+| 7 | Calendar feed (.ics + rotation) | — | ✅ (Codex half; Jason half = Apple/Google subscribe) |
+| 8 | Short links + allowlisted external interstitial | #140 | ✅ |
+| 9 | Stripe checkout wiring (monthly + annual + trial) | — | ✅ (Codex half; Jason half = live charge smoke) |
+| 10 | Stripe customer portal session | — | ✅ (Codex half; Jason half = live update/cancel) |
+| 11 | Stripe webhook idempotency | — | ✅ |
+| 12 | Notifications inbox | — | ✅ |
+| 13 | Reminders cron | — | ✅ |
+| 14 | Stats refresh cron | — | ✅ |
+| 15 | Worship planning + ProPresenter export wiring | — | ✅ (Codex half; Jason half = ProPresenter import + play) |
+| 16 | Audit log | — | ✅ |
+| 17 | Account / org deletion + Stripe wiring + index fix | #136 (purge + index) | ✅ (Codex half; Jason half = live customer-record cleanup) |
+
+Six Jason-half rows remain — they don't gate Wave 9 (Check-In hardening), only Wave 8 (customer comms). Jason can knock them out at any pace; they involve physical printers, real calendar apps, real Stripe charges, etc.
+
+### Decisions baked in (Wave 7)
+
+- **Codex never runs real live-mode Stripe payments** — wiring-only on production; charge/cancel/refund are Jason's halves.
+- **Throwaway live church pattern** — each row that mutated data spun a fresh church (`/dashboard/account/delete-account` cleanup at the end). Row 17 doubled as cleanup + test.
+- **Residual finding fix-forward, not block** — Codex Sev 3 ("security_code surfaced on idempotent re-checkin") fixed in #139 before closing the wave; no fatal blocker emerged.
+
+### Recurring bug class observed (Wave 7)
+
+**Idempotency tells the truth about response shape.** The Wave 7 Sev 3 was a check-in route returning a duplicate-warning that still echoed the security code — fine for first-write, leaked detail on idempotent retry. Pattern: **whenever a route is idempotent, hand-author the duplicate response separately rather than reusing the first-write response shape**. Captured in `src/app/api/checkin/checkin/route.ts` (PR #139) and added to the "review-checklist for idempotent endpoints."
+
+---
+
+## Wave 9 — Active (Best-in-class Child Check-In safety)
+
+Triggered by Outreach Magazine's "New Trends in Kids Check-In" + the 109-agent deep-research workflow that surfaced ECAP / PCO / KidCheck / GuideOne industry patterns. Jason's explicit framing: *"almost nothing is more important than handling children properly, respectfully, and safely."* Active plan: `/Users/jasonpaschall/.claude/plans/i-want-you-to-iterative-spring.md` (5 P0 phases, ~25 days, supersedes the original launch-readiness plan).
+
+### P0-1 — Station type architecture — SHIPPED (2026-05-30)
+
+| PR | Commit | Scope |
+|----|--------|-------|
+| #142 | `52b5e6d` | `KioskStation.type: "self_service" \| "staffed"`; `KioskScope[]` narrowed per station type (self-service excludes `checkout`); `requireKioskToken` now reads the token's actual persisted scope (was hardcoded to ALL_SCOPES — silent gap closed); `changeStationType()` transactionally revokes the active token and issues a fresh activation code; `kiosk.checkout_blocked_self_service` + `kiosk.station_type_changed` audit codes; admin Stations create form + per-row "Change to X" affordance; kiosk top-bar hides Check Out toggle on self-service stations (renders "Self-service" label instead); legacy stations get back-compat `"staffed (legacy)"` default at read time. |
+
+**Codex production retest PASS** on `52b5e6d` (`docs/ux-review/passes/launch-readiness/CODEX_CHECKIN_P01.md`). Verified end-to-end:
+- Self-service station: type=`self_service`, scopes exclude `checkout`, direct checkout returns 403 + audit row.
+- Staffed station: type=`staffed`, scopes include `checkout`, direct checkout succeeds.
+- Change-type flow: old token revoked, new activation code issued, audit row carries `from_type` / `to_type`.
+
+### Decisions baked in (Wave 9, current as of P0-1 close)
+
+- **All 5 P0 phases pre-launch** (~25 days; Jason 2026-05-29 authorized).
+- **Tier strategy:** Child Check-In stays Growth+; ALL safety features included in Growth+ (no tier-gating on child safety as a moral floor + competitive moat); pre-check-in SMS stays Pro; SMS monitoring (not metering) per Jason 2026-05-29.
+- **Background-check vendor:** abstraction + MinistrySafe adapter pre-launch (P1-6).
+- **HIPAA stance:** HIPAA-aware (per-field medical visibility, encrypted storage, retention) without making a formal HIPAA claim.
+- **Two-deep "related adults count":** counts as 1 volunteer but does NOT satisfy `min_unrelated_adults` (Jason 2026-05-29).
+- **Authorized-pickup photo capture:** strongly recommended at registration, never blocking; "incomplete" badge until populated.
+- **Custody-order storage:** Firebase Storage with `read=false, write=false` rules — server-side signed-URL pattern only.
+- **Parent self-service pickup-list cooling-off:** 24h before parent-initiated changes take effect; both household primaries notified.
+- **Blocked-pickup override authority:** Owner role ONLY; operator on-site cannot self-override.
+- **Emergency Response Team:** new `CheckInSettings.emergency_notification_numbers` — SMS in parallel to owner on blocked-pickup attempts (Jason 2026-05-29).
+- **Audit retention:** 7 years (matches ECAP guidance) — implemented as a future cron pass.
+- **Operator training tabletop exercise:** deferred to help-articles phase (task #21); per-org "Operator Training" toggle in admin onboarding tracked in P0-2/P0-5 PRs.
+
+### Privacy architecture decision (P0-2 foundation, 2026-05-30)
+
+Plan called for `ChildProfile.blocked_pickups` + `UnifiedHousehold.household_blocked_pickups`. **Implementation deviates** — both are now in a single top-level subcollection `churches/{churchId}/checkin_blocked_pickups/{id}` (server-only client rules, `allow read,write: if false`), with a `scope: "child" | "household"` discriminator + `child_id` / `household_id` fields. Reason: `people/{docId}` is volunteer-readable (line 174 of `firestore.rules`), so embedding the most sensitive surface in the system in `ChildProfile` would leak custody-order data to every active member. Same logic for not embedding in `UnifiedHousehold` (org-admin readable, but server-only matches the pattern for `checkInSessions` / `check_in_codes` / `checkinAlerts` — the most consistent privacy boundary).
+
+### P0-2 — Authorized-pickup photos + block list + ERT — IN PROGRESS
+
+Multi-PR sub-phase per the plan ("PR per phase, or per substantial sub-step in P0-2 and P0-5"). Foundation PR lands data model + audit codes + rules; subsequent sub-PRs land server CRUD, photo capture component, household admin UI, blocked-pickup attempt workflow, and parent self-service surface.
+
+---
+
 ## Next up
 
-- **Wave 7 — production verification matrix**: walk all 17 features (happy + one failure path each) on the live deployment using a throwaway live church; mark pass only when `audit_logs` is written where applicable. Living doc: `docs/launch-verification.md`. The next substantive wave.
-- **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder)
-- **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf, no security dependency; revisit post-launch.
-- **Console-noise cleanup — DONE (2026-05-28)**: `useNotifications` onSnapshot error handler now treats `permission-denied` as benign (routed to `log.debug` instead of `console.error`) and only surfaces genuinely unexpected listener errors via `log.error`. No console permission warning on the volunteer dashboard during normal load / org switch. (`src/lib/hooks/use-notifications.ts`)
-- **Wave 3.4 long-tail route sweep**: incremental as files get touched
-- **Polish item from Wave 4.2 retest**: clearer UI copy when MFA enrollment fails because the user's email isn't verified — currently surfaces as a Firebase error code. Fold into Wave 5 H.1 a11y pass or carry as standalone polish.
+- **Wave 9 P0-2** in progress — foundation → server CRUD → photo-capture component → households admin UI → blocked-pickup attempt + ERT fan-out → parent self-service.
+- **Wave 9 P0-3** queued — restrictions + SOR field + raw bg-check expiry cron.
+- **Wave 9 P0-4** queued — HIPAA-aware medical visibility.
+- **Wave 9 P0-5** queued — ratio enforcement + worker check-in (biggest differentiator).
+- **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder).
+- **Wave 7 Jason halves**: 6 manual confirmations on a flexible schedule; don't gate Wave 9.
+- **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf; revisit post-launch.
+- **Console-noise cleanup — DONE (2026-05-28)**: `useNotifications` onSnapshot error handler treats `permission-denied` as benign.
+- **Wave 3.4 long-tail route sweep**: incremental as files get touched.
+- **Polish item from Wave 4.2 retest**: clearer UI copy when MFA enrollment fails because the user's email isn't verified. Carry as standalone polish.
