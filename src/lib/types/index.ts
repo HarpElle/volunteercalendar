@@ -1777,6 +1777,16 @@ export interface Person {
     sor_checked?: boolean;
     sor_match?: boolean | null;
     last_sor_check_at?: string | null;
+    /**
+     * Wave 9 P0-3 sub-PR D: idempotency cache for the raw bg-check
+     * expiry-warning cron. Stores the `expires_at` value the most
+     * recent warning was sent against. If admin updates `expires_at`
+     * (e.g. after a renewal), this value won't match, so the next
+     * cron pass re-sends a warning at the appropriate threshold.
+     * The cron writes both fields atomically when a warning ships.
+     */
+    expiry_warning_sent_for?: string | null;
+    expiry_warning_sent_at?: string | null;
   } | null;
   /**
    * Wave 9 P0-3: per-volunteer hard restrictions. Append-only history;
