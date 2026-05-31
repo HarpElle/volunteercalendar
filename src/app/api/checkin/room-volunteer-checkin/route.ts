@@ -212,20 +212,31 @@ export async function POST(req: NextRequest) {
     };
 
     await adminDb.runTransaction(async (tx) => {
-      // Write the new check-in.
+      // Codex P0-5C: Firestore transactions REQUIRE all reads before
+      // any writes. The pre-hotfix code did tx.set() followed by
+      // tx.get() inside the same tx, which threw and 500'd before
+      // the related_to symmetry could be exercised. Hotfix splits
+      // the work into two phases.
+      //
+      // Phase 1 — ALL reads.
+      const peerSnaps = await Promise.all(
+        docRefsToBackfill.map((ref) => tx.get(ref)),
+      );
+      // Phase 2 — ALL writes.
       tx.set(
         churchRef
           .collection("roomVolunteerCheckins")
           .doc(newCheckIn.id),
         newCheckIn,
       );
-      // Backfill peers' related_to to keep symmetric.
-      for (const ref of docRefsToBackfill) {
-        const snap = await tx.get(ref);
+      for (let i = 0; i < docRefsToBackfill.length; i++) {
+        const snap = peerSnaps[i];
         if (!snap.exists) continue;
         const current = (snap.data()?.related_to as string[]) ?? [];
         if (!current.includes(personId)) {
-          tx.update(ref, { related_to: [...current, personId] });
+          tx.update(docRefsToBackfill[i], {
+            related_to: [...current, personId],
+          });
         }
       }
     });
