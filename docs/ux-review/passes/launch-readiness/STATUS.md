@@ -18,7 +18,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **6** | Annual billing (20% off / "2 months free") + 14-day trial; custom auth domain N/A | #131 #132 | `a651501` | ✅ Closed — billing + trial shipped; custom auth domain dropped (N/A for an email/password app) |
 | **7** | Production verification matrix (17 features × happy + failure) | #133 #134 #135 #136 #137 #139 #140 #141 | `2f315bf` | ✅ Closed — all 11 Codex-owned rows PASS in prod; 6 Jason halves (label print, calendar subscribe, Stripe live × 2, ProPresenter, Stripe customer cleanup) intentionally left open and tracked in `launch-verification.md` |
 | **8** | Customer comms + outreach + marketing | — | — | ⏸ Parked behind Wave 9 |
-| **9** | **Best-in-class Child Check-In safety** (Outreach Magazine + ECAP + PCO research; P0-1 → P0-5) — pre-launch | P0-1: #142 | `52b5e6d` | 🟢 Active — P0-1 PASS in prod; P0-2 in progress |
+| **9** | **Best-in-class Child Check-In safety** (Outreach Magazine + ECAP + PCO research; P0-1 → P0-5) — pre-launch | P0-1 #142; P0-2 #143–146 (reverted via #147; re-landed via #156 #157 #158 #159 #160→#161 #162 #163 #164) | `4b38ac5` | 🟢 Active — P0-1 + P0-2 closed in prod (Codex PASS each); P0-3 queued |
 
 ---
 
@@ -459,16 +459,39 @@ Triggered by Outreach Magazine's "New Trends in Kids Check-In" + the 109-agent d
 
 Plan called for `ChildProfile.blocked_pickups` + `UnifiedHousehold.household_blocked_pickups`. **Implementation deviates** — both are now in a single top-level subcollection `churches/{churchId}/checkin_blocked_pickups/{id}` (server-only client rules, `allow read,write: if false`), with a `scope: "child" | "household"` discriminator + `child_id` / `household_id` fields. Reason: `people/{docId}` is volunteer-readable (line 174 of `firestore.rules`), so embedding the most sensitive surface in the system in `ChildProfile` would leak custody-order data to every active member. Same logic for not embedding in `UnifiedHousehold` (org-admin readable, but server-only matches the pattern for `checkInSessions` / `check_in_codes` / `checkinAlerts` — the most consistent privacy boundary).
 
-### P0-2 — Authorized-pickup photos + block list + ERT — IN PROGRESS
+### P0-2 — Authorized-pickup photos + block list + ERT — SHIPPED (2026-05-30 → 2026-05-31)
 
-Multi-PR sub-phase per the plan ("PR per phase, or per substantial sub-step in P0-2 and P0-5"). Foundation PR lands data model + audit codes + rules; subsequent sub-PRs land server CRUD, photo capture component, household admin UI, blocked-pickup attempt workflow, and parent self-service surface.
+Multi-PR sub-phase per the plan ("PR per phase, or per substantial sub-step in P0-2 and P0-5"). Shipped as 7 sub-PRs + 1 hotfix; Codex production retest PASS on each Codex-tested sub-PR (D, E, F-hotfix, G-hotfix). Sub-PRs A/B/C/E2 were small/server-only and Codex was not engaged per the standing rule ("Codex's efforts are best leveraged for physical-interaction navigation or genuine second-opinion technical input" — Jason 2026-05-30).
+
+| Sub-PR | PR | Commit | Scope | Codex |
+|---|---|---|---|---|
+| **A — foundation** | #143 → reverted #147 → re-landed #156 | `42b2110` | Data model deltas (`PersonAuthorizedPickup`, `BlockedPickup`, `CheckInSettings.emergency_notification_numbers`, `KioskStation.type`); audit code additions across `pickup.*` + `kiosk.checkout_blocked_*` + `kiosk.blocked_pickup_attempted` + `kiosk.ert_notified`; `firestore.rules` updates (`checkin_blocked_pickups/**: read=false, write=false` — server-only); `storage.rules` updates (`checkin-photos/**: read=false, write=false`). | — |
+| **B — server CRUD** | #144 → reverted #149/#150 → re-landed inside #156 | `42b2110` | Authorized-pickup POST + PATCH + DELETE; blocked-pickup GET + POST + PATCH + DELETE; settings PUT ERT-aware. After re-land moved from `children/[personId]/authorized-pickups[/[pickupId]]/route.ts` → flat `authorized-pickups/[id]/route.ts` per the bundler-bug workaround (see below). `child_id` moved to body. | — |
+| **C — photos** | #145 → reverted #147 → re-landed #157 | `e93fd20` | `src/lib/server/checkin-photos.ts` (`uploadCheckInPhoto`, `getCheckInPhotoSignedUrl`, `buildCheckInPhotoPath`, `isCheckInPhotoPathFor`); photo POST + signed-URL serving routes; custody-order document upload (`blocked-pickups/[id]/document/route.ts`). | — |
+| **D — households UI** | #146 → reverted #147 → re-landed #158 | `ba5d0b4` | `<PhotoCapture>` greenfield component (webcam via `getUserMedia` + `<input capture>` mobile fallback); `<AuthorizedPickupPanel>` on `/dashboard/checkin/households/[id]`. | ✅ PASS on `ba5d0b4` (`CODEX_CHECKIN_P02D.md`) |
+| **E — blocked-pickup panel** | #159 | `8526eb8` | `<BlockedPickupPanel>` side-by-side with authorized list on household detail; per-entry photo + document upload affordances; scope-aware (child vs. household). | ✅ PASS on `8526eb8` (`CODEX_CHECKIN_P02E.md`) |
+| **E2 — ERT settings UI** | #162 | `becb8ec` | `<ErtSettingsSection>` admin UI with E.164 validation (`/^\+[1-9]\d{6,14}$/`); per-recipient name + role. Persists to `CheckInSettings.emergency_notification_numbers`. | — |
+| **F — kiosk attempt + ERT** | #160 → Sev 1 caught by Codex → hotfix #161 | `735e325` | Kiosk-side intercept: `<BlockedPickupReview>` full-screen modal before release; `<BlockedPickupAlert>` confirmed-attempt full-screen alarm; `/api/checkin/blocked-pickup-attempt` ERT SMS fan-out (parallel to owner); defense-in-depth `acknowledged_blocks` gate in `/api/checkin/checkout`; query-predicate fix (the Sev 1 — `where("status","==","checked_in")` referenced a non-existent field). | ✅ PASS on `735e325` (`CODEX_CHECKIN_P02F_HOTFIX.md`) |
+| **G — parent self-service** | #163 → 2 findings → hotfix #164 | `4b38ac5` | `/dashboard/account/family/pickups` parent UI; `/api/account/family/pickups` GET + POST; `/api/account/family/pickups/[id]/{request,cancel}-removal` with 24h cooling-off; `notifyHouseholdAdults` email fan-out via Resend (initiator excluded); `pickup.authorized_parent_{added,remove_requested,remove_canceled,change_notified}` audit codes. Hotfix: cancel-removal wrote `undefined` (Firestore rejects) → write `null`; parent GET didn't filter elapsed pending entries → server-side `filterElapsed`. | ✅ PASS on `4b38ac5` (`CODEX_CHECKIN_P02G_HOTFIX.md`) |
+
+**Deferred from P0-2 (intentional — not blocking P0 close):**
+- Past-pending cleanup cron (G v2) — for now, elapsed entries linger in the doc but are filtered at read time on the parent surface.
+- Discoverability link from `/dashboard/account/family` to the new pickup-list page — Codex flagged as a known follow-up.
+- Integration test re-land (was task #30) — original `tests/integration/checkin-pickups.test.ts` (519 lines) targets the pre-flat-path route shape (`children/[personId]/...`); re-landing is now a rewrite against the new `authorized-pickups/[id]` shape + `requireModuleTier` mock, not a re-land. Tracking in task #30; not blocking P0-3.
+
+### Next.js 16 bundler bug — root cause + workaround
+
+During P0-2 D landing (PR #146, commit `176ef9a`), production hit a regression where every Firebase-backed API route hung ~30s with zero response bytes — even routes whose imports weren't touched (e.g. `/api/church-info`). Emergency revert (PR #147 / `ef8def2`) restored service. The investigation file (now consolidated into `docs/dev/nextjs-16-bundler-bug.md`) bisected the cause to a single Next.js 16 app-router bundler bug:
+
+> A `route.ts` file at `[param]/static/[param]/route.ts` (TWO dynamic segments separated by a literal segment) corrupts the build artifacts of EVERY Firebase-backed Vercel function — even ones that don't import the offending route. Verified with PR #154 which shipped a 3-line empty GET handler at exactly that path and reproduced the global hang.
+
+**Workaround applied across P0-2 re-lands:** all routes flatten to a single dynamic segment with the other ID in the request body. `children/[personId]/authorized-pickups/[pickupId]/route.ts` → `authorized-pickups/[id]/route.ts` (`child_id` in body). All four reverted sub-PRs (foundation/CRUD/photos/households-UI) and three subsequent sub-PRs (E/F/G) ship clean against this pattern. Upstream Next.js issue draft lives in `docs/dev/nextjs-16-bundler-bug.md` (task #31 — Jason can submit when convenient).
 
 ---
 
 ## Next up
 
-- **Wave 9 P0-2** in progress — foundation → server CRUD → photo-capture component → households admin UI → blocked-pickup attempt + ERT fan-out → parent self-service.
-- **Wave 9 P0-3** queued — restrictions + SOR field + raw bg-check expiry cron.
+- **Wave 9 P0-3** queued — `Person.restrictions[]` + `cannot_serve_with_children` hard block + `Person.background_check.sor_*` field + scheduler-level enforcement in `canServeInMinistry()` + raw `background_check.expires_at` scan added to `/api/cron/prerequisite-check`.
 - **Wave 9 P0-4** queued — HIPAA-aware medical visibility.
 - **Wave 9 P0-5** queued — ratio enforcement + worker check-in (biggest differentiator).
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder).
