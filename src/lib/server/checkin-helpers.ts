@@ -31,6 +31,10 @@ export interface NormalizedChild {
   has_alerts: boolean;
   allergies?: string;
   medical_notes?: string;
+  /** Wave 9 P0-4: medications split out from medical_notes for
+   *  per-field HIPAA-aware visibility gating. Legacy child / Person
+   *  docs without this field read as undefined. */
+  medications?: string;
   default_room_id?: string;
   grade?: string;
   /** Convenience: preferred_name or first_name. */
@@ -59,6 +63,7 @@ export async function loadChild(
       has_alerts: !!c.has_alerts,
       allergies: (c.allergies as string) || undefined,
       medical_notes: (c.medical_notes as string) || undefined,
+      medications: (c.medications as string) || undefined,
       default_room_id: (c.default_room_id as string) || undefined,
       grade: (c.grade as string) || undefined,
       display_name: (c.preferred_name as string) || first_name,
@@ -80,6 +85,7 @@ export async function loadChild(
       has_alerts: !!cp.has_alerts,
       allergies: (cp.allergies as string) || undefined,
       medical_notes: (cp.medical_notes as string) || undefined,
+      medications: (cp.medications as string) || undefined,
       default_room_id: (cp.default_room_id as string) || undefined,
       grade: (cp.grade as string) || undefined,
       display_name: (p.preferred_name as string) || first_name,
