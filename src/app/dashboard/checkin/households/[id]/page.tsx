@@ -14,6 +14,7 @@ import type {
   PersonAuthorizedPickup,
 } from "@/lib/types";
 import { AuthorizedPickupPanel } from "@/components/checkin/authorized-pickup-panel";
+import { BlockedPickupPanel } from "@/components/checkin/blocked-pickup-panel";
 
 /** Wave 9 P0-2: the household-detail API extends the Child shape with
  *  `authorized_pickups`. Local extension keeps the legacy Child type
@@ -420,8 +421,30 @@ export default function HouseholdDetailPage() {
                 initialPickups={child.authorized_pickups ?? []}
                 onChanged={() => fetchData()}
               />
+              <BlockedPickupPanel
+                scope="child"
+                childPersonId={child.id}
+                childDisplayName={child.preferred_name || child.first_name}
+              />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Wave 9 P0-2 sub-PR E: household-wide blocked-pickup list.
+          Sibling-wide blocks (e.g. custody orders covering all
+          children in the household) are managed here. Child-specific
+          blocks are managed per-child in the section above. */}
+      {household && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+            Household-wide block list
+          </h2>
+          <BlockedPickupPanel
+            scope="household"
+            householdId={household.id}
+            householdDisplayName={household.primary_guardian_name}
+          />
         </div>
       )}
 
