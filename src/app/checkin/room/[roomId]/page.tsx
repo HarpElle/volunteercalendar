@@ -6,6 +6,16 @@ import { useWakeLock } from "@/lib/hooks/use-wake-lock";
 import { RoomChildCard } from "@/components/checkin/room-child-card";
 import { AllergyDetailModal } from "@/components/checkin/allergy-detail-modal";
 
+/** Wave 9 P0-4 sub-PR C: per-field render plan from the visibility
+ *  config. Matches `RosterFieldState` from
+ *  `@/lib/server/medical-visibility`. */
+interface MedicalField {
+  field: "allergies" | "medical_notes" | "medications";
+  value: string | null;
+  visible: boolean;
+  requires_tap: boolean;
+}
+
 interface RoomChild {
   session_id: string;
   child_id: string;
@@ -14,8 +24,12 @@ interface RoomChild {
   checked_in_at: string;
   checked_out_at: string | null;
   has_alerts: boolean;
+  /** Legacy flat fields kept for back-compat. Populated only when
+   *  the visibility config allows the field without tap-to-reveal. */
   allergies?: string;
   medical_notes?: string;
+  medications?: string;
+  medical_fields: MedicalField[];
   is_late: boolean;
   parent_phone_masked: string;
 }
@@ -251,13 +265,36 @@ export default function RoomViewPage() {
         )}
       </div>
 
-      {/* Allergy detail modal */}
+      {/* Allergy detail modal — Wave 9 P0-4 sub-PR C: passes the new
+          medical_fields shape so the modal can render tap-to-reveal
+          placeholders for fields gated behind expand_on_tap_only. */}
       {selectedChild && (
         <AllergyDetailModal
           childName={selectedChild.child_name}
-          allergies={selectedChild.allergies}
-          medicalNotes={selectedChild.medical_notes}
+          medicalFields={selectedChild.medical_fields}
           parentPhoneMasked={selectedChild.parent_phone_masked}
+          onRevealField={async (field) => {
+            // Fire-and-forget audit. Even if the network call fails,
+            // the operator still gets to see the value (UX > audit
+            // perfection); a missed audit row is a known acceptable
+            // trade-off matching the existing
+            // `kiosk.medical_data_revealed` pattern.
+            try {
+              await fetch("/api/checkin/room-medical-reveal", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  church_id: churchId,
+                  room_id: roomId,
+                  token,
+                  session_id: selectedChild.session_id,
+                  field,
+                }),
+              });
+            } catch {
+              // intentionally swallowed
+            }
+          }}
           onClose={() => setSelectedChild(null)}
         />
       )}
