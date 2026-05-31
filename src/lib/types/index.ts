@@ -1599,6 +1599,25 @@ export interface PersonAuthorizedPickup {
   /** Firebase Auth UID of the admin who added this contact; optional on
    *  legacy records. */
   added_by_user_id?: string;
+  /**
+   * Wave 9 P0-2 sub-PR G: parent self-service pickup-list cooling-off.
+   * When set to a future ISO timestamp, the entry stays visible in
+   * admin / parent UI WITH a "pending removal" badge but is filtered
+   * out of reads once the timestamp is reached. Cooling-off applies
+   * only to PARENT-initiated removals; admin removals via the existing
+   * admin endpoints are still immediate (the destructive path is the
+   * one that needs the 24h window).
+   * - undefined / null → no pending removal
+   * - future timestamp → pending removal at that time
+   * - past timestamp   → effectively removed (filtered from reads)
+   *
+   * Sub-PR G v2 will add a cleanup cron to physically prune past
+   * pending-removal entries; for now they remain in the array but
+   * are filtered at read time.
+   */
+  pending_remove_at?: string | null;
+  /** UID of the guardian who requested the removal. Audit aid. */
+  pending_remove_by_user_id?: string;
 }
 
 /**
