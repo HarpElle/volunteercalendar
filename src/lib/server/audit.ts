@@ -62,6 +62,11 @@ export type AuditAction =
   | "pickup.blocked_added"
   | "pickup.blocked_removed"
   | "pickup.blocked_photo_added"
+  | "pickup.blocked_photo_removed"
+  /** Court-order PDF / supporting document attached to a blocked-pickup entry. */
+  | "pickup.blocked_document_added"
+  | "pickup.blocked_document_removed"
+  | "pickup.authorized_photo_removed"
   /** Operator confirmed the on-site pickup person matches an authorized
    *  contact at the staffed-station checkout step. */
   | "kiosk.pickup_person_confirmed"
