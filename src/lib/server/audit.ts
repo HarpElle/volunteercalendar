@@ -57,18 +57,11 @@ export type AuditAction =
   | "kiosk.checkout_blocked_self_service"
   // P0-2: authorized-pickup contacts + blocked-pickup list + ERT
   | "pickup.authorized_added"
-  | "pickup.authorized_updated"
   | "pickup.authorized_removed"
   | "pickup.authorized_photo_added"
   | "pickup.blocked_added"
-  | "pickup.blocked_updated"
   | "pickup.blocked_removed"
   | "pickup.blocked_photo_added"
-  /** Owner reduced the scope of a block (e.g. "this person is allowed
-   *  for THIS Sunday only"). Distinct from the routine list edit. */
-  | "pickup.blocked_override_granted"
-  /** ERT settings updated — add/remove notification numbers, change name/role. */
-  | "checkin.ert_settings_updated"
   /** Operator confirmed the on-site pickup person matches an authorized
    *  contact at the staffed-station checkout step. */
   | "kiosk.pickup_person_confirmed"
