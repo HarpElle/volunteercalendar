@@ -184,9 +184,14 @@ export function evaluateRatio(
   const minVolFloorOk =
     !minVolFloorRequired || volCount >= policy.min_volunteers;
 
-  const ratioOk = children < effectiveMaxChildren;
+  // Inclusive boundary: at children === effectiveMaxChildren, the room
+  // is AT capacity (which is warning-band territory). One more child
+  // would tip into violation. Codex P0-5C retest caught the off-by-one
+  // when this was `<` — the 6th child to a 6-cap room was wrongly
+  // blocked.
+  const ratioOk = children <= effectiveMaxChildren;
   const maxCapOk =
-    policy.max_children === undefined || children < policy.max_children;
+    policy.max_children === undefined || children <= policy.max_children;
 
   let status: RatioStatus = "ok";
   let message = "";

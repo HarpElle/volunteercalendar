@@ -189,15 +189,78 @@ describe("evaluateRatio — violation cases", () => {
     expect(e.two_deep_ok).toBe(true);
   });
 
-  it("max_children hard cap overrides a generous ratio", () => {
+  it("max_children hard cap overrides a generous ratio — exceeded by 1", () => {
+    const room = makeRoom({
+      ...POLICY,
+      max_children: 5,
+    });
+    // Codex P0-5C hotfix: the cap is INCLUSIVE — 5/5 is AT the cap,
+    // not over it. The 6th child is the violation.
+    const e = evaluateRatio(room, 6, [v("a"), v("b"), v("c")]);
+    expect(e.status).toBe("violation");
+    expect(e.message).toContain("room cap");
+  });
+
+  it("max_children at the cap exactly is NOT a violation (Codex P0-5C boundary fix)", () => {
     const room = makeRoom({
       ...POLICY,
       max_children: 5,
     });
     const e = evaluateRatio(room, 5, [v("a"), v("b"), v("c")]);
-    // ratio allows 12, but max_children cap = 5; children == cap → violation
+    // 5/5 is the line, not over it — should be warning (100% >= 90%)
+    // but ratio_ok and maxCapOk both remain true.
+    expect(e.ratio_ok).toBe(true);
+    expect(e.status).toBe("warning");
+  });
+});
+
+describe("evaluateRatio — boundary regression (Codex P0-5C hotfix)", () => {
+  it("at children === effectiveMaxChildren: status is warning, ratio_ok=true", () => {
+    const room = makeRoom({
+      enabled: true,
+      min_volunteers: 1,
+      max_children_per_volunteer: 3,
+      min_unrelated_adults: 0,
+    });
+    // 2 vols × 3 = 6 max. 6 children sits exactly at the cap.
+    const e = evaluateRatio(room, 6, [v("a"), v("b")]);
+    expect(e.ratio_ok).toBe(true);
+    expect(e.status).toBe("warning");
+    expect(e.max_children_for_current_volunteers).toBe(6);
+  });
+
+  it("at children === effectiveMaxChildren + 1: status is violation", () => {
+    const room = makeRoom({
+      enabled: true,
+      min_volunteers: 1,
+      max_children_per_volunteer: 3,
+      min_unrelated_adults: 0,
+    });
+    const e = evaluateRatio(room, 7, [v("a"), v("b")]);
+    expect(e.ratio_ok).toBe(false);
     expect(e.status).toBe("violation");
-    expect(e.message).toContain("room cap");
+  });
+
+  it("canCheckInOneMore at boundary: childrenNow=5, vols=2 (max=6) → warning, not violation", () => {
+    const room = makeRoom({
+      enabled: true,
+      min_volunteers: 1,
+      max_children_per_volunteer: 3,
+      min_unrelated_adults: 0,
+    });
+    const e = canCheckInOneMore(room, 5, [v("a"), v("b")]);
+    expect(e.status).toBe("warning"); // 6/6 = 100% >= 90%
+  });
+
+  it("canCheckInOneMore one past boundary: childrenNow=6, vols=2 (max=6) → violation", () => {
+    const room = makeRoom({
+      enabled: true,
+      min_volunteers: 1,
+      max_children_per_volunteer: 3,
+      min_unrelated_adults: 0,
+    });
+    const e = canCheckInOneMore(room, 6, [v("a"), v("b")]);
+    expect(e.status).toBe("violation");
   });
 });
 

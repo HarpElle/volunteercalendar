@@ -186,6 +186,11 @@ export async function POST(req: NextRequest) {
     >();
     const batchAddsByRoom = new Map<string, number>();
     let stationIsStaffed: boolean | null = null;
+    // Codex P0-5C Sev 4: tracks whether the staffed-station override
+    // was actually CONSUMED (not just requested via the header). Lets
+    // the batch-level kiosk.checkin audit row carry the flag so
+    // compliance can scan "which batches used the override."
+    let ratioOverrideUsed = false;
 
     for (const childId of child_ids) {
       // Handle both unified Person docs (Pro tier) and legacy children docs.
@@ -352,9 +357,16 @@ export async function POST(req: NextRequest) {
             // violation actually fires. Caches across the rest of the batch.
             if (stationIsStaffed === null) {
               if (kiosk.station_id) {
-                const stationSnap = await churchRef
-                  .collection("kioskStations")
-                  .doc(kiosk.station_id)
+                // Codex P0-5C: stations live at the top-level
+                // `kiosk_stations` collection (see src/lib/server/
+                // kiosk.ts), NOT a per-church subcollection. The
+                // pre-hotfix lookup at churchRef.collection(
+                // "kioskStations") always returned not-exists, so
+                // every override-with-header attempt fell through
+                // the !stationIsStaffed branch and 403'd even on
+                // legitimately staffed stations.
+                const stationSnap = await adminDb
+                  .doc(`kiosk_stations/${kiosk.station_id}`)
                   .get();
                 stationIsStaffed =
                   stationSnap.exists &&
@@ -394,6 +406,7 @@ export async function POST(req: NextRequest) {
             }
 
             // Override path — allow + emit the legally-material audit.
+            ratioOverrideUsed = true;
             void audit({
               church_id,
               actor: kiosk.station_id
@@ -597,6 +610,12 @@ export async function POST(req: NextRequest) {
         ...(service_id ? { service_id } : {}),
         children_count: sessions.length,
         had_alerts: anyAlerts,
+        // Wave 9 P0-5 sub-PR C + Codex hotfix: flag the batch when a
+        // staffed-station override was actually consumed. Lets
+        // compliance scans answer "which batches used the override"
+        // without joining against the per-child override audit.
+        ratio_override_used: ratioOverrideUsed,
+        ratio_blocked_count: ratioBlocked.length,
       },
       outcome: "ok",
     });
