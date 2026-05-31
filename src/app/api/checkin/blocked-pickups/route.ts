@@ -88,24 +88,41 @@ export async function POST(req: NextRequest) {
     if (mismatch) return mismatch;
 
     // Find active sessions for this code in this church TODAY.
+    //
+    // IMPORTANT (Sev 1 fix on Codex P0-2F retest): the previous query
+    // filtered on `status == "checked_in"`, but the `checkInSessions`
+    // doc schema does NOT have a `status` field — active vs.
+    // checked-out is determined by whether `checked_out_at` is null.
+    // The wrong predicate matched zero docs, which made the preview
+    // return `blocks: []` even when the household had active blocks,
+    // which meant the kiosk skipped the review modal and released
+    // children with active blocks. Now we match the same predicate
+    // shape used by /api/checkin/checkout: two equality filters,
+    // active-session filter in code.
     const today = new Date().toISOString().split("T")[0];
     const sessionsSnap = await adminDb
       .collection("churches")
       .doc(churchId)
       .collection("checkInSessions")
-      .where("security_code", "==", securityCode)
       .where("service_date", "==", today)
-      .where("status", "==", "checked_in")
+      .where("security_code", "==", securityCode)
       .get();
 
-    if (sessionsSnap.empty) {
-      // Same as the checkout endpoint would say. The kiosk client
-      // distinguishes 404 from 200-with-blocks.
+    const activeSessionDocs = sessionsSnap.docs.filter(
+      (d) => !d.data().checked_out_at,
+    );
+
+    if (activeSessionDocs.length === 0) {
+      // No active sessions for this code today — the kiosk client
+      // distinguishes 200-with-empty-blocks from a true checkout
+      // attempt's error. /api/checkin/checkout returns its own
+      // "no_active_sessions" 404 when the operator actually tries to
+      // check out.
       return NextResponse.json({ blocks: [], children: [] });
     }
 
     // Gather the children + their household IDs.
-    const sessions: CheckInSession[] = sessionsSnap.docs.map(
+    const sessions: CheckInSession[] = activeSessionDocs.map(
       (d) => d.data() as CheckInSession,
     );
     const childIds = Array.from(new Set(sessions.map((s) => s.child_id)));

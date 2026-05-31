@@ -55,6 +55,14 @@ export type AuditAction =
   // P0-1: station type architecture
   | "kiosk.station_type_changed"
   | "kiosk.checkout_blocked_self_service"
+  /**
+   * P0-2F defense-in-depth: server-side block-list gate fired during
+   * /api/checkin/checkout because the kiosk client didn't pass the
+   * acknowledged_blocks flag AND active blocks were found. Indicates
+   * either the preview was skipped, the preview query had a bug, or
+   * an attacker bypassed the kiosk UI. Outcome: "denied".
+   */
+  | "kiosk.checkout_blocked_pending_review"
   // P0-2: authorized-pickup contacts + blocked-pickup list + ERT
   | "pickup.authorized_added"
   | "pickup.authorized_removed"

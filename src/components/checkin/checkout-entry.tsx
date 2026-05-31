@@ -79,7 +79,10 @@ export function CheckoutEntry({
     }
   };
 
-  const proceedWithCheckout = async (securityCode: string) => {
+  const proceedWithCheckout = async (
+    securityCode: string,
+    acknowledgedBlocks: boolean,
+  ) => {
     setSubmitting(true);
     setError("");
     onActivity();
@@ -90,10 +93,25 @@ export function CheckoutEntry({
         body: JSON.stringify({
           church_id: churchId,
           security_code: securityCode,
+          acknowledged_blocks: acknowledgedBlocks,
         }),
       });
 
       const data = await res.json();
+
+      // Wave 9 P0-2 sub-PR F hotfix: server-side block-list gate. If
+      // the preview was skipped or its query failed and the server
+      // detects active blocks, the response is 409 with the block
+      // list. Treat this exactly like the preview returning blocks.
+      if (res.status === 409 && data.error === "requires_block_review") {
+        setBlockListPreview({
+          blocks: data.blocks ?? [],
+          children: data.children ?? [],
+          securityCode,
+        });
+        setSubmitting(false);
+        return;
+      }
 
       if (!res.ok) {
         if (data.error === "code_expired") {
@@ -167,23 +185,28 @@ export function CheckoutEntry({
         }
       }
       // No blocks (or the preview endpoint failed — fail-open: proceed
-      // with checkout. The preview is a SAFETY ASSIST, not a SAFETY GATE.
-      // The server-side checkout endpoint is the source of truth for
-      // release authorization; this UI step gives the operator a chance
-      // to detect attempted blocked pickups, but a network failure here
-      // shouldn't strand parents who have valid security codes).
+      // with checkout. The preview is a SAFETY ASSIST. If the preview
+      // missed because of a query bug (Sev 1 Codex caught on initial
+      // P0-2F retest), the server-side gate on /api/checkin/checkout
+      // catches it as belt-and-suspenders defense-in-depth.
     } catch {
       // Preview failed — proceed with checkout. See fail-open note above.
     }
 
-    await proceedWithCheckout(securityCode);
+    // acknowledgedBlocks=false → server gate may still fire if active
+    // blocks exist (defense-in-depth). The 409 response is handled
+    // inside proceedWithCheckout and pops the same modal.
+    await proceedWithCheckout(securityCode, false);
   };
 
   const handleConfirmNotOnList = async () => {
     if (!blockListPreview) return;
     const { securityCode } = blockListPreview;
     setBlockListPreview(null);
-    await proceedWithCheckout(securityCode);
+    // The operator reviewed the block list and confirmed the on-site
+    // person isn't on it. acknowledgedBlocks=true tells the server
+    // gate to allow the release without re-prompting.
+    await proceedWithCheckout(securityCode, true);
   };
 
   const handleAttempt = async (blockedPickupId: string) => {
