@@ -13,6 +13,11 @@ import {
   filterSnapshotForLabel,
   resolveMedicalVisibility,
 } from "@/lib/server/medical-visibility";
+import {
+  canCheckInOneMore,
+  DEFAULT_RATIO_WARNING_PERCENT,
+  type RatioEvaluation,
+} from "@/lib/server/ratio";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
@@ -23,6 +28,8 @@ import type {
   LabelJob,
   LabelPayload,
   PrinterConfig,
+  Room,
+  RoomVolunteerCheckIn,
 } from "@/lib/types";
 
 /**
@@ -152,6 +159,33 @@ export async function POST(req: NextRequest) {
     const childNames: string[] = [];
     const alreadyCheckedIn: string[] = [];
     let anyAlerts = false;
+    // Wave 9 P0-5 sub-PR C: ratio gate state.
+    //
+    // - `ratioBlocked` collects child_ids that hit a violation without an
+    //   override. The kiosk UI shows these as "blocked — room over ratio"
+    //   alongside the alreadyCheckedIn list.
+    // - `ratioByRoom` caches per-room state we'd otherwise re-fetch
+    //   across the loop (volunteers + active child count).
+    // - `batchAddsByRoom` tracks intra-batch increments so a 3-child
+    //   batch that lands all 3 in the same room counts each successive
+    //   add toward the gate (otherwise child #3 would be evaluated with
+    //   stale state).
+    // - The X-Ratio-Override header is one-shot per request and only
+    //   honored when the kiosk is provably a staffed station — looked
+    //   up below when the first violation hits, then cached.
+    const ratioOverrideHeader =
+      req.headers.get("x-ratio-override")?.trim() === "true";
+    const ratioBlocked: Array<{ child_id: string; ratio: RatioEvaluation }> = [];
+    const ratioByRoom = new Map<
+      string,
+      {
+        roomDoc: Pick<Room, "ratio_policy">;
+        baseChildCount: number;
+        volunteers: Pick<RoomVolunteerCheckIn, "person_id" | "related_to">[];
+      }
+    >();
+    const batchAddsByRoom = new Map<string, number>();
+    let stationIsStaffed: boolean | null = null;
 
     for (const childId of child_ids) {
       // Handle both unified Person docs (Pro tier) and legacy children docs.
@@ -249,9 +283,162 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // ────────────────────────────────────────────────────────────
+      // Wave 9 P0-5 sub-PR C: ratio gate. Evaluates the volunteer-to-
+      // child ratio for the FINAL roomId (after capacity-overflow has
+      // potentially redirected) and either blocks, warns, or passes.
+      //
+      // Violation → block unless X-Ratio-Override header is set AND
+      // the kiosk is a staffed station. Override emits
+      // `kiosk.ratio_violation_override` audit (legally material).
+      //
+      // Warning → allow but emit `kiosk.ratio_warning_shown` so the
+      // platform monitoring can surface the "how often does this church
+      // bump the warning" signal.
+      //
+      // Skipped silently when the final room has no `ratio_policy` or
+      // policy is disabled — matches the helper's bypass semantics.
+      // ────────────────────────────────────────────────────────────
+      if (roomId) {
+        let ratioState = ratioByRoom.get(roomId);
+        if (!ratioState) {
+          const finalRoomSnap = await churchRef
+            .collection("rooms")
+            .doc(roomId)
+            .get();
+          const finalRoomDoc = finalRoomSnap.exists
+            ? (finalRoomSnap.data() as Room)
+            : null;
+          if (finalRoomDoc?.ratio_policy?.enabled) {
+            const baseCountSnap = await churchRef
+              .collection("checkInSessions")
+              .where("service_date", "==", service_date)
+              .where("room_id", "==", roomId)
+              .where("checked_out_at", "==", null)
+              .count()
+              .get();
+            const volSnap = await churchRef
+              .collection("roomVolunteerCheckins")
+              .where("room_id", "==", roomId)
+              .where("service_date", "==", service_date)
+              .get();
+            const activeVolunteers = volSnap.docs
+              .map((d) => d.data() as RoomVolunteerCheckIn)
+              .filter((v) => (v.checked_out_at ?? null) === null);
+            ratioState = {
+              roomDoc: { ratio_policy: finalRoomDoc.ratio_policy },
+              baseChildCount: baseCountSnap.data().count,
+              volunteers: activeVolunteers,
+            };
+            ratioByRoom.set(roomId, ratioState);
+          }
+        }
+
+        if (ratioState) {
+          const warningPercent =
+            (settings?.ratio_warning_threshold_percent as
+              | number
+              | undefined) ?? DEFAULT_RATIO_WARNING_PERCENT;
+          const prevAdds = batchAddsByRoom.get(roomId) ?? 0;
+          const ratio = canCheckInOneMore(
+            ratioState.roomDoc,
+            ratioState.baseChildCount + prevAdds,
+            ratioState.volunteers,
+            warningPercent,
+          );
+
+          if (ratio.status === "violation") {
+            // Resolve staffed-station status lazily — only when the first
+            // violation actually fires. Caches across the rest of the batch.
+            if (stationIsStaffed === null) {
+              if (kiosk.station_id) {
+                const stationSnap = await churchRef
+                  .collection("kioskStations")
+                  .doc(kiosk.station_id)
+                  .get();
+                stationIsStaffed =
+                  stationSnap.exists &&
+                  stationSnap.data()?.type === "staffed";
+              } else {
+                // Bootstrap mode (no real station) — treat as
+                // staffed for back-compat. Real production deployments
+                // use real station tokens; bootstrap exists for admin
+                // migrations.
+                stationIsStaffed = true;
+              }
+            }
+
+            const overrideAllowed = ratioOverrideHeader && stationIsStaffed;
+            if (!overrideAllowed) {
+              ratioBlocked.push({ child_id: childId, ratio });
+              void audit({
+                church_id,
+                actor: kiosk.station_id
+                  ? kioskActor(kiosk.station_id)
+                  : "kiosk:bootstrap",
+                action: "kiosk.checkin",
+                target_type: "checkin_attempt",
+                target_id: childId,
+                metadata: {
+                  room_id: roomId,
+                  service_date,
+                  ratio_status: "violation",
+                  blocked_reason: ratioOverrideHeader
+                    ? "self_service_station_cannot_override"
+                    : "no_override",
+                  ratio_message: ratio.message,
+                },
+                outcome: "denied",
+              });
+              continue;
+            }
+
+            // Override path — allow + emit the legally-material audit.
+            void audit({
+              church_id,
+              actor: kiosk.station_id
+                ? kioskActor(kiosk.station_id)
+                : "kiosk:bootstrap",
+              action: "kiosk.ratio_violation_override",
+              target_type: "checkin_attempt",
+              target_id: childId,
+              metadata: {
+                room_id: roomId,
+                service_date,
+                ratio_message: ratio.message,
+                station_id: kiosk.station_id,
+              },
+              outcome: "ok",
+            });
+          } else if (ratio.status === "warning") {
+            void audit({
+              church_id,
+              actor: kiosk.station_id
+                ? kioskActor(kiosk.station_id)
+                : "kiosk:bootstrap",
+              action: "kiosk.ratio_warning_shown",
+              target_type: "checkin_attempt",
+              target_id: childId,
+              metadata: {
+                room_id: roomId,
+                service_date,
+                ratio_message: ratio.message,
+              },
+              outcome: "ok",
+            });
+          }
+        }
+      }
+
       const displayName = child.preferred_name || child.first_name;
       const fullName = `${displayName} ${child.last_name}`;
       childNames.push(displayName);
+      // Wave 9 P0-5 sub-PR C: bump the per-room batch counter so the
+      // NEXT iteration's canCheckInOneMore call sees this child as
+      // already accounted for. Mutates the gate state in place.
+      if (roomId) {
+        batchAddsByRoom.set(roomId, (batchAddsByRoom.get(roomId) ?? 0) + 1);
+      }
 
       if (child.has_alerts) anyAlerts = true;
 
@@ -453,6 +640,11 @@ export async function POST(req: NextRequest) {
       // Codex Wave 7 Row 5: children skipped because they were already
       // actively checked in for this service_date (no duplicate session made).
       already_checked_in: alreadyCheckedIn,
+      // Wave 9 P0-5 sub-PR C: children blocked by the ratio gate.
+      // Carries the per-child evaluation so the kiosk UI can show
+      // "Room over ratio — talk to staff to override." Empty when the
+      // batch passed cleanly OR an X-Ratio-Override was honored.
+      ratio_blocked: ratioBlocked,
       print_server_url: printerConfig?.print_server_url || null,
       // Native kiosk app uses this to route to Brother SDK / AirPrint
       ...(printerConfig
