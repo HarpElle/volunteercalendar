@@ -87,10 +87,22 @@ export function MedicalVisibilitySection({
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) throw new Error("Could not load settings");
+      // GET /api/admin/checkin/settings returns the raw CheckInSettings
+      // doc directly (not wrapped in { settings }), matching the
+      // established ERT + thresholds section pattern. The Sub-PR C
+      // initial loader expected `{ settings }` and silently fell
+      // through to DEFAULT every time — visible behavior:
+      // "save succeeds, reload shows defaults" (Codex P0-4 Sev 2).
+      // Fix: read the field at the top level. Keep a `data.settings?.`
+      // fallback for forward-compat if we ever wrap the response.
       const data = (await res.json()) as {
-        settings: { medical_visibility?: MedicalVisibility | null } | null;
+        medical_visibility?: MedicalVisibility | null;
+        settings?: { medical_visibility?: MedicalVisibility | null } | null;
       };
-      const v = data.settings?.medical_visibility ?? DEFAULT_MEDICAL_VISIBILITY;
+      const v =
+        data.medical_visibility ??
+        data.settings?.medical_visibility ??
+        DEFAULT_MEDICAL_VISIBILITY;
       setOriginal(clone(v));
       setDraft(clone(v));
     } catch (err) {
