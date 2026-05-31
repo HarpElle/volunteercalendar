@@ -75,6 +75,11 @@ export type AuditAction =
   | "pickup.blocked_document_added"
   | "pickup.blocked_document_removed"
   | "pickup.authorized_photo_removed"
+  /** Sub-PR G: parent self-service pickup-list operations. */
+  | "pickup.authorized_parent_added"
+  | "pickup.authorized_parent_remove_requested"
+  | "pickup.authorized_parent_remove_canceled"
+  | "pickup.authorized_parent_change_notified"
   /** Operator confirmed the on-site pickup person matches an authorized
    *  contact at the staffed-station checkout step. */
   | "kiosk.pickup_person_confirmed"

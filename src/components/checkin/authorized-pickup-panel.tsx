@@ -281,14 +281,34 @@ export function AuthorizedPickupPanel({
         </div>
       )}
 
-      {pickups.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-vc-border-light bg-vc-bg-warm px-4 py-6 text-center text-sm text-vc-text-secondary">
-          No authorized contacts yet. Add the people allowed to pick{" "}
-          {childDisplayName} up from check-in.
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {pickups.map((p) => (
+      {/*
+        Wave 9 P0-2 sub-PR G: hide entries whose pending_remove_at has
+        already elapsed (effectively removed). Entries whose pending
+        timestamp is in the FUTURE still render with a "Pending removal"
+        badge so the admin is aware of guardian-initiated cooling-off
+        actions.
+      */}
+      {(() => {
+        const nowMs = Date.now();
+        const visible = pickups.filter((p) => {
+          if (!p.pending_remove_at) return true;
+          return Date.parse(p.pending_remove_at) > nowMs;
+        });
+        if (visible.length === 0) {
+          return (
+            <div className="rounded-lg border border-dashed border-vc-border-light bg-vc-bg-warm px-4 py-6 text-center text-sm text-vc-text-secondary">
+              No authorized contacts yet. Add the people allowed to pick{" "}
+              {childDisplayName} up from check-in.
+            </div>
+          );
+        }
+        return (
+          <ul className="space-y-3">
+            {visible.map((p) => {
+              const pendingRemoval =
+                p.pending_remove_at &&
+                Date.parse(p.pending_remove_at) > nowMs;
+              return (
             <li
               key={p.id ?? `${p.name}|${p.phone ?? ""}`}
               className="flex items-start gap-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-3"
@@ -299,7 +319,15 @@ export function AuthorizedPickupPanel({
                 className="w-16 h-16 flex-shrink-0"
               />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-vc-indigo">{p.name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium text-vc-indigo">{p.name}</p>
+                  {pendingRemoval && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
+                      Pending removal{" "}
+                      {new Date(p.pending_remove_at!).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
                 {p.relationship && (
                   <p className="text-sm text-vc-text-secondary">
                     {p.relationship}
@@ -358,9 +386,11 @@ export function AuthorizedPickupPanel({
                 </div>
               </div>
             </li>
-          ))}
-        </ul>
-      )}
+              );
+            })}
+          </ul>
+        );
+      })()}
 
       {modal.mode !== "closed" && (
         <PickupFormModal
