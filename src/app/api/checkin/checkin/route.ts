@@ -288,6 +288,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Per-child deferred-warning carrier. Set to { ratio_message }
+      // when the pre-check returns a warning band; emitted as
+      // `kiosk.ratio_warning_shown` AFTER the session write succeeds
+      // inside the transactional re-check (race-safe).
+      let pendingWarningAudit: { ratio_message: string } | null = null;
+
       // ────────────────────────────────────────────────────────────
       // Wave 9 P0-5 sub-PR C: ratio gate. Evaluates the volunteer-to-
       // child ratio for the FINAL roomId (after capacity-overflow has
@@ -424,24 +430,22 @@ export async function POST(req: NextRequest) {
               outcome: "ok",
             });
           } else if (ratio.status === "warning") {
-            void audit({
-              church_id,
-              actor: kiosk.station_id
-                ? kioskActor(kiosk.station_id)
-                : "kiosk:bootstrap",
-              action: "kiosk.ratio_warning_shown",
-              target_type: "checkin_attempt",
-              target_id: childId,
-              metadata: {
-                room_id: roomId,
-                service_date,
-                ratio_message: ratio.message,
-              },
-              outcome: "ok",
-            });
+            // Codex P0-5C race-fix: defer the warning-audit emission
+            // until AFTER the session write succeeds inside the
+            // transactional re-check below. If the tx detects a race
+            // and blocks the write, we don't want to claim "warning
+            // shown" for a child that didn't actually check in —
+            // that would mix a "delivered" audit with a "denied"
+            // audit on the same target.
+            pendingWarningAudit = { ratio_message: ratio.message };
           }
         }
       }
+      // Tracks whether this iteration is in race-protected-write mode
+      // (ratio_policy enabled on the final room) — used below to
+      // decide between transactional and bare write.
+      const roomHasRatioPolicy =
+        roomId !== null && ratioByRoom.has(roomId);
 
       const displayName = child.preferred_name || child.first_name;
       const fullName = `${displayName} ${child.last_name}`;
@@ -505,10 +509,148 @@ export async function POST(req: NextRequest) {
         created_at: now.toISOString(),
       };
 
-      await churchRef
-        .collection("checkInSessions")
-        .doc(sessionId)
-        .set(session);
+      // ────────────────────────────────────────────────────────────
+      // Codex P0-5C race-fix (Sev 3): transactional write that re-
+      // counts children for the room INSIDE the same Firestore
+      // transaction. Closes the concurrent-batch overrun the prior
+      // Codex retest documented (final count 7/6 observed in the
+      // production harness).
+      //
+      // The pre-check above uses a cached `ratioByRoom` snapshot +
+      // intra-batch counter — fast path that catches most cases.
+      // But if a CONCURRENT batch from another kiosk writes a
+      // session between our pre-check and our write, the cached
+      // state is stale and a child that should fail might pass.
+      // The tx re-reads the live count and re-evaluates the gate
+      // with the volunteers cached (volunteers don't change during
+      // a single check-in batch — only other room-volunteer-check-in
+      // routes write them, which are rare relative to children
+      // check-ins).
+      //
+      // No-ratio-policy rooms skip the tx — saves the round-trip on
+      // the common case and matches the helper's bypass semantics.
+      // ────────────────────────────────────────────────────────────
+      let raceBlocked = false;
+      let raceBlockedRatio: import("@/lib/server/ratio").RatioEvaluation | null = null;
+      if (roomHasRatioPolicy) {
+        const ratioState = ratioByRoom.get(roomId!)!;
+        const warningPercentInner =
+          (settings?.ratio_warning_threshold_percent as
+            | number
+            | undefined) ?? DEFAULT_RATIO_WARNING_PERCENT;
+        await adminDb.runTransaction(async (tx) => {
+          // Phase 1: read live child count INSIDE the tx so concurrent
+          // writes are visible per Firestore optimistic concurrency.
+          const liveSnap = await tx.get(
+            churchRef
+              .collection("checkInSessions")
+              .where("service_date", "==", service_date)
+              .where("room_id", "==", roomId!)
+              .where("checked_out_at", "==", null),
+          );
+          // Note: also count any sessions we've already written in
+          // THIS batch (sessions[]). The live snap will include them
+          // since they were committed in prior loop iterations; but
+          // for the FIRST iteration writing to this room in the
+          // batch, the live snap won't include them yet. The cached
+          // batchAddsByRoom counter handles the intra-batch case,
+          // and the live snap handles cross-batch race detection.
+          // We take the MAX to be safe.
+          const liveCount = Math.max(
+            liveSnap.size,
+            ratioState.baseChildCount +
+              (batchAddsByRoom.get(roomId!) ?? 0),
+          );
+          const recheck = canCheckInOneMore(
+            ratioState.roomDoc,
+            liveCount,
+            ratioState.volunteers,
+            warningPercentInner,
+          );
+          if (recheck.status === "violation") {
+            // Race detected between the pre-check and now. The pre-
+            // check passed (we wouldn't be here otherwise), but the
+            // live state now violates. Apply the same override gate
+            // as the pre-check: staffed station + header = pass, else
+            // block.
+            const overrideAllowed = ratioOverrideHeader && stationIsStaffed;
+            if (!overrideAllowed) {
+              raceBlocked = true;
+              raceBlockedRatio = recheck;
+              return;
+            }
+            // Override consumed under race conditions — still legal
+            // since the operator explicitly accepted the bypass.
+            // The pre-check may or may not have flipped this flag
+            // already; flipping again is idempotent.
+            ratioOverrideUsed = true;
+          }
+          // Pass-through (warning or ok or override-consumed): write
+          // the session inside the tx so the next concurrent batch
+          // sees our +1.
+          tx.set(
+            churchRef.collection("checkInSessions").doc(sessionId),
+            session,
+          );
+        });
+      } else {
+        // No ratio policy — bare write, no tx needed.
+        await churchRef
+          .collection("checkInSessions")
+          .doc(sessionId)
+          .set(session);
+      }
+
+      if (raceBlocked) {
+        // The tx detected a race and refused the write. Treat as a
+        // standard ratio block: surface in ratio_blocked, emit a
+        // denied audit (with a race-specific reason), and skip the
+        // label + bookkeeping path for this child. The pre-check
+        // had not yet emitted a warning audit (we deferred it), so
+        // there's no contradictory audit row to worry about.
+        ratioBlocked.push({
+          child_id: childId,
+          ratio: raceBlockedRatio!,
+        });
+        void audit({
+          church_id,
+          actor: kiosk.station_id
+            ? kioskActor(kiosk.station_id)
+            : "kiosk:bootstrap",
+          action: "kiosk.checkin",
+          target_type: "checkin_attempt",
+          target_id: childId,
+          metadata: {
+            room_id: roomId,
+            service_date,
+            ratio_status: "violation",
+            blocked_reason: "race_detected",
+            ratio_message: raceBlockedRatio!.message,
+          },
+          outcome: "denied",
+        });
+        continue;
+      }
+
+      // Session committed successfully — emit any deferred audit and
+      // record the session.
+      if (pendingWarningAudit) {
+        void audit({
+          church_id,
+          actor: kiosk.station_id
+            ? kioskActor(kiosk.station_id)
+            : "kiosk:bootstrap",
+          action: "kiosk.ratio_warning_shown",
+          target_type: "checkin_attempt",
+          target_id: childId,
+          metadata: {
+            room_id: roomId,
+            service_date,
+            ratio_message: pendingWarningAudit.ratio_message,
+          },
+          outcome: "ok",
+        });
+      }
       sessions.push(session);
 
       // Generate child label
