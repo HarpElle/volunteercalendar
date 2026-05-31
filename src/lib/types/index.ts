@@ -1365,6 +1365,15 @@ export interface CheckInSettings {
     };
   };
   /**
+   * Wave 9 P0-5: percent (0–100) of room ratio capacity at which the
+   * kiosk shows a warning banner. The hard violation (block + require
+   * staffed-station override) fires at 100%. Default 90 — admins can
+   * tighten to 75 for stricter, or 100 to disable warnings entirely
+   * (only blocks at violation). Applies across all rooms with
+   * `ratio_policy.enabled === true`.
+   */
+  ratio_warning_threshold_percent?: number;
+  /**
    * Wave 9 P0-2: Emergency Response Team. When a blocked-pickup attempt is
    * detected at the kiosk, SMS is sent to the owner AND every number in
    * this list in parallel. Owner retains sole override authority — operators
@@ -1449,11 +1458,93 @@ export interface Room {
   default_grades?: ChildGrade[];
   overflow_room_id?: string;
   checkin_view_token?: string;
+  /**
+   * Wave 9 P0-5: per-room volunteer-to-child ratio policy. Enforced
+   * by the kiosk check-in route (sub-PR C) — over-ratio check-ins
+   * are blocked at violation and warned at threshold. ECAP Indicator
+   * 3.12 (two-deep leadership) is encoded as `min_unrelated_adults`.
+   *
+   * Defaults when undefined: no ratio enforcement — matches today's
+   * behavior. Existing rooms are unaffected until an admin opts in.
+   *
+   * Field meanings:
+   *   - enabled: master switch. When false, the rest of the fields
+   *     are advisory display-only and the check-in gate is skipped.
+   *   - min_volunteers: absolute floor (>=) before any child can be
+   *     checked in. Two-deep policy typically sets this to 2.
+   *   - max_children_per_volunteer: numerator of the ratio
+   *     (children / max_children_per_volunteer = max volunteers
+   *     required). Common values: 4 (nursery), 6 (preschool), 8
+   *     (elementary), 10 (middle/high). The check-in gate uses:
+   *     `children + 1 > volunteers * max_children_per_volunteer`.
+   *   - min_unrelated_adults: floor for "non-related" adults in the
+   *     room. Counts a volunteer as unrelated to another only when
+   *     their household_ids don't intersect — so a parent serving
+   *     in the same room as their child counts as ONE adult but
+   *     does NOT satisfy two-deep. The scheduler-side enforcement
+   *     of this is via the parent-child related_to computation on
+   *     RoomVolunteerCheckIn.
+   *   - max_children: optional hard cap (>=) in addition to ratio.
+   *     Distinct from `capacity` — capacity is the room's physical
+   *     limit; max_children is the policy ceiling regardless of
+   *     volunteers.
+   */
+  ratio_policy?: {
+    enabled: boolean;
+    min_volunteers: number;
+    max_children_per_volunteer: number;
+    min_unrelated_adults: number;
+    max_children?: number;
+  };
   /** Links this room to a facility group for cross-org visibility */
   facility_group_id?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Wave 9 P0-5: a volunteer's check-in to a specific room for a
+ * specific service-date. Distinct from `CheckInSession` which
+ * tracks CHILDREN; this tracks the adults who are responsible for
+ * them. Persisted at
+ * `churches/{churchId}/roomVolunteerCheckins/{id}` (note the
+ * camelCase collection name to match the existing
+ * `checkInSessions` convention).
+ *
+ * `related_to` is computed at check-in time from
+ * `UnifiedHousehold.member_ids` — it lists every OTHER person in
+ * the same room whose household intersects this volunteer's. Used
+ * by the two-deep gate to determine whether a volunteer counts as
+ * an "unrelated adult."
+ */
+export interface RoomVolunteerCheckIn {
+  id: string;
+  church_id: string;
+  room_id: string;
+  person_id: string;
+  /** ISO date "YYYY-MM-DD" — matches CheckInSession.service_date. */
+  service_date: string;
+  checked_in_at: string;
+  /** Null until the volunteer is checked out (or the day ends). */
+  checked_out_at?: string | null;
+  /**
+   * Person IDs of OTHER volunteers in the same room whose households
+   * overlap this volunteer's at check-in time. Snapshot — re-computed
+   * if the volunteer rejoins after a checkout. Used by
+   * `evaluateRatio()` to count unrelated adults.
+   */
+  related_to: string[];
+  /**
+   * Who initiated the check-in. Useful for audit + parent-self-checkin
+   * vs. operator-tap differentiation:
+   *   - "self"        — volunteer scanned own QR / opened own page
+   *   - "operator"    — kiosk operator tapped name on roster
+   *   - "system"      — auto-checked-in via schedule (future)
+   */
+  source: "self" | "operator" | "system";
+  /** UID of the person who recorded the check-in (operator or self). */
+  recorded_by_user_id: string | null;
 }
 
 // ─── Shared Facility Groups ──────────────────────────────────────────────────
