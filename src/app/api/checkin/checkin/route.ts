@@ -9,12 +9,17 @@ import {
   loadChild,
   loadHouseholdPhone,
 } from "@/lib/server/checkin-helpers";
+import {
+  filterSnapshotForLabel,
+  resolveMedicalVisibility,
+} from "@/lib/server/medical-visibility";
 import { generateSecurityCode } from "@/lib/utils/security-code";
 import { getPrinterAdapter } from "@/lib/services/printing";
 import { sendSms } from "@/lib/services/sms";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import type {
   CheckInSession,
+  CheckInSettings,
   LabelJob,
   LabelPayload,
   PrinterConfig,
@@ -308,6 +313,24 @@ export async function POST(req: NextRequest) {
 
       // Generate child label
       if (printerConfig) {
+        // Wave 9 P0-4 sub-PR B: apply per-field visibility to the
+        // label. Today's adapters only render allergies on the
+        // physical label, so we gate the `allergy_text` field on
+        // `visibility.allergies.label`. The medical_notes /
+        // medications gating is forward-compatible — when adapters
+        // add fields, the filtered snapshot already carries the
+        // correct nulls.
+        const visibility = resolveMedicalVisibility(
+          settings as Pick<CheckInSettings, "medical_visibility"> | null,
+        );
+        const labelSnapshot = filterSnapshotForLabel(
+          {
+            allergies: child.allergies ?? null,
+            medical_notes: child.medical_notes ?? null,
+            medications: childMedications,
+          },
+          visibility,
+        );
         const labelJob: LabelJob = {
           type: "child_label",
           child_name: fullName,
@@ -315,8 +338,13 @@ export async function POST(req: NextRequest) {
           service_date: formatDateForLabel(service_date),
           security_code: securityCode,
           church_name: churchName,
+          // has_allergy_alert stays driven by whether the child has
+          // ANY medical surface — so the visual ⚠ indicator on the
+          // label still appears even when the text is hidden by
+          // visibility config. The alert presence is not PII; the
+          // text content is.
           has_allergy_alert: child.has_alerts,
-          allergy_text: child.allergies || undefined,
+          allergy_text: labelSnapshot.allergies || undefined,
         };
         try {
           const adapter = getPrinterAdapter(printerConfig.printer_type);
@@ -385,6 +413,28 @@ export async function POST(req: NextRequest) {
       },
       outcome: "ok",
     });
+
+    // Wave 9 P0-4 sub-PR B: distinguish "alert delivered + acknowledged"
+    // from "alert delivered, never confirmed." Only fires when the
+    // batch actually had alerts AND the operator confirmed. The
+    // counterpart "alert delivered, NOT confirmed" is already captured
+    // by `had_alerts: true` + `alerts_acknowledged: false` on the
+    // session doc + the absence of this audit row.
+    if (anyAlerts && alerts_acknowledged) {
+      void audit({
+        church_id,
+        actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+        action: "kiosk.alert_acknowledged",
+        target_type: "checkin_session_batch",
+        target_id: household_id,
+        metadata: {
+          service_date,
+          ...(service_id ? { service_id } : {}),
+          children_count: sessions.length,
+        },
+        outcome: "ok",
+      });
+    }
 
     return NextResponse.json({
       sessions: sessions.map((s) => ({

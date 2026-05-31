@@ -3,7 +3,12 @@ import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
-import type { CheckInSession } from "@/lib/types";
+import {
+  getRosterFieldStates,
+  resolveMedicalVisibility,
+  type RosterFieldState,
+} from "@/lib/server/medical-visibility";
+import type { CheckInSession, CheckInSettings } from "@/lib/types";
 
 /**
  * GET /api/checkin/room/[roomId]
@@ -97,6 +102,12 @@ export async function GET(
       .where("room_id", "==", roomId)
       .get();
 
+    // Wave 9 P0-4 sub-PR B: resolve visibility once per request so
+    // the per-child rendering loop doesn't re-read settings.
+    const visibility = resolveMedicalVisibility(
+      settings as Pick<CheckInSettings, "medical_visibility"> | null,
+    );
+
     // Enrich sessions with child data
     const children: {
       session_id: string;
@@ -106,8 +117,19 @@ export async function GET(
       checked_in_at: string;
       checked_out_at: string | null;
       has_alerts: boolean;
+      /** Legacy fields — kept for back-compat readers; new clients
+       *  should consume `medical_fields` instead. */
       allergies?: string;
       medical_notes?: string;
+      medications?: string;
+      /** Wave 9 P0-4 sub-PR B: per-field render plan for the kiosk
+       *  roster. Each entry tells the client whether to show the
+       *  field at all (`visible`) and whether to gate it behind a
+       *  tap-to-reveal placeholder (`requires_tap`). For
+       *  tap-gated fields, the value IS sent — the gating is purely
+       *  a render decision; the client fires
+       *  `kiosk.medical_data_revealed` when the operator taps. */
+      medical_fields: RosterFieldState[];
       is_late: boolean;
       parent_phone_masked: string;
     }[] = [];
@@ -136,6 +158,20 @@ export async function GET(
       }
 
       const displayName = child.display_name;
+      // Wave 9 P0-4 sub-PR B: prefer the structured snapshot captured
+      // at check-in (so a mid-service medical-notes edit doesn't
+      // retroactively change what the operator sees on the roster).
+      // Fall back to the live child doc for sessions created before
+      // the foundation PR shipped.
+      const childMedications =
+        (child as { medications?: string }).medications;
+      const snapshot = session.medical_snapshot ?? {
+        allergies: child.allergies ?? null,
+        medical_notes: child.medical_notes ?? null,
+        medications: childMedications ?? null,
+      };
+      const medicalFields = getRosterFieldStates(snapshot, visibility);
+
       children.push({
         session_id: session.id,
         child_id: session.child_id,
@@ -144,8 +180,19 @@ export async function GET(
         checked_in_at: session.checked_in_at,
         checked_out_at: session.checked_out_at || null,
         has_alerts: child.has_alerts,
-        allergies: child.allergies,
-        medical_notes: child.medical_notes,
+        // Legacy field exposure kept ONLY for the values the
+        // visibility config explicitly allows on the roster. Tap-
+        // gated fields are omitted from these — clients consuming
+        // the legacy shape get a "no value" for fields that need
+        // the tap-to-reveal interaction, matching what they'd see
+        // if they used the new `medical_fields` shape.
+        allergies: medicalFields.find((f) => f.field === "allergies" && f.visible && !f.requires_tap)
+          ?.value ?? undefined,
+        medical_notes: medicalFields.find((f) => f.field === "medical_notes" && f.visible && !f.requires_tap)
+          ?.value ?? undefined,
+        medications: medicalFields.find((f) => f.field === "medications" && f.visible && !f.requires_tap)
+          ?.value ?? undefined,
+        medical_fields: medicalFields,
         is_late: isLate,
         parent_phone_masked: maskedPhone,
       });
