@@ -87,10 +87,30 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Mode 2: Code-only kiosk checkout ---
-    const today = now.toISOString().split("T")[0];
+    //
+    // Codex W10-1 hotfix (Sev 2): the check-in route writes
+    // `service_date` from the BROWSER's locally-computed date (church-
+    // local), but this code used to compare against `now.toISOString()
+    // .split("T")[0]` which is UTC. When the church is in a timezone
+    // west of UTC and a service spans the UTC midnight rollover (e.g.
+    // Sunday-evening services in US time become Monday UTC), every
+    // code-only checkout 404'd because no session matched the UTC
+    // "today" string.
+    //
+    // Fix: search a 3-day UTC window (yesterday/today/tomorrow). The
+    // security code is the actual gate — we narrow to one church-day
+    // by `where("security_code", "==", ...)` and the in-process
+    // `checked_out_at` filter below. Three explicit ISO dates fit
+    // comfortably within Firestore's `in` cap (30 values).
+    const dayMs = 86_400_000;
+    const candidateDates = [
+      new Date(now.getTime() - dayMs).toISOString().split("T")[0],
+      now.toISOString().split("T")[0],
+      new Date(now.getTime() + dayMs).toISOString().split("T")[0],
+    ];
     const sessionsSnap = await churchRef
       .collection("checkInSessions")
-      .where("service_date", "==", today)
+      .where("service_date", "in", candidateDates)
       .where("security_code", "==", security_code.toUpperCase())
       .get();
 
