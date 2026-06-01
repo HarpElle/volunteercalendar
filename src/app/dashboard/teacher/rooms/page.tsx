@@ -27,6 +27,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import type { User } from "firebase/auth";
+
+const PAGE_COOLDOWN_MS = 60_000;
 
 interface MedicalField {
   field: "allergies" | "medical_notes" | "medications";
@@ -171,14 +174,27 @@ export default function TeacherDashboardPage() {
         </div>
       ) : (
         data.rooms.map((roomData) => (
-          <RoomCard key={roomData.room.id} data={roomData} />
+          <RoomCard
+            key={roomData.room.id}
+            data={roomData}
+            user={user}
+            churchId={churchId!}
+          />
         ))
       )}
     </div>
   );
 }
 
-function RoomCard({ data }: { data: DashboardRoom }) {
+function RoomCard({
+  data,
+  user,
+  churchId,
+}: {
+  data: DashboardRoom;
+  user: User | null;
+  churchId: string;
+}) {
   const max = data.ratio.max_children_for_current_volunteers;
 
   const statusBadge = {
@@ -221,57 +237,242 @@ function RoomCard({ data }: { data: DashboardRoom }) {
       ) : (
         <ul className="space-y-2">
           {data.children.map((c) => (
-            <li
+            <ChildRow
               key={c.session_id}
-              className="rounded-xl bg-white border border-vc-border-light p-3 flex items-start gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <p className="font-medium text-vc-indigo">
-                    {c.child_name}
-                  </p>
-                  {c.grade && (
-                    <span className="text-xs text-vc-text-muted">
-                      ({c.grade})
-                    </span>
-                  )}
-                  {c.has_alerts && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
-                      ⚠ Alert
-                    </span>
-                  )}
-                </div>
-                {c.allergies && (
-                  <p className="text-sm text-vc-coral mt-1">
-                    Allergies: {c.allergies}
-                  </p>
-                )}
-                {c.medical_notes && (
-                  <p className="text-sm text-amber-700 mt-1">
-                    Notes: {c.medical_notes}
-                  </p>
-                )}
-                {c.medications && (
-                  <p className="text-sm text-vc-indigo mt-1">
-                    Medications: {c.medications}
-                  </p>
-                )}
-                {c.has_alerts &&
-                  !c.allergies &&
-                  !c.medical_notes &&
-                  !c.medications && (
-                    <p className="text-xs text-vc-text-muted mt-1 italic">
-                      Medical details hidden — ask a kiosk operator to reveal
-                    </p>
-                  )}
-                <p className="text-xs text-vc-text-muted mt-1">
-                  Parent: {c.parent_phone_masked}
-                </p>
-              </div>
-            </li>
+              child={c}
+              user={user}
+              churchId={churchId}
+            />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function ChildRow({
+  child,
+  user,
+  churchId,
+}: {
+  child: RoomChild;
+  user: User | null;
+  churchId: string;
+}) {
+  const [pageModalOpen, setPageModalOpen] = useState(false);
+  const [lastPagedAt, setLastPagedAt] = useState<number | null>(null);
+  // `cooldownSecs` is driven from inside an effect (where Date.now() is
+  // allowed) so the render path stays pure.
+  const [cooldownSecs, setCooldownSecs] = useState(0);
+
+  useEffect(() => {
+    if (lastPagedAt === null) {
+      setCooldownSecs(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        PAGE_COOLDOWN_MS - (Date.now() - lastPagedAt),
+      );
+      setCooldownSecs(Math.ceil(remaining / 1000));
+      return remaining;
+    };
+    if (tick() === 0) return;
+    const interval = setInterval(() => {
+      if (tick() === 0) clearInterval(interval);
+    }, 1_000);
+    return () => clearInterval(interval);
+  }, [lastPagedAt]);
+
+  const inCooldown = cooldownSecs > 0;
+
+  return (
+    <li className="rounded-xl bg-white border border-vc-border-light p-3 flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <p className="font-medium text-vc-indigo">{child.child_name}</p>
+          {child.grade && (
+            <span className="text-xs text-vc-text-muted">({child.grade})</span>
+          )}
+          {child.has_alerts && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
+              ⚠ Alert
+            </span>
+          )}
+        </div>
+        {child.allergies && (
+          <p className="text-sm text-vc-coral mt-1">
+            Allergies: {child.allergies}
+          </p>
+        )}
+        {child.medical_notes && (
+          <p className="text-sm text-amber-700 mt-1">
+            Notes: {child.medical_notes}
+          </p>
+        )}
+        {child.medications && (
+          <p className="text-sm text-vc-indigo mt-1">
+            Medications: {child.medications}
+          </p>
+        )}
+        {child.has_alerts &&
+          !child.allergies &&
+          !child.medical_notes &&
+          !child.medications && (
+            <p className="text-xs text-vc-text-muted mt-1 italic">
+              Medical details hidden — ask a kiosk operator to reveal
+            </p>
+          )}
+        <p className="text-xs text-vc-text-muted mt-1">
+          Parent: {child.parent_phone_masked}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => setPageModalOpen(true)}
+        disabled={inCooldown}
+        className="text-sm font-medium px-3 py-2 rounded-lg bg-vc-coral text-white disabled:bg-vc-text-muted disabled:cursor-not-allowed min-w-[88px] min-h-[44px]"
+        aria-label={`Page parent for ${child.child_name}`}
+      >
+        {inCooldown ? `Sent · ${cooldownSecs}s` : "Page parent"}
+      </button>
+
+      {pageModalOpen && (
+        <PageParentModal
+          child={child}
+          user={user}
+          churchId={churchId}
+          onClose={() => setPageModalOpen(false)}
+          onSent={() => {
+            setLastPagedAt(Date.now());
+            setPageModalOpen(false);
+          }}
+        />
+      )}
+    </li>
+  );
+}
+
+function PageParentModal({
+  child,
+  user,
+  churchId,
+  onClose,
+  onSent,
+}: {
+  child: RoomChild;
+  user: User | null;
+  churchId: string;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = useCallback(async () => {
+    if (!user) {
+      setError("Sign-in expired. Please reload.");
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/teacher/page-parent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          session_id: child.session_id,
+          note: note.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? "Could not send page");
+      }
+      onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSending(false);
+    }
+  }, [user, churchId, child.session_id, note, onSent]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="page-parent-title"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-vc-indigo/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3
+            id="page-parent-title"
+            className="text-lg font-display font-semibold text-vc-indigo"
+          >
+            Page parent for {child.child_name}
+          </h3>
+          <p className="text-sm text-vc-text-secondary mt-1">
+            We&rsquo;ll text the primary guardian and any pickup recipients
+            checked in for this session. The text identifies you and the room.
+          </p>
+        </div>
+        <label className="block">
+          <span className="text-sm font-medium text-vc-indigo">
+            Optional note
+          </span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={200}
+            rows={3}
+            placeholder="e.g. needs a diaper change, very upset, ran out of snack"
+            className="mt-1 w-full rounded-lg border border-vc-border-light bg-vc-bg-warm p-2 text-sm"
+          />
+          <span className="text-xs text-vc-text-muted">
+            {note.length}/200
+          </span>
+        </label>
+        {error && (
+          <p
+            role="alert"
+            className="text-sm text-vc-danger bg-vc-danger/5 border border-vc-danger/20 rounded-lg p-2"
+          >
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sending}
+            className="px-4 py-2 rounded-lg border border-vc-border-light text-vc-indigo min-h-[44px]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={send}
+            disabled={sending}
+            className="px-4 py-2 rounded-lg bg-vc-coral text-white font-medium min-h-[44px] min-w-[88px]"
+          >
+            {sending ? "Sending…" : "Send page"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
