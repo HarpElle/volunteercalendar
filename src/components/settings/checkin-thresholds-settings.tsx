@@ -22,6 +22,11 @@ export function CheckinThresholdsSettings({
     capacity_sms_recipient_phone: "",
     guardian_sms_on_checkin: false,
     guardian_sms_on_checkout: false,
+    // Wave 9 P0-5 sub-PR D: global ratio warning threshold (percent).
+    // The kiosk gate shows an amber banner at this fill % per room
+    // with ratio_policy.enabled. Defaults to 90 — match
+    // DEFAULT_RATIO_WARNING_PERCENT from @/lib/server/ratio.
+    ratio_warning_threshold_percent: 90,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,6 +55,10 @@ export function CheckinThresholdsSettings({
               data.guardian_sms_on_checkin ?? false,
             guardian_sms_on_checkout:
               data.guardian_sms_on_checkout ?? false,
+            ratio_warning_threshold_percent:
+              typeof data.ratio_warning_threshold_percent === "number"
+                ? data.ratio_warning_threshold_percent
+                : 90,
           });
         }
       } catch {
@@ -159,6 +168,34 @@ export function CheckinThresholdsSettings({
               placeholder="+15551234567"
               className="min-h-[44px] w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
             />
+          </div>
+          {/* Wave 9 P0-5 sub-PR D: global ratio warning threshold */}
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-vc-text-secondary">
+              Ratio warning threshold (%)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={thresholds.ratio_warning_threshold_percent}
+              onChange={(e) =>
+                setThresholds((t) => ({
+                  ...t,
+                  ratio_warning_threshold_percent: Math.min(
+                    100,
+                    Math.max(0, parseInt(e.target.value, 10) || 0),
+                  ),
+                }))
+              }
+              className="min-h-[44px] w-full rounded-lg border border-vc-border-light bg-white px-3 py-2 text-sm outline-none focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30"
+            />
+            <p className="mt-1 text-xs text-vc-text-muted">
+              Kiosk shows an amber banner at this fill % per room with a
+              ratio policy enabled. 90 is the recommended default; set lower
+              for stricter early-warning, or 100 to disable warnings entirely
+              (block at violation only).
+            </p>
           </div>
         </div>
       </section>

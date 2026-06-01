@@ -94,6 +94,10 @@ export async function PUT(req: NextRequest) {
       // matches the expected { allergies, medical_notes, medications }
       // × { label, roster, expand_on_tap_only } structure.
       "medical_visibility",
+      // Wave 9 P0-5 sub-PR D: ratio warning threshold percent (0–100).
+      // Clamped in code; the kiosk gate also falls through to the
+      // DEFAULT_RATIO_WARNING_PERCENT (90) when absent.
+      "ratio_warning_threshold_percent",
     ];
 
     const updates: Record<string, unknown> = {
