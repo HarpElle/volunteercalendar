@@ -142,6 +142,16 @@ export type AuditAction =
    * filling audit_logs with poll noise).
    */
   | "teacher.dashboard_viewed"
+  /**
+   * Wave 10 W10-3: a checked-in volunteer paged the parent for a
+   * specific session from the teacher dashboard. SMS fans out to
+   * the primary guardian + each `present_recipients` entry on the
+   * session, deduped by normalized phone. Metadata captures the
+   * session, the room, the recipient count (NOT the phone numbers),
+   * and an optional teacher-supplied note (capped at 200 chars,
+   * stored verbatim so compliance can review what was said).
+   */
+  | "teacher.parent_paged"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
