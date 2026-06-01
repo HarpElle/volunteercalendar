@@ -404,8 +404,14 @@ function CheckInKioskInner() {
       .filter((c) => c.has_alerts)
       .map((c) => c.id);
 
+    // Codex W10-1 Sev 2: when no children have alerts, the pre-W10-1
+    // shortcut bypassed the confirm screen and called doCheckIn()
+    // directly — which silently skipped the new "recipients" screen
+    // too. Route every check-in through the recipients screen
+    // regardless of alerts so the operator/parent always gets a
+    // chance to select pickup contacts.
     if (alertedChildIds.length === 0) {
-      doCheckIn(ids);
+      setScreen("recipients");
       return;
     }
 
@@ -463,17 +469,11 @@ function CheckInKioskInner() {
     });
   };
 
-  const doCheckIn = async (childIds: string[]) => {
-    // Retained for the override-modal retry path; recipients come
-    // from `pendingRecipients` (set when the user passed the
-    // recipients screen, if applicable).
-    onActivity();
-    setError("");
-    await submitCheckIn(childIds, {
-      override: false,
-      recipients: pendingRecipients ?? undefined,
-    });
-  };
+  // Codex W10-1 Sev 2 cleanup: `doCheckIn` is now dead — the only
+  // prior caller (handleChildrenSelected's no-alert shortcut) was
+  // re-routed to setScreen("recipients") so every check-in flows
+  // through the same path. submitCheckIn is called directly from
+  // handleRecipientsConfirmed and the override modal button.
 
   // Wave 9 P0-5 sub-PR E: extracted check-in submission so it can be
   // re-invoked after a staffed-station operator confirms an override
@@ -918,7 +918,13 @@ function CheckInKioskInner() {
                   const childIds = ratioPrompt.childIds;
                   setRatioPrompt(null);
                   setOverrideReason(null);
-                  await submitCheckIn(childIds, { override: true });
+                  // Codex W10-1 Sev 1: carry pendingRecipients through
+                  // the override retry so a staffed override doesn't
+                  // silently drop the recipient selection.
+                  await submitCheckIn(childIds, {
+                    override: true,
+                    recipients: pendingRecipients ?? undefined,
+                  });
                 }}
                 className="px-4 py-3 rounded-lg text-sm font-bold text-white bg-vc-coral disabled:opacity-40 disabled:cursor-not-allowed hover:bg-vc-coral/90 min-h-[44px]"
               >
