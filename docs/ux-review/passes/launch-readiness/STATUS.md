@@ -18,7 +18,7 @@ round-trip. Full plan lives at `/Users/jasonpaschall/.claude/plans/i-want-you-to
 | **6** | Annual billing (20% off / "2 months free") + 14-day trial; custom auth domain N/A | #131 #132 | `a651501` | ✅ Closed — billing + trial shipped; custom auth domain dropped (N/A for an email/password app) |
 | **7** | Production verification matrix (17 features × happy + failure) | #133 #134 #135 #136 #137 #139 #140 #141 | `2f315bf` | ✅ Closed — all 11 Codex-owned rows PASS in prod; 6 Jason halves (label print, calendar subscribe, Stripe live × 2, ProPresenter, Stripe customer cleanup) intentionally left open and tracked in `launch-verification.md` |
 | **8** | Customer comms + outreach + marketing | — | — | ⏸ Parked behind Wave 9 |
-| **9** | **Best-in-class Child Check-In safety** (Outreach Magazine + ECAP + PCO research; P0-1 → P0-5) — pre-launch | P0-1 #142; P0-2 #143–146 (reverted via #147; re-landed via #156 #157 #158 #159 #160→#161 #162 #163 #164) | `4b38ac5` | 🟢 Active — P0-1 + P0-2 closed in prod (Codex PASS each); P0-3 queued |
+| **9** | **Best-in-class Child Check-In safety** (Outreach Magazine + ECAP + PCO research; P0-1 → P0-5) — pre-launch | P0-1 #142; P0-2 #143–164; P0-3 #166–170; P0-4 #171–174; P0-5 #175–184 + 4-hotfix race-fix chain | `11f0ba9` | ✅ Closed — all 5 P0 phases shipped + Codex PASS. Wave 10 next. |
 
 ---
 
@@ -485,15 +485,80 @@ During P0-2 D landing (PR #146, commit `176ef9a`), production hit a regression w
 
 > A `route.ts` file at `[param]/static/[param]/route.ts` (TWO dynamic segments separated by a literal segment) corrupts the build artifacts of EVERY Firebase-backed Vercel function — even ones that don't import the offending route. Verified with PR #154 which shipped a 3-line empty GET handler at exactly that path and reproduced the global hang.
 
-**Workaround applied across P0-2 re-lands:** all routes flatten to a single dynamic segment with the other ID in the request body. `children/[personId]/authorized-pickups/[pickupId]/route.ts` → `authorized-pickups/[id]/route.ts` (`child_id` in body). All four reverted sub-PRs (foundation/CRUD/photos/households-UI) and three subsequent sub-PRs (E/F/G) ship clean against this pattern. Upstream Next.js issue draft lives in `docs/dev/nextjs-16-bundler-bug.md` (task #31 — Jason can submit when convenient).
+**Workaround applied across P0-2 re-lands AND every subsequent route added in P0-3 / P0-4 / P0-5:** all routes flatten to a single dynamic segment with the other ID in the request body. `children/[personId]/authorized-pickups/[pickupId]/route.ts` → `authorized-pickups/[id]/route.ts` (`child_id` in body). The flat-path convention is now load-bearing across the Check-In surface. Upstream Next.js issue draft lives in `docs/dev/nextjs-16-bundler-bug.md` (task #31 — Jason can submit when convenient).
+
+### P0-3 — Restrictions + SOR + raw bg-check expiry cron — SHIPPED (2026-05-31)
+
+ECAP Indicator 3.15 (categorical exclusion of SOR-matched volunteers from children's ministry) is now enforced as a hard scheduler gate, surfaced as a manageable admin UI, and triagable via filter chips. Cron auto-expires stale background checks. **Codex retest PASS** on `d101d75` — no findings.
+
+| Sub-PR | PR | Commit | Scope | Codex |
+|---|---|---|---|---|
+| **A — foundation** | #166 | `e8cb12b` | `PersonRestriction` interface + `Person.restrictions[]`; SOR fields on `Person.background_check` (`sor_checked`, `sor_match`, `last_sor_check_at`); `Ministry.category` (already populated by setup wizard, now typed); 6 new audit codes; `hasNoChildrenRestriction` gate in scheduler; threaded through `isEligible` + `trySwap`; 11 new unit tests. | — |
+| **B — CRUD** | #167 | `6c4792b` | 3 owner-only routes: `POST /api/people/restrictions`, `PATCH /api/people/restrictions/[id]` (lift; idempotent), `POST /api/people/sor-check`. Append-only restriction history; SOR check decoupled from restriction creation per ECAP doctrine. | — |
+| **C — Safety panel UI** | #168 | `3cade8d` | `<SafetyPanel>` on person-detail drawer; active restrictions with lift; add-restriction form; log-SOR-check form. Owner-only edit; admin/scheduler read-only fallthrough. | ✅ PASS on `d101d75` |
+| **D — cron** | #169 | `efd6c2c` | `/api/cron/prerequisite-check` extended: raw `bg_check.expires_at` scan → auto-expire + 30d warning email + in-app notification. Idempotency cached on `expiry_warning_sent_for` (admin renewal invalidates). New email template. | ✅ PASS on `d101d75` |
+| **E — filter chips** | #170 | `d101d75` | "Background expiring (60d)" + "Restricted from children" filter chips on people page (orthogonal toggles). | ✅ PASS on `d101d75` |
+
+**Scoped out of P0-3 (intentional, deferred to W10 / P1):** schedule-matrix lock badge when admin manually drags a restricted volunteer into a children's-ministry slot — the foundation gate already prevents auto-draft from surfacing them. MinistrySafe vendor adapter is P1-6.
+
+### P0-4 — HIPAA-aware medical visibility — SHIPPED (2026-05-31)
+
+Per-field per-surface visibility config for allergies / medical_notes / medications. Churches can dial in their HIPAA posture without affecting the underlying medical data. **Codex retest PASS** after hotfix on `dd878fc` — Sev 2 reload bug caught + fixed inline.
+
+| Sub-PR | PR | Commit | Scope | Codex |
+|---|---|---|---|---|
+| **A — foundation** | #171 | `3ca2bba` | `CheckInSettings.medical_visibility`, `CheckInSession.medical_snapshot` (structured), `ChildProfile.medications` field split from medical_notes, dual-write at check-in route, new `kiosk.alert_acknowledged` audit. | — |
+| **B — visibility helper + roster + label gates** | #172 | `b24ffae` | `src/lib/server/medical-visibility.ts` with 14 unit tests; roster API returns per-field render plan (`medical_fields: RosterFieldState[]`); check-in route applies label gate; new `kiosk.alert_acknowledged` audit emit when batch had alerts + acknowledged. | — |
+| **C — Settings UI + roster client + tap-reveal endpoint** | #173 | `ef4296b` | `<MedicalVisibilitySection>` admin UI under Settings → Children; `<AllergyDetailModal>` rewritten for per-field render + tap-to-reveal placeholders; new `/api/checkin/room-medical-reveal` endpoint emits `kiosk.medical_data_revealed` audit on tap. | Sev 2 → hotfix `dd878fc` → PASS |
+| **HOTFIX** | #174 | `dd878fc` | Settings UI reload bug: client read `data.settings.medical_visibility` but route returns the raw doc. Fixed to read top-level field. | ✅ PASS post-fix |
+
+### P0-5 — Ratio enforcement + worker check-in — SHIPPED (2026-05-31)
+
+The biggest differentiator: mechanical ratio enforcement, not just advisory warnings. PCO documents ratio as a warning, KidCheck has no policy enforcement. VolunteerCal now BLOCKS check-in at violation and warns at threshold. **Codex retest PASS** on `11f0ba9` after 4 rounds of hotfixes on sub-PR C.
+
+| Sub-PR | PR | Commit | Scope | Codex |
+|---|---|---|---|---|
+| **A — foundation** | #175 | `1fadfed` | `Room.ratio_policy` (5 fields), `RoomVolunteerCheckIn` collection, `CheckInSettings.ratio_warning_threshold_percent`, 4 new audit codes, `src/lib/server/ratio.ts` helpers (`evaluateRatio`, `canCheckInOneMore`, `computeRelatedTo`), 25 unit tests. Two-deep encoded as `min_unrelated_adults`. | — |
+| **B — worker check-in + roster ratio** | #176 | `a2cf97b` | `POST /api/checkin/room-volunteer-checkin` + `POST /api/checkin/room-volunteer-checkout`; `related_to` snapshot from household overlap; symmetric backfill in tx; `GET /api/checkin/room/[roomId]` augmented with `ratio: RatioEvaluation`. `roomVolunteerCheckins/{docId}` server-only Firestore rules. | — |
+| **C — kiosk ratio gate** | #178 | `637a5a0` | Per-child gate in `/api/checkin/checkin/route.ts`: violation blocks (unless staffed `X-Ratio-Override`); warning emits audit; per-room cache + batch counter. **4 hotfix rounds** chasing a stubborn race — see chain below. | Sev 2/1 → 4 hotfix rounds → PASS |
+| **HOTFIX 1** | #179 | `a2fb5db` | 3 Sev 2 fixes: ratio boundary `<` → `<=`; kiosk_stations top-level (was per-church); transaction read-before-write in worker check-in. + Sev 4 batch audit metadata. | — |
+| **HOTFIX 2** | #180 | `df40947` | Race-fix attempt 1: wrapped session write in tx with re-read of checkInSessions query. Didn't actually serialize — tx writes went to NEW doc IDs, no conflict. | Sev 1 reproduced |
+| **HOTFIX 3** | #181 | `cc1900d` | Race-fix attempt 2: added `roomCheckinLocks` doc per (room, service_date) inside the tx as a deterministic conflict point. + fixed counter-increment timing. | Sev 1 reproduced |
+| **HOTFIX 4** | #182 | `528d3dc` | **Root cause:** Firestore `where("checked_out_at", "==", null)` doesn't match docs where the field is ABSENT. Sessions were created without the field, so live-count queries returned 0. Session create now writes `checked_out_at: null` explicitly + all 4 queries switched to in-process filtering for defense-in-depth. | ✅ PASS post-fix |
+| **D — admin policy editor** | #183 | `6b5ec41` | Per-room ratio policy editor in `/dashboard/checkin/rooms` (5 fields + read-view chip); global `ratio_warning_threshold_percent` in CheckinThresholdsSettings; strict server-side shape validation. | ✅ PASS on `11f0ba9` |
+| **E — wall dashboard + override modal** | #184 | `11f0ba9` | New `/checkin/room/[roomId]/dashboard` wall view with traffic-light + stat tiles + 5s polling; kiosk override modal (staffed-only) with required reason chips + `X-Ratio-Override` header on re-submit. | ✅ PASS on `11f0ba9` |
+
+**Race-fix chain reflection:** the persistent Sev 1 across hotfixes 2 + 3 wasn't a concurrency-architecture problem — it was a data-shape bug that masked the entire enforcement. Lesson: Firestore null-equality semantics are well-known but easy to forget; this pattern would be caught by an integration test against the emulator but never by a pure unit test. Tracking integration test re-land work in task #30 (originally for P0-2).
+
+---
+
+## ✅ Wave 9 P0 — Closed
+
+All 5 P0 phases shipped + Codex PASS on each. **The launch-readiness P0 set is complete.**
+
+| Phase | What | Final commit | Final Codex |
+|---|---|---|---|
+| **P0-1** | Station type architecture | `52b5e6d` | PASS |
+| **P0-2** | Authorized-pickup photos + block list + ERT + parent self-service | `4b38ac5` | PASS (E/F-hotfix/G-hotfix tested) |
+| **P0-3** | Restrictions + SOR + raw bg-check cron | `d101d75` | PASS |
+| **P0-4** | HIPAA-aware medical visibility | `dd878fc` | PASS (C-hotfix) |
+| **P0-5** | Ratio enforcement + worker check-in | `11f0ba9` | PASS (after 4 hotfix rounds on C) |
+
+**What it adds up to:** VolunteerCal's Child Check-In now has the safety story the plan promised — best-in-class. Specifically:
+- ECAP Indicator 3.12 (two-deep leadership) **mechanically enforced** at kiosk check-in
+- ECAP Indicator 3.15 (SOR exclusion) **mechanically enforced** at scheduler + visible in admin
+- ECAP-style attendance + check-in/check-out procedures with kiosk-station-type discrimination
+- Authorized-pickup photo verification + blocked-pickup list with court-order docs + ERT SMS fan-out
+- HIPAA-aware per-field medical visibility (label / roster / tap-to-reveal)
+- Parent self-service pickup list management with 24h cooling-off
+- Background check raw expiry auto-cron + 30d warning emails
 
 ---
 
 ## Next up
 
-- **Wave 9 P0-3** queued — `Person.restrictions[]` + `cannot_serve_with_children` hard block + `Person.background_check.sor_*` field + scheduler-level enforcement in `canServeInMinistry()` + raw `background_check.expires_at` scan added to `/api/cron/prerequisite-check`.
-- **Wave 9 P0-4** queued — HIPAA-aware medical visibility.
-- **Wave 9 P0-5** queued — ratio enforcement + worker check-in (biggest differentiator).
+- **Codex closeout artifacts** for Wave 9 P0 are now consolidated in `docs/ux-review/passes/launch-readiness/CODEX_CHECKIN_P*` reports.
+- **Wave 10** (added 2026-05-31 per Jason's church-coordinator conversation) — In-service safety operations + parent UX. Sequencing: W10-1 first (per-check-in pickup selection, smallest independent piece) → W10-2/3/4 → W10-5 → W10-R. Plan file has the full breakdown. Sticker-privacy research already landed at `docs/research/sticker-privacy.md`.
 - **Wave 1.2b CSP enforce flip**: lands ~2026-06-02 (calendar reminder).
 - **Wave 7 Jason halves**: 6 manual confirmations on a flexible schedule; don't gate Wave 9.
 - **Deferred — Wave 5 Batch E phase 2** (Schedules + Service Day server endpoints): pure admin-page perf; revisit post-launch.
