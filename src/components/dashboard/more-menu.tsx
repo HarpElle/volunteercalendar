@@ -355,7 +355,10 @@ export function MoreMenu({
             <WorkbenchLink href="/dashboard/checkin/households" label="Households" onClose={onClose} />
             <WorkbenchLink href="/dashboard/checkin/reports" label="Reports" onClose={onClose} />
             {isAdmin && (
-              <WorkbenchLink href="/dashboard/checkin/import" label="Import" onClose={onClose} />
+              <>
+                <WorkbenchLink href="/dashboard/checkin/import" label="Import" onClose={onClose} />
+                <WorkbenchLink href="/dashboard/checkin/emergency-roster" label="Emergency roster" onClose={onClose} />
+              </>
             )}
           </>
         )}
