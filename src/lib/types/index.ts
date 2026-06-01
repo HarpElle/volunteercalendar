@@ -1411,6 +1411,25 @@ export interface CheckInSettings {
    */
   ratio_warning_threshold_percent?: number;
   /**
+   * Wave 10 W10-R: how the child's name is rendered on the printed
+   * sticker. The label travels with the child off the kiosk's chain
+   * of custody — a stranger reading it from across a room can call
+   * the child by name. Research synthesis (docs/research/sticker-
+   * privacy.md) flagged full-name labels as a stranger-risk surface;
+   * "Sarah J." preserves the verification utility for staff while
+   * limiting public disclosure.
+   *
+   *   - `"first_name_last_initial"` (DEFAULT) — "Sarah J."
+   *   - `"first_name"` — "Sarah"
+   *   - `"first_and_last"` — "Sarah Johnson" (pre-W10-R behavior)
+   *
+   * Default applies when the field is undefined on the settings doc.
+   */
+  label_content_format?:
+    | "first_name_last_initial"
+    | "first_name"
+    | "first_and_last";
+  /**
    * Wave 9 P0-2: Emergency Response Team. When a blocked-pickup attempt is
    * detected at the kiosk, SMS is sent to the owner AND every number in
    * this list in parallel. Owner retains sole override authority — operators

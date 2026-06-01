@@ -14,6 +14,10 @@ import {
   resolveMedicalVisibility,
 } from "@/lib/server/medical-visibility";
 import {
+  formatLabelName,
+  type LabelContentFormat,
+} from "@/lib/server/label-format";
+import {
   canCheckInOneMore,
   DEFAULT_RATIO_WARNING_PERCENT,
   type RatioEvaluation,
@@ -523,7 +527,6 @@ export async function POST(req: NextRequest) {
         roomId !== null && ratioByRoom.has(roomId);
 
       const displayName = child.preferred_name || child.first_name;
-      const fullName = `${displayName} ${child.last_name}`;
       childNames.push(displayName);
 
       // Codex P0-5C race-of-race fix: batchAddsByRoom is incremented
@@ -804,9 +807,24 @@ export async function POST(req: NextRequest) {
           },
           visibility,
         );
+        // Wave 10 W10-R: render the sticker name per the org's
+        // label_content_format setting. Default ("Sarah J.") biases
+        // toward minimal disclosure. The kiosk response + SMS still
+        // carry the unformatted `displayName` (via `childNames`),
+        // so guardians see the regular first/preferred name in
+        // their text confirmation — the formatting applies ONLY to
+        // the printed sticker that travels with the child.
+        const labelName = formatLabelName(
+          displayName,
+          child.last_name,
+          settings?.label_content_format as
+            | LabelContentFormat
+            | undefined
+            | null,
+        );
         const labelJob: LabelJob = {
           type: "child_label",
-          child_name: fullName,
+          child_name: labelName,
           room_name: roomName,
           service_date: formatDateForLabel(service_date),
           security_code: securityCode,
