@@ -5,6 +5,7 @@ import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { audit, kioskActor, SYSTEM_ACTOR } from "@/lib/server/audit";
+import { loadHouseholdPhone } from "@/lib/server/checkin-helpers";
 import { timingSafeEqual } from "crypto";
 import type { BlockedPickup, CheckInSession, CheckInAlert } from "@/lib/types";
 
@@ -500,17 +501,15 @@ async function sendGuardianCheckoutSms(
     .get();
   if (!settingsSnap.exists || !settingsSnap.data()!.guardian_sms_on_checkout) return;
 
-  // Primary guardian phone — prefer the legacy checkin_households doc
-  // (where it's stored top-level); falls back to null if the household
-  // doesn't have one. Matches the prior behavior; Pro-tier unified
-  // households route through a different lookup (W10-2 follow-up).
-  const householdSnap = await churchRef
-    .collection("checkin_households")
-    .doc(householdId)
-    .get();
-  const primaryPhone = householdSnap.exists
-    ? (householdSnap.data()!.primary_guardian_phone as string | undefined)
-    : undefined;
+  // Codex W10-1 Sev 2: prior implementation only looked at the
+  // legacy `checkin_households` doc; unified-mode (Pro-tier) churches
+  // store the primary's phone on the linked adult Person, so the
+  // legacy-only lookup silently returned undefined and Mom never got
+  // the checkout SMS. `loadHouseholdPhone` handles both shapes (see
+  // src/lib/server/checkin-helpers.ts:105) — same helper the check-in
+  // route uses.
+  const primaryPhone = (await loadHouseholdPhone(churchRef, householdId))
+    ?? undefined;
 
   // Dedup phones: primary first, then each recipient with a phone on file.
   const dedup = (p: string | null | undefined) =>

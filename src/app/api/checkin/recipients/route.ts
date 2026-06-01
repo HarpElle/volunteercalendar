@@ -118,6 +118,23 @@ export async function POST(req: NextRequest) {
       .where("household_ids", "array-contains", householdId)
       .get();
 
+    // Codex W10-1 Sev 3: resolve primary guardian FIRST (from
+    // household.primary_guardian_id), then exclude their entry from
+    // the toggleable recipient list. Prior implementation pushed
+    // them in via first-write-wins, which surfaced them both in the
+    // sage "✓ Auto" card AND as a toggleable card below — the same
+    // person rendered twice in the kiosk picker.
+    let primaryRefId: string | null = null;
+    if (childIds.length > 0) {
+      const hhSnap = await churchRef
+        .collection("households")
+        .doc(householdId)
+        .get();
+      primaryRefId = hhSnap.exists
+        ? ((hhSnap.data()?.primary_guardian_id as string | null) ?? null)
+        : null;
+    }
+
     let primaryGuardianName: string | null = null;
     let primaryGuardianPhoneMasked: string | null = null;
     const recipients: RecipientOption[] = [];
@@ -131,16 +148,31 @@ export async function POST(req: NextRequest) {
         (data.name as string) ||
         "Adult";
       const phone = (data.phone as string) || null;
+
+      // Primary guardian: surface in the dedicated "always-notified"
+      // card and DO NOT include in the toggleable recipients list.
+      // Also reserve their normalized phone in the dedup set so a
+      // sibling-pickup entry with the same number can't surface as a
+      // separate toggleable.
+      if (primaryRefId && doc.id === primaryRefId) {
+        primaryGuardianName = name;
+        primaryGuardianPhoneMasked = phone ? `***${phone.slice(-4)}` : null;
+        const normalized = normalizePhoneForDedup(phone);
+        if (normalized) phoneSeen.add(normalized);
+        continue;
+      }
+
       const normalized = normalizePhoneForDedup(phone);
       if (normalized && phoneSeen.has(normalized)) continue;
       if (normalized) phoneSeen.add(normalized);
 
-      // Track first adult as "primary guardian" for the always-notified
-      // badge. Households surface the canonical primary via
-      // `primary_guardian_id` on the household doc; if that's not set,
-      // any adult will do (first-write-wins matches the existing
-      // checkin/lookup behavior).
-      if (!primaryGuardianName) {
+      // Fallback primary identification when the household doc has no
+      // primary_guardian_id (legacy / partially-migrated households).
+      // First-adult-wins matches the existing checkin/lookup behavior.
+      // In this branch the adult IS added to the recipients list — the
+      // operator can still tap them; but we mark them as the
+      // always-notified primary so the UI renders the badge.
+      if (!primaryRefId && !primaryGuardianName) {
         primaryGuardianName = name;
         primaryGuardianPhoneMasked = phone
           ? `***${phone.slice(-4)}`
@@ -154,29 +186,6 @@ export async function POST(req: NextRequest) {
         source: "household_adult",
         ref_id: doc.id,
       });
-    }
-
-    // Re-canonicalize the primary guardian if the household doc carries
-    // primary_guardian_id (more reliable than first-write-wins).
-    if (childIds.length > 0) {
-      const hhSnap = await churchRef
-        .collection("households")
-        .doc(householdId)
-        .get();
-      const primaryId = hhSnap.exists
-        ? (hhSnap.data()?.primary_guardian_id as string | null)
-        : null;
-      if (primaryId) {
-        const adultEntry = recipients.find(
-          (r) => r.source === "household_adult" && r.ref_id === primaryId,
-        );
-        if (adultEntry) {
-          primaryGuardianName = adultEntry.name;
-          primaryGuardianPhoneMasked = adultEntry.phone
-            ? `***${adultEntry.phone.slice(-4)}`
-            : null;
-        }
-      }
     }
 
     // 2. For each child, surface their authorized_pickups (filtered for
