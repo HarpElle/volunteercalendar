@@ -62,6 +62,25 @@ interface CheckInResult {
   /** Children skipped because they already had an active session for today
    *  (the server's dedupe — see /api/checkin/checkin route comment). */
   already_checked_in: string[];
+  /** Wave 9 P0-5 sub-PR E: children blocked by the ratio gate. Each
+   *  entry carries the per-child evaluation + blocked_reason so the
+   *  kiosk can render the override modal with specific copy. */
+  ratio_blocked?: Array<{
+    child_id: string;
+    ratio: {
+      status: "violation" | "warning" | "ok";
+      message: string;
+      children: number;
+      volunteers: number;
+      unrelated_adults: number;
+      two_deep_ok: boolean;
+      ratio_ok: boolean;
+    };
+    blocked_reason:
+      | "no_override"
+      | "self_service_station_cannot_override"
+      | "race_detected";
+  }>;
 }
 
 interface ServiceOption {
@@ -209,6 +228,19 @@ function CheckInKioskInner() {
   const [household, setHousehold] = useState<HouseholdResult | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
+  // Wave 9 P0-5 sub-PR E: staffed-station override prompt state.
+  // When non-null, the modal renders with the listed blocked children
+  // and an override button that re-submits with X-Ratio-Override: true.
+  const [ratioPrompt, setRatioPrompt] = useState<{
+    childIds: string[];
+    blocked: NonNullable<CheckInResult["ratio_blocked"]>;
+  } | null>(null);
+  const [selfServiceBlockedBanner, setSelfServiceBlockedBanner] =
+    useState(false);
+  // Override-tap reason (set on chip-tap; submitted in audit metadata via
+  // a future PR — current server route doesn't parse reason from body
+  // yet, but capturing it locally future-proofs the UX).
+  const [overrideReason, setOverrideReason] = useState<string | null>(null);
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -382,16 +414,34 @@ function CheckInKioskInner() {
     onActivity();
     setError("");
 
+    await submitCheckIn(childIds, { override: false });
+  };
+
+  // Wave 9 P0-5 sub-PR E: extracted check-in submission so it can be
+  // re-invoked after a staffed-station operator confirms an override
+  // on the ratio_blocked modal. The override flag adds the
+  // X-Ratio-Override header; the route only honors it from a staffed
+  // station (self-service can't override).
+  const submitCheckIn = async (
+    childIds: string[],
+    opts: { override: boolean },
+  ): Promise<void> => {
     try {
       const res = await kioskFetch("/api/checkin/checkin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(opts.override ? { "X-Ratio-Override": "true" } : {}),
+        },
         body: JSON.stringify({
           church_id: churchId,
           household_id: household!.household.id,
           child_ids: childIds,
           station_id: stationId,
-          service_date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })(),
+          service_date: (() => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          })(),
           service_id: selectedServiceId || undefined,
           alerts_acknowledged: true,
         }),
@@ -404,6 +454,24 @@ function CheckInKioskInner() {
       }
 
       const result = (await res.json()) as CheckInResult;
+      const blocked = result.ratio_blocked ?? [];
+
+      // Ratio-blocked children present:
+      //  - Staffed kiosk + not-yet-overridden → show override modal
+      //  - Self-service or already-overridden → fall through to success;
+      //    the success screen will surface the partial result.
+      if (blocked.length > 0 && !opts.override && stationType === "staffed") {
+        setRatioPrompt({ childIds, blocked });
+        return;
+      }
+      if (blocked.length > 0 && stationType === "self_service") {
+        // Self-service can't override; we still complete the partial
+        // success but inform the operator via a banner on the
+        // success screen (the next sub-PR / W10-1 work can add
+        // dedicated copy here; v1 keeps it simple).
+        setSelfServiceBlockedBanner(true);
+      }
+
       setCheckInResult(result);
       setScreen("success");
     } catch {
@@ -678,6 +746,98 @@ function CheckInKioskInner() {
 
       {/* PWA install prompt — only shown when not in standalone mode */}
       {screen === "lookup" && <KioskInstallPrompt />}
+
+      {/* Wave 9 P0-5 sub-PR E: ratio-violation override modal (staffed-station only).
+          Renders when the check-in response surfaced ratio_blocked entries AND
+          this kiosk is a staffed station. Operator chooses an override reason
+          chip + confirms; the re-submitted check-in carries X-Ratio-Override:
+          true, the server emits kiosk.ratio_violation_override audit, and the
+          flow completes. Cancel falls through with the partial result intact. */}
+      {ratioPrompt && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="bg-vc-coral text-white p-5">
+              <h3 className="text-xl font-bold font-display">
+                Room over ratio
+              </h3>
+              <p className="text-sm opacity-95 mt-1">
+                {ratioPrompt.blocked.length} child
+                {ratioPrompt.blocked.length === 1 ? "" : "ren"} can&rsquo;t
+                check in under the current ratio policy.
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-lg bg-vc-bg-warm p-3 max-h-40 overflow-y-auto">
+                {ratioPrompt.blocked.map((b) => (
+                  <p key={b.child_id} className="text-sm text-vc-indigo mb-1">
+                    • {b.ratio.message}
+                  </p>
+                ))}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-vc-indigo mb-2">
+                  Override reason (required)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {["Late volunteer", "Service starting", "Other"].map(
+                    (chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setOverrideReason(chip)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
+                          overrideReason === chip
+                            ? "bg-vc-coral text-white"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {chip}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Override emits an audit log entry tied to this kiosk and the
+                affected children. Staff are responsible for two-deep
+                coverage when overriding.
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-100 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRatioPrompt(null);
+                  setOverrideReason(null);
+                  // Surface the partial result that the server returned —
+                  // successful sessions will still show on success screen.
+                  setScreen("success");
+                }}
+                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!overrideReason}
+                onClick={async () => {
+                  const childIds = ratioPrompt.childIds;
+                  setRatioPrompt(null);
+                  setOverrideReason(null);
+                  await submitCheckIn(childIds, { override: true });
+                }}
+                className="px-4 py-3 rounded-lg text-sm font-bold text-white bg-vc-coral disabled:opacity-40 disabled:cursor-not-allowed hover:bg-vc-coral/90 min-h-[44px]"
+              >
+                Override &amp; check in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Settings sheet — slide-up panel */}
       {showSettings && (
