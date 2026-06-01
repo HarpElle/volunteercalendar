@@ -494,6 +494,34 @@ export interface ConditionalRole {
 
 // --- Households ---
 
+/**
+ * Wave 10 W10-5A: per-household Apple/Google Wallet pass record.
+ *
+ * Stored at `churches/{churchId}/wallet_passes/{household_id}`. We
+ * use household_id as both the doc id AND the Apple pass
+ * `serialNumber` so re-downloads replace the previous pass in the
+ * user's wallet instead of stacking duplicates.
+ *
+ * `auth_token` is the Apple PassKit `authenticationToken` — a
+ * random per-household secret that would be sent on
+ * pass-update web-service calls IF we wired remote updates. We
+ * generate one upfront so the schema is forward-compatible; in v1
+ * no updates are pushed, so the token sits dormant.
+ *
+ * `last_downloaded_at` is updated each time the pass is built
+ * (post-audit). Lets compliance / support see "this household has
+ * an active wallet pass" without scanning the audit log.
+ */
+export interface WalletPass {
+  id: string; // matches household_id
+  church_id: string;
+  household_id: string;
+  auth_token: string;
+  created_at: string;
+  last_downloaded_at: string;
+  download_count: number;
+}
+
 export interface Household {
   id: string;
   church_id: string;
