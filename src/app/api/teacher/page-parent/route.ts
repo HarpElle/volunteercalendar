@@ -44,6 +44,7 @@ import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
 import { sendSms } from "@/lib/services/sms";
 import { audit, userActor } from "@/lib/server/audit";
+import { normalizePhone } from "@/lib/utils/phone";
 import { log } from "@/lib/log";
 import type {
   CheckInSession,
@@ -110,6 +111,18 @@ export async function POST(req: NextRequest) {
     const uid = await authUid(req);
     if (uid instanceof NextResponse) return uid;
 
+    // CRITICAL: call requireModuleTier BEFORE consuming the body.
+    // The helper does `req.clone().json()` internally; cloning AFTER
+    // the original stream has been read yields a clone with an
+    // already-consumed stream, so the tier helper returns
+    // "Missing church_id" even when the body has it. Codex W10-3
+    // finding 1.
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+
     const body = (await req.json().catch(() => ({}))) as PostBody;
     const churchId =
       typeof body.church_id === "string" ? body.church_id.trim() : "";
@@ -128,12 +141,6 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-
-    const gate = await requireModuleTier(req, "checkin", {
-      churchIdFrom: "body",
-      allowAnonymous: true,
-    });
-    if (!gate.ok) return gate.response;
 
     const churchRef = adminDb.collection("churches").doc(churchId);
 
@@ -206,13 +213,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Build recipient list: primary guardian phone + present_recipients.
+    // Dedup via shared normalizePhone (strips formatting AND leading US
+    // country code "1") so +15551110001 and (555) 111-0001 collapse to
+    // a single recipient. Codex W10-3 finding 2.
     const primaryPhone = await loadHouseholdPhone(churchRef, session.household_id);
-    const dedup = (p: string | null | undefined) =>
-      p ? p.replace(/[^0-9+]/g, "") : "";
     const sendTo: string[] = [];
     const seen = new Set<string>();
     if (primaryPhone) {
-      const norm = dedup(primaryPhone);
+      const norm = normalizePhone(primaryPhone);
       if (norm) {
         seen.add(norm);
         sendTo.push(primaryPhone);
@@ -220,7 +228,7 @@ export async function POST(req: NextRequest) {
     }
     for (const r of session.present_recipients ?? []) {
       if (!r.phone) continue;
-      const norm = dedup(r.phone);
+      const norm = normalizePhone(r.phone);
       if (!norm || seen.has(norm)) continue;
       seen.add(norm);
       sendTo.push(r.phone);
@@ -268,6 +276,10 @@ export async function POST(req: NextRequest) {
       target_type: "checkin_session",
       target_id: sessionId,
       metadata: {
+        // Duplicated from target_id for query convenience (audit
+        // queries that filter on metadata.session_id; Codex W10-3
+        // finding 3).
+        session_id: sessionId,
         room_id: session.room_id,
         child_id: session.child_id,
         recipients_count: sendTo.length,
