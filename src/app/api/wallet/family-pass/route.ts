@@ -179,7 +179,28 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    // Capture the actual error message in the audit metadata so a
+    // future "Could not build wallet pass" failure can be diagnosed
+    // from audit_logs without needing to dig through Sentry. Codex
+    // W10-5A retest was blocked by exactly this gap — the public
+    // response stays generic for safety but we record what really
+    // broke. `outcome: "failed"` is distinct from the "denied"
+    // outcome we use for bad signatures.
+    const errMsg = error instanceof Error ? error.message : String(error);
     log.error("[GET /api/wallet/family-pass]", error);
+    void audit({
+      church_id: churchId,
+      actor: SYSTEM_ACTOR,
+      action: "wallet.family_pass_generated",
+      target_type: "household",
+      target_id: householdId,
+      metadata: {
+        error_message: errMsg.slice(0, 500),
+        error_name:
+          error instanceof Error ? error.constructor.name : "Unknown",
+      },
+      outcome: "failed",
+    });
     return NextResponse.json(
       { error: "Could not build wallet pass" },
       { status: 500 },

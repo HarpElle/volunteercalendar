@@ -202,8 +202,19 @@ export async function buildFamilyPassBuffer(
   const { passTypeIdentifier, teamIdentifier, certs } = getCertsFromEnv();
   const props = buildPassProps(input, passTypeIdentifier, teamIdentifier);
 
+  // CRITICAL: the third constructor arg `OverridablePassProps` is
+  // `Omit<PassProps, "barcodes" | "generic" | "boardingPass" | ...>`
+  // — passing `generic` or `barcodes` there gets rejected at
+  // runtime by Joi validation with a generic "Could not build
+  // wallet pass" 500.
+  //
+  // The supported pattern is to put the FULL pass.json as a buffer
+  // alongside the icons/logos; passkit-generator parses + validates
+  // it (incl. the per-type fields and barcodes), then signs.
+  // (See passkit-generator README "Buffer Model" example.)
   const pass = new PKPass(
     {
+      "pass.json": Buffer.from(JSON.stringify(props), "utf8"),
       "icon.png": Buffer.from(ICON_PNG_BASE64, "base64"),
       "icon@2x.png": Buffer.from(ICON_2X_PNG_BASE64, "base64"),
       "icon@3x.png": Buffer.from(ICON_3X_PNG_BASE64, "base64"),
@@ -211,7 +222,6 @@ export async function buildFamilyPassBuffer(
       "logo@2x.png": Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
     },
     certs,
-    props,
   );
 
   return pass.getAsBuffer();
