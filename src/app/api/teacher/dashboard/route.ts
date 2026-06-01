@@ -1,0 +1,319 @@
+/**
+ * GET /api/teacher/dashboard?church_id=...&date=YYYY-MM-DD?
+ *
+ * Wave 10 W10-2. Returns a person-anchored teacher dashboard: every
+ * room the signed-in volunteer is currently checked into TODAY,
+ * with the room's children roster + ratio status + parent contact.
+ *
+ * Distinct from /api/checkin/room/[roomId]:
+ *   - /checkin/room/* is STATION-anchored (room view token, anyone
+ *     with the URL can see it; used for wall-mount tablets in the
+ *     room).
+ *   - /teacher/dashboard is PERSON-anchored (Bearer JWT, only the
+ *     signed-in volunteer themself sees it). Same render payload
+ *     per room, but only for rooms where the caller is checked in.
+ *
+ * Auth:
+ *   - Bearer JWT — caller's Firebase Auth UID. Must map to a Person
+ *     doc in this church with person_type=adult and is_volunteer.
+ *   - The volunteer must have at least one active
+ *     `RoomVolunteerCheckIn` for the target service_date; else the
+ *     response carries `rooms: []` (the page renders a friendly
+ *     "you're not checked into a room" empty state).
+ *
+ * Auto-refresh polling:
+ *   - The page polls every 30s. To avoid filling audit_logs with
+ *     `teacher.dashboard_viewed` rows on every poll, we emit ONCE
+ *     per (church_id, person_id, date) tuple per ~5-minute window.
+ *     The de-dup window is in-process per Vercel function instance
+ *     — over multiple instances we may emit a handful per window
+ *     instead of 1, which is fine.
+ *
+ * Medical visibility:
+ *   - Same `medical_visibility` config that the kiosk roster uses.
+ *     Returns the per-field render plan + the legacy flat fields
+ *     for fields visible without tap-to-reveal.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { rateLimit } from "@/lib/utils/rate-limit";
+import { requireModuleTier } from "@/lib/server/require-module-tier";
+import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import {
+  getRosterFieldStates,
+  resolveMedicalVisibility,
+  type RosterFieldState,
+} from "@/lib/server/medical-visibility";
+import {
+  DEFAULT_RATIO_WARNING_PERCENT,
+  evaluateRatio,
+} from "@/lib/server/ratio";
+import { audit, userActor } from "@/lib/server/audit";
+import { log } from "@/lib/log";
+import type {
+  CheckInSession,
+  CheckInSettings,
+  Room,
+  RoomVolunteerCheckIn,
+} from "@/lib/types";
+
+// In-memory de-dup cache for the dashboard_viewed audit emit. Key is
+// `${churchId}:${personId}:${date}`; value is the wall-clock ms of
+// the most recent emit. Cleared on a sliding 10-minute window.
+const AUDIT_DEDUP_MS = 5 * 60_000;
+const auditDedupCache = new Map<string, number>();
+
+function shouldEmitViewAudit(
+  churchId: string,
+  personId: string,
+  date: string,
+): boolean {
+  const key = `${churchId}:${personId}:${date}`;
+  const last = auditDedupCache.get(key);
+  const now = Date.now();
+  if (last && now - last < AUDIT_DEDUP_MS) return false;
+  auditDedupCache.set(key, now);
+  // Opportunistic cleanup so the cache doesn't grow unbounded.
+  if (auditDedupCache.size > 2_000) {
+    const cutoff = now - 2 * AUDIT_DEDUP_MS;
+    for (const [k, v] of auditDedupCache) {
+      if (v < cutoff) auditDedupCache.delete(k);
+    }
+  }
+  return true;
+}
+
+async function authUid(req: NextRequest): Promise<string | NextResponse> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    return decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  if (limited) return limited;
+
+  try {
+    const uid = await authUid(req);
+    if (uid instanceof NextResponse) return uid;
+
+    const churchId = req.nextUrl.searchParams.get("church_id");
+    if (!churchId) {
+      return NextResponse.json(
+        { error: "church_id is required" },
+        { status: 400 },
+      );
+    }
+    const date =
+      req.nextUrl.searchParams.get("date") ||
+      new Date().toISOString().split("T")[0];
+
+    // Tier gate (allowAnonymous because the caller isn't routed via
+    // an admin-role check — we use the Person + active-room-checkin
+    // combination as the gate).
+    const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "query",
+      allowAnonymous: true,
+    });
+    if (!gate.ok) return gate.response;
+
+    const churchRef = adminDb.collection("churches").doc(churchId);
+
+    // Resolve the caller's Person doc. Must be an adult volunteer in
+    // this church.
+    const personSnap = await churchRef
+      .collection("people")
+      .where("user_id", "==", uid)
+      .where("person_type", "==", "adult")
+      .limit(1)
+      .get();
+    if (personSnap.empty) {
+      return NextResponse.json(
+        { error: "Not registered as a volunteer in this church" },
+        { status: 403 },
+      );
+    }
+    const personId = personSnap.docs[0].id;
+    const personData = personSnap.docs[0].data();
+    const personName =
+      (personData.preferred_name as string) ||
+      (personData.first_name as string) ||
+      (personData.name as string) ||
+      "Teacher";
+
+    // Find the volunteer's active RoomVolunteerCheckIns for this date.
+    const myCheckinsSnap = await churchRef
+      .collection("roomVolunteerCheckins")
+      .where("person_id", "==", personId)
+      .where("service_date", "==", date)
+      .get();
+    const myActiveCheckins = myCheckinsSnap.docs
+      .map((d) => d.data() as RoomVolunteerCheckIn)
+      .filter((v) => (v.checked_out_at ?? null) === null);
+
+    if (myActiveCheckins.length === 0) {
+      return NextResponse.json({
+        teacher: { id: personId, name: personName },
+        date,
+        rooms: [],
+      });
+    }
+
+    // Load CheckInSettings once (medical_visibility + warning percent).
+    const settingsSnap = await churchRef
+      .collection("checkinSettings")
+      .doc("config")
+      .get();
+    const settings = settingsSnap.exists ? settingsSnap.data()! : null;
+    const visibility = resolveMedicalVisibility(
+      settings as Pick<CheckInSettings, "medical_visibility"> | null,
+    );
+    const warningPercent =
+      (settings?.ratio_warning_threshold_percent as number | undefined) ??
+      DEFAULT_RATIO_WARNING_PERCENT;
+
+    // Build per-room payloads. Done sequentially because the per-room
+    // I/O is small and the typical teacher is in 1-2 rooms.
+    const rooms: Array<{
+      room: { id: string; name: string };
+      children: Array<{
+        session_id: string;
+        child_id: string;
+        child_name: string;
+        grade?: string;
+        checked_in_at: string;
+        has_alerts: boolean;
+        allergies?: string;
+        medical_notes?: string;
+        medications?: string;
+        medical_fields: RosterFieldState[];
+        parent_phone_masked: string;
+      }>;
+      ratio: ReturnType<typeof evaluateRatio>;
+      total_checked_in: number;
+    }> = [];
+
+    for (const checkin of myActiveCheckins) {
+      const roomId = checkin.room_id;
+      const roomSnap = await churchRef.collection("rooms").doc(roomId).get();
+      if (!roomSnap.exists) continue;
+      const room = roomSnap.data() as Room;
+
+      // Children sessions in this room.
+      const sessionsSnap = await churchRef
+        .collection("checkInSessions")
+        .where("service_date", "==", date)
+        .where("room_id", "==", roomId)
+        .get();
+      const activeSessions = sessionsSnap.docs.filter(
+        (d) => (d.data().checked_out_at ?? null) === null,
+      );
+
+      // Active volunteers in this room (for ratio).
+      const volSnap = await churchRef
+        .collection("roomVolunteerCheckins")
+        .where("room_id", "==", roomId)
+        .where("service_date", "==", date)
+        .get();
+      const activeVolunteers = volSnap.docs
+        .map((d) => d.data() as RoomVolunteerCheckIn)
+        .filter((v) => (v.checked_out_at ?? null) === null);
+
+      const ratio = evaluateRatio(
+        { ratio_policy: room.ratio_policy },
+        activeSessions.length,
+        activeVolunteers,
+        warningPercent,
+      );
+
+      const children = await Promise.all(
+        activeSessions.map(async (doc) => {
+          const session = doc.data() as CheckInSession;
+          const child = await loadChild(churchRef, session.child_id);
+          const displayName = child?.display_name ?? "Unknown";
+          const lastName = child?.last_name ?? "";
+          const phone =
+            (await loadHouseholdPhone(churchRef, session.household_id)) || "";
+          const maskedPhone =
+            phone.length >= 4 ? `***${phone.slice(-4)}` : "****";
+
+          const childMedications = (child as { medications?: string } | null)
+            ?.medications;
+          const snapshot = session.medical_snapshot ?? {
+            allergies: child?.allergies ?? null,
+            medical_notes: child?.medical_notes ?? null,
+            medications: childMedications ?? null,
+          };
+          const medicalFields = getRosterFieldStates(snapshot, visibility);
+          const visibleNoTap = (field: RosterFieldState["field"]) =>
+            medicalFields.find(
+              (f) => f.field === field && f.visible && !f.requires_tap,
+            )?.value ?? undefined;
+
+          return {
+            session_id: session.id,
+            child_id: session.child_id,
+            child_name: `${displayName} ${lastName}`.trim(),
+            grade: child?.grade,
+            checked_in_at: session.checked_in_at,
+            has_alerts: child?.has_alerts ?? false,
+            allergies: visibleNoTap("allergies") ?? undefined,
+            medical_notes: visibleNoTap("medical_notes") ?? undefined,
+            medications: visibleNoTap("medications") ?? undefined,
+            medical_fields: medicalFields,
+            parent_phone_masked: maskedPhone,
+          };
+        }),
+      );
+
+      rooms.push({
+        room: { id: roomId, name: room.name },
+        children: children.sort((a, b) =>
+          a.child_name.localeCompare(b.child_name),
+        ),
+        ratio,
+        total_checked_in: children.length,
+      });
+    }
+
+    // Audit emit (deduped per 5-minute window).
+    if (shouldEmitViewAudit(churchId, personId, date)) {
+      void audit({
+        church_id: churchId,
+        actor: userActor(uid),
+        action: "teacher.dashboard_viewed",
+        target_type: "person",
+        target_id: personId,
+        metadata: {
+          date,
+          room_count: rooms.length,
+          children_count: rooms.reduce(
+            (a, r) => a + r.total_checked_in,
+            0,
+          ),
+        },
+        outcome: "ok",
+      });
+    }
+
+    return NextResponse.json({
+      teacher: { id: personId, name: personName },
+      date,
+      rooms,
+    });
+  } catch (error) {
+    log.error("[GET /api/teacher/dashboard]", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}

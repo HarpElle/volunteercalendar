@@ -132,6 +132,16 @@ export type AuditAction =
    * session doc — important for audit-trail surveys.
    */
   | "kiosk.recipients_selected"
+  /**
+   * Wave 10 W10-2: a checked-in volunteer loaded their personal
+   * teacher dashboard. Captures who-saw-what-and-when on the
+   * children's data surface; complements the kiosk-side
+   * `kiosk.medical_data_revealed` for the person-anchored path.
+   * Fires at most once per dashboard fetch (the page auto-refreshes
+   * but we de-duplicate via a short server-side cache to avoid
+   * filling audit_logs with poll noise).
+   */
+  | "teacher.dashboard_viewed"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
