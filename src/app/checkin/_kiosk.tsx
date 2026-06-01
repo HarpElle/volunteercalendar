@@ -14,6 +14,7 @@ import {
 import { FamilyLookup } from "@/components/checkin/family-lookup";
 import { ChildSelection } from "@/components/checkin/child-selection";
 import { AllergyConfirm } from "@/components/checkin/allergy-confirm";
+import { RecipientSelection } from "@/components/checkin/recipient-selection";
 import { CheckInSuccess } from "@/components/checkin/checkin-success";
 import { VisitorRegistration } from "@/components/checkin/visitor-registration";
 import { CheckoutEntry, type CheckoutResult } from "@/components/checkin/checkout-entry";
@@ -91,7 +92,30 @@ interface ServiceOption {
   is_current: boolean;
 }
 
-type KioskScreen = "lookup" | "register" | "select" | "confirm" | "success" | "checkout-enter" | "checkout-success" | "printer-setup";
+/** Wave 10 W10-1: shape sent to /api/checkin/checkin as
+ *  `present_recipients`. Matches the body the server normalizer
+ *  expects. */
+interface PresentRecipient {
+  id: string;
+  name: string;
+  phone: string | null;
+  source: "household_adult" | "authorized_pickup" | "manual";
+  ref_id?: string;
+}
+
+type KioskScreen =
+  | "lookup"
+  | "register"
+  | "select"
+  | "confirm"
+  // Wave 10 W10-1: between confirm + success — operator picks who's
+  // here to pick up; the SMS fans out to primary + selected with the
+  // recipient list embedded in the body.
+  | "recipients"
+  | "success"
+  | "checkout-enter"
+  | "checkout-success"
+  | "printer-setup";
 type KioskMode = "checkin" | "checkout";
 
 const INACTIVITY_TIMEOUT = 30_000; // 30 seconds
@@ -241,6 +265,13 @@ function CheckInKioskInner() {
   // a future PR — current server route doesn't parse reason from body
   // yet, but capturing it locally future-proofs the UX).
   const [overrideReason, setOverrideReason] = useState<string | null>(null);
+  // Wave 10 W10-1 sub-PR B: recipient selection captured between the
+  // allergy confirmation screen and the check-in submit. Carried
+  // through any subsequent ratio-override retry so a staffed override
+  // doesn't lose the SMS audience.
+  const [pendingRecipients, setPendingRecipients] = useState<
+    PresentRecipient[] | null
+  >(null);
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -285,6 +316,8 @@ function CheckInKioskInner() {
     setCheckInResult(null);
     setCheckoutResult(null);
     setError("");
+    // Wave 10 W10-1: clear recipient selection between sessions
+    setPendingRecipients(null);
   }, [mode]);
 
   // Toggle between check-in and checkout modes
@@ -297,6 +330,7 @@ function CheckInKioskInner() {
     setCheckInResult(null);
     setCheckoutResult(null);
     setError("");
+    setPendingRecipients(null);
   }, [mode]);
 
   // Activity tracker — resets 30s inactivity timer
@@ -406,15 +440,39 @@ function CheckInKioskInner() {
     setScreen("confirm");
   };
 
+  // Wave 10 W10-1 sub-PR B: after allergy confirmation, advance to
+  // the recipient selection screen instead of submitting check-in
+  // immediately. submitCheckIn now accepts the present_recipients
+  // captured on that screen.
   const handleAllergyConfirmed = () => {
-    doCheckIn(selectedChildIds);
+    onActivity();
+    setScreen("recipients");
+  };
+
+  const handleRecipientsConfirmed = async (
+    recipients: PresentRecipient[],
+  ) => {
+    onActivity();
+    setError("");
+    // Carry the selection through the ratio-override retry path too,
+    // in case the staffed-station override modal fires after this.
+    setPendingRecipients(recipients);
+    await submitCheckIn(selectedChildIds, {
+      override: false,
+      recipients,
+    });
   };
 
   const doCheckIn = async (childIds: string[]) => {
+    // Retained for the override-modal retry path; recipients come
+    // from `pendingRecipients` (set when the user passed the
+    // recipients screen, if applicable).
     onActivity();
     setError("");
-
-    await submitCheckIn(childIds, { override: false });
+    await submitCheckIn(childIds, {
+      override: false,
+      recipients: pendingRecipients ?? undefined,
+    });
   };
 
   // Wave 9 P0-5 sub-PR E: extracted check-in submission so it can be
@@ -422,9 +480,13 @@ function CheckInKioskInner() {
   // on the ratio_blocked modal. The override flag adds the
   // X-Ratio-Override header; the route only honors it from a staffed
   // station (self-service can't override).
+  //
+  // Wave 10 W10-1 sub-PR B: also accepts `recipients` which becomes
+  // the body's `present_recipients` — server fans out SMS to primary
+  // + each recipient with the recipient list embedded.
   const submitCheckIn = async (
     childIds: string[],
-    opts: { override: boolean },
+    opts: { override: boolean; recipients?: PresentRecipient[] },
   ): Promise<void> => {
     try {
       const res = await kioskFetch("/api/checkin/checkin", {
@@ -444,6 +506,9 @@ function CheckInKioskInner() {
           })(),
           service_id: selectedServiceId || undefined,
           alerts_acknowledged: true,
+          ...(opts.recipients && opts.recipients.length > 0
+            ? { present_recipients: opts.recipients }
+            : {}),
         }),
       });
 
@@ -674,6 +739,31 @@ function CheckInKioskInner() {
             setScreen("select");
             onActivity();
           }}
+          onActivity={onActivity}
+        />
+      )}
+
+      {/* Wave 10 W10-1 sub-PR B: recipient selection step between
+          allergy confirmation and final check-in submit. Renders a
+          list of household adults + authorized pickups; operator
+          taps to select who's here today; SMS fans out to those +
+          the primary guardian. */}
+      {screen === "recipients" && household && (
+        <RecipientSelection
+          churchId={churchId}
+          householdId={household.household.id}
+          childIds={selectedChildIds}
+          childNameById={Object.fromEntries(
+            household.children.map((c) => [
+              c.id,
+              c.preferred_name || c.first_name,
+            ]),
+          )}
+          onBack={() => {
+            setScreen("confirm");
+            onActivity();
+          }}
+          onConfirm={handleRecipientsConfirmed}
           onActivity={onActivity}
         />
       )}
