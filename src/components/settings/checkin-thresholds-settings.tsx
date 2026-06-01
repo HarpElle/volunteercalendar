@@ -27,6 +27,14 @@ export function CheckinThresholdsSettings({
     // with ratio_policy.enabled. Defaults to 90 — match
     // DEFAULT_RATIO_WARNING_PERCENT from @/lib/server/ratio.
     ratio_warning_threshold_percent: 90,
+    // Wave 10 W10-R: how the child's name renders on the printed
+    // sticker. Default is the privacy-aware "first_name_last_initial"
+    // ("Sarah J."); admins can opt back to the legacy "first_and_last"
+    // if they need the full name on the label.
+    label_content_format: "first_name_last_initial" as
+      | "first_name_last_initial"
+      | "first_name"
+      | "first_and_last",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,6 +67,12 @@ export function CheckinThresholdsSettings({
               typeof data.ratio_warning_threshold_percent === "number"
                 ? data.ratio_warning_threshold_percent
                 : 90,
+            label_content_format:
+              data.label_content_format === "first_name" ||
+              data.label_content_format === "first_and_last" ||
+              data.label_content_format === "first_name_last_initial"
+                ? data.label_content_format
+                : "first_name_last_initial",
           });
         }
       } catch {
@@ -197,6 +211,66 @@ export function CheckinThresholdsSettings({
               (block at violation only).
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* Wave 10 W10-R: sticker name format */}
+      <section className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-6">
+        <h2 className="mb-1 font-display text-lg text-vc-indigo">
+          Sticker name format
+        </h2>
+        <p className="mb-4 text-sm text-vc-text-secondary">
+          How a child&rsquo;s name is printed on the kiosk sticker. The
+          sticker travels with the child once they leave the kiosk;
+          full-name stickers are a stranger-risk surface. The recommended
+          default keeps verification utility (&ldquo;which Sarah?&rdquo;
+          → &ldquo;Sarah J.&rdquo;) while limiting public disclosure.
+        </p>
+        <div className="space-y-2">
+          {(
+            [
+              {
+                value: "first_name_last_initial",
+                label: "First name + last initial (recommended)",
+                example: "Sarah J.",
+              },
+              {
+                value: "first_name",
+                label: "First name only",
+                example: "Sarah",
+              },
+              {
+                value: "first_and_last",
+                label: "First and last name",
+                example: "Sarah Johnson",
+              },
+            ] as const
+          ).map((opt) => (
+            <label
+              key={opt.value}
+              className="flex items-start gap-3 rounded-lg border border-transparent px-3 py-2 hover:border-vc-border-light"
+            >
+              <input
+                type="radio"
+                name="label_content_format"
+                value={opt.value}
+                checked={thresholds.label_content_format === opt.value}
+                onChange={() =>
+                  setThresholds((t) => ({
+                    ...t,
+                    label_content_format: opt.value,
+                  }))
+                }
+                className="mt-1 h-4 w-4 accent-vc-coral"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-vc-text">{opt.label}</p>
+                <p className="text-xs text-vc-text-muted">
+                  Renders as “{opt.example}”
+                </p>
+              </div>
+            </label>
+          ))}
         </div>
       </section>
 

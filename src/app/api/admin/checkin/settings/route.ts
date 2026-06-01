@@ -98,6 +98,10 @@ export async function PUT(req: NextRequest) {
       // Clamped in code; the kiosk gate also falls through to the
       // DEFAULT_RATIO_WARNING_PERCENT (90) when absent.
       "ratio_warning_threshold_percent",
+      // Wave 10 W10-R: how the child's name renders on the printed
+      // sticker. One of "first_name_last_initial" (default),
+      // "first_name", "first_and_last". Validated below.
+      "label_content_format",
     ];
 
     const updates: Record<string, unknown> = {
@@ -145,6 +149,29 @@ export async function PUT(req: NextRequest) {
             .filter((e): e is { name: string; phone: string; role: string | null } => e !== null)
         : [];
       updates.emergency_notification_numbers = cleaned;
+    }
+
+    // Wave 10 W10-R: label_content_format whitelist. Reject unknown
+    // values so a typo can't silently revert behavior to a default
+    // the admin didn't intend.
+    if ("label_content_format" in updates) {
+      const v = updates.label_content_format;
+      if (v === null || v === undefined) {
+        // Explicit clear → revert to default rendering.
+        updates.label_content_format = null;
+      } else if (
+        v !== "first_name_last_initial" &&
+        v !== "first_name" &&
+        v !== "first_and_last"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "label_content_format must be 'first_name_last_initial', 'first_name', or 'first_and_last'",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // Wave 9 P0-4: medical_visibility shape validation. Reject any
