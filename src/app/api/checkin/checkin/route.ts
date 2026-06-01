@@ -175,7 +175,18 @@ export async function POST(req: NextRequest) {
     //   up below when the first violation hits, then cached.
     const ratioOverrideHeader =
       req.headers.get("x-ratio-override")?.trim() === "true";
-    const ratioBlocked: Array<{ child_id: string; ratio: RatioEvaluation }> = [];
+    // Codex P0-5C Sev 4: response carries the same blocked_reason
+    // string that the audit row metadata gets. Lets kiosk UI render
+    // distinct copy for the three reasons without re-deriving from
+    // the message.
+    const ratioBlocked: Array<{
+      child_id: string;
+      ratio: RatioEvaluation;
+      blocked_reason:
+        | "no_override"
+        | "self_service_station_cannot_override"
+        | "race_detected";
+    }> = [];
     const ratioByRoom = new Map<
       string,
       {
@@ -256,14 +267,19 @@ export async function POST(req: NextRequest) {
 
       // Check room capacity + auto-redirect to overflow if available
       if (roomId && roomCapacity) {
-        const currentCount = await churchRef
+        // Codex P0-5C: no .where("checked_out_at", "==", null)
+        // because Firestore null-equality doesn't match missing
+        // fields. In-process filter is defense-in-depth even for
+        // legacy sessions created before this commit added the
+        // explicit `null` write on creation.
+        const capacitySnap = await churchRef
           .collection("checkInSessions")
           .where("service_date", "==", service_date)
           .where("room_id", "==", roomId)
-          .where("checked_out_at", "==", null)
-          .count()
           .get();
-        const count = currentCount.data().count;
+        const count = capacitySnap.docs.filter(
+          (d) => (d.data().checked_out_at ?? null) === null,
+        ).length;
 
         if (count >= roomCapacity) {
           // Auto-redirect to overflow room if configured
@@ -321,13 +337,17 @@ export async function POST(req: NextRequest) {
             ? (finalRoomSnap.data() as Room)
             : null;
           if (finalRoomDoc?.ratio_policy?.enabled) {
-            const baseCountSnap = await churchRef
+            // Codex P0-5C: same pattern — no .where(checked_out_at,null);
+            // count via in-process filter to tolerate any legacy
+            // sessions missing the explicit null.
+            const baseSessionsSnap = await churchRef
               .collection("checkInSessions")
               .where("service_date", "==", service_date)
               .where("room_id", "==", roomId)
-              .where("checked_out_at", "==", null)
-              .count()
               .get();
+            const baseChildCount = baseSessionsSnap.docs.filter(
+              (d) => (d.data().checked_out_at ?? null) === null,
+            ).length;
             const volSnap = await churchRef
               .collection("roomVolunteerCheckins")
               .where("room_id", "==", roomId)
@@ -338,7 +358,7 @@ export async function POST(req: NextRequest) {
               .filter((v) => (v.checked_out_at ?? null) === null);
             ratioState = {
               roomDoc: { ratio_policy: finalRoomDoc.ratio_policy },
-              baseChildCount: baseCountSnap.data().count,
+              baseChildCount,
               volunteers: activeVolunteers,
             };
             ratioByRoom.set(roomId, ratioState);
@@ -388,7 +408,15 @@ export async function POST(req: NextRequest) {
 
             const overrideAllowed = ratioOverrideHeader && stationIsStaffed;
             if (!overrideAllowed) {
-              ratioBlocked.push({ child_id: childId, ratio });
+              const blockedReason: "self_service_station_cannot_override" | "no_override" =
+                ratioOverrideHeader
+                  ? "self_service_station_cannot_override"
+                  : "no_override";
+              ratioBlocked.push({
+                child_id: childId,
+                ratio,
+                blocked_reason: blockedReason,
+              });
               void audit({
                 church_id,
                 actor: kiosk.station_id
@@ -401,9 +429,7 @@ export async function POST(req: NextRequest) {
                   room_id: roomId,
                   service_date,
                   ratio_status: "violation",
-                  blocked_reason: ratioOverrideHeader
-                    ? "self_service_station_cannot_override"
-                    : "no_override",
+                  blocked_reason: blockedReason,
                   ratio_message: ratio.message,
                 },
                 outcome: "denied",
@@ -490,6 +516,18 @@ export async function POST(req: NextRequest) {
         security_code: securityCode,
         security_code_expires_at: expiresAt.toISOString(),
         checked_in_at: now.toISOString(),
+        // Codex P0-5C race-of-race-fix root cause: Firestore
+        // `where('checked_out_at', '==', null)` ONLY matches docs
+        // that HAVE the field set to null — docs where the field is
+        // absent are excluded. Pre-fix, this code created sessions
+        // WITHOUT checked_out_at, so the live-count queries
+        // returned 0 even when active sessions existed. The race-
+        // detect tx therefore never saw a violation; final count
+        // 9/6 observed by Codex. Writing the field explicitly on
+        // creation makes the queries match correctly. (The 4 query
+        // sites are also switched to no-filter + in-process filtering
+        // as defense-in-depth for any legacy session docs.)
+        checked_out_at: null,
         pre_checked_in: false,
         alerts_acknowledged: !!alerts_acknowledged,
         ...(child.has_alerts
@@ -570,20 +608,24 @@ export async function POST(req: NextRequest) {
 
           // Phase 1B: read live child count INSIDE the tx so a retry
           // sees the winner's session.
+          // Codex P0-5C: same fix — drop the where(checked_out_at,null)
+          // filter (Firestore null-equality doesn't match missing
+          // fields, so the prior query returned 0 sessions even when
+          // active sessions existed — observed by Codex as final
+          // count 9/6). The session-create code now writes the field
+          // explicitly, and the in-process filter is defense for any
+          // legacy session docs.
           const liveSnap = await tx.get(
             churchRef
               .collection("checkInSessions")
               .where("service_date", "==", service_date)
-              .where("room_id", "==", roomId!)
-              .where("checked_out_at", "==", null),
+              .where("room_id", "==", roomId!),
           );
-          // liveSnap reflects committed sessions from prior loop
-          // iterations of THIS batch (each iteration's tx commits
-          // before the next iteration starts) AND any sessions
-          // committed by concurrent batches before our tx began.
-          // No need for the cached `batchAddsByRoom` here — the live
-          // snap is authoritative.
-          const liveCount = liveSnap.size;
+          // liveSnap reflects all sessions (active + checked-out) for
+          // the room+date. Filter in-process for the active count.
+          const liveCount = liveSnap.docs.filter(
+            (d) => (d.data().checked_out_at ?? null) === null,
+          ).length;
           const recheck = canCheckInOneMore(
             ratioState.roomDoc,
             liveCount,
@@ -632,6 +674,7 @@ export async function POST(req: NextRequest) {
         ratioBlocked.push({
           child_id: childId,
           ratio: raceBlockedRatio!,
+          blocked_reason: "race_detected",
         });
         void audit({
           church_id,
