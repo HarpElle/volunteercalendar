@@ -13,7 +13,25 @@ interface RoomData {
   overflow_room_id?: string;
   checkin_view_token?: string;
   is_active: boolean;
+  /** Wave 9 P0-5 sub-PR D: ratio enforcement policy. Undefined or
+   *  `enabled:false` → no enforcement (matches today's behavior). */
+  ratio_policy?: {
+    enabled: boolean;
+    min_volunteers: number;
+    max_children_per_volunteer: number;
+    min_unrelated_adults: number;
+    max_children?: number;
+  };
 }
+
+/** Empty ratio policy for new edits. */
+const EMPTY_RATIO_POLICY = {
+  enabled: false,
+  min_volunteers: 2,
+  max_children_per_volunteer: 6,
+  min_unrelated_adults: 2,
+  max_children: "",
+} as const;
 
 const ALL_GRADES: { value: ChildGrade; label: string }[] = [
   { value: "nursery", label: "Nursery" },
@@ -44,6 +62,20 @@ export default function CheckInRoomsPage() {
   const [editGrades, setEditGrades] = useState<ChildGrade[]>([]);
   const [editCapacity, setEditCapacity] = useState("");
   const [editOverflow, setEditOverflow] = useState("");
+  // Wave 9 P0-5 sub-PR D: ratio policy editor state. max_children
+  // stays a string in form state because it's optional — empty string
+  // means "no hard cap." All other numeric fields use number.
+  const [editRatioEnabled, setEditRatioEnabled] = useState(false);
+  const [editMinVolunteers, setEditMinVolunteers] = useState<number>(
+    EMPTY_RATIO_POLICY.min_volunteers,
+  );
+  const [editMaxPerVol, setEditMaxPerVol] = useState<number>(
+    EMPTY_RATIO_POLICY.max_children_per_volunteer,
+  );
+  const [editMinUnrelated, setEditMinUnrelated] = useState<number>(
+    EMPTY_RATIO_POLICY.min_unrelated_adults,
+  );
+  const [editMaxChildren, setEditMaxChildren] = useState<string>("");
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const fetchRooms = useCallback(async () => {
@@ -74,6 +106,20 @@ export default function CheckInRoomsPage() {
     setEditGrades(room.default_grades || []);
     setEditCapacity(room.capacity?.toString() || "");
     setEditOverflow(room.overflow_room_id || "");
+    // Wave 9 P0-5 sub-PR D: prime ratio policy from existing doc or
+    // sensible defaults (which only take effect when the admin
+    // toggles `enabled` on).
+    const rp = room.ratio_policy;
+    setEditRatioEnabled(rp?.enabled ?? false);
+    setEditMinVolunteers(rp?.min_volunteers ?? EMPTY_RATIO_POLICY.min_volunteers);
+    setEditMaxPerVol(
+      rp?.max_children_per_volunteer ??
+        EMPTY_RATIO_POLICY.max_children_per_volunteer,
+    );
+    setEditMinUnrelated(
+      rp?.min_unrelated_adults ?? EMPTY_RATIO_POLICY.min_unrelated_adults,
+    );
+    setEditMaxChildren(rp?.max_children?.toString() ?? "");
   };
 
   const cancelEdit = () => {
@@ -81,6 +127,11 @@ export default function CheckInRoomsPage() {
     setEditGrades([]);
     setEditCapacity("");
     setEditOverflow("");
+    setEditRatioEnabled(false);
+    setEditMinVolunteers(EMPTY_RATIO_POLICY.min_volunteers);
+    setEditMaxPerVol(EMPTY_RATIO_POLICY.max_children_per_volunteer);
+    setEditMinUnrelated(EMPTY_RATIO_POLICY.min_unrelated_adults);
+    setEditMaxChildren("");
   };
 
   const toggleGrade = (grade: ChildGrade) => {
@@ -106,6 +157,18 @@ export default function CheckInRoomsPage() {
           default_grades: editGrades,
           capacity: editCapacity ? parseInt(editCapacity, 10) : null,
           overflow_room_id: editOverflow || null,
+          // Wave 9 P0-5 sub-PR D: ratio policy. Empty max_children
+          // input → omit the field so it doesn't apply an inadvertent
+          // 0-cap.
+          ratio_policy: {
+            enabled: editRatioEnabled,
+            min_volunteers: editMinVolunteers,
+            max_children_per_volunteer: editMaxPerVol,
+            min_unrelated_adults: editMinUnrelated,
+            ...(editMaxChildren.trim() && !Number.isNaN(parseInt(editMaxChildren, 10))
+              ? { max_children: parseInt(editMaxChildren, 10) }
+              : {}),
+          },
         }),
       });
 
@@ -258,6 +321,20 @@ export default function CheckInRoomsPage() {
                               ?.name || "Unknown"}
                           </span>
                         )}
+                        {/* Wave 9 P0-5 sub-PR D: ratio policy summary */}
+                        {room.ratio_policy?.enabled && (
+                          <span className="px-2 py-1 rounded-full bg-vc-coral/10 text-vc-coral text-xs font-medium">
+                            Ratio: 1:{room.ratio_policy.max_children_per_volunteer}
+                            {" · "}
+                            {room.ratio_policy.min_volunteers}+ volunteers
+                            {room.ratio_policy.min_unrelated_adults > 0
+                              ? ` · ${room.ratio_policy.min_unrelated_adults} unrelated`
+                              : ""}
+                            {room.ratio_policy.max_children
+                              ? ` · cap ${room.ratio_policy.max_children}`
+                              : ""}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <span className="text-sm text-gray-400 italic">
@@ -334,6 +411,109 @@ export default function CheckInRoomsPage() {
                               </option>
                             ))}
                         </select>
+                      </div>
+                    </div>
+
+                    {/* Wave 9 P0-5 sub-PR D: ratio policy editor */}
+                    <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-4">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <label className="block text-sm font-medium text-vc-indigo">
+                          Ratio policy
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editRatioEnabled}
+                            onChange={(e) => setEditRatioEnabled(e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          Enabled
+                        </label>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">
+                        When enabled, the kiosk blocks check-ins that would
+                        exceed the policy and warns at 90% of capacity. The
+                        warning threshold is global (set in Check-In Settings).
+                        Staffed-station operators can override at the kiosk;
+                        self-service stations cannot.
+                      </p>
+                      <div
+                        className={`grid grid-cols-2 gap-3 ${editRatioEnabled ? "" : "opacity-60 pointer-events-none"}`}
+                      >
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Min volunteers
+                          </label>
+                          <input
+                            type="number"
+                            value={editMinVolunteers}
+                            onChange={(e) =>
+                              setEditMinVolunteers(
+                                Math.max(0, parseInt(e.target.value, 10) || 0),
+                              )
+                            }
+                            min={0}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200
+                              focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Max children per volunteer
+                          </label>
+                          <input
+                            type="number"
+                            value={editMaxPerVol}
+                            onChange={(e) =>
+                              setEditMaxPerVol(
+                                Math.max(1, parseInt(e.target.value, 10) || 1),
+                              )
+                            }
+                            min={1}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200
+                              focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Min unrelated adults (two-deep)
+                          </label>
+                          <input
+                            type="number"
+                            value={editMinUnrelated}
+                            onChange={(e) =>
+                              setEditMinUnrelated(
+                                Math.max(0, parseInt(e.target.value, 10) || 0),
+                              )
+                            }
+                            min={0}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200
+                              focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Set to 2 to enforce two-deep leadership. A volunteer related to
+                            another volunteer in the same room (household overlap) doesn&apos;t
+                            count.
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Max children cap (optional)
+                          </label>
+                          <input
+                            type="number"
+                            value={editMaxChildren}
+                            onChange={(e) => setEditMaxChildren(e.target.value)}
+                            placeholder="No cap"
+                            min={1}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200
+                              focus:border-vc-coral focus:ring-1 focus:ring-vc-coral/30 outline-none"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Hard cap regardless of volunteer count. Leave blank to
+                            use ratio alone.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
