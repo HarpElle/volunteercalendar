@@ -6,6 +6,7 @@ import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { audit, kioskActor, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import { normalizePhone } from "@/lib/utils/phone";
 import { timingSafeEqual } from "crypto";
 import type { BlockedPickup, CheckInSession, CheckInAlert } from "@/lib/types";
 
@@ -532,12 +533,13 @@ async function sendGuardianCheckoutSms(
     ?? undefined;
 
   // Dedup phones: primary first, then each recipient with a phone on file.
-  const dedup = (p: string | null | undefined) =>
-    p ? p.replace(/[^0-9+]/g, "") : "";
+  // Uses normalizePhone (strips formatting AND leading US country code "1")
+  // so +15551110001 and (555) 111-0001 collapse to a single recipient.
+  // Consistency with the W10-3 hotfix to /api/teacher/page-parent.
   const sendTo: string[] = [];
   const seen = new Set<string>();
   if (primaryPhone) {
-    const norm = dedup(primaryPhone);
+    const norm = normalizePhone(primaryPhone);
     if (norm) {
       seen.add(norm);
       sendTo.push(primaryPhone);
@@ -545,7 +547,7 @@ async function sendGuardianCheckoutSms(
   }
   for (const r of presentRecipients ?? []) {
     if (!r.phone) continue;
-    const norm = dedup(r.phone);
+    const norm = normalizePhone(r.phone);
     if (!norm || seen.has(norm)) continue;
     seen.add(norm);
     sendTo.push(r.phone);
