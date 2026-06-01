@@ -1245,7 +1245,11 @@ export interface CheckInSession {
   checked_in_at: string;
   checked_in_by_user_id?: string;
   pre_checked_in: boolean;
-  checked_out_at?: string;
+  /** Wave 9 P0-5C: nullable so check-in routes can write `null`
+   *  explicitly. Firestore `where(field, '==', null)` doesn't match
+   *  docs where the field is absent — the explicit-null write makes
+   *  the live-count queries work for race detection. */
+  checked_out_at?: string | null;
   checked_out_by_user_id?: string;
   alerts_acknowledged: boolean;
   /**

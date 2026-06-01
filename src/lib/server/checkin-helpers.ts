@@ -189,14 +189,18 @@ export async function assignRoomByGrade(
     if (!room.capacity) {
       return room;
     }
-    const countSnap = await churchRef
+    // Codex P0-5C: drop where(checked_out_at,null) — Firestore
+    // null-equality skips docs where the field is absent. In-process
+    // filter is defense-in-depth for any legacy session docs.
+    const sessionsSnap = await churchRef
       .collection("checkInSessions")
       .where("service_date", "==", serviceDate)
       .where("room_id", "==", room.id)
-      .where("checked_out_at", "==", null)
-      .count()
       .get();
-    if (countSnap.data().count < room.capacity) {
+    const activeCount = sessionsSnap.docs.filter(
+      (d) => (d.data().checked_out_at ?? null) === null,
+    ).length;
+    if (activeCount < room.capacity) {
       return room;
     }
   }

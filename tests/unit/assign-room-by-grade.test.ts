@@ -76,6 +76,23 @@ function makeFakeChurchRef(rooms: FakeRoomDoc[], sessions: FakeSessionDoc[] = []
               },
             };
           },
+          // Codex P0-5C: assignRoomByGrade now uses .get() + in-process
+          // filter (because Firestore null-equality skips missing-field
+          // docs). Mock returns a snapshot with `docs` array and per-doc
+          // .data() in the shape the production code consumes.
+          async get() {
+            const matched = sessions.filter((s) =>
+              filters.every((f) => {
+                if (f.op !== "==") return true;
+                return (s.data as Record<string, unknown>)[f.field] === f.value;
+              }),
+            );
+            return {
+              docs: matched.map((s) => ({
+                data: () => s.data,
+              })),
+            };
+          },
         };
         return chain;
       }
