@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
       service_date,
       service_id,
       alerts_acknowledged,
+      // Wave 10 W10-1: present pickup recipients selected at the kiosk.
+      // When supplied + non-empty: SMS fans out to primary guardian +
+      // each recipient (dedup'd by phone). When omitted or empty: SMS
+      // falls through to primary guardian only (current behavior).
+      present_recipients,
     } = body as {
       church_id: string;
       household_id: string;
@@ -72,7 +77,51 @@ export async function POST(req: NextRequest) {
       service_date: string;
       service_id?: string;
       alerts_acknowledged?: boolean;
+      present_recipients?: Array<{
+        id?: string;
+        name?: string;
+        phone?: string | null;
+        source?: string;
+        ref_id?: string;
+      }>;
     };
+
+    // Wave 10 W10-1: normalize the present_recipients payload. Drop
+    // entries missing name; preserve null phone (operator might have
+    // tapped a person without an on-file number). The kiosk pre-
+    // validates, but server-side cleanup hardens against tampered
+    // bodies.
+    const ALLOWED_SOURCES = ["household_adult", "authorized_pickup", "manual"] as const;
+    const normalizedRecipients = (() => {
+      if (!Array.isArray(present_recipients)) return undefined;
+      const out: NonNullable<import("@/lib/types").CheckInSession["present_recipients"]> = [];
+      const seenPhones = new Set<string>();
+      for (const r of present_recipients) {
+        const name = typeof r.name === "string" ? r.name.trim() : "";
+        if (!name) continue;
+        const phone =
+          typeof r.phone === "string" && r.phone.trim().length > 0
+            ? r.phone.trim()
+            : null;
+        // Server-side dedup by normalized phone — the kiosk dedups
+        // by id but a manual entry might collide with a list entry
+        // post-tampering.
+        const norm = phone ? phone.replace(/[^0-9+]/g, "") : "";
+        if (norm && seenPhones.has(norm)) continue;
+        if (norm) seenPhones.add(norm);
+        const source =
+          typeof r.source === "string" &&
+          (ALLOWED_SOURCES as readonly string[]).includes(r.source)
+            ? (r.source as (typeof ALLOWED_SOURCES)[number])
+            : "manual";
+        const id = typeof r.id === "string" && r.id.trim().length > 0
+          ? r.id.trim()
+          : `manual:${out.length}`;
+        const refId = typeof r.ref_id === "string" ? r.ref_id : undefined;
+        out.push({ id, name, phone, source, ...(refId ? { ref_id: refId } : {}) });
+      }
+      return out;
+    })();
 
     if (!household_id || !child_ids?.length || !service_date) {
       return NextResponse.json(
@@ -546,6 +595,14 @@ export async function POST(req: NextRequest) {
               },
             }
           : {}),
+        // Wave 10 W10-1: snapshot of present pickup recipients. Each
+        // session in the batch carries the SAME list (the operator's
+        // selection covers the whole household for the day). Checkout
+        // reads it to know who to notify with the pickup-confirmation
+        // SMS.
+        ...(normalizedRecipients && normalizedRecipients.length > 0
+          ? { present_recipients: normalizedRecipients }
+          : {}),
         created_at: now.toISOString(),
       };
 
@@ -791,28 +848,105 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Guardian SMS — fire-and-forget (non-blocking)
-    if (settings?.guardian_sms_on_checkin && guardianPhone) {
+    // Guardian + recipient SMS fan-out (Wave 10 W10-1 extension of
+    // the existing guardian_sms_on_checkin flow). When present_
+    // recipients is populated, the SMS fans out to:
+    //   - the primary guardian (always, even if not in the recipient
+    //     list) so they stay informed
+    //   - each selected recipient with a phone on file
+    //   - deduplicated by normalized phone so a primary who is ALSO
+    //     a selected recipient doesn't get two copies
+    //
+    // The SMS body includes the recipient list so each person sees
+    // who else is authorized today ("Pickup contacts today: Dad,
+    // Mom, Aunt Linda"). When no recipients were selected, behavior
+    // matches the prior single-primary SMS for back-compat.
+    if (settings?.guardian_sms_on_checkin && sessions.length > 0) {
       const roomList = [...new Set(sessions.map((s) => s.room_name))].join(", ");
       const nameList = childNames.join(", ");
-      let smsBody = `${nameList} checked in to ${roomList}. Security code: ${securityCode}`;
 
-      // On first SMS, append vCard download link so guardian can save the contact
-      if (isFirstSms) {
-        const origin = getBaseUrl(req);
-        smsBody += ` Save this contact: ${origin}/api/checkin/vcard?church_id=${church_id}`;
+      // Build the dedup'd recipient phone set. Primary guardian first
+      // (always included when configured); then each present recipient.
+      const dedupPhone = (p: string | null | undefined) =>
+        p ? p.replace(/[^0-9+]/g, "") : "";
+      const sendTo: Array<{ name: string | null; phone: string }> = [];
+      const seen = new Set<string>();
+      if (guardianPhone) {
+        const norm = dedupPhone(guardianPhone);
+        if (norm) {
+          seen.add(norm);
+          sendTo.push({ name: null, phone: guardianPhone });
+        }
+      }
+      for (const r of normalizedRecipients ?? []) {
+        if (!r.phone) continue;
+        const norm = dedupPhone(r.phone);
+        if (!norm || seen.has(norm)) continue;
+        seen.add(norm);
+        sendTo.push({ name: r.name, phone: r.phone });
       }
 
-      sendSms({ to: guardianPhone, body: smsBody }).catch(() => {});
+      // Build the recipient-list string for the body. Caps at 5
+      // names with "and N more" to keep SMS short. Names only — no
+      // phones in the broadcast body.
+      const allNames = (normalizedRecipients ?? []).map((r) => r.name);
+      const namesPreview = allNames.length === 0
+        ? ""
+        : allNames.length <= 5
+          ? allNames.join(", ")
+          : `${allNames.slice(0, 5).join(", ")}, and ${allNames.length - 5} more`;
+      const pickupClause = namesPreview
+        ? ` Pickup today: ${namesPreview}.`
+        : "";
 
-      // Mark first SMS sent (fire-and-forget)
-      if (isFirstSms) {
+      // First-SMS vCard suffix preserved from the prior behavior.
+      const origin = getBaseUrl(req);
+      const vcardSuffix = isFirstSms
+        ? ` Save this contact: ${origin}/api/checkin/vcard?church_id=${church_id}`
+        : "";
+
+      const smsBody = `${nameList} checked in to ${roomList}. Security code: ${securityCode}.${pickupClause}${vcardSuffix}`;
+
+      for (const r of sendTo) {
+        sendSms({ to: r.phone, body: smsBody }).catch(() => {});
+      }
+
+      // Mark first SMS sent (fire-and-forget) — only on first batch
+      // for the household, matches the prior behavior.
+      if (isFirstSms && sendTo.length > 0) {
         churchRef
           .collection("checkin_households")
           .doc(household_id)
           .update({ first_sms_sent: true })
           .catch(() => {});
       }
+    }
+
+    // Wave 10 W10-1: emit kiosk.recipients_selected once per batch
+    // when recipients were captured. Lets compliance trace
+    // "who was authorized for THIS check-in" without re-reading the
+    // session doc.
+    if (normalizedRecipients && normalizedRecipients.length > 0) {
+      void audit({
+        church_id,
+        actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
+        action: "kiosk.recipients_selected",
+        target_type: "checkin_session_batch",
+        target_id: household_id,
+        metadata: {
+          service_date,
+          ...(service_id ? { service_id } : {}),
+          recipient_count: normalizedRecipients.length,
+          source_counts: normalizedRecipients.reduce<Record<string, number>>(
+            (acc, r) => {
+              acc[r.source] = (acc[r.source] ?? 0) + 1;
+              return acc;
+            },
+            {},
+          ),
+        },
+        outcome: "ok",
+      });
     }
 
     void audit({

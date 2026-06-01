@@ -124,6 +124,14 @@ export type AuditAction =
   | "room.volunteer_checked_out"
   | "kiosk.ratio_warning_shown"
   | "kiosk.ratio_violation_override"
+  /**
+   * Wave 10 W10-1: per-check-in pickup recipient selection. Emitted
+   * once per check-in batch, capturing how many contacts the operator
+   * indicated would be picking up today. Lets compliance trace
+   * "who was authorized for THIS check-in" without re-reading the
+   * session doc — important for audit-trail surveys.
+   */
+  | "kiosk.recipients_selected"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
