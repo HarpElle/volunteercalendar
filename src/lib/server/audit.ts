@@ -152,6 +152,24 @@ export type AuditAction =
    * stored verbatim so compliance can review what was said).
    */
   | "teacher.parent_paged"
+  /**
+   * Wave 10 W10-4: an admin accessed the emergency evacuation
+   * roster — the cross-room sweep view that surfaces full medical
+   * + parent-contact data regardless of the HIPAA-aware
+   * `medical_visibility` config, because the evacuation marshal or
+   * EMT needs the data immediately in an actual emergency.
+   *
+   * Material every time it fires. Legitimate uses (fire drill, real
+   * evacuation, missing child) all coincide with documented incidents
+   * the org can correlate. Unexpected fires of this audit code
+   * (especially outside service hours) are the signal a board would
+   * want to investigate. Hence:
+   *   - No de-duplication. Every fetch lands one row.
+   *   - Metadata captures date, total_children, total_rooms, and
+   *     the optional `reason` the admin acknowledged in the consent
+   *     modal. No PII (no names, no phones).
+   */
+  | "admin.emergency_roster_accessed"
   /** Wave 9 P0-3: per-volunteer restrictions + raw bg-check / SOR audit.
    *  Together these form the legal-defensibility trail for the "cannot
    *  serve with children" gate (ECAP Indicator 3.15). */
