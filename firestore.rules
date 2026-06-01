@@ -433,6 +433,18 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Wave 9 P0-5C race-fix — Room check-in serialization locks.
+      //
+      // One doc per (room_id, service_date) used purely as a
+      // Firestore-transaction conflict point. The kiosk children-
+      // check-in route tx.get()s + tx.set()s this doc inside the
+      // gate transaction so two concurrent batches targeting the
+      // same room can't both commit. Doc content is throwaway
+      // (last_checkin_at only). Server-only.
+      match /roomCheckinLocks/{docId} {
+        allow read, write: if false;
+      }
+
       // Settings + rooms config: org-admin readable for setup screens.
       match /checkinSettings/{docId} {
         allow read: if isOrgAdmin(churchId);

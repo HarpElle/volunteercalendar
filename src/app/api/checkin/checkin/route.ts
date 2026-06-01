@@ -450,12 +450,14 @@ export async function POST(req: NextRequest) {
       const displayName = child.preferred_name || child.first_name;
       const fullName = `${displayName} ${child.last_name}`;
       childNames.push(displayName);
-      // Wave 9 P0-5 sub-PR C: bump the per-room batch counter so the
-      // NEXT iteration's canCheckInOneMore call sees this child as
-      // already accounted for. Mutates the gate state in place.
-      if (roomId) {
-        batchAddsByRoom.set(roomId, (batchAddsByRoom.get(roomId) ?? 0) + 1);
-      }
+
+      // Codex P0-5C race-of-race fix: batchAddsByRoom is incremented
+      // AFTER a successful session write, NOT here. The earlier
+      // placement double-counted the in-flight child inside the
+      // transactional re-check below: pre-check used (counter - 0),
+      // tx used (counter + 1) which then passed +1 internally to
+      // canCheckInOneMore, blocking child 6 of a 7-child batch as
+      // race_detected even when there was no concurrency.
 
       if (child.has_alerts) anyAlerts = true;
 
@@ -538,9 +540,36 @@ export async function POST(req: NextRequest) {
           (settings?.ratio_warning_threshold_percent as
             | number
             | undefined) ?? DEFAULT_RATIO_WARNING_PERCENT;
+        // Codex P0-5C race-of-race fix: the prior tx read the
+        // checkInSessions query + wrote a new session doc. Two
+        // concurrent tx targeting the SAME room+date queried the
+        // SAME virtual collection but wrote DIFFERENT doc IDs —
+        // so the writes didn't conflict, Firestore committed both,
+        // and the room overran (Codex observed final count 9/6).
+        //
+        // The fix: tx.get() + tx.set() the SAME deterministic lock
+        // doc per room+date. Two concurrent tx now read the same
+        // doc version + both try to set it on commit; Firestore's
+        // optimistic concurrency aborts the loser, which retries
+        // with the new state and either passes or fails the gate.
+        //
+        // The lock doc has no semantically-meaningful content —
+        // it's purely a serialization point. We stamp it with the
+        // last check-in timestamp so the write is non-trivial
+        // (avoids any potential Firestore no-op optimization), and
+        // the doc itself doubles as a debug breadcrumb.
+        const lockDocRef = churchRef
+          .collection("roomCheckinLocks")
+          .doc(`${roomId!}_${service_date}`);
+
         await adminDb.runTransaction(async (tx) => {
-          // Phase 1: read live child count INSIDE the tx so concurrent
-          // writes are visible per Firestore optimistic concurrency.
+          // Phase 1A: tx.get() the lock doc to register read interest.
+          // Two concurrent tx that both read this doc + both write to
+          // it will conflict on commit; one wins, the other retries.
+          await tx.get(lockDocRef);
+
+          // Phase 1B: read live child count INSIDE the tx so a retry
+          // sees the winner's session.
           const liveSnap = await tx.get(
             churchRef
               .collection("checkInSessions")
@@ -548,19 +577,13 @@ export async function POST(req: NextRequest) {
               .where("room_id", "==", roomId!)
               .where("checked_out_at", "==", null),
           );
-          // Note: also count any sessions we've already written in
-          // THIS batch (sessions[]). The live snap will include them
-          // since they were committed in prior loop iterations; but
-          // for the FIRST iteration writing to this room in the
-          // batch, the live snap won't include them yet. The cached
-          // batchAddsByRoom counter handles the intra-batch case,
-          // and the live snap handles cross-batch race detection.
-          // We take the MAX to be safe.
-          const liveCount = Math.max(
-            liveSnap.size,
-            ratioState.baseChildCount +
-              (batchAddsByRoom.get(roomId!) ?? 0),
-          );
+          // liveSnap reflects committed sessions from prior loop
+          // iterations of THIS batch (each iteration's tx commits
+          // before the next iteration starts) AND any sessions
+          // committed by concurrent batches before our tx began.
+          // No need for the cached `batchAddsByRoom` here — the live
+          // snap is authoritative.
+          const liveCount = liveSnap.size;
           const recheck = canCheckInOneMore(
             ratioState.roomDoc,
             liveCount,
@@ -568,29 +591,27 @@ export async function POST(req: NextRequest) {
             warningPercentInner,
           );
           if (recheck.status === "violation") {
-            // Race detected between the pre-check and now. The pre-
-            // check passed (we wouldn't be here otherwise), but the
-            // live state now violates. Apply the same override gate
-            // as the pre-check: staffed station + header = pass, else
-            // block.
+            // Race detected. Same override semantics as the pre-check:
+            // staffed station + header = pass, else block.
             const overrideAllowed = ratioOverrideHeader && stationIsStaffed;
             if (!overrideAllowed) {
               raceBlocked = true;
               raceBlockedRatio = recheck;
               return;
             }
-            // Override consumed under race conditions — still legal
-            // since the operator explicitly accepted the bypass.
-            // The pre-check may or may not have flipped this flag
-            // already; flipping again is idempotent.
             ratioOverrideUsed = true;
           }
-          // Pass-through (warning or ok or override-consumed): write
-          // the session inside the tx so the next concurrent batch
-          // sees our +1.
+
+          // Phase 2: writes. Session + lock-doc bump in the same tx
+          // so concurrent retries see the new state on next read.
           tx.set(
             churchRef.collection("checkInSessions").doc(sessionId),
             session,
+          );
+          tx.set(
+            lockDocRef,
+            { last_checkin_at: now.toISOString(), room_id: roomId, service_date },
+            { merge: true },
           );
         });
       } else {
@@ -652,6 +673,16 @@ export async function POST(req: NextRequest) {
         });
       }
       sessions.push(session);
+      // Codex P0-5C race-of-race fix: bump the per-room batch counter
+      // ONLY after a successful, non-race-blocked write. The counter
+      // is now only consumed by the PRE-CHECK fast path (the
+      // transactional re-check above uses the live snap directly), so
+      // a slightly-stale counter is acceptable here — the tx will
+      // catch any drift. But incrementing only after success ensures
+      // we never count an in-flight child against itself.
+      if (roomId && roomHasRatioPolicy) {
+        batchAddsByRoom.set(roomId, (batchAddsByRoom.get(roomId) ?? 0) + 1);
+      }
 
       // Generate child label
       if (printerConfig) {
