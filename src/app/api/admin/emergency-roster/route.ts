@@ -152,12 +152,19 @@ export async function GET(req: NextRequest) {
       .filter((s) => (s.data.checked_out_at ?? null) === null);
 
     // Group active session docs by room_id (or null for unroomed).
+    // CRITICAL: coerce empty-string / whitespace-only room_id to null so
+    // those sessions land in the unroomed bucket instead of crashing
+    // `churchRef.collection("rooms").doc("").get()` further down. The
+    // Firestore admin SDK throws synchronously on `.doc("")`. Codex
+    // W10-4 finding 1.
     const sessionsByRoom = new Map<string | null, typeof activeSessions>();
     for (const s of activeSessions) {
-      const key = s.data.room_id ?? null;
-      const arr = sessionsByRoom.get(key) ?? [];
+      const raw = s.data.room_id;
+      const trimmed =
+        typeof raw === "string" && raw.trim().length > 0 ? raw : null;
+      const arr = sessionsByRoom.get(trimmed) ?? [];
       arr.push(s);
-      sessionsByRoom.set(key, arr);
+      sessionsByRoom.set(trimmed, arr);
     }
 
     // Resolve room metadata. Single batched read per room id.
@@ -167,70 +174,103 @@ export async function GET(req: NextRequest) {
     const roomMap = new Map<string, Room>();
     await Promise.all(
       roomIds.map(async (rid) => {
-        const snap = await churchRef.collection("rooms").doc(rid).get();
-        if (snap.exists) roomMap.set(rid, snap.data() as Room);
+        try {
+          const snap = await churchRef.collection("rooms").doc(rid).get();
+          if (snap.exists) roomMap.set(rid, snap.data() as Room);
+        } catch (err) {
+          // A malformed room_id (e.g., contains "/" or other invalid
+          // path characters) blows up .doc(rid). Log + carry on — the
+          // unnamed-room fallback below will surface the session under
+          // "Unnamed room" so the marshal still sees the child.
+          log.warn("[emergency-roster] failed to load room", {
+            room_id: rid,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }),
     );
 
     // Helper: build the per-child payload. Loads child + household
     // phone + child_profile.authorized_pickups (embedded in the
-    // child Person doc).
+    // child Person doc). Tolerant of missing / malformed ids — an
+    // evacuation tool MUST NOT 500 because one session has bad
+    // data; the marshal still sees the others.
     const buildChild = async (
       session: CheckInSession,
       sessionId: string,
     ): Promise<RosterChild> => {
-      const child = await loadChild(churchRef, session.child_id);
-      const phone =
-        (await loadHouseholdPhone(churchRef, session.household_id)) ?? null;
+      const validChildId =
+        typeof session.child_id === "string" && session.child_id.trim().length > 0
+          ? session.child_id
+          : null;
+      const validHouseholdId =
+        typeof session.household_id === "string" &&
+        session.household_id.trim().length > 0
+          ? session.household_id
+          : null;
+
+      const child = validChildId ? await loadChild(churchRef, validChildId) : null;
+      const phone = validHouseholdId
+        ? ((await loadHouseholdPhone(churchRef, validHouseholdId)) ?? null)
+        : null;
       const displayName = child?.display_name ?? "Unknown";
       const lastName = child?.last_name ?? "";
       const childMedications = (child as { medications?: string | null } | null)
         ?.medications;
       // Pull authorized_pickups directly off the child Person doc;
       // loadChild returns a flattened shape that doesn't carry it.
-      const childPersonSnap = await churchRef
-        .collection("people")
-        .doc(session.child_id)
-        .get();
-      const childPerson = childPersonSnap.exists
-        ? (childPersonSnap.data() as Person)
-        : null;
-      const childProfile =
-        ((childPerson as unknown as { child_profile?: Record<string, unknown> })
-          ?.child_profile ?? {}) as Record<string, unknown>;
-      const rawPickups = Array.isArray(childProfile.authorized_pickups)
-        ? (childProfile.authorized_pickups as PersonAuthorizedPickup[])
-        : [];
+      let rawPickups: PersonAuthorizedPickup[] = [];
+      if (validChildId) {
+        try {
+          const childPersonSnap = await churchRef
+            .collection("people")
+            .doc(validChildId)
+            .get();
+          const childPerson = childPersonSnap.exists
+            ? (childPersonSnap.data() as Person)
+            : null;
+          const childProfile = ((
+            childPerson as unknown as { child_profile?: Record<string, unknown> }
+          )?.child_profile ?? {}) as Record<string, unknown>;
+          rawPickups = Array.isArray(childProfile.authorized_pickups)
+            ? (childProfile.authorized_pickups as PersonAuthorizedPickup[])
+            : [];
+        } catch {
+          // Legacy / malformed child doc — best-effort.
+        }
+      }
       // Try the household primary's first/last name for the parent
       // label; falls back to null when absent.
       let parentName: string | null = null;
-      try {
-        const hhSnap = await churchRef
-          .collection("households")
-          .doc(session.household_id)
-          .get();
-        const primaryGuardianId = hhSnap.exists
-          ? ((hhSnap.data()?.primary_guardian_id as string | null) ?? null)
-          : null;
-        if (primaryGuardianId) {
-          const primarySnap = await churchRef
-            .collection("people")
-            .doc(primaryGuardianId)
+      if (validHouseholdId) {
+        try {
+          const hhSnap = await churchRef
+            .collection("households")
+            .doc(validHouseholdId)
             .get();
-          if (primarySnap.exists) {
-            const p = primarySnap.data() as Person;
-            parentName =
-              [p.first_name, p.last_name].filter(Boolean).join(" ") || null;
+          const primaryGuardianId = hhSnap.exists
+            ? ((hhSnap.data()?.primary_guardian_id as string | null) ?? null)
+            : null;
+          if (primaryGuardianId) {
+            const primarySnap = await churchRef
+              .collection("people")
+              .doc(primaryGuardianId)
+              .get();
+            if (primarySnap.exists) {
+              const p = primarySnap.data() as Person;
+              parentName =
+                [p.first_name, p.last_name].filter(Boolean).join(" ") || null;
+            }
           }
+        } catch {
+          // Households doc shape varies for legacy orgs; best-effort.
         }
-      } catch {
-        // Households doc shape varies for legacy orgs; best-effort.
       }
 
       return {
         session_id: sessionId,
-        child_id: session.child_id,
-        child_name: `${displayName} ${lastName}`.trim(),
+        child_id: session.child_id ?? "",
+        child_name: `${displayName} ${lastName}`.trim() || "Unknown child",
         grade: child?.grade,
         checked_in_at: session.checked_in_at,
         has_alerts: child?.has_alerts ?? false,
@@ -250,8 +290,41 @@ export async function GET(req: NextRequest) {
           relationship: p.relationship,
           phone: p.phone,
         })),
-        household_id: session.household_id,
+        household_id: session.household_id ?? "",
       };
+    };
+
+    // Wrap each buildChild so one bad session can't 500 the whole
+    // roster. An evacuation tool must be all-or-something, not
+    // all-or-nothing. Failures land as a "Data load failed" stub
+    // row so the marshal at least knows a session was here.
+    const safeBuildChild = async (
+      session: CheckInSession,
+      sessionId: string,
+    ): Promise<RosterChild> => {
+      try {
+        return await buildChild(session, sessionId);
+      } catch (err) {
+        log.error("[emergency-roster] buildChild failed", {
+          session_id: sessionId,
+          child_id: session.child_id,
+          household_id: session.household_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return {
+          session_id: sessionId,
+          child_id: session.child_id ?? "",
+          child_name: "⚠ Data load failed — check kiosk roster",
+          checked_in_at: session.checked_in_at ?? "",
+          has_alerts: false,
+          allergies: null,
+          medical_notes: null,
+          medications: null,
+          parent: { name: null, phone: null },
+          authorized_pickups: [],
+          household_id: session.household_id ?? "",
+        };
+      }
     };
 
     // Build per-room sections in parallel; preserve room ordering by
@@ -261,7 +334,7 @@ export async function GET(req: NextRequest) {
         const room = roomMap.get(rid);
         const sessions = sessionsByRoom.get(rid) ?? [];
         const children = await Promise.all(
-          sessions.map((s) => buildChild(s.data, s.id)),
+          sessions.map((s) => safeBuildChild(s.data, s.id)),
         );
         children.sort((a, b) => a.child_name.localeCompare(b.child_name));
         return {
@@ -276,7 +349,7 @@ export async function GET(req: NextRequest) {
     // get a dedicated section so the marshal sees them too.
     const unroomedSessions = sessionsByRoom.get(null) ?? [];
     const unroomed = await Promise.all(
-      unroomedSessions.map((s) => buildChild(s.data, s.id)),
+      unroomedSessions.map((s) => safeBuildChild(s.data, s.id)),
     );
     unroomed.sort((a, b) => a.child_name.localeCompare(b.child_name));
 
