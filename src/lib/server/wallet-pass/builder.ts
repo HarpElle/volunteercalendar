@@ -60,28 +60,49 @@ export interface FamilyPassInput {
 }
 
 function getCertsFromEnv() {
-  const passTypeIdentifier = process.env.APPLE_PASSKIT_PASS_TYPE_ID;
-  const teamIdentifier = process.env.APPLE_PASSKIT_TEAM_ID;
-  const signerCert = process.env.APPLE_PASSKIT_CERT_PEM;
-  const signerKey = process.env.APPLE_PASSKIT_KEY_PEM;
-  const signerKeyPassphrase = process.env.APPLE_PASSKIT_KEY_PASSWORD;
-  const wwdr = process.env.APPLE_WWDR_PEM;
-  if (
-    !passTypeIdentifier ||
-    !teamIdentifier ||
-    !signerCert ||
-    !signerKey ||
-    !signerKeyPassphrase ||
-    !wwdr
-  ) {
+  // Specific per-var check so a future failure audit row can name
+  // the actual culprit, not "one of these six is missing." Each
+  // entry returns a status:
+  //   - "missing"     → process.env.X is undefined entirely (not
+  //                      added in Vercel, or wrong scope)
+  //   - "empty"       → present but trims to an empty string (added
+  //                      with no value, or pasted whitespace only)
+  //   - "ok"          → has at least one non-whitespace character
+  // The empty-vs-missing distinction matters because Vercel's
+  // "Sensitive" type can occasionally show a var in the dashboard
+  // that doesn't propagate to runtime, or vice versa.
+  const slots = [
+    ["APPLE_PASSKIT_PASS_TYPE_ID", process.env.APPLE_PASSKIT_PASS_TYPE_ID],
+    ["APPLE_PASSKIT_TEAM_ID", process.env.APPLE_PASSKIT_TEAM_ID],
+    ["APPLE_PASSKIT_CERT_PEM", process.env.APPLE_PASSKIT_CERT_PEM],
+    ["APPLE_PASSKIT_KEY_PEM", process.env.APPLE_PASSKIT_KEY_PEM],
+    ["APPLE_PASSKIT_KEY_PASSWORD", process.env.APPLE_PASSKIT_KEY_PASSWORD],
+    ["APPLE_WWDR_PEM", process.env.APPLE_WWDR_PEM],
+  ] as const;
+  const issues = slots
+    .map(([name, value]) => {
+      if (value === undefined) return `${name}=missing`;
+      if (value.trim().length === 0) return `${name}=empty`;
+      return null;
+    })
+    .filter((v): v is string => v !== null);
+  if (issues.length > 0) {
     throw new Error(
-      "Apple PassKit env vars are not fully configured. Required: APPLE_PASSKIT_PASS_TYPE_ID, APPLE_PASSKIT_TEAM_ID, APPLE_PASSKIT_CERT_PEM, APPLE_PASSKIT_KEY_PEM, APPLE_PASSKIT_KEY_PASSWORD, APPLE_WWDR_PEM.",
+      `Apple PassKit env vars are not fully configured at runtime. Issues: ${issues.join(", ")}.`,
     );
   }
+  // After the check above, all six slot values are non-null/non-empty
+  // strings — but TS doesn't see that through the array. Re-read with
+  // bang so we keep strict typing downstream.
   return {
-    passTypeIdentifier,
-    teamIdentifier,
-    certs: { wwdr, signerCert, signerKey, signerKeyPassphrase },
+    passTypeIdentifier: process.env.APPLE_PASSKIT_PASS_TYPE_ID!,
+    teamIdentifier: process.env.APPLE_PASSKIT_TEAM_ID!,
+    certs: {
+      wwdr: process.env.APPLE_WWDR_PEM!,
+      signerCert: process.env.APPLE_PASSKIT_CERT_PEM!,
+      signerKey: process.env.APPLE_PASSKIT_KEY_PEM!,
+      signerKeyPassphrase: process.env.APPLE_PASSKIT_KEY_PASSWORD!,
+    },
   };
 }
 
