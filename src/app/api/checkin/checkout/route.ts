@@ -293,11 +293,26 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // Guardian SMS on checkout (fire-and-forget)
+    // Guardian + recipient SMS on checkout (fire-and-forget)
+    // Wave 10 W10-1: pulls present_recipients from the first session
+    // — all sessions in a check-in batch carry the same recipient
+    // snapshot, so the first is representative.
     if (activeSessions.length > 0) {
       const householdId = activeSessions[0].data().household_id;
+      const presentRecipients = activeSessions[0].data()
+        .present_recipients as
+        | NonNullable<
+            import("@/lib/types").CheckInSession["present_recipients"]
+          >
+        | undefined;
       if (householdId) {
-        sendGuardianCheckoutSms(churchRef, church_id, householdId, children).catch(() => {});
+        sendGuardianCheckoutSms(
+          churchRef,
+          church_id,
+          householdId,
+          children,
+          presentRecipients,
+        ).catch(() => {});
       }
     }
 
@@ -423,9 +438,17 @@ async function checkoutSession(
 
   const children = [{ child_name: childName, room_name: session.room_name }];
 
-  // Guardian SMS on checkout (fire-and-forget)
+  // Guardian + recipient SMS on checkout (fire-and-forget)
+  // Wave 10 W10-1: includes present_recipients if the original
+  // session captured them.
   if (session.household_id) {
-    sendGuardianCheckoutSms(churchRef, churchId, session.household_id, children).catch(() => {});
+    sendGuardianCheckoutSms(
+      churchRef,
+      churchId,
+      session.household_id,
+      children,
+      session.present_recipients,
+    ).catch(() => {});
   }
 
   // Wave 4.1: child-data event for the session-specific path.
@@ -451,14 +474,25 @@ async function checkoutSession(
 }
 
 /**
- * Fire-and-forget guardian SMS on checkout.
- * Loads settings + household phone; skips silently if disabled or missing.
+ * Fire-and-forget guardian + recipient SMS on checkout.
+ *
+ * Wave 10 W10-1 extension: when the original session(s) carried
+ * `present_recipients` (the kiosk recipient selection), the
+ * pickup-confirmation SMS fans out to primary guardian + each
+ * recipient (dedup'd by normalized phone). When no recipients were
+ * captured, behavior matches the prior single-primary SMS.
+ *
+ * Loads settings + household phone; skips silently if disabled or
+ * missing.
  */
 async function sendGuardianCheckoutSms(
   churchRef: FirebaseFirestore.DocumentReference,
-  churchId: string,
+  _churchId: string,
   householdId: string,
   children: { child_name: string; room_name: string }[],
+  presentRecipients?: NonNullable<
+    import("@/lib/types").CheckInSession["present_recipients"]
+  >,
 ) {
   const settingsSnap = await churchRef
     .collection("checkinSettings")
@@ -466,19 +500,56 @@ async function sendGuardianCheckoutSms(
     .get();
   if (!settingsSnap.exists || !settingsSnap.data()!.guardian_sms_on_checkout) return;
 
+  // Primary guardian phone — prefer the legacy checkin_households doc
+  // (where it's stored top-level); falls back to null if the household
+  // doesn't have one. Matches the prior behavior; Pro-tier unified
+  // households route through a different lookup (W10-2 follow-up).
   const householdSnap = await churchRef
     .collection("checkin_households")
     .doc(householdId)
     .get();
-  if (!householdSnap.exists) return;
+  const primaryPhone = householdSnap.exists
+    ? (householdSnap.data()!.primary_guardian_phone as string | undefined)
+    : undefined;
 
-  const phone = householdSnap.data()!.primary_guardian_phone as string | undefined;
-  if (!phone) return;
+  // Dedup phones: primary first, then each recipient with a phone on file.
+  const dedup = (p: string | null | undefined) =>
+    p ? p.replace(/[^0-9+]/g, "") : "";
+  const sendTo: string[] = [];
+  const seen = new Set<string>();
+  if (primaryPhone) {
+    const norm = dedup(primaryPhone);
+    if (norm) {
+      seen.add(norm);
+      sendTo.push(primaryPhone);
+    }
+  }
+  for (const r of presentRecipients ?? []) {
+    if (!r.phone) continue;
+    const norm = dedup(r.phone);
+    if (!norm || seen.has(norm)) continue;
+    seen.add(norm);
+    sendTo.push(r.phone);
+  }
+  if (sendTo.length === 0) return;
+
+  // Recipient-list preview in body so each notified contact sees who
+  // else was authorized at check-in. Caps at 5 names.
+  const allNames = (presentRecipients ?? []).map((r) => r.name);
+  const namesPreview = allNames.length === 0
+    ? ""
+    : allNames.length <= 5
+      ? allNames.join(", ")
+      : `${allNames.slice(0, 5).join(", ")}, and ${allNames.length - 5} more`;
+  const pickupClause = namesPreview
+    ? ` Pickup authorized: ${namesPreview}.`
+    : "";
 
   const nameList = children.map((c) => c.child_name).join(", ");
   const roomList = [...new Set(children.map((c) => c.room_name))].join(", ");
-  await sendSms({
-    to: phone,
-    body: `${nameList} has been checked out from ${roomList}.`,
-  });
+  const body = `${nameList} has been checked out from ${roomList}.${pickupClause}`;
+
+  for (const to of sendTo) {
+    sendSms({ to, body }).catch(() => {});
+  }
 }

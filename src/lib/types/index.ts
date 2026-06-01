@@ -1274,6 +1274,39 @@ export interface CheckInSession {
     medical_notes: string | null;
     medications: string | null;
   };
+  /**
+   * Wave 10 W10-1: per-check-in present pickup contacts. Snapshot
+   * of who the operator/parent indicated would be picking up TODAY,
+   * captured at check-in time. Used for:
+   *   1. SMS fan-out at check-in (each contact + primary guardian
+   *      receives the security code; the message body includes the
+   *      full recipient list so each person knows who else is
+   *      authorized today)
+   *   2. SMS fan-out at checkout (same group gets pickup-confirmation
+   *      SMS — replaces the responsible-party sticker entirely)
+   *   3. Audit trail for "who was authorized for THIS check-in"
+   *
+   * Persisted denormalized (name + phone) because:
+   *   - Source contact records may change between check-in and
+   *     checkout (the parent removes a pickup mid-service)
+   *   - One-time entries (Grandma flew in for the weekend) aren't
+   *     in any authorized list at all
+   *
+   * `source` tells us where the entry came from at selection time:
+   *   - "household_adult" — Person doc with person_type=adult linked
+   *     to the household. `ref_id` is the person_id.
+   *   - "authorized_pickup" — entry from a child's
+   *     ChildProfile.authorized_pickups. `ref_id` is the pickup_id.
+   *   - "manual" — typed at the kiosk; not persisted on any list.
+   */
+  present_recipients?: Array<{
+    /** Stable id within this session's recipient set. */
+    id: string;
+    name: string;
+    phone: string | null;
+    source: "household_adult" | "authorized_pickup" | "manual";
+    ref_id?: string;
+  }>;
   created_at: string;
 }
 
