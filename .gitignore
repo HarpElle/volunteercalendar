@@ -50,3 +50,7 @@ VolunteerCalTestingByCodex/
 
 # Firestore emulator runtime log (regenerated on every emulator run)
 firestore-debug.log
+
+
+# Apple PassKit + Google Wallet provisioning artifacts (private keys, CSRs, P12s)
+docs/PassInformation/
