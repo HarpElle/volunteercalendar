@@ -153,6 +153,19 @@ export type AuditAction =
    */
   | "teacher.parent_paged"
   /**
+   * Wave 10 W10-5A: a household downloaded (or re-downloaded) their
+   * Apple Wallet family pass. The pass carries no medical or
+   * contact data, but it does identify a household and list
+   * children's first names, so the access trail matters.
+   *
+   * Two distinct events both use this code:
+   *   - `outcome: "ok"` — successful pass build + download.
+   *   - `outcome: "denied"` — a signed-URL request failed
+   *     verification (expired or tampered). Useful for detecting
+   *     probes against the signing secret.
+   */
+  | "wallet.family_pass_generated"
+  /**
    * Wave 10 W10-4: an admin accessed the emergency evacuation
    * roster — the cross-room sweep view that surfaces full medical
    * + parent-contact data regardless of the HIPAA-aware

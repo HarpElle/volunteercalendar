@@ -469,6 +469,13 @@ service cloud.firestore {
         allow read, write: if false; // Admin SDK only
       }
 
+      // Wave 10 W10-5A: per-household Apple/Google Wallet pass
+      // records. Admin SDK writes only — the wallet-pass endpoints
+      // do all the auth + download bookkeeping server-side.
+      match /wallet_passes/{householdId} {
+        allow read, write: if false;
+      }
+
       match /notification_outbox/{docId} {
         allow read, write: if false; // Admin SDK only
       }
