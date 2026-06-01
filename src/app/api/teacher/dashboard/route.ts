@@ -258,6 +258,20 @@ export async function GET(req: NextRequest) {
               (f) => f.field === field && f.visible && !f.requires_tap,
             )?.value ?? undefined;
 
+          // CRITICAL: redact the raw value from any field that isn't
+          // immediately renderable. The kiosk roster intentionally
+          // ships values for tap-gated fields (the operator taps to
+          // reveal client-side; see PR #172 rationale) — but the
+          // teacher dashboard has no tap-to-reveal client in v1, so
+          // shipping the value would be a real leak. When/if a
+          // Bearer-JWT reveal endpoint is added in a follow-up, that
+          // endpoint will return the unredacted value alongside the
+          // `kiosk.medical_data_revealed` audit emit.
+          const safeMedicalFields = medicalFields.map((f) => ({
+            ...f,
+            value: f.visible && !f.requires_tap ? f.value : null,
+          }));
+
           return {
             session_id: session.id,
             child_id: session.child_id,
@@ -268,7 +282,7 @@ export async function GET(req: NextRequest) {
             allergies: visibleNoTap("allergies") ?? undefined,
             medical_notes: visibleNoTap("medical_notes") ?? undefined,
             medications: visibleNoTap("medications") ?? undefined,
-            medical_fields: medicalFields,
+            medical_fields: safeMedicalFields,
             parent_phone_masked: maskedPhone,
           };
         }),
