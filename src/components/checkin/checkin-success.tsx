@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import QRCode from "qrcode";
 import {
   printLabels as printVia,
   detectPrintPath,
   type KioskPrinterConfig,
 } from "@/lib/services/kiosk-print-bridge";
+import { getStoredKioskToken } from "@/lib/kiosk-client";
 
 interface CheckInResult {
   sessions: {
@@ -32,6 +34,16 @@ interface CheckInSuccessProps {
   onReset: () => void;
   onActivity: () => void;
   onSetupPrinter?: () => void;
+  /**
+   * Wave 10 W10-5A-UI B: kiosk identity so we can fetch the
+   * household's portal URL and show a QR for "Save your family pass."
+   * Omitted → wallet-pass prompt is skipped (back-compat for any
+   * caller that hasn't been updated). The kiosk's X-Kiosk-Token is
+   * read directly from localStorage via getStoredKioskToken — no
+   * need to prop-drill it.
+   */
+  churchId?: string;
+  householdId?: string;
 }
 
 /**
@@ -51,6 +63,8 @@ export function CheckInSuccess({
   onReset,
   onActivity,
   onSetupPrinter,
+  churchId,
+  householdId,
 }: CheckInSuccessProps) {
   // When the kiosk operator selected children who were ALL already checked in
   // earlier today (server skipped every one), we have no new sessions to show —
@@ -65,7 +79,13 @@ export function CheckInSuccess({
   const [printStatus, setPrintStatus] = useState<
     "sending" | "sent" | "failed" | "no_printer"
   >(hasPrinter && result.label_payloads.length > 0 ? "sending" : "no_printer");
-  const [countdown, setCountdown] = useState(8);
+  // Auto-reset countdown — extended to 20s when the wallet-pass
+  // prompt is shown so parents have time to actually scan the QR
+  // with their phone. Default 8s when the prompt is suppressed.
+  const showWalletPrompt = !!churchId && !!householdId && hasNewSessions;
+  const [countdown, setCountdown] = useState(showWalletPrompt ? 20 : 8);
+  const [walletQrDataUrl, setWalletQrDataUrl] = useState<string>("");
+  const [walletQrError, setWalletQrError] = useState(false);
 
   // Send labels via the print bridge
   useEffect(() => {
@@ -97,6 +117,47 @@ export function CheckInSuccess({
 
     return () => clearInterval(timer);
   }, [onReset]);
+
+  // Wave 10 W10-5A-UI B: fetch the household's /guardian portal URL
+  // and render it as a QR code so the parent can scan it with their
+  // phone and add the wallet pass. Fires only on a real check-in
+  // (not the all-duplicate case) and only when the kiosk passed
+  // through its identity props.
+  useEffect(() => {
+    if (!showWalletPrompt || !churchId || !householdId) return;
+    const token = getStoredKioskToken();
+    if (!token) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/checkin/guardian-portal-url", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Kiosk-Token": token,
+          },
+          body: JSON.stringify({
+            church_id: churchId,
+            household_id: householdId,
+          }),
+        });
+        if (!res.ok) throw new Error("portal-url fetch failed");
+        const data = (await res.json()) as { portal_url: string };
+        const dataUrl = await QRCode.toDataURL(data.portal_url, {
+          width: 160,
+          margin: 1,
+          color: { dark: "#2D3047", light: "#FFFFFF" },
+        });
+        if (!cancelled) setWalletQrDataUrl(dataUrl);
+      } catch {
+        if (!cancelled) setWalletQrError(true);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [showWalletPrompt, churchId, householdId]);
 
   const handleRetryPrint = useCallback(async () => {
     onActivity();
@@ -211,6 +272,30 @@ export function CheckInSuccess({
         </div>
       )}
 
+      {/* Wave 10 W10-5A-UI B: save-the-family-pass QR. Shown after a
+          real check-in when the kiosk supplied its identity. Parent
+          scans with their phone → lands on the /guardian portal → taps
+          "Add to Apple Wallet" (the button sub-PR A added). */}
+      {showWalletPrompt && walletQrDataUrl && (
+        <div className="bg-white rounded-2xl border border-vc-border-light p-5 mb-6 text-center max-w-sm">
+          <p className="text-sm font-semibold text-vc-indigo mb-1">
+            Save your family pass
+          </p>
+          <p className="text-xs text-vc-text-secondary mb-3">
+            Scan with your phone camera to add this family to
+            Apple&nbsp;Wallet for instant check-in next time.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={walletQrDataUrl}
+            alt="QR code to save your family pass to Apple Wallet"
+            className="mx-auto rounded-lg"
+            width={160}
+            height={160}
+          />
+        </div>
+      )}
+
       {/* Auto-reset */}
       <button
         type="button"
@@ -222,6 +307,16 @@ export function CheckInSuccess({
       >
         Screen resets in {countdown}s — tap to start over
       </button>
+
+      {/* Suppressed — non-blocking. If the QR fetch failed we just
+          don't show the prompt; parents can still access their pass
+          via /guardian later. Avoids cluttering the success screen
+          with errors that have no actionable recovery. */}
+      {walletQrError && (
+        <span className="sr-only">
+          (Family pass QR unavailable — try again from /guardian)
+        </span>
+      )}
     </div>
   );
 }

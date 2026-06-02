@@ -777,6 +777,8 @@ function CheckInKioskInner() {
           onReset={resetKiosk}
           onActivity={onActivity}
           onSetupPrinter={() => setScreen("printer-setup")}
+          churchId={churchId}
+          householdId={household?.household.id}
         />
       )}
 
