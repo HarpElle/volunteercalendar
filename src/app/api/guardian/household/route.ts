@@ -35,7 +35,12 @@ export async function GET(req: NextRequest) {
         { status: 404 },
       );
     }
-    const churchName = churchSnap.data()!.name as string;
+    const churchData = churchSnap.data()!;
+    const churchName = churchData.name as string;
+    // W11 Sub-PR D: church logo surfaces in the /guardian portal
+    // header. Null when no custom logo uploaded.
+    const churchLogoUrl =
+      (churchData.logo_url as string | null | undefined) ?? null;
 
     // Find household by QR token
     const householdsSnap = await churchRef
@@ -113,6 +118,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       church_name: churchName,
+      church_logo_url: churchLogoUrl,
       household: {
         id: household.id,
         primary_guardian_name: household.primary_guardian_name,

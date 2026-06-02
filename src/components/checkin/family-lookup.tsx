@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { kioskFetch } from "@/lib/kiosk-client";
-import { CheckInBadge } from "@/components/ui/check-in-badge";
+import { OrgLogoOrBadge } from "@/components/ui/org-logo-or-badge";
 import { NumericKeypad } from "./numeric-keypad";
 
 interface HouseholdResult {
@@ -29,6 +29,12 @@ interface HouseholdResult {
 interface FamilyLookupProps {
   churchId: string;
   churchName?: string;
+  /**
+   * W11 Sub-PR D: church's uploaded logo URL. When set, replaces the
+   * VolunteerCal CheckInBadge in the header. When null/undefined, the
+   * badge stays (existing W11 #211 behavior).
+   */
+  churchLogoUrl?: string | null;
   onHouseholdFound: (results: HouseholdResult[], method: "qr" | "phone") => void;
   onFirstTimeVisitor: () => void;
   onActivity: () => void;
@@ -42,6 +48,7 @@ type LookupMode = "idle" | "phone" | "scanning";
 export function FamilyLookup({
   churchId,
   churchName,
+  churchLogoUrl,
   onHouseholdFound,
   onFirstTimeVisitor,
   onActivity,
@@ -246,7 +253,12 @@ export function FamilyLookup({
     <div className="flex flex-col items-center justify-center h-full p-8 gap-6">
       {/* Header */}
       <div className="text-center mb-4">
-        <CheckInBadge size={56} className="mx-auto mb-3" decorative />
+        <OrgLogoOrBadge
+          logoUrl={churchLogoUrl}
+          size={56}
+          className="mx-auto mb-3"
+          decorative
+        />
         {churchName && (
           <p className="text-lg text-vc-text-secondary font-medium mb-1">{churchName}</p>
         )}
