@@ -8,7 +8,7 @@ import {
   type KioskPrinterConfig,
 } from "@/lib/services/kiosk-print-bridge";
 import { getStoredKioskToken } from "@/lib/kiosk-client";
-import { CheckInBadge } from "@/components/ui/check-in-badge";
+import { OrgLogoOrBadge } from "@/components/ui/org-logo-or-badge";
 
 interface CheckInResult {
   sessions: {
@@ -32,6 +32,12 @@ interface CheckInSuccessProps {
    *  for today (server dedupe). Optional for callers that don't pass it. */
   alreadyCheckedInNames?: string[];
   churchName?: string;
+  /**
+   * W11 Sub-PR D: church's uploaded logo URL. When set, replaces the
+   * VolunteerCal CheckInBadge as the hero icon on the success
+   * screen. Null/undefined → badge stays (existing W11 #211 behavior).
+   */
+  churchLogoUrl?: string | null;
   onReset: () => void;
   onActivity: () => void;
   onSetupPrinter?: () => void;
@@ -61,6 +67,7 @@ export function CheckInSuccess({
   childNames,
   alreadyCheckedInNames = [],
   churchName,
+  churchLogoUrl,
   onReset,
   onActivity,
   onSetupPrinter,
@@ -177,7 +184,12 @@ export function CheckInSuccess({
           icon. Same visual mark used on the wallet pass + kiosk
           welcome screen, so the moment of success is brand-tied
           to the same identity parents have already seen. */}
-      <CheckInBadge size={80} className="mb-6" decorative />
+      <OrgLogoOrBadge
+        logoUrl={churchLogoUrl}
+        size={80}
+        className="mb-6"
+        decorative
+      />
 
       {/* Tiny green confirmation chip below the badge keeps the
           "your action succeeded" semantic without competing visually. */}

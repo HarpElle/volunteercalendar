@@ -277,6 +277,10 @@ function CheckInKioskInner() {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [churchName, setChurchName] = useState("");
+  // W11 Sub-PR D: church's uploaded logo URL (null when none uploaded).
+  // Substituted for the CheckInBadge on the lookup + success screens
+  // via the new OrgLogoOrBadge component.
+  const [churchLogoUrl, setChurchLogoUrl] = useState<string | null>(null);
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lookupMethodRef = useRef<"qr" | "phone">("phone");
@@ -292,6 +296,9 @@ function CheckInKioskInner() {
           const svcList = data.services as ServiceOption[];
           setServices(svcList);
           if (data.church_name) setChurchName(data.church_name);
+          if ("church_logo_url" in data) {
+            setChurchLogoUrl((data.church_logo_url as string | null) ?? null);
+          }
           // Auto-select if only one service today
           if (svcList.length === 1) {
             setSelectedServiceId(svcList[0].id);
@@ -690,6 +697,7 @@ function CheckInKioskInner() {
         <FamilyLookup
           churchId={churchId}
           churchName={churchName}
+          churchLogoUrl={churchLogoUrl}
           onHouseholdFound={handleHouseholdFound}
           onFirstTimeVisitor={handleFirstTimeVisitor}
           onActivity={onActivity}
@@ -774,6 +782,7 @@ function CheckInKioskInner() {
           childNames={newlyCheckedInNames}
           alreadyCheckedInNames={alreadyCheckedInNames}
           churchName={churchName}
+          churchLogoUrl={churchLogoUrl}
           onReset={resetKiosk}
           onActivity={onActivity}
           onSetupPrinter={() => setScreen("printer-setup")}

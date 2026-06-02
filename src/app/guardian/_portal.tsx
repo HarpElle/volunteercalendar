@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { CheckInBadge } from "@/components/ui/check-in-badge";
+import { OrgLogoOrBadge } from "@/components/ui/org-logo-or-badge";
 
 interface GuardianChild {
   id: string;
@@ -52,6 +52,7 @@ function GuardianPortalInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [churchName, setChurchName] = useState("");
+  const [churchLogoUrl, setChurchLogoUrl] = useState<string | null>(null);
   const [household, setHousehold] = useState<HouseholdInfo | null>(null);
   const [children, setChildren] = useState<GuardianChild[]>([]);
   const [sessions, setSessions] = useState<CheckInSession[]>([]);
@@ -91,6 +92,7 @@ function GuardianPortalInner() {
 
       const data = await res.json();
       setChurchName(data.church_name);
+      setChurchLogoUrl(data.church_logo_url ?? null);
       setHousehold(data.household);
       setChildren(data.children);
       setSessions(data.sessions);
@@ -248,7 +250,7 @@ function GuardianPortalInner() {
     <div>
       {/* Header: VolunteerCal Check-In badge + church + family name */}
       <div className="flex items-center gap-3 mb-6">
-        <CheckInBadge size={44} decorative />
+        <OrgLogoOrBadge logoUrl={churchLogoUrl} size={44} decorative />
         <div>
           <p className="text-sm text-vc-text-secondary font-medium">
             {churchName}

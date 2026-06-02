@@ -53,6 +53,11 @@ export async function GET(req: NextRequest) {
 
     const churchData = churchSnap.data()!;
     const churchName = churchData.name as string;
+    // W11 Sub-PR D: surface the church logo so the kiosk can show
+    // it on the lookup screen + success screen instead of the
+    // VolunteerCal CheckInBadge.
+    const churchLogoUrl =
+      (churchData.logo_url as string | null | undefined) ?? null;
 
     // Pass G Phase 1: tier-gate. Inlined here because the route accepts both
     // a church_id and a short_code; the short_code needs to be resolved before
@@ -85,7 +90,11 @@ export async function GET(req: NextRequest) {
       .get();
 
     if (!settingsSnap.exists) {
-      return NextResponse.json({ services: [], church_name: churchName });
+      return NextResponse.json({
+        services: [],
+        church_name: churchName,
+        church_logo_url: churchLogoUrl,
+      });
     }
 
     const settings = settingsSnap.data() as CheckInSettings;
@@ -109,7 +118,11 @@ export async function GET(req: NextRequest) {
           };
         });
 
-    return NextResponse.json({ services: todayServices, church_name: churchName });
+    return NextResponse.json({
+      services: todayServices,
+      church_name: churchName,
+      church_logo_url: churchLogoUrl,
+    });
   } catch (error) {
     console.error("[GET /api/checkin/services]", error);
     return NextResponse.json(
