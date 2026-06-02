@@ -78,6 +78,10 @@ export function TeamsSettings({
         color: formData.color,
         description: formData.description,
         requires_background_check: formData.requiresBgCheck,
+        // W12-D: persist the per-team peer-swap toggle. Server +
+        // client both read this via isPeerSwapAllowed(); legacy docs
+        // without the field still resolve to true.
+        allow_peer_swap: formData.allowPeerSwap,
         prerequisites: formData.prereqs.filter((p) => p.label.trim()),
         church_id: churchId,
         lead_user_id: user.uid,
@@ -189,6 +193,9 @@ export function TeamsSettings({
                   color: m.color,
                   description: m.description,
                   requiresBgCheck: m.requires_background_check || false,
+                  // W12-D: default true so editing a legacy ministry
+                  // doesn't accidentally flip swaps off on save.
+                  allowPeerSwap: m.allow_peer_swap !== false,
                   prereqs: m.prerequisites || [],
                 }
               : undefined;

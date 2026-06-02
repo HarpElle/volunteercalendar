@@ -34,6 +34,7 @@ import {
 } from "@/lib/services/scheduler";
 import { getServiceMinistries } from "@/lib/utils/service-helpers";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { isPeerSwapAllowed } from "@/lib/server/peer-swap-policy";
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -91,6 +92,13 @@ interface ScheduleItem {
    * action was recorded. Previously the page silently reverted to Confirmed.
    */
   attended?: string | null;
+  /**
+   * Wave 12 D: false when the assignment's ministry has the
+   * `allow_peer_swap` flag explicitly disabled in team settings.
+   * Drives whether the "Need a Sub" button renders for this item.
+   * Defaults to true (legacy / unset = allowed).
+   */
+  allowPeerSwap?: boolean;
 }
 
 type TabKey = "upcoming" | "past" | "team" | "open-slots";
@@ -354,6 +362,10 @@ export default function MySchedulePage() {
       attended: a.attended || null,
       isReleasable: isSelfSignup && releasableScheduleIds.has(a.schedule_id),
       churchId: a.church_id,
+      // W12-D: hide "Need a Sub" when admin disabled peer-swap for
+      // this team. Default-true preserves behavior for ministries
+      // whose docs predate the field.
+      allowPeerSwap: isPeerSwapAllowed(ministry),
     });
   }
 
@@ -983,8 +995,10 @@ export default function MySchedulePage() {
                                   {/* W12-A: Need-a-sub button — sub-only path
                                        via the existing /api/swap backend. Only
                                        shown for assignments (event signups
-                                       don't have ministry-scoped swap shape). */}
-                                  {item.kind === "assignment" && (
+                                       don't have ministry-scoped swap shape).
+                                       W12-D: also gated by per-team
+                                       allow_peer_swap flag (default true). */}
+                                  {item.kind === "assignment" && item.allowPeerSwap !== false && (
                                     <button
                                       onClick={() => setSwapRequestItem({
                                         id: item.id,

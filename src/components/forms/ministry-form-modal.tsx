@@ -29,6 +29,17 @@ export interface MinistryFormData {
   description: string;
   requiresBgCheck: boolean;
   prereqs: OnboardingStep[];
+  /**
+   * W12-D: per-team toggle for peer-swap. True = volunteers can
+   * tap "Need a sub" to ask teammates to cover. False = the button
+   * hides and POST /api/swap rejects with 403; volunteers must
+   * contact the scheduler directly instead.
+   *
+   * Default true (matches the legacy behavior before the field
+   * existed). Recommended off for children/youth, security, or
+   * anywhere training/clearance matters.
+   */
+  allowPeerSwap: boolean;
 }
 
 interface MinistryFormModalProps {
@@ -65,6 +76,9 @@ export function MinistryFormModal({
   const [color, setColor] = useState(PRESET_COLORS[0].hex);
   const [description, setDescription] = useState("");
   const [requiresBgCheck, setRequiresBgCheck] = useState(false);
+  // W12-D: default true on the form state so new teams ship with
+  // peer-swap allowed (matches existing-ministry behavior pre-W12-D).
+  const [allowPeerSwap, setAllowPeerSwap] = useState(true);
   const [prereqs, setPrereqs] = useState<OnboardingStep[]>([]);
   const [pickerMode, setPickerMode] = useState(false);
 
@@ -74,6 +88,9 @@ export function MinistryFormModal({
       setColor(initialValues?.color ?? PRESET_COLORS[0].hex);
       setDescription(initialValues?.description ?? "");
       setRequiresBgCheck(initialValues?.requiresBgCheck ?? false);
+      // Default true so editing a legacy ministry that lacked the
+      // field doesn't accidentally flip swaps off on save.
+      setAllowPeerSwap(initialValues?.allowPeerSwap ?? true);
       setPrereqs(initialValues?.prereqs ?? []);
       // Show picker for new items when templates are enabled
       setPickerMode(!isEditing && !!showTemplatePicker);
@@ -85,6 +102,11 @@ export function MinistryFormModal({
     setColor(template.color);
     setDescription(template.description);
     setRequiresBgCheck(template.requires_background_check);
+    // W12-D: templates don't carry an explicit allow_peer_swap value;
+    // children/youth templates should default OFF since teammate
+    // training/clearance matters, while everything else defaults ON.
+    // Mirrors the bg-check defaulting in the same templates.
+    setAllowPeerSwap(template.category !== "children_youth");
     setPrereqs([]);
     setPickerMode(false);
   }
@@ -94,13 +116,21 @@ export function MinistryFormModal({
     setColor(PRESET_COLORS[0].hex);
     setDescription("");
     setRequiresBgCheck(false);
+    setAllowPeerSwap(true);
     setPrereqs([]);
     setPickerMode(true);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    await onSubmit({ name, color, description, requiresBgCheck, prereqs });
+    await onSubmit({
+      name,
+      color,
+      description,
+      requiresBgCheck,
+      prereqs,
+      allowPeerSwap,
+    });
   }
 
   // Filter out templates that already exist
@@ -254,6 +284,26 @@ export function MinistryFormModal({
             />
             <span className="text-sm text-vc-text-secondary">
               Require background check clearance to serve in this {terms.singularLower}
+            </span>
+          </label>
+
+          {/* W12-D: per-team peer-swap toggle. Default-true matches
+              existing behavior. Recommended off for children/youth,
+              security, and other clearance-sensitive teams. */}
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowPeerSwap}
+              onChange={(e) => setAllowPeerSwap(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-vc-border text-vc-coral focus:ring-vc-coral"
+            />
+            <span className="text-sm text-vc-text-secondary">
+              <span className="block">
+                Allow volunteers to ask the team for a sub
+              </span>
+              <span className="block text-xs text-vc-text-muted mt-0.5">
+                When off, the &ldquo;Need a Sub&rdquo; button is hidden for this {terms.singularLower} and volunteers must contact the scheduler directly. Turn off for teams where teammate training or clearance matters (e.g. children&rsquo;s ministry).
+              </span>
             </span>
           </label>
 
