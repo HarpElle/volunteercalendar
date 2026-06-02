@@ -158,6 +158,10 @@ export async function POST(req: NextRequest) {
     const churchData = churchSnap.exists ? churchSnap.data()! : {};
     const churchName = (churchData.name as string) || "Organization";
     const subscriptionTier = (churchData.subscription_tier as string) || "free";
+    // W11-C: church logo for email header. Null/undefined = template
+    // falls back to the existing text-only header.
+    const churchLogoUrl =
+      (churchData.logo_url as string | null | undefined) ?? null;
 
     // Find notification recipients: schedulers for this ministry + all admins/owners
     const membershipsSnap = await adminDb
@@ -222,6 +226,7 @@ export async function POST(req: NextRequest) {
           recipientName,
           volunteerName,
           churchName,
+          churchLogoUrl,
           serviceName,
           serviceDate,
           roleName,

@@ -32,6 +32,12 @@ export interface BackgroundCheckExpiryEmailData {
    *  auto-marked status. */
   variant: "approaching" | "expired";
   dashboardUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildBackgroundCheckExpiryEmail(
@@ -76,6 +82,7 @@ export function buildBackgroundCheckExpiryEmail(
   const html = wrapInLayout({
     headerText,
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

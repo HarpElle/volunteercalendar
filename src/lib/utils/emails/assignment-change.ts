@@ -25,6 +25,12 @@ export interface AssignmentChangeEmailData {
   oldRole: string;
   newRole?: string;
   changedByName: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildAssignmentChangeEmail(data: AssignmentChangeEmailData): {
@@ -81,6 +87,7 @@ export function buildAssignmentChangeEmail(data: AssignmentChangeEmailData): {
   const html = wrapInLayout({
     headerText: "Schedule Update",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

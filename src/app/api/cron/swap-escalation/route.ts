@@ -39,6 +39,9 @@ export const maxDuration = 300;
 interface ChurchSlice {
   id: string;
   name: string;
+  /** W11-C: public Firebase Storage URL of the church's uploaded
+   *  logo, or null. Threaded into the escalation email when present. */
+  logoUrl: string | null;
 }
 
 interface EscalationOutcome {
@@ -107,6 +110,8 @@ export async function GET(request: NextRequest) {
       const church: ChurchSlice = {
         id: churchId,
         name: (churchSnap.data()?.name as string) || "your church",
+        logoUrl:
+          (churchSnap.data()?.logo_url as string | null | undefined) ?? null,
       };
 
       // Pull active scheduler/admin/owner memberships once per church.
@@ -190,6 +195,7 @@ export async function GET(request: NextRequest) {
                 recipientName,
                 requesterName: swap.requester_name,
                 churchName: church.name,
+                churchLogoUrl: church.logoUrl,
                 teamName,
                 serviceName,
                 serviceDate: swap.service_date,

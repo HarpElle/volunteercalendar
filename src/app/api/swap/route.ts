@@ -133,6 +133,11 @@ export async function POST(request: Request) {
       ]);
       const churchName =
         (churchSnap.data()?.name as string) || "your church";
+      // W11-C: pull the church's logo URL too (already in Storage,
+      // public read). Templates render it above the header text when
+      // present; null falls through to the existing text-only header.
+      const churchLogoUrl =
+        (churchSnap.data()?.logo_url as string | null | undefined) ?? null;
       const teamName =
         (ministrySnap.data()?.name as string) || "your team";
       const serviceName =
@@ -196,6 +201,7 @@ export async function POST(request: Request) {
                 requesterName,
                 teamName,
                 churchName,
+                churchLogoUrl,
                 serviceName,
                 serviceDate: assignment.service_date,
                 roleName: assignment.role_title,

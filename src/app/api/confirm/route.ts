@@ -148,11 +148,17 @@ export async function POST(request: NextRequest) {
             ]);
 
             const churchName = churchSnap.exists ? (churchSnap.data()?.name as string) || "Church" : "Church";
+            // W11-C: church logo for confirmation email header. Null
+            // falls through to existing text-only header.
+            const churchLogoUrl = churchSnap.exists
+              ? ((churchSnap.data()?.logo_url as string | null | undefined) ?? null)
+              : null;
             const origin = getBaseUrl(request);
 
             const { subject, html, text } = buildConfirmationEmail({
               volunteerName: result.newVolunteerName || "Volunteer",
               churchName,
+              churchLogoUrl,
               serviceName: svcSnap.exists ? (svcSnap.data()?.name as string) || "Service" : "Service",
               ministryName: minSnap.exists ? (minSnap.data()?.name as string) || "Ministry" : "Ministry",
               roleTitle: current.role_title,

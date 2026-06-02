@@ -23,6 +23,14 @@ export interface LayoutOptions {
   body: string;
   /** Footer attribution line. Defaults to the HarpElle tagline. */
   footerHtml?: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo
+   * (from Firebase Storage). When present, renders as a 64x64 image
+   * above the headerText. When absent/null, the header falls back
+   * to text-only (existing behavior). Alt text uses headerSubtitle
+   * when available so image-blocked clients still see who sent it.
+   */
+  churchLogoUrl?: string | null;
 }
 
 /**
@@ -37,6 +45,17 @@ export function wrapInLayout(opts: LayoutOptions): string {
   // constructed by template files using already-escaped sub-helpers.
   const subtitle = opts.headerSubtitle
     ? `<p style="margin:6px 0 0;font-size:14px;color:rgba(255,255,255,0.65);">${escapeHtml(opts.headerSubtitle)}</p>`
+    : "";
+
+  // W11-C: church-logo block above the header text. Email clients
+  // vary in image support (Outlook + sometimes Gmail block external
+  // images by default), so the alt text needs to make sense alone
+  // — use the church name (from headerSubtitle) when available, else
+  // a generic fallback. White background tile keeps the logo legible
+  // on the dark indigo header banner regardless of logo design.
+  const logoAlt = opts.headerSubtitle || "Church logo";
+  const logoBlock = opts.churchLogoUrl
+    ? `<img src="${opts.churchLogoUrl}" alt="${escapeHtml(logoAlt)}" width="64" height="64" style="display:block;margin:0 auto 14px;background-color:#ffffff;border-radius:10px;padding:6px;max-width:64px;max-height:64px;object-fit:contain;">`
     : "";
 
   const footer =
@@ -57,6 +76,7 @@ export function wrapInLayout(opts: LayoutOptions): string {
           <!-- Header -->
           <tr>
             <td style="background-color:#2D3047;padding:28px 32px;text-align:center;">
+              ${logoBlock}
               <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
                 ${escapeHtml(opts.headerText)}
               </h1>

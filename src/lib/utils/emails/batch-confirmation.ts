@@ -24,6 +24,12 @@ export interface BatchConfirmationEmailData {
   volunteerName: string;
   churchName: string;
   assignments: BatchAssignment[];
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildBatchConfirmationEmail(
@@ -72,6 +78,7 @@ export function buildBatchConfirmationEmail(
   const html = wrapInLayout({
     headerText: "You're Scheduled to Serve",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

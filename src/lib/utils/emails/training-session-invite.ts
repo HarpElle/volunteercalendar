@@ -22,6 +22,12 @@ export interface TrainingSessionInviteEmailData {
   location: string;
   spotsRemaining: number;
   rsvpUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildTrainingSessionInviteEmail(data: TrainingSessionInviteEmailData): {
@@ -55,6 +61,7 @@ export function buildTrainingSessionInviteEmail(data: TrainingSessionInviteEmail
   const html = wrapInLayout({
     headerText: "Training Session Invitation",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

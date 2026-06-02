@@ -19,6 +19,12 @@ export interface HouseholdConflictEmailData {
   conflictDate: string;
   constraintDescription: string;
   recipientEmail: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildHouseholdConflictEmail(data: HouseholdConflictEmailData): {
@@ -46,6 +52,7 @@ export function buildHouseholdConflictEmail(data: HouseholdConflictEmailData): {
   const html = wrapInLayout({
     headerText: "Family Scheduling Note",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

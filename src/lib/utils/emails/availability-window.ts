@@ -20,6 +20,12 @@ export interface AvailabilityWindowEmailData {
   dueDate: string;
   message: string | null;
   availabilityUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildAvailabilityWindowEmail(data: AvailabilityWindowEmailData): {
@@ -51,6 +57,7 @@ export function buildAvailabilityWindowEmail(data: AvailabilityWindowEmailData):
   const html = wrapInLayout({
     headerText: "Availability Needed",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

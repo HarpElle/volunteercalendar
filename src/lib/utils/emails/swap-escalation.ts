@@ -40,6 +40,12 @@ export interface SwapEscalationData {
   note: string | null;
   /** Absolute URL to deep-link the scheduler to the schedule. */
   ctaUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildSwapEscalationEmail(
@@ -91,6 +97,7 @@ export function buildSwapEscalationEmail(
   const html = wrapInLayout({
     headerText: "Open swap still uncovered",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

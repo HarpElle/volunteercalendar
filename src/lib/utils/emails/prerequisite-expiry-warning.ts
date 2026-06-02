@@ -20,6 +20,12 @@ export interface ExpiryWarningEmailData {
   expiresAt: string;
   daysRemaining: number;
   dashboardUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildExpiryWarningEmail(data: ExpiryWarningEmailData): {
@@ -53,6 +59,7 @@ export function buildExpiryWarningEmail(data: ExpiryWarningEmailData): {
   const html = wrapInLayout({
     headerText: "Renewal Needed",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });
