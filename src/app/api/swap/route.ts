@@ -14,6 +14,7 @@ import { audit, userActor } from "@/lib/server/audit";
 import { resend } from "@/lib/resend";
 import { buildSwapRequestBroadcastEmail } from "@/lib/utils/emails/swap-request-broadcast";
 import { getBaseUrl } from "@/lib/utils/base-url";
+import { buildSwapTransferUpdate } from "@/lib/server/swap-transfer";
 
 // POST — Create a swap request
 // Supports two auth modes:
@@ -407,11 +408,13 @@ export async function PATCH(request: Request) {
         updated_at: now,
       });
 
-      // Transfer the assignment to the replacement volunteer
-      await churchRef.collection("assignments").doc(swap.assignment_id).update({
-        volunteer_id: volunteer_id,
-        status: "confirmed",
-      });
+      // Transfer the assignment to the replacement volunteer.
+      // Must update BOTH person_id and volunteer_id — /api/my-schedule
+      // queries by person_id (see swap-transfer.ts contract).
+      await churchRef
+        .collection("assignments")
+        .doc(swap.assignment_id)
+        .update({ ...buildSwapTransferUpdate(volunteer_id, now) });
 
       // Fire-and-forget: notify requester and replacement about swap acceptance
       try {
@@ -475,12 +478,16 @@ export async function PATCH(request: Request) {
           updated_at: now,
         });
 
-        // Transfer the assignment
+        // Transfer the assignment. Same person_id/volunteer_id
+        // lockstep contract as the accept branch — see
+        // swap-transfer.ts for the rationale.
         if (swap.replacement_volunteer_id) {
-          await churchRef.collection("assignments").doc(swap.assignment_id).update({
-            volunteer_id: swap.replacement_volunteer_id,
-            status: "confirmed",
-          });
+          await churchRef
+            .collection("assignments")
+            .doc(swap.assignment_id)
+            .update({
+              ...buildSwapTransferUpdate(swap.replacement_volunteer_id, now),
+            });
         }
       } else {
         // Reject — revert assignment to confirmed
