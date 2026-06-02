@@ -99,11 +99,14 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
       ]);
     });
 
-    it("header field labeled CODE", () => {
+    it("V5: headerFields is empty so logoText (church name) has full row width", () => {
       const p = buildPassProps(baseInput, "p", "T");
-      expect(p.storeCard.headerFields).toEqual([
-        { key: "household_code", label: "CODE", value: "123456" },
-      ]);
+      expect(p.storeCard.headerFields).toEqual([]);
+    });
+
+    it("V5: short code still appears beneath the QR via barcode altText", () => {
+      const p = buildPassProps(baseInput, "p", "T");
+      expect(p.barcodes[0].altText).toBe("123456");
     });
   });
 
