@@ -12,6 +12,8 @@ import { TeamScheduleView } from "@/components/scheduling/team-schedule-view";
 import { CalendarFeedCta } from "@/components/scheduling/calendar-feed-cta";
 import { SelfRemoveModal } from "@/components/scheduling/self-remove-modal";
 import { CantMakeItModal } from "@/components/scheduling/cant-make-it-modal";
+import { RequestSwapModal } from "@/components/scheduling/request-swap-modal";
+import { OpenSwapsSection } from "@/components/scheduling/open-swaps-section";
 import type {
   Assignment,
   Service,
@@ -140,6 +142,8 @@ export default function MySchedulePage() {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
   const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
+  const [swapRequestItem, setSwapRequestItem] = useState<{ id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
+  const [swapToast, setSwapToast] = useState<string | null>(null);
   // Codex Run 2 retest (2026-05-17): in-app confirm/decline for pending
   // assignments. Tracks the assignment ID currently in flight so we can
   // disable both buttons and show a spinner on the right one.
@@ -700,6 +704,20 @@ export default function MySchedulePage() {
         </p>
       </div>
 
+      {/* W12-A: Open swap requests from teammates. Only renders when
+           there's at least one swap I could cover; otherwise the
+           section auto-hides to avoid clutter. */}
+      {activeMembership?.church_id && (
+        <OpenSwapsSection
+          churchId={activeMembership.church_id}
+          onAccepted={() => {
+            // Refetch the schedule on accept — the assignment just
+            // transferred to me and should appear in Upcoming.
+            window.location.reload();
+          }}
+        />
+      )}
+
       {/* Tabs */}
       <div className="mb-6 flex gap-1 rounded-xl bg-vc-bg-warm p-1">
         {([
@@ -928,6 +946,23 @@ export default function MySchedulePage() {
                                 </button>
                               ) : (
                                 <>
+                                  {/* W12-A: Need-a-sub button — sub-only path
+                                       via the existing /api/swap backend. Only
+                                       shown for assignments (event signups
+                                       don't have ministry-scoped swap shape). */}
+                                  {item.kind === "assignment" && (
+                                    <button
+                                      onClick={() => setSwapRequestItem({
+                                        id: item.id,
+                                        roleName: item.roleName,
+                                        eventOrServiceName: item.eventOrServiceName,
+                                        date: item.date,
+                                      })}
+                                      className="min-h-[44px] min-w-[44px] px-2 py-2 text-xs text-vc-text-muted hover:text-vc-indigo transition-colors"
+                                    >
+                                      Need a Sub
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => setCantMakeItItem({
                                       kind: item.kind,
@@ -1097,6 +1132,43 @@ export default function MySchedulePage() {
           <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
         </svg>
       </Link>
+
+      {/* W12-A: Request-Swap modal */}
+      {swapRequestItem && (
+        <RequestSwapModal
+          open={!!swapRequestItem}
+          onClose={() => setSwapRequestItem(null)}
+          onCreated={({ teammates_emailed, teammates_notified }) => {
+            // Lead with email count — that's the channel volunteers
+            // actually see. Fall back to in-app count if no teammates
+            // had emails on file, and finally to the empty-team case.
+            const emailed = teammates_emailed ?? 0;
+            const notified = teammates_notified ?? 0;
+            let msg: string;
+            if (emailed > 0) {
+              msg = `Emailed ${emailed} teammate${emailed === 1 ? "" : "s"}. First to tap "Cover this" takes the spot.`;
+            } else if (notified > 0) {
+              msg = `Sent to ${notified} teammate${notified === 1 ? "" : "s"} in-app. (No email addresses on file.)`;
+            } else {
+              msg = "Swap request created. (No teammates on this team to notify yet.)";
+            }
+            setSwapToast(msg);
+            setTimeout(() => setSwapToast(null), 5000);
+          }}
+          churchId={activeMembership?.church_id || profile?.church_id || ""}
+          assignmentId={swapRequestItem.id}
+          roleName={swapRequestItem.roleName}
+          serviceName={swapRequestItem.eventOrServiceName}
+          serviceDate={swapRequestItem.date}
+        />
+      )}
+
+      {/* W12-A: success toast for swap-request creation */}
+      {swapToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl bg-vc-indigo text-white text-sm shadow-lg max-w-md">
+          {swapToast}
+        </div>
+      )}
 
       {/* Can't Make It modal */}
       {cantMakeItItem && (
