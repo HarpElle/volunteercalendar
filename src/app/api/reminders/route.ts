@@ -172,6 +172,10 @@ export async function POST(request: Request) {
     }
     const church = churchSnap.data() as Record<string, unknown>;
     const churchName = (church.name as string) || "Organization";
+    // W11-C: church logo for email header. Null/undefined = template
+    // falls back to the existing text-only header.
+    const churchLogoUrl =
+      (church.logo_url as string | null | undefined) ?? null;
     const defaultChannels = ((church.settings as Record<string, unknown>)?.default_reminder_channels as string[]) || ["email"];
 
     // Calculate the target date window
@@ -283,6 +287,7 @@ export async function POST(request: Request) {
       const templateData = {
         volunteerName: volName,
         churchName,
+        churchLogoUrl,
         serviceName: (service?.name as string) || "Service",
         ministryName: (ministry?.name as string) || "Team",
         roleTitle: (assignment.role_title as string) || "Volunteer",

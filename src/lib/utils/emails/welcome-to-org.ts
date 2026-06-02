@@ -18,6 +18,12 @@ export interface WelcomeToOrgEmailData {
   churchName: string;
   isPending: boolean;
   role: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
@@ -80,6 +86,7 @@ export function buildWelcomeToOrgEmail(data: WelcomeToOrgEmailData): {
   const html = wrapInLayout({
     headerText: "Welcome!",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

@@ -42,6 +42,12 @@ export interface SwapRequestBroadcastData {
   note: string | null;
   /** Absolute URL to deep-link the recipient to the open-swaps section. */
   ctaUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildSwapRequestBroadcastEmail(
@@ -92,6 +98,7 @@ export function buildSwapRequestBroadcastEmail(
   const html = wrapInLayout({
     headerText: "A teammate needs a sub",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

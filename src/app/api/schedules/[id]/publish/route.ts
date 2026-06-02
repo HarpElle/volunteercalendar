@@ -52,6 +52,10 @@ export async function POST(
 
     const schedule = { id: scheduleSnap.id, ...scheduleSnap.data()! } as Schedule;
     const churchName = churchSnap.data()?.name || "Your Church";
+    // W11-C: church logo for confirmation emails. Null/undefined =
+    // template falls back to the existing text-only header.
+    const churchLogoUrl =
+      (churchSnap.data()?.logo_url as string | null | undefined) ?? null;
 
     // Check all ministry approvals (warning if not all approved)
     const approvals = schedule.ministry_approvals || {};
@@ -145,6 +149,7 @@ export async function POST(
       const email = buildConfirmationEmail({
         volunteerName: volunteer.name,
         churchName,
+        churchLogoUrl,
         serviceName: service?.name || "Service",
         ministryName: assignment.ministry_id,
         roleTitle: assignment.role_title,

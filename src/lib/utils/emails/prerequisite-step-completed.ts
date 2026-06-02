@@ -11,6 +11,12 @@ export interface StepCompletedEmailData {
   completedCount: number;
   totalCount: number;
   dashboardUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildStepCompletedEmail(data: StepCompletedEmailData): {
@@ -56,6 +62,7 @@ export function buildStepCompletedEmail(data: StepCompletedEmailData): {
   const html = wrapInLayout({
     headerText: allDone ? "All Steps Complete!" : "Step Completed!",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });

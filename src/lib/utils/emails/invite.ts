@@ -18,6 +18,12 @@ export interface InviteEmailData {
   inviterName: string;
   role: string;
   acceptUrl: string;
+  /**
+   * Wave 11 Sub-PR C: public URL of the church's uploaded logo. When
+   * present, renders above the header text. Null/undefined falls back
+   * to the original text-only header. Passed through to wrapInLayout.
+   */
+  churchLogoUrl?: string | null;
 }
 
 export function buildInviteEmail(data: InviteEmailData): {
@@ -47,6 +53,7 @@ export function buildInviteEmail(data: InviteEmailData): {
   const html = wrapInLayout({
     headerText: "You're Invited",
     headerSubtitle: data.churchName,
+    churchLogoUrl: data.churchLogoUrl,
     body,
     footerHtml: onBehalfFooter(data.churchName),
   });
