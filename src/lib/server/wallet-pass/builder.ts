@@ -256,13 +256,13 @@ export function buildPassProps(
     ...(locations.length > 0 ? { locations } : {}),
     ...(input.relevant_date ? { relevantDate: input.relevant_date } : {}),
     storeCard: {
-      headerFields: [
-        {
-          key: "household_code",
-          label: "CODE",
-          value: shortCode,
-        },
-      ],
+      // V5: headerFields intentionally empty. V4 had the household
+      // code here (top-right), but it squeezed the church name in
+      // logoText and forced truncation to "Anchor Fall...". The code
+      // is already shown beneath the QR via `barcodes[].altText`, so
+      // duplicating it in the header was just visual noise. Dropping
+      // headerFields gives logoText the full top-row width.
+      headerFields: [],
       primaryFields: [
         {
           key: "family",
@@ -299,6 +299,12 @@ export function buildPassProps(
         },
       ],
     },
+    // NOTE: Apple Wallet hard-fixes barcode rendering to black-on-
+    // white for scanner reliability. There is no `foregroundColor`-
+    // equivalent for the barcode in PassKit. So the QR will always
+    // render in pure black regardless of the pass's `foregroundColor`
+    // (the indigo brand color). The altText below the QR DOES respect
+    // foregroundColor and renders in indigo.
     barcodes: [
       {
         format: "PKBarcodeFormatQR" as const,
