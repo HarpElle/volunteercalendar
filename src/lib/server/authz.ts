@@ -147,6 +147,20 @@ export async function requireKioskToken(
  *                            Unset by default; the route works exactly
  *                            as before until the env var is configured.
  *
+ * Accepts EITHER of two header shapes (W12-C Codex retest hotfix):
+ *   - `Authorization: Bearer <secret>` — Vercel's canonical scheduled-
+ *     cron contract; what production traffic uses.
+ *   - `x-cron-secret: <secret>` — what the internal /api/reminders
+ *     chain already sends (the codebase had two divergent cron-auth
+ *     shapes); also the shape Codex's QA harness sends. Adding this
+ *     here unifies the contract so a manual curl with either header
+ *     works without surprising no-op 401s.
+ *
+ * Security: same timing-safe compare runs against whichever header
+ * was supplied. No length-extension risk; no signal that one header
+ * "matched" before the secret compare. If both headers are present,
+ * Authorization wins (matches Vercel's behavior on real traffic).
+ *
  * Use at the top of every route under /api/cron/*.
  */
 export function requireCronSecret(req: NextRequest): NextResponse | null {
@@ -157,8 +171,13 @@ export function requireCronSecret(req: NextRequest): NextResponse | null {
       { status: 503 },
     );
   }
-  const presented =
+  const authHeader =
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const xCronHeader = req.headers.get("x-cron-secret") ?? "";
+  // Authorization wins when both are present — matches what real
+  // Vercel cron traffic will look like on the rare day Codex testing
+  // and a scheduled invocation overlap.
+  const presented = authHeader || xCronHeader;
   const presentedBuf = Buffer.from(presented);
 
   // Constant-time compare against each accepted secret. Loop the full
