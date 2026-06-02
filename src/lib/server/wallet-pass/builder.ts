@@ -33,13 +33,17 @@ import {
   ICON_3X_PNG_BASE64,
   LOGO_PNG_BASE64,
   LOGO_2X_PNG_BASE64,
-  STRIP_PNG_BASE64,
-  STRIP_2X_PNG_BASE64,
 } from "./assets";
 
-const BG_COLOR = "rgb(45, 48, 71)"; // vc-indigo #2D3047
-const FG_COLOR = "rgb(254, 252, 249)"; // vc-bg cream
-const LABEL_COLOR = "rgb(224, 122, 95)"; // vc-coral
+// W10-5A V3 redesign palette — INVERTED from V2 for a lighter,
+// warmer, less ominous feel. Matches the site's "Warm Editorial"
+// aesthetic (cream surfaces, indigo text, muted labels for
+// hierarchy). Coral was dropped because (a) it doesn't have enough
+// luminance contrast for some colorblind users, and (b) it competed
+// for attention with the values.
+const BG_COLOR = "rgb(254, 252, 249)"; // vc-bg cream #FEFCF9
+const FG_COLOR = "rgb(45, 48, 71)"; // vc-indigo #2D3047 (main text)
+const LABEL_COLOR = "rgb(107, 110, 138)"; // vc-indigo-muted (subtle labels)
 
 export interface FamilyPassChild {
   id: string;
@@ -113,28 +117,41 @@ function getCertsFromEnv() {
  * golden-file the shape without exercising the certificate signing
  * pipeline (which needs real env vars).
  *
- * Wave 10 W10-5A V2 layout — switched from `generic` to `storeCard`:
+ * Wave 10 W10-5A V3 redesign — clean, identity-forward layout that
+ * matches the visual polish of stock wallet cards (Starbucks,
+ * ChargePoint, etc.) rather than competing with decoration:
  *
- *   - `storeCard` semantically matches "family loyalty card for this
- *     church" better than `generic`, AND unlocks `stripImage` (the
- *     decorative banner between primary and secondary fields, which
- *     `generic` doesn't support).
+ *   - Light cream background + dark indigo text. Earth-tone, calm,
+ *     welcoming — parents are dropping off a child, not paying a
+ *     parking ticket. The previous dark-indigo background felt
+ *     heavy in comparison to the rest of the wallet stack.
  *
- *   - `logoText` (church name) renders next to the VolunteerCal logo
- *     in the top-left, communicating "this church's pass, powered
- *     by VolunteerCal" at-a-glance.
+ *   - Strong identity in the top-left: new check-in-specific
+ *     calendar+checkmark badge (see assets.ts) plus the FULL church
+ *     name via logoText. Church name reads as "this is YOUR
+ *     church's pass," powered-by VolunteerCal moves to the back.
  *
- *   - `headerFields` (top-right) carries the short household code,
- *     freeing the secondary row.
+ *   - Front-of-pass content stripped to essentials parents actually
+ *     use: family name (primary), children list (one line each in
+ *     secondary), code in the upper-right header. No redundant
+ *     labels ("Family" under the family name was noise; "CHILDREN"
+ *     above kid names too). No Household ID on the front; it's
+ *     debug-only.
  *
- *   - Children render as a single multi-line `secondaryFields` value
- *     (Apple's auxiliary-field row is horizontal and gets cramped
- *     past 2 children — multi-line is the only stack-vertically
- *     option). A small overflow back-field still calls out hidden
- *     children when the family is large.
+ *   - Back-of-pass (Pass Details) keeps the long-form children list
+ *     with grades, kiosk-scan instructions, support, and the
+ *     "Powered by VolunteerCal" attribution. Household ID was
+ *     dropped from the back too — parents don't need it; if support
+ *     does, they have it server-side.
  *
- *   - Back-field "Powered by VolunteerCal" makes the relationship
- *     explicit for parents who don't know the SaaS by name.
+ *   - No strip image. Other wallet cards in the parent's stack
+ *     (Starbucks, ChargePoint, Electrify America) don't use
+ *     decorative strips; they get their polish from strong logo +
+ *     clean type + breathing room. We follow that pattern in V3.
+ *
+ *   - Pass type stays `storeCard` (semantically right for "family
+ *     loyalty card for this church"), even though we no longer use
+ *     its stripImage support.
  */
 export function buildPassProps(
   input: FamilyPassInput,
@@ -143,10 +160,15 @@ export function buildPassProps(
 ) {
   const shortCode = input.household_id.slice(-6).toUpperCase();
 
+  // Front-of-pass child list: one per line, NAME · GRADE. No bullet
+  // (we have no label, so a bullet feels misplaced). Comma-fallback
+  // when no grades exist so we don't end with a trailing separator.
   const childInline = input.children
-    .map((c) => `${c.first_name}${c.grade ? `  ·  ${c.grade}` : ""}`)
+    .map((c) => `${c.first_name}${c.grade ? ` · ${c.grade}` : ""}`)
     .join("\n");
 
+  // Back-of-pass child list: bulleted with em-dash grade separator
+  // for a more "document" feel on the longer details page.
   const childLines = input.children
     .map((c) => `• ${c.first_name}${c.grade ? ` — ${c.grade}` : ""}`)
     .join("\n");
@@ -166,23 +188,26 @@ export function buildPassProps(
     sharingProhibited: true,
     storeCard: {
       headerFields: [
+        // Empty-string label on the code: V2's "CODE" label was in
+        // hard-to-see coral and felt redundant. The short alphanumeric
+        // string reads as a code on its own.
         {
           key: "household_code",
-          label: "Code",
+          label: "",
           value: shortCode,
         },
       ],
       primaryFields: [
         {
           key: "family",
-          label: "Family",
+          label: "",
           value: input.family_name,
         },
       ],
       secondaryFields: [
         {
           key: "children_list",
-          label: input.children.length === 1 ? "Child" : "Children",
+          label: "",
           value: childInline || "Add children in your account",
         },
       ],
@@ -207,13 +232,8 @@ export function buildPassProps(
           value: `Email info@volunteercal.com or visit ${input.support_url}`,
         },
         {
-          key: "household_id",
-          label: "Household ID",
-          value: input.household_id,
-        },
-        {
           key: "powered_by",
-          label: " ",
+          label: "",
           value: "Powered by VolunteerCal",
         },
       ],
@@ -254,13 +274,6 @@ export async function buildFamilyPassBuffer(
       "icon@3x.png": Buffer.from(ICON_3X_PNG_BASE64, "base64"),
       "logo.png": Buffer.from(LOGO_PNG_BASE64, "base64"),
       "logo@2x.png": Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
-      // Wave 10 W10-5A V2: strip image (gradient banner) between
-      // primary and secondary fields. Only renders because the
-      // pass is `storeCard` (not `generic`, which doesn't support
-      // strip images). Brand palette: vc-indigo → vc-coral diagonal
-      // with a warm radial glow in the top-right.
-      "strip.png": Buffer.from(STRIP_PNG_BASE64, "base64"),
-      "strip@2x.png": Buffer.from(STRIP_2X_PNG_BASE64, "base64"),
     },
     certs,
   );
