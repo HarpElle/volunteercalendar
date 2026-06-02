@@ -16,6 +16,7 @@ import {
 } from "@/components/settings/general-settings";
 import { CampusesSettings } from "@/components/settings/campuses-settings";
 import { SecuritySection } from "@/components/settings/security-section";
+import { BrandingSection } from "@/components/settings/branding-section";
 import { SettingsShell } from "@/components/dashboard/settings-shell";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 
@@ -172,6 +173,21 @@ function SettingsContent() {
               setCampuses={setCampuses}
               mutationError={campusesMutationError}
               setMutationError={setCampusesMutationError}
+            />
+          </section>
+        )}
+
+        {/* Wave 11 Org Branding — admin-only. Sits between Campuses
+            and CCLI for natural "identity" grouping (church name, logo,
+            CCLI license number all belong together). */}
+        {church && churchId && isAdmin(activeMembership) && (
+          <section className="border-t border-vc-border-light pt-10">
+            <BrandingSection
+              churchId={churchId}
+              currentLogoUrl={church.logo_url ?? null}
+              onChange={(newLogoUrl) =>
+                setChurch({ ...church, logo_url: newLogoUrl })
+              }
             />
           </section>
         )}

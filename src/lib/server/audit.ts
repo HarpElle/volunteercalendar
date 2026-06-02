@@ -38,6 +38,19 @@ export type AuditAction =
   | "org.delete"
   | "org.tier_change"
   | "org.transfer_ownership"
+  /**
+   * Wave 11 Org Branding: org admin uploaded a new logo to Firebase
+   * Storage and updated the church doc's logo_url. Metadata captures
+   * the new URL + file size + format (no PII). The previous logo, if
+   * any, is deleted from Storage to keep the bucket tidy.
+   */
+  | "org.brand_logo_updated"
+  /**
+   * Wave 11 Org Branding: org admin removed the custom logo. The
+   * Storage object is deleted and logo_url is set back to null.
+   * Surfaces revert to the VolunteerCal mark on next render.
+   */
+  | "org.brand_logo_removed"
   // Billing (Stripe)
   | "billing.subscription_created"
   | "billing.subscription_updated"

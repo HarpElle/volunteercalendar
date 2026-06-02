@@ -29,6 +29,18 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Wave 11 Org Branding: church/org logos. PUBLIC read because the
+    // logo renders on unauthenticated surfaces (Apple Wallet pass, email
+    // headers for parents who don't have an account, kiosk welcome
+    // screen, /guardian magic-link portal). The logo is by design
+    // non-secret. Writes via Admin SDK only — the upload route
+    // (`/api/admin/org/branding/logo`) gates on admin/owner role +
+    // sharp-validates the bytes before storing.
+    match /churches/{churchId}/branding/{file=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Default: deny all
     match /{allPaths=**} {
       allow read, write: if false;
