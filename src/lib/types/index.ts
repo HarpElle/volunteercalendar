@@ -933,6 +933,15 @@ export interface SwapRequest {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Wave 12 C: ISO timestamp of the most recent auto-escalation
+   * email sent to schedulers/admins. Set by /api/cron/swap-escalation
+   * when a swap is still "open" and the service is within ~24h. The
+   * cron uses presence/absence of this field to avoid re-escalating
+   * the same swap on successive daily runs (escalate exactly once).
+   * Null/undefined = never escalated.
+   */
+  escalated_at?: string | null;
 }
 
 // ---------------------------------------------------------------------------

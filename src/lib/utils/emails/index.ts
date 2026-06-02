@@ -36,3 +36,4 @@ export { buildPrerequisiteNudgeEmail } from "./prerequisite-nudge";
 export { buildTrainingSessionInviteEmail } from "./training-session-invite";
 export { buildDowngradeNotificationEmail } from "./downgrade-notification";
 export { buildSwapRequestBroadcastEmail } from "./swap-request-broadcast";
+export { buildSwapEscalationEmail } from "./swap-escalation";
