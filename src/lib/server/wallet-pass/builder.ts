@@ -33,6 +33,8 @@ import {
   ICON_3X_PNG_BASE64,
   LOGO_PNG_BASE64,
   LOGO_2X_PNG_BASE64,
+  STRIP_PNG_BASE64,
+  STRIP_2X_PNG_BASE64,
 } from "./assets";
 
 const BG_COLOR = "rgb(45, 48, 71)"; // vc-indigo #2D3047
@@ -106,28 +108,47 @@ function getCertsFromEnv() {
   };
 }
 
-/** Visible per pass — Apple displays at most 4 auxiliary slots. */
-const MAX_AUX_CHILDREN = 4;
-
 /**
  * The pass.json content. Exported separately so unit tests can
  * golden-file the shape without exercising the certificate signing
  * pipeline (which needs real env vars).
+ *
+ * Wave 10 W10-5A V2 layout — switched from `generic` to `storeCard`:
+ *
+ *   - `storeCard` semantically matches "family loyalty card for this
+ *     church" better than `generic`, AND unlocks `stripImage` (the
+ *     decorative banner between primary and secondary fields, which
+ *     `generic` doesn't support).
+ *
+ *   - `logoText` (church name) renders next to the VolunteerCal logo
+ *     in the top-left, communicating "this church's pass, powered
+ *     by VolunteerCal" at-a-glance.
+ *
+ *   - `headerFields` (top-right) carries the short household code,
+ *     freeing the secondary row.
+ *
+ *   - Children render as a single multi-line `secondaryFields` value
+ *     (Apple's auxiliary-field row is horizontal and gets cramped
+ *     past 2 children — multi-line is the only stack-vertically
+ *     option). A small overflow back-field still calls out hidden
+ *     children when the family is large.
+ *
+ *   - Back-field "Powered by VolunteerCal" makes the relationship
+ *     explicit for parents who don't know the SaaS by name.
  */
 export function buildPassProps(
   input: FamilyPassInput,
   passTypeIdentifier: string,
   teamIdentifier: string,
 ) {
-  const visible = input.children.slice(0, MAX_AUX_CHILDREN);
-  const hiddenCount = input.children.length - visible.length;
   const shortCode = input.household_id.slice(-6).toUpperCase();
 
+  const childInline = input.children
+    .map((c) => `${c.first_name}${c.grade ? `  ·  ${c.grade}` : ""}`)
+    .join("\n");
+
   const childLines = input.children
-    .map(
-      (c) =>
-        `• ${c.first_name}${c.grade ? ` — ${c.grade}` : ""}`,
-    )
+    .map((c) => `• ${c.first_name}${c.grade ? ` — ${c.grade}` : ""}`)
     .join("\n");
 
   return {
@@ -141,8 +162,16 @@ export function buildPassProps(
     backgroundColor: BG_COLOR,
     foregroundColor: FG_COLOR,
     labelColor: LABEL_COLOR,
+    logoText: input.church_name,
     sharingProhibited: true,
-    generic: {
+    storeCard: {
+      headerFields: [
+        {
+          key: "household_code",
+          label: "Code",
+          value: shortCode,
+        },
+      ],
       primaryFields: [
         {
           key: "family",
@@ -152,24 +181,12 @@ export function buildPassProps(
       ],
       secondaryFields: [
         {
-          key: "children_count",
-          label: "Children",
-          value:
-            input.children.length === 0
-              ? "0"
-              : String(input.children.length),
-        },
-        {
-          key: "household_code",
-          label: "Code",
-          value: shortCode,
+          key: "children_list",
+          label: input.children.length === 1 ? "Child" : "Children",
+          value: childInline || "Add children in your account",
         },
       ],
-      auxiliaryFields: visible.map((c, i) => ({
-        key: `child_${i}`,
-        label: c.grade ?? " ",
-        value: c.first_name,
-      })),
+      auxiliaryFields: [],
       backFields: [
         {
           key: "children_full",
@@ -178,15 +195,6 @@ export function buildPassProps(
             childLines ||
             "No children on file yet — add them in your VolunteerCal account.",
         },
-        ...(hiddenCount > 0
-          ? [
-              {
-                key: "children_overflow",
-                label: " ",
-                value: `(+${hiddenCount} more on the front)`,
-              },
-            ]
-          : []),
         {
           key: "kiosk_instructions",
           label: "Speed up next check-in",
@@ -202,6 +210,11 @@ export function buildPassProps(
           key: "household_id",
           label: "Household ID",
           value: input.household_id,
+        },
+        {
+          key: "powered_by",
+          label: " ",
+          value: "Powered by VolunteerCal",
         },
       ],
     },
@@ -241,6 +254,13 @@ export async function buildFamilyPassBuffer(
       "icon@3x.png": Buffer.from(ICON_3X_PNG_BASE64, "base64"),
       "logo.png": Buffer.from(LOGO_PNG_BASE64, "base64"),
       "logo@2x.png": Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
+      // Wave 10 W10-5A V2: strip image (gradient banner) between
+      // primary and secondary fields. Only renders because the
+      // pass is `storeCard` (not `generic`, which doesn't support
+      // strip images). Brand palette: vc-indigo → vc-coral diagonal
+      // with a warm radial glow in the top-right.
+      "strip.png": Buffer.from(STRIP_PNG_BASE64, "base64"),
+      "strip@2x.png": Buffer.from(STRIP_2X_PNG_BASE64, "base64"),
     },
     certs,
   );
