@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { kioskFetch } from "@/lib/kiosk-client";
+import { CheckInBadge } from "@/components/ui/check-in-badge";
 import { NumericKeypad } from "./numeric-keypad";
 
 interface HouseholdResult {
@@ -245,6 +246,7 @@ export function FamilyLookup({
     <div className="flex flex-col items-center justify-center h-full p-8 gap-6">
       {/* Header */}
       <div className="text-center mb-4">
+        <CheckInBadge size={56} className="mx-auto mb-3" decorative />
         {churchName && (
           <p className="text-lg text-vc-text-secondary font-medium mb-1">{churchName}</p>
         )}
