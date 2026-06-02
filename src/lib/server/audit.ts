@@ -68,6 +68,15 @@ export type AuditAction =
    */
   | "assignment.swap_accepted"
   /**
+   * Wave 12 C: daily cron escalated an open swap_request to the
+   * team's schedulers + admins because the service is within ~24h
+   * and no teammate had covered. Fires at most once per swap (the
+   * cron stamps `escalated_at` to guarantee that). Metadata
+   * captures the swap id, ministry, service date, recipient count.
+   * Actor is "system" since the cron fires on a schedule.
+   */
+  | "swap.escalated"
+  /**
    * Wave 12 B: a volunteer hit the day-of urgent absence path
    * ("I can't make it today" — sick, flat tire, etc.). The route
    * SMS-fans-out to schedulers + admins regardless of their normal
