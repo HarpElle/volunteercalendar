@@ -156,7 +156,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
+    /*
+     * Auth-state watchdog (Safari ITP / IndexedDB stall circuit-breaker).
+     *
+     * The canonical Firebase fix for Safari ITP-related stalls is the
+     * `experimentalAutoDetectLongPolling` Firestore option (shipped
+     * commit 1695848, in src/lib/firebase/config.ts). That covers the
+     * common WebChannel/iframe-cookie failure mode.
+     *
+     * This watchdog is the second line: if onAuthStateChanged never
+     * fires within 10s (corrupted IndexedDB, network deadlock, other
+     * pathological Safari state), surface an error so the user sees
+     * "Sign-in is taking longer than expected" with a reload button
+     * — instead of staring at an infinite spinner. The 10s threshold
+     * is well above any normal cold-cache load on a real network and
+     * well below any actual user patience.
+     *
+     * Cleared on first successful dispatch so we never false-fire
+     * after a slow-but-eventually-successful auth resolution.
+     */
+    const watchdog = setTimeout(() => {
+      dispatch({
+        type: "SET_ERROR",
+        error:
+          "Sign-in is taking longer than expected. Try reloading the page. If that doesn't work, clearing your browser's cookies/data for this site and signing in again usually fixes it.",
+      });
+    }, 10_000);
+
     const unsubscribe = onAuthChange(async (user) => {
+      // Listener fired — kill the watchdog so the error toast doesn't
+      // appear even on a slow-but-successful first resolution.
+      clearTimeout(watchdog);
+
       if (user) {
         try {
           let [profile, memberships] = await Promise.all([
@@ -243,7 +274,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     });
-    return unsubscribe;
+    return () => {
+      clearTimeout(watchdog);
+      unsubscribe();
+    };
   }, []);
 
   async function signUp(email: string, password: string, displayName: string, phone?: string) {

@@ -28,7 +28,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, profile, loading, signOut, memberships, activeMembership, switchOrg } = useAuth();
+  const { user, profile, loading, error, signOut, memberships, activeMembership, switchOrg } = useAuth();
   const [churchName, setChurchName] = useState<string>("");
   const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map());
   const [showGuideDot, setShowGuideDot] = useState(false);
@@ -140,6 +140,31 @@ export default function DashboardLayout({
     await signOut();
     router.push("/");
   }, [signOut, router]);
+
+  // Safari ITP / IndexedDB stall circuit-breaker: if the auth-context
+  // watchdog timed out (onAuthStateChanged never fired within 10s),
+  // show an actionable error instead of an infinite spinner. The
+  // canonical long-polling Firestore fix is already shipped — this
+  // only fires in the pathological corrupted-IndexedDB case where the
+  // listener itself never resolves.
+  if (error && !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-vc-bg px-6">
+        <div className="max-w-md text-center">
+          <p className="font-display text-lg font-semibold text-vc-indigo">
+            Sign-in stuck?
+          </p>
+          <p className="mt-3 text-sm text-vc-text-secondary">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-5 inline-flex items-center justify-center rounded-lg bg-vc-coral px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-vc-coral/90"
+          >
+            Reload page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Show the spinner during initial auth resolution AND while the redirect
   // is in flight for logged-out users — eliminates the blank-page window.
