@@ -51,6 +51,22 @@ export type AuditAction =
    * Surfaces revert to the VolunteerCal mark on next render.
    */
   | "org.brand_logo_removed"
+  /**
+   * Wave 12 A: a volunteer requested a swap (someone to cover their
+   * scheduled shift). Backend creates the SwapRequest record + fans
+   * out in-app notifications to ministry teammates. Metadata captures
+   * the swap_id, assignment_id, ministry_id, and how many teammates
+   * were notified (no PII).
+   */
+  | "assignment.swap_requested"
+  /**
+   * Wave 12 A: a teammate accepted an open swap request. The
+   * assignment was atomically reassigned to them. Both the original
+   * requester and the accepting volunteer get a swap_resolved
+   * in-app notification (existing PATCH flow already does that).
+   * Audit records who took whose shift for compliance.
+   */
+  | "assignment.swap_accepted"
   // Billing (Stripe)
   | "billing.subscription_created"
   | "billing.subscription_updated"

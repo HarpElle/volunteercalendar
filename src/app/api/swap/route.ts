@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase/admin";
 import type { SwapRequest, Person, Assignment } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
+import { audit, userActor } from "@/lib/server/audit";
 
 // POST — Create a swap request
 // Supports two auth modes:
@@ -86,27 +87,158 @@ export async function POST(request: Request) {
 
     const ref = await churchRef.collection("swap_requests").add(swapData);
 
-    return NextResponse.json({ success: true, swap_id: ref.id });
+    // W12-A: broadcast in-app notification to ministry teammates
+    // (people in the same ministry, excluding the requester). They'll
+    // see the open swap in their "Open swap requests" section on
+    // /dashboard/my-schedule + their inbox. Fire-and-forget — a
+    // broadcast failure must not block swap creation.
+    let teammatesNotified = 0;
+    try {
+      const teammatesSnap = await churchRef
+        .collection("people")
+        .where("ministry_ids", "array-contains", assignment.ministry_id)
+        .where("person_type", "==", "adult")
+        .get();
+      const teammates = teammatesSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Person)
+        .filter((p) => p.id !== assignment.volunteer_id);
+
+      const dateLabel = assignment.service_date;
+      const notifs = await Promise.all(
+        teammates.map(async (t) => {
+          const uid = await resolveUserId(church_id, t.id);
+          if (!uid) return null;
+          try {
+            await createUserNotification({
+              user_id: uid,
+              church_id,
+              type: "swap_request",
+              title: `Sub needed: ${assignment.role_title}`,
+              body: `${requesterName} can't make ${dateLabel}. Tap to cover.`,
+              metadata: {
+                link_href: "/dashboard/my-schedule#open-swaps",
+                swap_id: ref.id,
+              },
+            });
+            return true;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      teammatesNotified = notifs.filter(Boolean).length;
+    } catch (broadcastErr) {
+      console.error("Swap broadcast error (non-blocking):", broadcastErr);
+    }
+
+    // W12-A: audit emit. Best-effort — never blocks the swap.
+    if (authHeader) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(authHeader);
+        void audit({
+          church_id,
+          actor: userActor(decoded.uid),
+          action: "assignment.swap_requested",
+          target_type: "swap_request",
+          target_id: ref.id,
+          metadata: {
+            assignment_id,
+            ministry_id: assignment.ministry_id,
+            teammates_notified: teammatesNotified,
+            reason_provided: !!reason,
+          },
+          outcome: "ok",
+        });
+      } catch {
+        // Audit failure shouldn't block the swap — already created.
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      swap_id: ref.id,
+      teammates_notified: teammatesNotified,
+    });
   } catch (error) {
     console.error("Swap create error:", error);
     return NextResponse.json({ error: "Failed to create swap request" }, { status: 500 });
   }
 }
 
-// GET — List eligible replacements for a swap request
+// GET — Two list modes:
+//   1. `swap_id=X` — list eligible replacements for that specific swap
+//      (existing admin/scheduler-facing flow; mounted before W12-A).
+//   2. `open_for_me=true` (W12-A) — Bearer-auth'd; returns open swaps
+//      from any ministry the caller is part of, excluding swaps they
+//      created themselves. Powers the "Open swap requests" section on
+//      /dashboard/my-schedule for teammates to discover + accept.
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const churchId = searchParams.get("church_id");
     const swapId = searchParams.get("swap_id");
+    const openForMe = searchParams.get("open_for_me") === "true";
 
-    if (!churchId || !swapId) {
-      return NextResponse.json({ error: "Missing church_id or swap_id" }, { status: 400 });
+    if (!churchId) {
+      return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    }
+    if (!swapId && !openForMe) {
+      return NextResponse.json(
+        { error: "Missing swap_id or open_for_me=true" },
+        { status: 400 },
+      );
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
 
-    // Get the swap request
+    // W12-A: open-for-me mode — list swaps the caller could cover.
+    if (openForMe) {
+      const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+      if (!token) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const decoded = await adminAuth.verifyIdToken(token);
+
+      // Resolve caller's Person doc + ministries.
+      const personSnap = await churchRef
+        .collection("people")
+        .where("user_id", "==", decoded.uid)
+        .limit(1)
+        .get();
+      if (personSnap.empty) {
+        return NextResponse.json({ swaps: [] });
+      }
+      const callerPerson = {
+        id: personSnap.docs[0].id,
+        ...personSnap.docs[0].data(),
+      } as Person;
+      const myMinistries = callerPerson.ministry_ids ?? [];
+      if (myMinistries.length === 0) {
+        return NextResponse.json({ swaps: [] });
+      }
+
+      // Pull all open swaps for the church; filter in-memory by
+      // ministry overlap + exclude own. Volume is small (open swaps
+      // at a single org typically <10 at any time) so in-memory is
+      // fine; avoids needing a composite index per ministry.
+      const openSnap = await churchRef
+        .collection("swap_requests")
+        .where("status", "==", "open")
+        .get();
+      const swaps = openSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as SwapRequest)
+        .filter((s) => myMinistries.includes(s.ministry_id))
+        .filter((s) => s.requester_volunteer_id !== callerPerson.id);
+      return NextResponse.json({ swaps });
+    }
+
+    // Get the swap request. swapId is guaranteed non-null here:
+    // the openForMe branch above returns early when only that flag
+    // is set, and the initial guard rejects the case where BOTH
+    // swap_id and open_for_me are missing.
+    if (!swapId) {
+      return NextResponse.json({ error: "Missing swap_id" }, { status: 400 });
+    }
     const swapSnap = await churchRef.collection("swap_requests").doc(swapId).get();
     if (!swapSnap.exists) {
       return NextResponse.json({ error: "Swap request not found" }, { status: 404 });
@@ -238,6 +370,22 @@ export async function PATCH(request: Request) {
       } catch (notifErr) {
         console.error("User notification error (swap accept):", notifErr);
       }
+
+      // W12-A: audit emit
+      void audit({
+        church_id,
+        actor: userActor(decoded.uid),
+        action: "assignment.swap_accepted",
+        target_type: "swap_request",
+        target_id: swap_id,
+        metadata: {
+          assignment_id: swap.assignment_id,
+          ministry_id: swap.ministry_id,
+          requester_volunteer_id: swap.requester_volunteer_id,
+          replacement_volunteer_id: volunteer_id,
+        },
+        outcome: "ok",
+      });
 
       return NextResponse.json({ success: true, status: "auto_approved" });
     }
