@@ -23,7 +23,11 @@ import { useAuth } from "@/lib/context/auth-context";
 interface RequestSwapModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (info: { swap_id: string; teammates_notified: number }) => void;
+  onCreated: (info: {
+    swap_id: string;
+    teammates_notified: number;
+    teammates_emailed: number;
+  }) => void;
   churchId: string;
   assignmentId: string;
   roleName: string;
@@ -80,6 +84,7 @@ export function RequestSwapModal({
       const data = (await res.json()) as {
         swap_id: string;
         teammates_notified: number;
+        teammates_emailed: number;
       };
       onCreated(data);
       onClose();
@@ -94,10 +99,10 @@ export function RequestSwapModal({
     <Modal open={open} onClose={onClose} title="Need a sub?">
       <div className="space-y-4">
         <p className="text-sm text-vc-text-secondary">
-          We&rsquo;ll let your teammates on this team know you need
-          someone to cover. Any of them can claim it — the swap
-          happens automatically. Your scheduler gets a heads-up once
-          someone takes it.
+          We&rsquo;ll email your teammates on this team and let them
+          know you need someone to cover. Any of them can claim it
+          with one tap &mdash; the swap happens automatically. Your
+          scheduler gets a heads-up once someone takes it.
         </p>
 
         <div className="rounded-xl border border-vc-border-light bg-vc-bg-warm/50 p-4">

@@ -11,6 +11,9 @@ import { adminDb, adminAuth } from "@/lib/firebase/admin";
 import type { SwapRequest, Person, Assignment } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { audit, userActor } from "@/lib/server/audit";
+import { resend } from "@/lib/resend";
+import { buildSwapRequestBroadcastEmail } from "@/lib/utils/emails/swap-request-broadcast";
+import { getBaseUrl } from "@/lib/utils/base-url";
 
 // POST — Create a swap request
 // Supports two auth modes:
@@ -87,13 +90,35 @@ export async function POST(request: Request) {
 
     const ref = await churchRef.collection("swap_requests").add(swapData);
 
-    // W12-A: broadcast in-app notification to ministry teammates
-    // (people in the same ministry, excluding the requester). They'll
-    // see the open swap in their "Open swap requests" section on
-    // /dashboard/my-schedule + their inbox. Fire-and-forget — a
-    // broadcast failure must not block swap creation.
+    // W12-A: broadcast in-app notification + email to ministry
+    // teammates (people in the same ministry, excluding the requester).
+    // Volunteers don't routinely log in, so EMAIL is the primary
+    // discovery channel here — the in-app notification is the
+    // secondary surface for people who happen to be on the dashboard.
+    // Fire-and-forget — broadcast failure must not block swap creation.
     let teammatesNotified = 0;
+    let teammatesEmailed = 0;
     try {
+      // Resolve labels needed for the email up front (one read each).
+      const [churchSnap, ministrySnap, serviceSnap] = await Promise.all([
+        churchRef.get(),
+        churchRef.collection("ministries").doc(assignment.ministry_id).get(),
+        assignment.service_id
+          ? churchRef.collection("services").doc(assignment.service_id).get()
+          : Promise.resolve(null),
+      ]);
+      const churchName =
+        (churchSnap.data()?.name as string) || "your church";
+      const teamName =
+        (ministrySnap.data()?.name as string) || "your team";
+      const serviceName =
+        (serviceSnap?.data()?.name as string) || "your service";
+
+      // Deep-link recipients straight to the open-swaps section on
+      // /dashboard/my-schedule. Sign-in wall preserves the path so
+      // they land on the right anchor after auth.
+      const ctaUrl = `${getBaseUrl(request)}/dashboard/my-schedule#open-swaps`;
+
       const teammatesSnap = await churchRef
         .collection("people")
         .where("ministry_ids", "array-contains", assignment.ministry_id)
@@ -104,10 +129,23 @@ export async function POST(request: Request) {
         .filter((p) => p.id !== assignment.volunteer_id);
 
       const dateLabel = assignment.service_date;
-      const notifs = await Promise.all(
+      const results = await Promise.all(
         teammates.map(async (t) => {
           const uid = await resolveUserId(church_id, t.id);
-          if (!uid) return null;
+          if (!uid) return { notified: false, emailed: false };
+
+          // Look up the auth-side profile for email + display name.
+          // Person.email exists on the directory record but the
+          // canonical contact email lives on the user profile (parents
+          // sometimes share a household email with a teen Person doc).
+          const profileSnap = await adminDb.doc(`users/${uid}`).get();
+          const profile = profileSnap.exists ? profileSnap.data() : null;
+          const recipientEmail = (profile?.email as string) || t.email || "";
+          const recipientName =
+            (profile?.display_name as string) || t.name || "there";
+
+          // 1. In-app notification (existing behavior).
+          let notified = false;
           try {
             await createUserNotification({
               user_id: uid,
@@ -120,13 +158,44 @@ export async function POST(request: Request) {
                 swap_id: ref.id,
               },
             });
-            return true;
+            notified = true;
           } catch {
-            return null;
+            // continue — try email regardless
           }
+
+          // 2. Email (new — the primary discovery channel).
+          let emailed = false;
+          if (recipientEmail) {
+            try {
+              const email = buildSwapRequestBroadcastEmail({
+                recipientName,
+                requesterName,
+                teamName,
+                churchName,
+                serviceName,
+                serviceDate: assignment.service_date,
+                roleName: assignment.role_title,
+                note: reason || null,
+                ctaUrl,
+              });
+              await resend.emails.send({
+                from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
+                to: recipientEmail,
+                subject: email.subject,
+                html: email.html,
+                text: email.text,
+              });
+              emailed = true;
+            } catch {
+              // continue notifying others
+            }
+          }
+
+          return { notified, emailed };
         }),
       );
-      teammatesNotified = notifs.filter(Boolean).length;
+      teammatesNotified = results.filter((r) => r.notified).length;
+      teammatesEmailed = results.filter((r) => r.emailed).length;
     } catch (broadcastErr) {
       console.error("Swap broadcast error (non-blocking):", broadcastErr);
     }
@@ -145,6 +214,7 @@ export async function POST(request: Request) {
             assignment_id,
             ministry_id: assignment.ministry_id,
             teammates_notified: teammatesNotified,
+            teammates_emailed: teammatesEmailed,
             reason_provided: !!reason,
           },
           outcome: "ok",
@@ -158,6 +228,7 @@ export async function POST(request: Request) {
       success: true,
       swap_id: ref.id,
       teammates_notified: teammatesNotified,
+      teammates_emailed: teammatesEmailed,
     });
   } catch (error) {
     console.error("Swap create error:", error);

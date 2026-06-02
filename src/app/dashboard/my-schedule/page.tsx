@@ -1138,13 +1138,22 @@ export default function MySchedulePage() {
         <RequestSwapModal
           open={!!swapRequestItem}
           onClose={() => setSwapRequestItem(null)}
-          onCreated={({ teammates_notified }) => {
-            setSwapToast(
-              teammates_notified > 0
-                ? `Sent to ${teammates_notified} teammate${teammates_notified === 1 ? "" : "s"}.`
-                : "Swap request created. (No teammates on this team to notify yet.)",
-            );
-            setTimeout(() => setSwapToast(null), 4000);
+          onCreated={({ teammates_emailed, teammates_notified }) => {
+            // Lead with email count — that's the channel volunteers
+            // actually see. Fall back to in-app count if no teammates
+            // had emails on file, and finally to the empty-team case.
+            const emailed = teammates_emailed ?? 0;
+            const notified = teammates_notified ?? 0;
+            let msg: string;
+            if (emailed > 0) {
+              msg = `Emailed ${emailed} teammate${emailed === 1 ? "" : "s"}. First to tap "Cover this" takes the spot.`;
+            } else if (notified > 0) {
+              msg = `Sent to ${notified} teammate${notified === 1 ? "" : "s"} in-app. (No email addresses on file.)`;
+            } else {
+              msg = "Swap request created. (No teammates on this team to notify yet.)";
+            }
+            setSwapToast(msg);
+            setTimeout(() => setSwapToast(null), 5000);
           }}
           churchId={activeMembership?.church_id || profile?.church_id || ""}
           assignmentId={swapRequestItem.id}
