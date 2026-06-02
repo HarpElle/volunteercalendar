@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
+import { CheckInBadge } from "@/components/ui/check-in-badge";
 
 interface GuardianChild {
   id: string;
@@ -245,13 +246,18 @@ function GuardianPortalInner() {
 
   return (
     <div>
-      {/* Church name */}
-      <p className="text-sm text-vc-text-secondary font-medium mb-1">
-        {churchName}
-      </p>
-      <h1 className="text-2xl font-bold text-vc-indigo font-display mb-6">
-        {household.primary_guardian_name} Family
-      </h1>
+      {/* Header: VolunteerCal Check-In badge + church + family name */}
+      <div className="flex items-center gap-3 mb-6">
+        <CheckInBadge size={44} decorative />
+        <div>
+          <p className="text-sm text-vc-text-secondary font-medium">
+            {churchName}
+          </p>
+          <h1 className="text-2xl font-bold text-vc-indigo font-display leading-tight">
+            {household.primary_guardian_name} Family
+          </h1>
+        </div>
+      </div>
 
       {/* Guardian info */}
       <div className="bg-white rounded-xl border border-vc-border-light p-5 mb-4">

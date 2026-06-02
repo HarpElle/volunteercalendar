@@ -8,6 +8,7 @@ import {
   type KioskPrinterConfig,
 } from "@/lib/services/kiosk-print-bridge";
 import { getStoredKioskToken } from "@/lib/kiosk-client";
+import { CheckInBadge } from "@/components/ui/check-in-badge";
 
 interface CheckInResult {
   sessions: {
@@ -172,11 +173,19 @@ export function CheckInSuccess({
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
-      {/* Success icon */}
-      <div className="w-20 h-20 rounded-full bg-vc-sage/20 flex items-center justify-center mb-6">
-        <svg className="w-10 h-10 text-vc-sage" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      {/* W11 Check-In Badge — replaces the generic sage checkmark
+          icon. Same visual mark used on the wallet pass + kiosk
+          welcome screen, so the moment of success is brand-tied
+          to the same identity parents have already seen. */}
+      <CheckInBadge size={80} className="mb-6" decorative />
+
+      {/* Tiny green confirmation chip below the badge keeps the
+          "your action succeeded" semantic without competing visually. */}
+      <div className="flex items-center gap-1.5 text-vc-sage text-sm font-medium mb-2">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
+        Success
       </div>
 
       {churchName && (
