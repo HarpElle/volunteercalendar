@@ -65,6 +65,14 @@ function GuardianPortalInner() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
+  // Wave 10 W10-5A-UI A: Add to Apple Wallet button state.
+  // Fetches a fresh signed URL on click (URLs are 10 min TTL — too
+  // short to mint at portal-load and just sit waiting), then
+  // navigates the browser to the URL so iOS Safari can show the
+  // Wallet sheet.
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     if (!token || !churchId) return;
     setLoading(true);
@@ -108,6 +116,34 @@ function GuardianPortalInner() {
       .then(setQrDataUrl)
       .catch(() => {});
   }, [token, churchId]);
+
+  const handleAddToWallet = async () => {
+    if (!token || !churchId) return;
+    setWalletLoading(true);
+    setWalletError(null);
+    try {
+      const res = await fetch("/api/guardian/wallet-pass-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, church_id: churchId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? "Could not get pass URL");
+      }
+      const data = (await res.json()) as { url: string };
+      // Navigate to the signed URL — on iOS Safari, the
+      // application/vnd.apple.pkpass response triggers the
+      // "Add to Apple Wallet" sheet. On other browsers, it
+      // downloads a .pkpass file.
+      window.location.href = data.url;
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : "Failed to load");
+      setWalletLoading(false);
+    }
+  };
 
   const startEditing = () => {
     if (!household) return;
@@ -386,6 +422,59 @@ function GuardianPortalInner() {
           </p>
         </div>
       )}
+
+      {/* Apple Wallet family pass — Wave 10 W10-5A-UI sub-PR A */}
+      <div className="bg-white rounded-xl border border-vc-border-light p-5 mb-4">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Family Pass
+        </h2>
+        <p className="text-sm text-vc-text-secondary mb-4">
+          Add your family pass to Apple Wallet for faster check-in. Scan
+          the pass at the kiosk to pull up your household instantly — no
+          phone number needed.
+        </p>
+        <button
+          type="button"
+          onClick={handleAddToWallet}
+          disabled={walletLoading}
+          className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 rounded-lg bg-vc-indigo text-vc-bg font-medium text-sm min-h-[44px] disabled:opacity-60"
+        >
+          {walletLoading ? (
+            "Loading…"
+          ) : (
+            <>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="9" y1="4" x2="9" y2="10" />
+                <line x1="15" y1="4" x2="15" y2="10" />
+                <polyline points="8,16.5 10.5,19 16,13.5" />
+              </svg>
+              Add to Apple Wallet
+            </>
+          )}
+        </button>
+        <p className="text-xs text-vc-text-muted mt-2">
+          Requires iPhone or iPad. Google Wallet support coming soon.
+        </p>
+        {walletError && (
+          <p
+            role="alert"
+            className="text-sm text-vc-coral mt-2"
+          >
+            {walletError}
+          </p>
+        )}
+      </div>
 
       {/* Recent check-in history */}
       <div className="bg-white rounded-xl border border-vc-border-light p-5">
