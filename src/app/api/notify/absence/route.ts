@@ -7,12 +7,22 @@ import type { Membership } from "@/lib/types";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
+import { decideAbsenceChannels } from "@/lib/server/absence-channels";
+import { audit, userActor } from "@/lib/server/audit";
 
 interface AbsenceBody {
   church_id: string;
   item_type: "assignment" | "event_signup";
   item_id: string;
   note?: string;
+  /**
+   * Wave 12 B: client signals this is a day-of emergency (sick,
+   * flat tire, etc.). When true, SMS + email bypass each
+   * recipient's notification preferences so the news lands in time
+   * for the church to react. Default false preserves the original
+   * advance-notice behavior.
+   */
+  urgent?: boolean;
 }
 
 /**
@@ -34,6 +44,7 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as AbsenceBody;
     const { church_id, item_type, item_id, note } = body;
+    const urgent = body.urgent === true;
 
     if (!church_id || !item_type || !item_id) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -176,27 +187,38 @@ export async function POST(req: NextRequest) {
 
       if (!isRecipient) continue;
 
-      // Check scheduler notification preferences
+      // Get recipient profile up front — we need to know whether
+      // they have email/phone on file before we can decide channels.
+      const profileSnap = await adminDb.doc(`users/${mUserId}`).get();
+      if (!profileSnap.exists) continue;
+      const profileData = profileSnap.data()!;
+      const recipientEmail = (profileData.email as string) || "";
+      const recipientName = (profileData.display_name as string) || "there";
+      const recipientPhone = (profileData.phone as string) || "";
+
+      // W12-B: route channel decision through the pure helper so
+      // the urgent-override-prefs contract is regression-tested in
+      // isolation. Non-urgent path = same shouldNotifyScheduler-
+      // driven behavior as before. Urgent path = bypass prefs.
       const membershipAsType = { id: mDoc.id, ...mData } as Membership;
-      const { email: sendEmail, sms: sendSmsFlag } = shouldNotifyScheduler(
+      const prefs = shouldNotifyScheduler(
         membershipAsType,
         "absence_alert",
         subscriptionTier,
       );
+      const { email: sendEmail, sms: sendSmsFlag } = decideAbsenceChannels({
+        urgent,
+        prefsEmail: prefs.email,
+        prefsSms: prefs.sms,
+        hasEmail: !!recipientEmail,
+        hasPhone: !!recipientPhone,
+      });
 
       if (!sendEmail && !sendSmsFlag) continue;
 
-      // Get recipient profile
-      const profileSnap = await adminDb.doc(`users/${mUserId}`).get();
-      if (!profileSnap.exists) continue;
-      const profileData = profileSnap.data()!;
-      const recipientEmail = profileData.email as string;
-      const recipientName = (profileData.display_name as string) || "there";
-      const recipientPhone = (profileData.phone as string) || null;
-
       // Send email
       if (sendEmail && recipientEmail) {
-        const email = buildAbsenceAlertEmail({
+        const baseEmail = buildAbsenceAlertEmail({
           recipientName,
           volunteerName,
           churchName,
@@ -206,13 +228,21 @@ export async function POST(req: NextRequest) {
           note: note || null,
         });
 
+        // W12-B: urgent path prefixes the subject so the message
+        // jumps out in a crowded inbox. Body HTML/text are unchanged
+        // — the subject + the SMS that lands at the same time carry
+        // the urgency signal.
+        const subject = urgent
+          ? `URGENT — ${volunteerName} can’t make it TODAY (${roleName})`
+          : baseEmail.subject;
+
         try {
           await resend.emails.send({
             from: `${churchName} via VolunteerCal <noreply@harpelle.com>`,
             to: recipientEmail,
-            subject: email.subject,
-            html: email.html,
-            text: email.text,
+            subject,
+            html: baseEmail.html,
+            text: baseEmail.text,
           });
           emailCount++;
         } catch {
@@ -220,9 +250,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Send SMS if preferences allow and recipient has a phone number
+      // Send SMS. Body differs by mode — urgent leads with the word
+      // "URGENT" so the recipient's phone preview makes it obvious.
       if (sendSmsFlag && recipientPhone) {
-        const smsText = `VolunteerCal: ${volunteerName} can't make it for ${roleName} (${serviceName}) on ${serviceDate}. Check your dashboard.`;
+        const smsText = urgent
+          ? `URGENT — VolunteerCal: ${volunteerName} CAN'T MAKE IT TODAY for ${roleName} (${serviceName}). Reach out / find a sub ASAP.`
+          : `VolunteerCal: ${volunteerName} can't make it for ${roleName} (${serviceName}) on ${serviceDate}. Check your dashboard.`;
         try {
           await sendSms({ to: recipientPhone, body: smsText });
           smsCount++;
@@ -237,8 +270,12 @@ export async function POST(req: NextRequest) {
           user_id: mUserId,
           church_id,
           type: "absence_alert",
-          title: `${volunteerName} can't make it`,
-          body: `${roleName} on ${serviceDate}`,
+          title: urgent
+            ? `URGENT: ${volunteerName} can't make it today`
+            : `${volunteerName} can't make it`,
+          body: urgent
+            ? `${roleName} TODAY (${serviceDate}). Find a sub ASAP.`
+            : `${roleName} on ${serviceDate}`,
           metadata: { link_href: "/dashboard/schedules" },
         });
       } catch (notifErr) {
@@ -251,7 +288,7 @@ export async function POST(req: NextRequest) {
       church_id,
       volunteer_id: volunteerId,
       volunteer_name: volunteerName,
-      type: "absence_alert",
+      type: urgent ? "urgent_absence_alert" : "absence_alert",
       channel: "email",
       status: "sent",
       error_message: null,
@@ -259,10 +296,34 @@ export async function POST(req: NextRequest) {
       sent_at: new Date().toISOString(),
     });
 
+    // W12-B: audit the urgent path — material because (a) it
+    // overrides recipient prefs and (b) churches want a queryable
+    // signal for how often day-of absences happen. Non-urgent path
+    // remains un-audited to keep the volume sane.
+    if (urgent) {
+      void audit({
+        church_id,
+        actor: userActor(userId),
+        action: "volunteer.urgent_absence_alerted",
+        target_type: item_type,
+        target_id: item_id,
+        metadata: {
+          ministry_id: ministryId || null,
+          volunteer_id: volunteerId,
+          service_date: serviceDate,
+          emails_sent: emailCount,
+          sms_sent: smsCount,
+          note: note ? note.slice(0, 200) : null,
+        },
+        outcome: "ok",
+      });
+    }
+
     return NextResponse.json({
       success: true,
       emails_sent: emailCount,
       sms_sent: smsCount,
+      urgent,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";

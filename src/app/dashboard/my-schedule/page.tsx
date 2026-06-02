@@ -141,7 +141,17 @@ export default function MySchedulePage() {
   const [fetchError, setFetchError] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [removeItem, setRemoveItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
-  const [cantMakeItItem, setCantMakeItItem] = useState<{ kind: string; id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
+  const [cantMakeItItem, setCantMakeItItem] = useState<{
+    kind: string;
+    id: string;
+    roleName: string;
+    eventOrServiceName: string;
+    date: string;
+    // W12-B: true when the service is TODAY. Flips the modal into
+    // the urgent SMS-bypass-prefs path. Carried on the state object
+    // so a single modal handles both calendars-of-notice.
+    urgent?: boolean;
+  } | null>(null);
   const [swapRequestItem, setSwapRequestItem] = useState<{ id: string; roleName: string; eventOrServiceName: string; date: string } | null>(null);
   const [swapToast, setSwapToast] = useState<string | null>(null);
   // Codex Run 2 retest (2026-05-17): in-app confirm/decline for pending
@@ -944,6 +954,30 @@ export default function MySchedulePage() {
                                 >
                                   {releasingId === item.id ? "Releasing…" : "Release slot"}
                                 </button>
+                              ) : item.date === today ? (
+                                /* W12-B: day-of urgent path. When the
+                                   service is TODAY, peer-swap (W12-A) is
+                                   too slow and the routine "Can't Make
+                                   It" email path may miss the scheduler.
+                                   Replace all three action buttons with
+                                   one prominent coral button that opens
+                                   the modal in urgent mode → SMS-blasts
+                                   scheduler + admin regardless of their
+                                   notification prefs. */
+                                <button
+                                  onClick={() => setCantMakeItItem({
+                                    kind: item.kind,
+                                    id: item.id,
+                                    roleName: item.roleName,
+                                    eventOrServiceName: item.eventOrServiceName,
+                                    date: item.date,
+                                    urgent: true,
+                                  })}
+                                  className="min-h-[44px] rounded-lg bg-vc-coral px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-vc-coral/90 flex items-center gap-1.5"
+                                >
+                                  <span aria-hidden="true">⚠️</span>
+                                  Can&rsquo;t make it today
+                                </button>
                               ) : (
                                 <>
                                   {/* W12-A: Need-a-sub button — sub-only path
@@ -1197,6 +1231,7 @@ export default function MySchedulePage() {
           roleName={cantMakeItItem.roleName}
           serviceName={cantMakeItItem.eventOrServiceName}
           serviceDate={cantMakeItItem.date}
+          urgent={cantMakeItItem.urgent ?? false}
         />
       )}
       {/* Self-removal modal */}

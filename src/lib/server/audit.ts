@@ -67,6 +67,17 @@ export type AuditAction =
    * Audit records who took whose shift for compliance.
    */
   | "assignment.swap_accepted"
+  /**
+   * Wave 12 B: a volunteer hit the day-of urgent absence path
+   * ("I can't make it today" — sick, flat tire, etc.). The route
+   * SMS-fans-out to schedulers + admins regardless of their normal
+   * notification preferences. Material because (a) it overrides
+   * opt-out and (b) churches want a queryable signal for how often
+   * day-of absences happen by ministry/volunteer. Metadata captures
+   * item_type, item_id, ministry_id, channel counts, and the
+   * volunteer's optional note (truncated to 200 chars).
+   */
+  | "volunteer.urgent_absence_alerted"
   // Billing (Stripe)
   | "billing.subscription_created"
   | "billing.subscription_updated"
