@@ -75,7 +75,17 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Load recent check-in sessions (last 30 days)
+    // Load recent check-in sessions (last 30 days). The previous
+    // query had `.where("household_id","==",X).where("service_date",
+    // ">=",cutoff).orderBy("service_date","desc")` which requires a
+    // composite index on (household_id, service_date) that hasn't
+    // been deployed — Firestore threw FAILED_PRECONDITION and the
+    // endpoint 500'd, blocking the portal page from rendering at all.
+    //
+    // Fix: query by household_id only (single-field index already
+    // exists), then filter the date cutoff + sort + limit in memory.
+    // The total session count per household is small (rarely >100),
+    // so the in-process work is cheap.
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
@@ -83,22 +93,23 @@ export async function GET(req: NextRequest) {
     const sessionsSnap = await churchRef
       .collection("checkInSessions")
       .where("household_id", "==", household.id)
-      .where("service_date", ">=", cutoffDate)
-      .orderBy("service_date", "desc")
-      .limit(50)
       .get();
 
-    const sessions = sessionsSnap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        child_id: data.child_id as string,
-        service_date: data.service_date as string,
-        room_name: data.room_name as string,
-        checked_in_at: data.checked_in_at as string,
-        checked_out_at: (data.checked_out_at as string | null) || null,
-      };
-    });
+    const sessions = sessionsSnap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          child_id: data.child_id as string,
+          service_date: data.service_date as string,
+          room_name: data.room_name as string,
+          checked_in_at: data.checked_in_at as string,
+          checked_out_at: (data.checked_out_at as string | null) || null,
+        };
+      })
+      .filter((s) => s.service_date >= cutoffDate)
+      .sort((a, b) => b.service_date.localeCompare(a.service_date))
+      .slice(0, 50);
 
     return NextResponse.json({
       church_name: churchName,
