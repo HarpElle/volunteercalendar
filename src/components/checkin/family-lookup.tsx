@@ -96,7 +96,11 @@ export function FamilyLookup({
         return;
       }
 
-      const method: "qr" | "phone" = params.qr_token ? "qr" : "phone";
+      // wallet-pass scans + qr_token scans both originate from the
+      // camera scanner UI — treat both as "qr" for the welcome
+      // greeting and downstream "you scanned to enter" affordances.
+      const method: "qr" | "phone" =
+        params.qr_token || params.household_id ? "qr" : "phone";
       if (households.length === 1) {
         onHouseholdFound(households, method);
       } else {
@@ -152,18 +156,32 @@ export function FamilyLookup({
 
         if (code?.data) {
           stopScanner();
+          setMode("idle");
 
-          // Extract token from QR URL (e.g., /checkin?token=abc123)
+          // QR could be:
+          //   (a) Legacy: a URL like /checkin?token=abc123 — extract
+          //       `token` and submit as qr_token (existing flow)
+          //   (b) W10-5A-UI C: Apple Wallet family pass — raw
+          //       household_id encoded directly. Submit as
+          //       household_id; the lookup endpoint resolves the
+          //       household and returns the family.
+          let isUrl = false;
           let token = code.data;
           try {
-            const url = new URL(code.data, window.location.origin);
-            token = url.searchParams.get("token") || code.data;
+            const url = new URL(code.data);
+            if (url.protocol === "http:" || url.protocol === "https:") {
+              isUrl = true;
+              token = url.searchParams.get("token") || code.data;
+            }
           } catch {
-            // Not a URL — use raw value as token
+            // Not a URL — fall through to raw-value branch below
           }
 
-          setMode("idle");
-          doLookup({ qr_token: token });
+          if (isUrl) {
+            doLookup({ qr_token: token });
+          } else {
+            doLookup({ household_id: code.data });
+          }
           return;
         }
 

@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const { churchId: church_id } = gate.ctx;
 
     const body = await req.json();
-    const { qr_token, phone_last4, phone_full } = body;
+    const { qr_token, phone_last4, phone_full, household_id } = body;
 
     const churchMismatch = assertKioskChurchMatch(kiosk, church_id);
     if (churchMismatch) return churchMismatch;
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     // Codex Wave 7 Row 5: audit the household lookup (the matrix expects a
     // kiosk.lookup entry). Fire-and-forget; gated on a real search param so we
     // don't log the empty/invalid 400 case.
-    if (qr_token || phone_last4 || phone_full) {
+    if (qr_token || phone_last4 || phone_full || household_id) {
       void audit({
         church_id,
         actor: kiosk.station_id ? kioskActor(kiosk.station_id) : "kiosk:bootstrap",
@@ -59,7 +59,17 @@ export async function POST(req: NextRequest) {
         target_type: "checkin_household_lookup",
         target_id: church_id,
         metadata: {
-          method: qr_token ? "qr_token" : phone_last4 ? "phone_last4" : "phone_full",
+          // W10-5A-UI C: "wallet_pass" distinguishes the wallet-scan
+          // path from generic household_id lookups (we don't expose
+          // any non-wallet path that produces household_id today,
+          // but the metadata stays specific for future-proofing).
+          method: household_id
+            ? "wallet_pass"
+            : qr_token
+              ? "qr_token"
+              : phone_last4
+                ? "phone_last4"
+                : "phone_full",
         },
         outcome: "ok",
       });
@@ -72,9 +82,9 @@ export async function POST(req: NextRequest) {
     const useUnifiedPeople = !peopleSample.empty;
 
     if (useUnifiedPeople) {
-      return handleUnifiedLookup(churchRef, church_id, { qr_token, phone_last4, phone_full });
+      return handleUnifiedLookup(churchRef, church_id, { qr_token, phone_last4, phone_full, household_id });
     }
-    return handleLegacyLookup(churchRef, { qr_token, phone_last4, phone_full });
+    return handleLegacyLookup(churchRef, { qr_token, phone_last4, phone_full, household_id });
   } catch (error) {
     console.error("[POST /api/checkin/lookup]", error);
     return NextResponse.json(
@@ -89,15 +99,31 @@ export async function POST(req: NextRequest) {
 async function handleUnifiedLookup(
   churchRef: FirebaseFirestore.DocumentReference,
   churchId: string,
-  params: { qr_token?: string; phone_last4?: string; phone_full?: string },
+  params: {
+    qr_token?: string;
+    phone_last4?: string;
+    phone_full?: string;
+    household_id?: string;
+  },
 ) {
-  const { qr_token, phone_last4, phone_full } = params;
+  const { qr_token, phone_last4, phone_full, household_id } = params;
   const peopleRef = churchRef.collection("people");
 
   // Step 1: Find a matching adult person
   let matchedPeople: Person[] = [];
 
-  if (qr_token) {
+  if (household_id) {
+    // W10-5A-UI C: wallet-pass scan path. The QR encodes the
+    // household_id directly; resolve to people by querying for any
+    // person who lists that household. The downstream expansion
+    // (Step 2) reads household_ids[0]/etc and returns the full
+    // family payload, so we just need at least one matched person
+    // to seed the pipeline.
+    const snap = await peopleRef
+      .where("household_ids", "array-contains", household_id)
+      .get();
+    matchedPeople = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person);
+  } else if (qr_token) {
     // Try person-level qr_token
     let snap = await peopleRef.where("qr_token", "==", qr_token).limit(1).get();
     if (snap.empty) {
@@ -235,14 +261,44 @@ async function handleUnifiedLookup(
 
 async function handleLegacyLookup(
   churchRef: FirebaseFirestore.DocumentReference,
-  params: { qr_token?: string; phone_last4?: string; phone_full?: string },
+  params: {
+    qr_token?: string;
+    phone_last4?: string;
+    phone_full?: string;
+    household_id?: string;
+  },
 ) {
-  const { qr_token, phone_last4, phone_full } = params;
+  const { qr_token, phone_last4, phone_full, household_id } = params;
   const householdsRef = churchRef.collection("checkin_households");
 
   let matchedHouseholds: { household: CheckInHousehold; matched_guardian: "primary" | "secondary" }[] = [];
 
-  if (qr_token) {
+  if (household_id) {
+    // W10-5A-UI C: wallet-pass scan path on legacy households. Wallet
+    // pass QRs encode the household_id from the (unified) `households`
+    // doc, NOT the legacy `checkin_households` doc id. So a direct
+    // doc fetch by id won't match unless the IDs happen to be the
+    // same. We use the unified-household qr_token as the bridge:
+    // fetch the unified household, then find the legacy household
+    // with the matching qr_token.
+    const unifiedSnap = await churchRef
+      .collection("households")
+      .doc(household_id)
+      .get();
+    const bridgeToken = unifiedSnap.exists
+      ? ((unifiedSnap.data()?.qr_token as string | undefined) ?? null)
+      : null;
+    if (bridgeToken) {
+      const snap = await householdsRef
+        .where("qr_token", "==", bridgeToken)
+        .limit(1)
+        .get();
+      matchedHouseholds = snap.docs.map((d) => ({
+        household: { id: d.id, ...d.data() } as CheckInHousehold,
+        matched_guardian: "primary" as const,
+      }));
+    }
+  } else if (qr_token) {
     const snap = await householdsRef.where("qr_token", "==", qr_token).limit(1).get();
     matchedHouseholds = snap.docs.map(
       (d) => ({ household: { id: d.id, ...d.data() } as CheckInHousehold, matched_guardian: "primary" as const }),
