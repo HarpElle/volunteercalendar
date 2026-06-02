@@ -408,10 +408,24 @@ export function Sidebar({
                     Switch Organization
                   </p>
                   {activeMemberships.map((m) => {
+                    // Stale-name bug fix (Jason field report 2026-06-02):
+                    // when switching from org A → org B, `churchId` updates
+                    // immediately but `churchName` is stale (mid async
+                    // re-fetch). Using churchName for the active row meant
+                    // BOTH rows displayed the OLD active name, because the
+                    // OTHER row pulled from orgNames which still had "A".
+                    // Fix: prefer the orgNames cache for every row — it
+                    // already holds fresh names for all the user's orgs
+                    // from initial dashboard load. Only fall back to the
+                    // (potentially stale) churchName if the cache somehow
+                    // doesn't have an entry yet (race on first load).
+                    // Final fallback to raw UUID stays so an unreachable
+                    // org doc doesn't render blank.
+                    const cached = orgNames.get(m.church_id);
                     const name =
-                      m.church_id === churchId
-                        ? churchName
-                        : orgNames.get(m.church_id) || m.church_id;
+                      cached ||
+                      (m.church_id === churchId ? churchName : "") ||
+                      m.church_id;
                     const isCurrent = m.church_id === churchId;
                     return (
                       <button
