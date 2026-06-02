@@ -70,9 +70,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Household not found" }, { status: 404 });
     }
     const householdData = householdSnap.data() ?? {};
+    const churchData = churchSnap.exists ? (churchSnap.data() ?? {}) : {};
     const churchName =
-      (churchSnap.exists ? (churchSnap.data()?.name as string) : "") ||
-      "VolunteerCal";
+      (churchData.name as string | undefined) || "VolunteerCal";
+    // W11 Sub-PR B: church's uploaded logo URL (null when the org
+    // hasn't set one yet). Passed through to the builder which
+    // substitutes it for the embedded VolunteerCal CheckInBadge.
+    const churchLogoUrl =
+      (churchData.logo_url as string | null | undefined) ?? null;
 
     // Family display name: explicit `name` field on the household
     // doc, else fall back to "The <Last> Family" derived from the
@@ -153,6 +158,7 @@ export async function GET(req: NextRequest) {
       church_name: churchName,
       children,
       support_url: `${getBaseUrl()}/help`,
+      church_logo_url: churchLogoUrl,
     });
 
     void audit({
