@@ -15,6 +15,8 @@ import { resend } from "@/lib/resend";
 import { buildSwapRequestBroadcastEmail } from "@/lib/utils/emails/swap-request-broadcast";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { buildSwapTransferUpdate } from "@/lib/server/swap-transfer";
+import { isPeerSwapAllowed } from "@/lib/server/peer-swap-policy";
+import type { Ministry } from "@/lib/types";
 
 // POST — Create a swap request
 // Supports two auth modes:
@@ -55,6 +57,27 @@ export async function POST(request: Request) {
     // Verify assignment is confirmed (can only swap confirmed assignments)
     if (assignment.status !== "confirmed" && assignment.status !== "draft") {
       return NextResponse.json({ error: "Only confirmed or draft assignments can be swapped" }, { status: 400 });
+    }
+
+    // W12-D: per-team peer-swap policy gate. If the admin has
+    // disabled peer-swap on this ministry, reject the create.
+    // Existing open swaps remain coverable via PATCH ?action=accept
+    // so flipping the flag mid-flight doesn't strand a volunteer.
+    const ministrySnapForGate = await churchRef
+      .collection("ministries")
+      .doc(assignment.ministry_id)
+      .get();
+    const ministryForGate = ministrySnapForGate.exists
+      ? ({ id: ministrySnapForGate.id, ...ministrySnapForGate.data() } as Ministry)
+      : null;
+    if (!isPeerSwapAllowed(ministryForGate)) {
+      return NextResponse.json(
+        {
+          error:
+            "Peer-swap is disabled for this team. Contact your scheduler to request time off.",
+        },
+        { status: 403 },
+      );
     }
 
     // Get volunteer name

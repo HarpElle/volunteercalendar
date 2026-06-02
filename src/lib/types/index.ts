@@ -293,6 +293,22 @@ export interface Ministry {
   lead_email: string;
   /** Whether volunteers must have a cleared background check to serve in this ministry */
   requires_background_check?: boolean;
+  /**
+   * Wave 12 D: per-team toggle for the peer-swap "Need a sub" flow.
+   * When false, the swap-request UI hides the button for this team
+   * and /api/swap POST rejects with 403. Existing open swaps remain
+   * acceptable (so flipping the flag mid-flight never strands a
+   * volunteer mid-request). The day-of urgent absence path
+   * (W12-B) is NOT gated — every team needs that channel.
+   *
+   * Default: true (peer-swap allowed) — preserves existing behavior
+   * for legacy ministries created before this field existed.
+   *
+   * Recommended off for high-trust teams (children/youth ministry,
+   * security, anything requiring training that a random teammate
+   * may not have).
+   */
+  allow_peer_swap?: boolean;
   /** Prerequisites volunteers must complete before serving in this ministry */
   prerequisites?: OnboardingStep[];
   /**
