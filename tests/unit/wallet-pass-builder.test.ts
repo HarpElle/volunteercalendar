@@ -303,4 +303,29 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
       });
     });
   });
+
+  describe("W11 Sub-PR B: church_logo_url passthrough", () => {
+    it("accepts church_logo_url in input without changing pass.json shape", () => {
+      // The logo only affects the binary asset substitution in
+      // buildFamilyPassBuffer; buildPassProps's JSON shape stays
+      // identical regardless of whether a church has a logo.
+      const inputWithLogo = {
+        ...baseInput,
+        church_logo_url: "https://example.com/logo.png",
+      };
+      const propsNoLogo = buildPassProps(baseInput, "p", "T");
+      const propsWithLogo = buildPassProps(inputWithLogo, "p", "T");
+      expect(propsWithLogo).toEqual(propsNoLogo);
+    });
+
+    it("accepts church_logo_url = null without erroring", () => {
+      expect(() =>
+        buildPassProps(
+          { ...baseInput, church_logo_url: null },
+          "p",
+          "T",
+        ),
+      ).not.toThrow();
+    });
+  });
 });

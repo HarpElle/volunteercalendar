@@ -27,6 +27,7 @@
  */
 
 import { PKPass } from "passkit-generator";
+import { log } from "@/lib/log";
 import {
   ICON_PNG_BASE64,
   ICON_2X_PNG_BASE64,
@@ -85,6 +86,15 @@ export interface FamilyPassInput {
    * a future per-service hookup; V4 ships without computing it.
    */
   relevant_date?: string;
+  /**
+   * Wave 11 Org Branding Sub-PR B: public URL of the church's
+   * uploaded logo. When present, the wallet pass renders this in
+   * place of the embedded VolunteerCal CheckInBadge for both the
+   * icon set (29/58/87) and the logo slot (60×50 / 120×100). On
+   * any fetch / decode failure we silently fall back to the badge
+   * so a transient Storage outage doesn't break pass generation.
+   */
+  church_logo_url?: string | null;
 }
 
 function getCertsFromEnv() {
@@ -316,12 +326,85 @@ export function buildPassProps(
   };
 }
 
+/**
+ * Wave 11 Sub-PR B: fetch + sharp-resize the church logo into the
+ * PassKit icon + logo dimensions. Returns null on any failure
+ * (network, malformed image, etc.) so the caller can fall back to
+ * the embedded CheckInBadge bytes.
+ *
+ * Each output is `fit: 'inside'` on a transparent background so a
+ * landscape wordmark uploaded by the church doesn't get squished —
+ * it sits centered with transparent padding above/below. Square
+ * logos fill the canvas.
+ */
+async function fetchAndResizeChurchLogo(url: string): Promise<{
+  icon: Buffer;
+  icon2x: Buffer;
+  icon3x: Buffer;
+  logo: Buffer;
+  logo2x: Buffer;
+} | null> {
+  // Dynamic import keeps sharp out of the cold-start path of every
+  // wallet-pass build; only loaded when a church has uploaded a logo.
+  // (sharp is heavy; saving the import on the no-logo path matters.)
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      log.warn(
+        "[wallet-pass] church logo fetch non-OK; using fallback",
+        { url, status: res.status },
+      );
+      return null;
+    }
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const { default: sharp } = await import("sharp");
+
+    const renderAt = (size: number) =>
+      sharp(bytes)
+        .resize(size, size, {
+          fit: "inside",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .png()
+        .toBuffer();
+    const renderRect = (w: number, h: number) =>
+      sharp(bytes)
+        .resize(w, h, {
+          fit: "inside",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .png()
+        .toBuffer();
+
+    const [icon, icon2x, icon3x, logo, logo2x] = await Promise.all([
+      renderAt(29),
+      renderAt(58),
+      renderAt(87),
+      renderRect(60, 50),
+      renderRect(120, 100),
+    ]);
+    return { icon, icon2x, icon3x, logo, logo2x };
+  } catch (err) {
+    log.warn(
+      "[wallet-pass] church logo fetch/decode failed; using fallback",
+      { url, error: err instanceof Error ? err.message : String(err) },
+    );
+    return null;
+  }
+}
+
 /** Build and SIGN the .pkpass. Returns the binary as a Buffer. */
 export async function buildFamilyPassBuffer(
   input: FamilyPassInput,
 ): Promise<Buffer> {
   const { passTypeIdentifier, teamIdentifier, certs } = getCertsFromEnv();
   const props = buildPassProps(input, passTypeIdentifier, teamIdentifier);
+
+  // W11 Sub-PR B: try the church's uploaded logo first; fall back
+  // to the embedded VolunteerCal CheckInBadge if none / on failure.
+  const churchLogo = input.church_logo_url
+    ? await fetchAndResizeChurchLogo(input.church_logo_url)
+    : null;
 
   // CRITICAL: the third constructor arg `OverridablePassProps` is
   // `Omit<PassProps, "barcodes" | "generic" | "boardingPass" | ...>`
@@ -336,15 +419,19 @@ export async function buildFamilyPassBuffer(
   const pass = new PKPass(
     {
       "pass.json": Buffer.from(JSON.stringify(props), "utf8"),
-      "icon.png": Buffer.from(ICON_PNG_BASE64, "base64"),
-      "icon@2x.png": Buffer.from(ICON_2X_PNG_BASE64, "base64"),
-      "icon@3x.png": Buffer.from(ICON_3X_PNG_BASE64, "base64"),
-      "logo.png": Buffer.from(LOGO_PNG_BASE64, "base64"),
-      "logo@2x.png": Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
+      "icon.png": churchLogo?.icon ?? Buffer.from(ICON_PNG_BASE64, "base64"),
+      "icon@2x.png":
+        churchLogo?.icon2x ?? Buffer.from(ICON_2X_PNG_BASE64, "base64"),
+      "icon@3x.png":
+        churchLogo?.icon3x ?? Buffer.from(ICON_3X_PNG_BASE64, "base64"),
+      "logo.png": churchLogo?.logo ?? Buffer.from(LOGO_PNG_BASE64, "base64"),
+      "logo@2x.png":
+        churchLogo?.logo2x ?? Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
       // V4 strip — cream/sand wash with soft coral + sage organic
       // shapes. Renders between primary and secondary fields. Only
       // valid on storeCard / coupon / eventTicket (generic doesn't
-      // support strips).
+      // support strips). Strip is brand-neutral so it stays put
+      // regardless of whether the church has a custom logo.
       "strip.png": Buffer.from(STRIP_PNG_BASE64, "base64"),
       "strip@2x.png": Buffer.from(STRIP_2X_PNG_BASE64, "base64"),
     },
