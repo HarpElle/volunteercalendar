@@ -33,17 +33,17 @@ import {
   ICON_3X_PNG_BASE64,
   LOGO_PNG_BASE64,
   LOGO_2X_PNG_BASE64,
+  STRIP_PNG_BASE64,
+  STRIP_2X_PNG_BASE64,
 } from "./assets";
 
-// W10-5A V3 redesign palette — INVERTED from V2 for a lighter,
-// warmer, less ominous feel. Matches the site's "Warm Editorial"
-// aesthetic (cream surfaces, indigo text, muted labels for
-// hierarchy). Coral was dropped because (a) it doesn't have enough
-// luminance contrast for some colorblind users, and (b) it competed
-// for attention with the values.
+// W10-5A V4 palette — cream surface + indigo text + coral labels
+// per Codex spec. Coral labels are tiny and uppercase; the contrast
+// against cream is acceptable AND the type hierarchy (size +
+// spacing) doesn't rely on color alone — Jason's colorblind-safe.
 const BG_COLOR = "rgb(254, 252, 249)"; // vc-bg cream #FEFCF9
 const FG_COLOR = "rgb(45, 48, 71)"; // vc-indigo #2D3047 (main text)
-const LABEL_COLOR = "rgb(107, 110, 138)"; // vc-indigo-muted (subtle labels)
+const LABEL_COLOR = "rgb(224, 122, 95)"; // vc-coral #E07A5F (small uppercase labels)
 
 export interface FamilyPassChild {
   id: string;
@@ -56,13 +56,35 @@ export interface FamilyPassInput {
   household_id: string;
   /** Per-household auth token (dormant in v1; reserved for remote update). */
   auth_token: string;
-  /** Display name on the primary field, e.g. "The Paschall Family". */
+  /**
+   * Display name on the pass front. Inbound values usually include the
+   * leading "The " article ("The Paschall Family"); the builder strips
+   * it so the pass reads as "Paschall Family" per Codex spec.
+   */
   family_name: string;
-  /** Optional short code shown alongside the count — last 6 chars of household_id. */
+  /** Church/org name shown next to the VolunteerCal mark at the top. */
   church_name: string;
   children: FamilyPassChild[];
-  /** Where parents click for help (links from the back of the pass). */
+  /** Where parents click for help (linked from the back of the pass). */
   support_url: string;
+  /**
+   * Optional: church/campus coordinates. When provided, the pass
+   * surfaces on the lock screen when the user is within ~100m of the
+   * church (Apple's default). Empty/undefined skips location relevancy.
+   * Forward-compat for a future Church.coordinates field — V4 ships
+   * without persisting these but plumbs them through.
+   */
+  locations?: Array<{
+    latitude: number;
+    longitude: number;
+    relevant_text?: string;
+  }>;
+  /**
+   * Optional: ISO timestamp when the pass becomes relevant on the
+   * lock screen (e.g. the next service start time). Forward-compat for
+   * a future per-service hookup; V4 ships without computing it.
+   */
+  relevant_date?: string;
 }
 
 function getCertsFromEnv() {
@@ -117,41 +139,46 @@ function getCertsFromEnv() {
  * golden-file the shape without exercising the certificate signing
  * pipeline (which needs real env vars).
  *
- * Wave 10 W10-5A V3 redesign — clean, identity-forward layout that
- * matches the visual polish of stock wallet cards (Starbucks,
- * ChargePoint, etc.) rather than competing with decoration:
+ * Wave 10 W10-5A V4 — addresses the Codex-led design review of V3:
  *
- *   - Light cream background + dark indigo text. Earth-tone, calm,
- *     welcoming — parents are dropping off a child, not paying a
- *     parking ticket. The previous dark-indigo background felt
- *     heavy in comparison to the rest of the wallet stack.
+ *   - Brings back the strip image (V3 dropped it thinking
+ *     Starbucks/ChargePoint don't use them; they DO — the strip IS
+ *     their visual identity). V4's strip is an editorial cream/sand
+ *     wash with soft coral + sage organic shapes. Brand-aligned,
+ *     no literal subject matter.
  *
- *   - Strong identity in the top-left: new check-in-specific
- *     calendar+checkmark badge (see assets.ts) plus the FULL church
- *     name via logoText. Church name reads as "this is YOUR
- *     church's pass," powered-by VolunteerCal moves to the back.
+ *   - Strips the "The " prefix from the family name. "Paschall
+ *     Family" on the front; "The Paschall Family" rendering felt
+ *     stilted and burned horizontal space.
  *
- *   - Front-of-pass content stripped to essentials parents actually
- *     use: family name (primary), children list (one line each in
- *     secondary), code in the upper-right header. No redundant
- *     labels ("Family" under the family name was noise; "CHILDREN"
- *     above kid names too). No Household ID on the front; it's
- *     debug-only.
+ *   - Children render as ONE FIELD PER CHILD (not one multi-line
+ *     value). Apple's secondary fields render side-by-side, so
+ *     "4TH / Ellianna   6TH / Harper" both appear on the front
+ *     without the V3 truncation issue.
  *
- *   - Back-of-pass (Pass Details) keeps the long-form children list
- *     with grades, kiosk-scan instructions, support, and the
- *     "Powered by VolunteerCal" attribution. Household ID was
- *     dropped from the back too — parents don't need it; if support
- *     does, they have it server-side.
+ *   - For 5+ children: first 3 visible + "+N more" overflow slot;
+ *     full list on the back.
  *
- *   - No strip image. Other wallet cards in the parent's stack
- *     (Starbucks, ChargePoint, Electrify America) don't use
- *     decorative strips; they get their polish from strong logo +
- *     clean type + breathing room. We follow that pattern in V3.
+ *   - Description switched from "The Paschall Family — family
+ *     check-in pass" (the AI-ish em-dash voice) to "Paschall
+ *     Family Check-In" — what shows as the pass title in Pass
+ *     Details.
  *
- *   - Pass type stays `storeCard` (semantically right for "family
- *     loyalty card for this church"), even though we no longer use
- *     its stripImage support.
+ *   - Front-of-pass labels restored where they add semantic clarity
+ *     ("FAMILY", "CODE", per-child grade). Coral label color is fine
+ *     here because labels are small uppercase + type hierarchy +
+ *     spacing carry the design, not color alone (Jason's colorblind-
+ *     safe).
+ *
+ *   - Back copy shortened per Codex (no em dashes, no long marketing
+ *     prose). Kiosk instructions one sentence; help line ~15 words.
+ *
+ *   - Forward-compat for `locations` (church campus coordinates) +
+ *     `relevantDate` (next service start time). Both ship as
+ *     pass-through fields V4 doesn't populate but won't break when
+ *     a future Church.coordinates / service-time hookup arrives.
+ *
+ *   - Pass stays `storeCard` — semantically right + supports strip.
  */
 export function buildPassProps(
   input: FamilyPassInput,
@@ -160,18 +187,58 @@ export function buildPassProps(
 ) {
   const shortCode = input.household_id.slice(-6).toUpperCase();
 
-  // Front-of-pass child list: one per line, NAME · GRADE. No bullet
-  // (we have no label, so a bullet feels misplaced). Comma-fallback
-  // when no grades exist so we don't end with a trailing separator.
-  const childInline = input.children
-    .map((c) => `${c.first_name}${c.grade ? ` · ${c.grade}` : ""}`)
+  // Strip leading "The " from the household name so "Paschall Family"
+  // renders cleanly. Leaves other articles ("Los Mendoza Family")
+  // alone; Codex spec only called out "The".
+  const cleanFamilyName = input.family_name.replace(/^The\s+/i, "");
+
+  // Per-child front-of-pass field. Apple secondary fields render
+  // side-by-side as label-above-value pairs, which is exactly the
+  // shape we want: grade as the small label, first name as the
+  // value. 1-3 children fit comfortably across the secondary row;
+  // overflow handled below.
+  const MAX_VISIBLE = 3;
+  const visible = input.children.slice(0, MAX_VISIBLE);
+  const overflowCount = input.children.length - visible.length;
+  const childFields = visible.map((c, i) => ({
+    key: `child_${i}`,
+    label: (c.grade ?? "").toString().toUpperCase(),
+    value: c.first_name,
+  }));
+  if (overflowCount > 0) {
+    childFields.push({
+      key: "child_more",
+      label: "ALSO",
+      value: `+${overflowCount} more`,
+    });
+  }
+
+  // Empty-state placeholder (single field) — keeps the secondary row
+  // from collapsing when a family hasn't added kids yet.
+  const secondaryFields =
+    childFields.length > 0
+      ? childFields
+      : [
+          {
+            key: "children_empty",
+            label: "CHILDREN",
+            value: "Add in your account",
+          },
+        ];
+
+  // Back-of-pass child list — bulleted, normal hyphens (no em dashes
+  // per Codex). Falls back to a short friendly message when empty.
+  const childLinesBack = input.children
+    .map((c) => `${c.first_name}${c.grade ? ` - ${c.grade}` : ""}`)
     .join("\n");
 
-  // Back-of-pass child list: bulleted with em-dash grade separator
-  // for a more "document" feel on the longer details page.
-  const childLines = input.children
-    .map((c) => `• ${c.first_name}${c.grade ? ` — ${c.grade}` : ""}`)
-    .join("\n");
+  // Apple PassKit `locations` shape: array of {latitude, longitude,
+  // relevantText?}. Forward-compat: pass through if provided.
+  const locations = (input.locations ?? []).map((loc) => ({
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    ...(loc.relevant_text ? { relevantText: loc.relevant_text } : {}),
+  }));
 
   return {
     formatVersion: 1 as const,
@@ -180,56 +247,50 @@ export function buildPassProps(
     serialNumber: input.household_id,
     authenticationToken: input.auth_token,
     organizationName: input.church_name,
-    description: `${input.family_name} — family check-in pass`,
+    description: `${cleanFamilyName} Check-In`,
     backgroundColor: BG_COLOR,
     foregroundColor: FG_COLOR,
     labelColor: LABEL_COLOR,
     logoText: input.church_name,
     sharingProhibited: true,
+    ...(locations.length > 0 ? { locations } : {}),
+    ...(input.relevant_date ? { relevantDate: input.relevant_date } : {}),
     storeCard: {
       headerFields: [
-        // Empty-string label on the code: V2's "CODE" label was in
-        // hard-to-see coral and felt redundant. The short alphanumeric
-        // string reads as a code on its own.
         {
           key: "household_code",
-          label: "",
+          label: "CODE",
           value: shortCode,
         },
       ],
       primaryFields: [
         {
           key: "family",
-          label: "",
-          value: input.family_name,
+          label: "FAMILY",
+          value: cleanFamilyName,
         },
       ],
-      secondaryFields: [
-        {
-          key: "children_list",
-          label: "",
-          value: childInline || "Add children in your account",
-        },
-      ],
+      secondaryFields,
       auxiliaryFields: [],
       backFields: [
         {
           key: "children_full",
           label: "Children",
           value:
-            childLines ||
-            "No children on file yet — add them in your VolunteerCal account.",
+            childLinesBack ||
+            "No children on file yet. Add them in your VolunteerCal account.",
         },
         {
-          key: "kiosk_instructions",
-          label: "Speed up next check-in",
+          key: "how_to_use",
+          label: "How to use",
           value:
-            "Show this pass at the kiosk QR scanner to pull up your household instantly — no phone number needed.",
+            "Scan this pass at the check-in kiosk to find your household.",
         },
         {
-          key: "support",
-          label: "Need help?",
-          value: `Email info@volunteercal.com or visit ${input.support_url}`,
+          key: "help",
+          label: "Help",
+          value:
+            "Need help? Ask a check-in volunteer or visit volunteercal.com/help.",
         },
         {
           key: "powered_by",
@@ -274,6 +335,12 @@ export async function buildFamilyPassBuffer(
       "icon@3x.png": Buffer.from(ICON_3X_PNG_BASE64, "base64"),
       "logo.png": Buffer.from(LOGO_PNG_BASE64, "base64"),
       "logo@2x.png": Buffer.from(LOGO_2X_PNG_BASE64, "base64"),
+      // V4 strip — cream/sand wash with soft coral + sage organic
+      // shapes. Renders between primary and secondary fields. Only
+      // valid on storeCard / coupon / eventTicket (generic doesn't
+      // support strips).
+      "strip.png": Buffer.from(STRIP_PNG_BASE64, "base64"),
+      "strip@2x.png": Buffer.from(STRIP_2X_PNG_BASE64, "base64"),
     },
     certs,
   );
