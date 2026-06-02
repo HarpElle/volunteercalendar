@@ -147,6 +147,14 @@ export interface Church {
   feature_flags?: FeatureFlags;
   /** Denormalized count of people in the people collection (for tier limit enforcement) */
   person_count?: number;
+  /**
+   * Wave 11 Org Branding: public URL of the church's uploaded logo
+   * in Firebase Storage. Null/undefined = no custom logo, surfaces
+   * fall back to the VolunteerCal mark. V1 ships single-variant
+   * only; a `logo_url_dark` could be added in a future wave when
+   * dark-mode surfaces exist.
+   */
+  logo_url?: string | null;
   created_at: string;
 }
 
