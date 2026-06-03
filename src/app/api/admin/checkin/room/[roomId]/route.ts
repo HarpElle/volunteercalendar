@@ -108,7 +108,22 @@ export async function GET(
         (child as Person & { child_profile?: Record<string, unknown> })
           .child_profile ?? {};
 
-      // Load household for guardian contact
+      // Load household for guardian contact.
+      //
+      // Codex 2026-06-02 Sev 2 hotfix: unified Households (created via
+      // /api/admin/checkin/household) store guardian identity on a
+      // linked adult Person doc rather than denormalized fields on the
+      // household itself. The household doc's primary_guardian_name /
+      // primary_guardian_phone are often null for unified households —
+      // legacy checkin_households were the only shape that populated
+      // them inline. So we need a three-step resolution:
+      //   1. Try household.primary_guardian_name/phone (legacy + some
+      //      unified that did denormalize)
+      //   2. Fall back to household.primary_guardian_id → load that
+      //      Person doc → use its name/phone
+      //   3. Fall back to ANY adult Person in the household (the same
+      //      pattern /api/checkin/lookup uses to pick the primary
+      //      adult — first adult member wins)
       let primaryGuardianName: string | null = null;
       let primaryGuardianPhone: string | null = null;
       if (session.household_id) {
@@ -118,10 +133,69 @@ export async function GET(
           .get();
         if (householdSnap.exists) {
           const hh = householdSnap.data()!;
+          // Step 1: inline fields on the household doc
           primaryGuardianName =
             (hh.primary_guardian_name as string) || null;
           primaryGuardianPhone =
             (hh.primary_guardian_phone as string) || null;
+
+          // Step 2: linked adult Person via primary_guardian_id
+          if ((!primaryGuardianName || !primaryGuardianPhone) && hh.primary_guardian_id) {
+            try {
+              const guardianSnap = await churchRef
+                .collection("people")
+                .doc(hh.primary_guardian_id as string)
+                .get();
+              if (guardianSnap.exists) {
+                const guardian = guardianSnap.data() as Person;
+                if (!primaryGuardianName) {
+                  primaryGuardianName =
+                    (guardian.name as string) ||
+                    [guardian.first_name, guardian.last_name]
+                      .filter(Boolean)
+                      .join(" ") ||
+                    null;
+                }
+                if (!primaryGuardianPhone) {
+                  primaryGuardianPhone = guardian.phone || null;
+                }
+              }
+            } catch {
+              // continue to step 3
+            }
+          }
+
+          // Step 3: scan household for any adult Person (mirrors
+          // src/app/api/checkin/lookup/route.ts:177's
+          // "first adult match" rule).
+          if (!primaryGuardianName || !primaryGuardianPhone) {
+            try {
+              const adultsSnap = await churchRef
+                .collection("people")
+                .where("household_ids", "array-contains", session.household_id as string)
+                .where("person_type", "==", "adult")
+                .limit(5)
+                .get();
+              const adult = adultsSnap.docs
+                .map((d) => d.data() as Person)
+                .find((p) => p.status !== "inactive");
+              if (adult) {
+                if (!primaryGuardianName) {
+                  primaryGuardianName =
+                    (adult.name as string) ||
+                    [adult.first_name, adult.last_name]
+                      .filter(Boolean)
+                      .join(" ") ||
+                    null;
+                }
+                if (!primaryGuardianPhone) {
+                  primaryGuardianPhone = adult.phone || null;
+                }
+              }
+            } catch {
+              // accept the partial result
+            }
+          }
         }
       }
 
