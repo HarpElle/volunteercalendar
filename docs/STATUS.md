@@ -74,7 +74,8 @@ Last updated: 2026-06-02 (Jason corrections + Check-In feedback batch)
 | ✅ | Kiosk QR scan accepts wallet pass | W10-5A-UI C, PR #210 |
 | ✅ | **Wallet pass IS persistent per household** (Jason confirmed 2026-06-02) | Stable `serialNumber = household_id` (`src/lib/server/wallet-pass/builder.ts:257`), stable `auth_token` cached in `wallet_passes` collection. Security code rotates per check-in but isn't on the pass. |
 | 🔒 | **Google Wallet pass** | Code-ready; waiting on Google Issuer approval (your application is in) |
-| ⬜ | **Wallet pass location-aware** (geofence: pass auto-appears on iPhone lock screen when parent pulls into the church parking lot) | Apple Wallet `locations` array (up to 10 GPS coordinates per pass). Needs: church campus lat/lng stored on the church doc, then add to `builder.ts`. Modest scope. |
+| ✅ | **Wallet pass location-aware** (geofence: pass auto-appears on iPhone lock screen when parent pulls into the church parking lot) | Shipped — `/api/wallet/family-pass/route.ts` now threads each Campus's stored `location.lat/lng` (already captured via Google AddressAutocomplete) into the Apple Wallet `locations` array. Up to 10 campuses (Apple's hard limit, well above any real church). relevant_text reads "Check in at {campus name}". |
+| ⬜ | **Wallet pass auto-update on household changes** (name change, grade change, new child) | Currently passes are static — parent must re-download to refresh. To implement: PassKit web service endpoints + APNs push + device-token Firestore schema. Rough scope: 3-4 days. Worth queuing as a real feature; not blocking. |
 | 🟡 | **Remote child check-in** (parent initiates pre-arrival) | Current portal is **post**-check-in only (`/api/checkin/guardian-portal-url`). A pre-arrival deep-link flow is the missing piece. Could partially happen as a side effect of the location-aware pass + a one-tap "Pre-check us in" button on the parent's phone |
 
 ---
