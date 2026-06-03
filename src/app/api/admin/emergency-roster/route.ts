@@ -92,6 +92,12 @@ interface RosterChild {
     phone: string | null;
   }>;
   household_id: string;
+  /** W10 attendance (Jason 2026-06-02): teacher-marked presence.
+   *  false = teacher reported the child is NOT in the room — EMTs
+   *  + the evacuation marshal need this to avoid wasted search
+   *  time. Null = not marked (treat as "unknown — search per
+   *  normal protocol"). */
+  attendance_present: boolean | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -291,6 +297,7 @@ export async function GET(req: NextRequest) {
           phone: p.phone,
         })),
         household_id: session.household_id ?? "",
+        attendance_present: session.attendance_present ?? null,
       };
     };
 
@@ -323,6 +330,7 @@ export async function GET(req: NextRequest) {
           parent: { name: null, phone: null },
           authorized_pickups: [],
           household_id: session.household_id ?? "",
+          attendance_present: session.attendance_present ?? null,
         };
       }
     };

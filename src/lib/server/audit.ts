@@ -218,6 +218,14 @@ export type AuditAction =
    */
   | "teacher.pickup_acknowledged"
   /**
+   * Wave 10 (Jason 2026-06-02): teacher marked a child's
+   * attendance (present or not_in_room) for the day's classroom.
+   * Material because the emergency roster relies on this — an
+   * EMT who can't find a "checked in but not actually here" child
+   * needs an audit trail of who marked them missing.
+   */
+  | "teacher.attendance_marked"
+  /**
    * Wave 10 W10-5A: a household downloaded (or re-downloaded) their
    * Apple Wallet family pass. The pass carries no medical or
    * contact data, but it does identify a household and list

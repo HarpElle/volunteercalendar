@@ -1336,6 +1336,22 @@ export interface CheckInSession {
    */
   pickup_acknowledged_by?: string | null;
   /**
+   * Wave 10 (Jason 2026-06-02): teacher-marked attendance.
+   *   null  = not yet marked
+   *   true  = teacher confirmed child is physically in the room
+   *   false = teacher reported child is NOT in the room (despite
+   *           being checked in at the kiosk)
+   * Surfaces on the emergency / first-responder roster so EMTs +
+   * the evacuation marshal don't waste time searching for a child
+   * who isn't actually there. Distinct from `checked_out_at`
+   * (which fires when a parent actually picks up).
+   */
+  attendance_present?: boolean | null;
+  /** ISO timestamp of the last attendance mark. */
+  attendance_marked_at?: string | null;
+  /** user_id of the teacher who marked attendance. */
+  attendance_marked_by?: string | null;
+  /**
    * Legacy concatenated alert snapshot: `[allergies, medical_notes]
    * .filter(Boolean).join(" | ")`. Kept for back-compat through
    * Wave 9 P0-4; new readers should prefer `medical_snapshot` which
