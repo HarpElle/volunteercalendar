@@ -56,6 +56,10 @@ interface RoomChild {
   pickup_acknowledged_at: string | null;
   /** Wave 10 (Jason 2026-06-02): user_id of the ack-ing teacher. */
   pickup_acknowledged_by: string | null;
+  /** W10 attendance (Jason 2026-06-02): teacher-marked presence. */
+  attendance_present: boolean | null;
+  attendance_marked_at: string | null;
+  attendance_marked_by: string | null;
 }
 
 interface DashboardRoom {
@@ -324,6 +328,38 @@ function ChildRow({
     }
   }, [user, churchId, child.session_id]);
 
+  // W10 attendance (Jason 2026-06-02): mark child present / not in
+  // room / cleared. Cycle order: unmarked → present → not_in_room
+  // → unmarked. Same auth gate as pickup-ack; same network pattern
+  // (no optimistic update — poll resolves any race).
+  const [attendancePending, setAttendancePending] = useState(false);
+  const handleAttendance = useCallback(
+    async (next: boolean | null) => {
+      if (!user) return;
+      setAttendancePending(true);
+      try {
+        const token = await user.getIdToken();
+        await fetch("/api/teacher/attendance", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            church_id: churchId,
+            session_id: child.session_id,
+            present: next,
+          }),
+        });
+      } catch {
+        // silent
+      } finally {
+        setAttendancePending(false);
+      }
+    },
+    [user, churchId, child.session_id],
+  );
+
   return (
     <li
       className={`rounded-xl border p-3 flex items-start gap-3 transition-colors ${
@@ -382,6 +418,46 @@ function ChildRow({
         <p className="text-xs text-vc-text-muted mt-1">
           Parent: {child.parent_phone_masked}
         </p>
+        {/* W10 attendance (Jason 2026-06-02): two-pill toggle.
+            Tap "Present" to confirm physically in room.
+            Tap "Not in room" to flag — surfaces on emergency
+            roster so first responders know not to look here.
+            Tap the active pill again to clear back to unmarked. */}
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-vc-text-muted">Attendance:</span>
+          <button
+            type="button"
+            onClick={() =>
+              handleAttendance(child.attendance_present === true ? null : true)
+            }
+            disabled={attendancePending}
+            className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors min-h-[28px] ${
+              child.attendance_present === true
+                ? "bg-vc-sage text-white"
+                : "bg-vc-bg-warm text-vc-text-secondary border border-vc-border-light hover:border-vc-sage/50"
+            }`}
+            aria-pressed={child.attendance_present === true}
+            aria-label={`Mark ${child.child_name} present`}
+          >
+            ✓ Present
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              handleAttendance(child.attendance_present === false ? null : false)
+            }
+            disabled={attendancePending}
+            className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors min-h-[28px] ${
+              child.attendance_present === false
+                ? "bg-amber-500 text-white"
+                : "bg-vc-bg-warm text-vc-text-secondary border border-vc-border-light hover:border-amber-400"
+            }`}
+            aria-pressed={child.attendance_present === false}
+            aria-label={`Mark ${child.child_name} not in room`}
+          >
+            ⚠ Not in room
+          </button>
+        </div>
       </div>
       {pickupReady && (
         <button

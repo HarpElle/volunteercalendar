@@ -43,6 +43,10 @@ interface RosterChild {
     phone: string | null;
   }>;
   household_id: string;
+  /** W10 attendance (Jason 2026-06-02): teacher-marked presence
+   *  surfaces here so EMTs + the marshal don't waste time
+   *  searching for a child who isn't physically here. */
+  attendance_present: boolean | null;
 }
 
 interface RosterRoom {
@@ -413,6 +417,22 @@ function RoomSection({
                 {c.has_alerts && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium print:bg-white print:border print:border-black print:text-black">
                     ⚠ ALERT
+                  </span>
+                )}
+                {c.attendance_present === false && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full bg-amber-500 text-white font-bold print:bg-white print:border-2 print:border-black print:text-black"
+                    title="Teacher reported this child is NOT in the room"
+                  >
+                    ⚠ REPORTED ABSENT FROM ROOM
+                  </span>
+                )}
+                {c.attendance_present === true && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full bg-vc-sage/15 text-vc-sage font-medium print:bg-white print:border print:border-black print:text-black"
+                    title="Teacher confirmed present in the room"
+                  >
+                    ✓ Confirmed present
                   </span>
                 )}
               </div>

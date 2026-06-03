@@ -204,6 +204,10 @@ export async function GET(req: NextRequest) {
         pickup_acknowledged_at: string | null;
         /** Wave 10 (Jason 2026-06-02): user_id of the ack-ing teacher. */
         pickup_acknowledged_by: string | null;
+        /** W10 attendance (Jason 2026-06-02): teacher-marked presence. */
+        attendance_present: boolean | null;
+        attendance_marked_at: string | null;
+        attendance_marked_by: string | null;
       }>;
       ratio: ReturnType<typeof evaluateRatio>;
       total_checked_in: number;
@@ -298,6 +302,9 @@ export async function GET(req: NextRequest) {
             pickup_ready_at: session.pickup_ready_at ?? null,
             pickup_acknowledged_at: session.pickup_acknowledged_at ?? null,
             pickup_acknowledged_by: session.pickup_acknowledged_by ?? null,
+            attendance_present: session.attendance_present ?? null,
+            attendance_marked_at: session.attendance_marked_at ?? null,
+            attendance_marked_by: session.attendance_marked_by ?? null,
           };
         }),
       );
