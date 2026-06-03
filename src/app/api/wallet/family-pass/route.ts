@@ -84,22 +84,39 @@ export async function GET(req: NextRequest) {
     const churchLogoUrl =
       (churchData.logo_url as string | null | undefined) ?? null;
 
-    // Family display name: explicit `name` field on the household
-    // doc, else fall back to "The <Last> Family" derived from the
-    // primary guardian's surname, else generic.
-    let familyName = (householdData.name as string) || "";
-    if (!familyName) {
-      const primaryId = (householdData.primary_guardian_id as string | null) ?? null;
-      if (primaryId) {
-        const primarySnap = await churchRef
-          .collection("people")
-          .doc(primaryId)
-          .get();
-        if (primarySnap.exists) {
-          const last = (primarySnap.data() as Person).last_name;
-          if (last) familyName = `The ${last} Family`;
-        }
+    // Family display name (Jason 2026-06-03 reshape).
+    //
+    // Prior behavior preferred the household doc's `name` field, which
+    // gets populated by the household-create flow with the primary
+    // guardian's FULL NAME ("Helen Pevensie"). That read as odd on the
+    // pass (the husband seeing his wife's first name in the FAMILY
+    // slot) and didn't match the "surname-only" semantic the FAMILY
+    // label implies.
+    //
+    // V6: prefer the primary guardian's `last_name` (just "Pevensie").
+    // Fall back to `household.name` only when no guardian surname is
+    // resolvable. Final fallback stays "Family".
+    //
+    // Blended-family slash form (e.g. "Smith/Jones") is a follow-up
+    // when guardians' surnames differ — flagged but not implemented
+    // here per Jason's "not needed for tonight's test" call.
+    let familyName = "";
+    const primaryId = (householdData.primary_guardian_id as string | null) ?? null;
+    if (primaryId) {
+      const primarySnap = await churchRef
+        .collection("people")
+        .doc(primaryId)
+        .get();
+      if (primarySnap.exists) {
+        const last = (primarySnap.data() as Person).last_name;
+        if (last) familyName = last;
       }
+    }
+    if (!familyName) {
+      // No guardian surname available — fall back to whatever the
+      // household doc has stored as `name`, with the legacy "The X
+      // Family" form stripped by the builder if present.
+      familyName = (householdData.name as string) || "";
     }
     if (!familyName) familyName = "Family";
 

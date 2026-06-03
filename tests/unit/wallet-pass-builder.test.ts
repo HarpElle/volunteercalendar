@@ -104,22 +104,21 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
       expect(p.storeCard.headerFields).toEqual([]);
     });
 
-    it("V5: short code still appears beneath the QR via barcode altText", () => {
+    it("V6 (Jason 2026-06-03): barcode no longer carries altText (vestigial)", () => {
       const p = buildPassProps(baseInput, "p", "T");
-      expect(p.barcodes[0].altText).toBe("123456");
+      expect((p.barcodes[0] as { altText?: string }).altText).toBeUndefined();
     });
   });
 
-  describe("children — one field per child (V4 fix for V3 single-line truncation)", () => {
-    it("renders each child as a separate secondary field with grade as uppercase label", () => {
+  describe("children — V6 single CHILDREN field, comma-joined names", () => {
+    it("renders a single CHILDREN field with comma-joined first names", () => {
       const p = buildPassProps(baseInput, "p", "T");
       expect(p.storeCard.secondaryFields).toEqual([
-        { key: "child_0", label: "4TH", value: "Ellianna" },
-        { key: "child_1", label: "6TH", value: "Harper" },
+        { key: "children", label: "CHILDREN", value: "Ellianna, Harper" },
       ]);
     });
 
-    it("handles a child without a grade — empty label, name still renders", () => {
+    it("omits grade entirely on the front of the pass (back-of-pass still has it)", () => {
       const p = buildPassProps(
         {
           ...baseInput,
@@ -131,14 +130,12 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
         "p",
         "T",
       );
-      expect(p.storeCard.secondaryFields[0]).toEqual({
-        key: "child_0",
-        label: "",
-        value: "Ellianna",
-      });
+      // No GRADE labels anywhere in the CHILDREN value; just names
+      expect(p.storeCard.secondaryFields[0].value).toBe("Ellianna, Harper");
+      expect(p.storeCard.secondaryFields[0].label).toBe("CHILDREN");
     });
 
-    it("shows up to 3 children + '+N more' overflow slot for 4+", () => {
+    it("shows up to 6 children, then collapses overflow to 'and N more'", () => {
       const lots = {
         ...baseInput,
         children: [
@@ -147,22 +144,43 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
           { id: "c3", first_name: "C", grade: "2" },
           { id: "c4", first_name: "D", grade: "3" },
           { id: "c5", first_name: "E", grade: "4" },
+          { id: "c6", first_name: "F", grade: "5" },
+          { id: "c7", first_name: "G", grade: "6" },
+          { id: "c8", first_name: "H", grade: "7" },
         ],
       };
       const p = buildPassProps(lots, "p", "T");
       expect(p.storeCard.secondaryFields).toEqual([
-        { key: "child_0", label: "K", value: "A" },
-        { key: "child_1", label: "1", value: "B" },
-        { key: "child_2", label: "2", value: "C" },
-        { key: "child_more", label: "ALSO", value: "+2 more" },
+        {
+          key: "children",
+          label: "CHILDREN",
+          value: "A, B, C, D, E, F and 2 more",
+        },
       ]);
+    });
+
+    it("renders all without 'more' suffix when count is at or below the cap", () => {
+      const p = buildPassProps(
+        {
+          ...baseInput,
+          children: [
+            { id: "c1", first_name: "A", grade: "K" },
+            { id: "c2", first_name: "B", grade: "1" },
+            { id: "c3", first_name: "C", grade: "2" },
+            { id: "c4", first_name: "D", grade: "3" },
+          ],
+        },
+        "p",
+        "T",
+      );
+      expect(p.storeCard.secondaryFields[0].value).toBe("A, B, C, D");
     });
 
     it("uses friendly empty-state placeholder when there are no children", () => {
       const p = buildPassProps({ ...baseInput, children: [] }, "p", "T");
       expect(p.storeCard.secondaryFields).toEqual([
         {
-          key: "children_empty",
+          key: "children",
           label: "CHILDREN",
           value: "Add in your account",
         },
@@ -268,14 +286,13 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
   });
 
   describe("QR barcode (unchanged from V3)", () => {
-    it("encodes the household_id; altText is the short code", () => {
+    it("V6: encodes the household_id; no altText (vestigial code removed)", () => {
       const p = buildPassProps(baseInput, "p", "T");
       expect(p.barcodes).toEqual([
         {
           format: "PKBarcodeFormatQR",
           message: "hh_abcdef123456",
           messageEncoding: "iso-8859-1",
-          altText: "123456",
         },
       ]);
     });
@@ -297,8 +314,8 @@ describe("buildPassProps (W10-5A V4 redesign)", () => {
         "T",
       );
       expect(p.storeCard.secondaryFields[0]).toEqual({
-        key: "child_0",
-        label: "K",
+        key: "children",
+        label: "CHILDREN",
         value: "Sissy",
       });
     });
