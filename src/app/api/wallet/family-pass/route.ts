@@ -84,22 +84,43 @@ export async function GET(req: NextRequest) {
     const churchLogoUrl =
       (churchData.logo_url as string | null | undefined) ?? null;
 
-    // Family display name (Jason 2026-06-03 reshape).
+    // Family display name resolution (Jason 2026-06-03 V7).
     //
-    // Prior behavior preferred the household doc's `name` field, which
-    // gets populated by the household-create flow with the primary
-    // guardian's FULL NAME ("Helen Pevensie"). That read as odd on the
-    // pass (the husband seeing his wife's first name in the FAMILY
-    // slot) and didn't match the "surname-only" semantic the FAMILY
-    // label implies.
+    // Priority order — first hit wins:
+    //   1. Primary guardian's `last_name` field on the linked Person
+    //      doc. Cleanest: "Pevensie". Works when the household was
+    //      created with the guardian's name properly split into
+    //      first_name + last_name.
+    //   2. Surname extracted from household.name. Many real records
+    //      were created with household.name set to the primary
+    //      guardian's FULL NAME ("Helen Pevensie") — and the linked
+    //      Person doc has no last_name, just a single `name` field.
+    //      So we parse: strip leading "The " and trailing " Family",
+    //      then take the LAST whitespace-delimited token. This
+    //      converts:
+    //         "Helen Pevensie"            → "Pevensie"
+    //         "The Pevensie Family"       → "Pevensie"
+    //         "Pevensie"                  → "Pevensie"
+    //         "Smith-Jones"               → "Smith-Jones"
+    //      Known limit: "Mary van der Berg" → "Berg" (loses the
+    //      surname particle). Rare in the church-name use case;
+    //      a future enhancement could match against the linked
+    //      Person's `name` field to handle particle-prefixed surnames.
+    //   3. Generic fallback "Family".
     //
-    // V6: prefer the primary guardian's `last_name` (just "Pevensie").
-    // Fall back to `household.name` only when no guardian surname is
-    // resolvable. Final fallback stays "Family".
-    //
-    // Blended-family slash form (e.g. "Smith/Jones") is a follow-up
-    // when guardians' surnames differ — flagged but not implemented
-    // here per Jason's "not needed for tonight's test" call.
+    // Blended-family slash form (e.g. "Smith/Jones") when guardians'
+    // surnames differ is a deliberate follow-up — flagged but not
+    // implemented per Jason's earlier "not needed for tonight" call.
+    function extractSurname(raw: string): string {
+      const stripped = raw
+        .replace(/^The\s+/i, "")
+        .replace(/\s+Family$/i, "")
+        .trim();
+      if (!stripped) return "";
+      const tokens = stripped.split(/\s+/);
+      return tokens[tokens.length - 1];
+    }
+
     let familyName = "";
     const primaryId = (householdData.primary_guardian_id as string | null) ?? null;
     if (primaryId) {
@@ -109,14 +130,12 @@ export async function GET(req: NextRequest) {
         .get();
       if (primarySnap.exists) {
         const last = (primarySnap.data() as Person).last_name;
-        if (last) familyName = last;
+        if (last && last.trim()) familyName = last.trim();
       }
     }
     if (!familyName) {
-      // No guardian surname available — fall back to whatever the
-      // household doc has stored as `name`, with the legacy "The X
-      // Family" form stripped by the builder if present.
-      familyName = (householdData.name as string) || "";
+      const hhName = (householdData.name as string) || "";
+      familyName = extractSurname(hhName);
     }
     if (!familyName) familyName = "Family";
 
