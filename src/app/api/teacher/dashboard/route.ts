@@ -196,6 +196,14 @@ export async function GET(req: NextRequest) {
         medications?: string;
         medical_fields: RosterFieldState[];
         parent_phone_masked: string;
+        /** Wave 10 (Jason 2026-06-02): parent has signaled arrival
+         *  at the kiosk. Render a prominent indicator until ack'd. */
+        pickup_ready_at: string | null;
+        /** Wave 10 (Jason 2026-06-02): a teacher has ack'd the
+         *  pickup ping (clears the prominent indicator). */
+        pickup_acknowledged_at: string | null;
+        /** Wave 10 (Jason 2026-06-02): user_id of the ack-ing teacher. */
+        pickup_acknowledged_by: string | null;
       }>;
       ratio: ReturnType<typeof evaluateRatio>;
       total_checked_in: number;
@@ -284,6 +292,12 @@ export async function GET(req: NextRequest) {
             medications: visibleNoTap("medications") ?? undefined,
             medical_fields: safeMedicalFields,
             parent_phone_masked: maskedPhone,
+            // W10 (Jason 2026-06-02): pickup-ping state flows
+            // through to the dashboard so the teacher sees the
+            // prominent indicator without an extra fetch.
+            pickup_ready_at: session.pickup_ready_at ?? null,
+            pickup_acknowledged_at: session.pickup_acknowledged_at ?? null,
+            pickup_acknowledged_by: session.pickup_acknowledged_by ?? null,
           };
         }),
       );

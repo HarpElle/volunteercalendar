@@ -1314,6 +1314,28 @@ export interface CheckInSession {
   checked_out_by_user_id?: string;
   alerts_acknowledged: boolean;
   /**
+   * Wave 10 (Jason 2026-06-02): timestamp when the parent signaled
+   * arrival at the kiosk for pickup. Null/undefined = not signaled.
+   * Distinct from `checked_out_at` (which fires only when the
+   * security-code release actually completes). The teacher
+   * dashboard renders a prominent indicator on sessions where
+   * pickup_ready_at is set and pickup_acknowledged_at is not yet.
+   */
+  pickup_ready_at?: string | null;
+  /**
+   * Wave 10 (Jason 2026-06-02): timestamp when the assigned teacher
+   * acknowledged the parent's arrival ("On my way" button). Null
+   * = waiting. Setting this clears the prominent indicator on the
+   * teacher dashboard so other staff don't double-respond.
+   */
+  pickup_acknowledged_at?: string | null;
+  /**
+   * Wave 10 (Jason 2026-06-02): user_id of the teacher who
+   * acknowledged the pickup-ready ping. Surfaces on the dashboard
+   * so admins / other staff can see who's on it.
+   */
+  pickup_acknowledged_by?: string | null;
+  /**
    * Legacy concatenated alert snapshot: `[allergies, medical_notes]
    * .filter(Boolean).join(" | ")`. Kept for back-compat through
    * Wave 9 P0-4; new readers should prefer `medical_snapshot` which
