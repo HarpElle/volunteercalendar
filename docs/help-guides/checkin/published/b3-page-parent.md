@@ -26,7 +26,7 @@ Tap it to open a short form with an optional note (up to 200 characters). A note
 - "Eli could use a diaper change and we're out of his size."
 - "Noah's a little under the weather and would like you."
 
-[SCREENSHOT: b3-page-parent-modal]
+[SCREENSHOT: a3-page-parent-modal]
 
 ---
 
