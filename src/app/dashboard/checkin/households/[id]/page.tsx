@@ -126,10 +126,21 @@ export default function HouseholdDetailPage() {
     }
   };
 
-  // Generate QR code when household loads or changes
+  // Generate QR code when household loads or changes.
+  // Jason field report 2026-06-02: the URL previously pointed at
+  // /checkin (the kiosk station), which (a) tries to bootstrap kiosk
+  // enrollment when a parent scans the QR with their phone camera,
+  // and (b) doesn't surface the wallet-pass "Add to Apple Wallet"
+  // affordance the parent expected to find.
+  //
+  // Now points at /guardian, the existing parent portal — opens the
+  // family info screen with the Add to Apple Wallet button. The kiosk
+  // scanner extracts ?token= regardless of path (see
+  // src/components/checkin/family-lookup.tsx:182), so this doesn't
+  // break scan-at-kiosk; it only fixes the parent-side experience.
   useEffect(() => {
     if (!household?.qr_token || !churchId) return;
-    const url = `${window.location.origin}/checkin?church_id=${churchId}&token=${household.qr_token}`;
+    const url = `${window.location.origin}/guardian?church_id=${churchId}&token=${household.qr_token}`;
     QRCode.toDataURL(url, {
       width: 200,
       margin: 2,
@@ -138,7 +149,7 @@ export default function HouseholdDetailPage() {
   }, [household?.qr_token, churchId]);
 
   const qrKioskUrl = household?.qr_token && churchId
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/checkin?church_id=${churchId}&token=${household.qr_token}`
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/guardian?church_id=${churchId}&token=${household.qr_token}`
     : "";
 
   const handleDownloadQr = () => {

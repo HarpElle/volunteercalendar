@@ -1,6 +1,6 @@
 # VolunteerCal — Feature Status (codebase-driven)
 
-Last updated: 2026-06-02
+Last updated: 2026-06-02 (Jason corrections + Check-In feedback batch)
 
 > **Single source of truth.** Every entry is verified against actual
 > code, not against `docs/ROADMAP.md` or any other markdown. When
@@ -25,7 +25,7 @@ Last updated: 2026-06-02
 | ✅ | 14-day free trial | `/api/billing/checkout` lines 72-77 |
 | ⬜ | Overage / usage-based billing | post-launch, trigger when usage patterns emerge |
 
-Live-mode operational gate (your half): LLC formation + business bank account before flipping live keys.
+**Live mode is on.** HarpElle LLC + business bank account were set up over a month ago. Stripe live keys are in env. The 20% annual discount copy is wired. **Do NOT relist LLC/bank/live-mode as blockers.**
 
 ---
 
@@ -72,8 +72,10 @@ Live-mode operational gate (your half): LLC formation + business bank account be
 | ✅ | Apple Wallet family pass — generation + signed URL + branded strip | `/api/wallet/family-pass`, `src/lib/server/wallet-pass/*` |
 | ✅ | W10-5A-UI: parent + kiosk surfaces consume the pass | Wave 10 sub-PRs (#208 etc.) |
 | ✅ | Kiosk QR scan accepts wallet pass | W10-5A-UI C, PR #210 |
+| ✅ | **Wallet pass IS persistent per household** (Jason confirmed 2026-06-02) | Stable `serialNumber = household_id` (`src/lib/server/wallet-pass/builder.ts:257`), stable `auth_token` cached in `wallet_passes` collection. Security code rotates per check-in but isn't on the pass. |
 | 🔒 | **Google Wallet pass** | Code-ready; waiting on Google Issuer approval (your application is in) |
-| 🟡 | **Remote child check-in** (parent initiates pre-arrival) | Current portal is **post**-check-in only (`/api/checkin/guardian-portal-url`). A pre-arrival deep-link flow is the missing piece |
+| ⬜ | **Wallet pass location-aware** (geofence: pass auto-appears on iPhone lock screen when parent pulls into the church parking lot) | Apple Wallet `locations` array (up to 10 GPS coordinates per pass). Needs: church campus lat/lng stored on the church doc, then add to `builder.ts`. Modest scope. |
+| 🟡 | **Remote child check-in** (parent initiates pre-arrival) | Current portal is **post**-check-in only (`/api/checkin/guardian-portal-url`). A pre-arrival deep-link flow is the missing piece. Could partially happen as a side effect of the location-aware pass + a one-tap "Pre-check us in" button on the parent's phone |
 
 ---
 
@@ -171,19 +173,28 @@ From `launch-verification.md` — rows that need physical/account-level testing 
 
 - [ ] Label printing on Brother QL-820NWB (real hardware)
 - [ ] iCal calendar feed subscription in Apple Calendar / Google Calendar
-- [ ] Stripe live monthly + annual transactions (after LLC + bank set up)
+- [ ] Stripe live monthly + annual transactions (LLC + bank are already live; this is just exercising one of each in live mode end-to-end)
 - [ ] Stripe customer portal flows in live mode
 - [ ] ProPresenter export round-trip
 - [ ] Deleted-org Stripe subscription cleanup
 
 ---
 
+## Check-In feedback batch (Jason 2026-06-02)
+
+| Status | Item | Notes |
+|---|---|---|
+| ✅ | Household QR encoded `/checkin` instead of `/guardian` → routed to kiosk enrollment when parent scanned with phone camera | Fixed this turn — now encodes `/guardian` (parent portal w/ Add-to-Apple-Wallet button). Kiosk scanner unaffected (extracts `?token=` regardless of path) |
+| ⬜ | **Household-level vs per-child Authorized Pickup toggle** | Today: stored per-child. Jason's ask: default household-level with per-child as toggle for blended families. Needs schema additive + UI toggle |
+| ⬜ | **Phone number display normalization** — `(###) ###-####` everywhere | Helper `formatPhone()` exists but only used 4/22+ places. Display sweep is cheap (~7 files). Storage cleanup (E.164 everywhere) is a second phase (~15 files + backfill consideration) |
+| ⬜ | **Twilio international policy** — SMS to non-US numbers | Twilio supports international but per-message rates vary 5-20x, and toll-free can't deliver to many countries. Need a policy decision: US/Canada only (cheapest, covers ~all churches), or whitelist specific countries |
+
 ## Active Bug Watch
 
 | Status | Item | Evidence |
 |---|---|---|
-| 🟡 | Safari recurring login spin | Long-polling fix is in (May 25). Watchdog timeout in flight this turn. Custom auth domain ruled out (doesn't apply to email/password auth) |
-| ✅ | Org-switcher stale names | PR #223 (this turn) — render precedence fix |
+| 🟡 | Safari recurring login spin | Long-polling fix is in (May 25). 10s watchdog circuit-breaker shipped this turn (PR #225) — surfaces "Sign-in stuck? Reload" instead of infinite spinner. Custom auth domain ruled out (doesn't apply to email/password auth) |
+| ✅ | Org-switcher stale names | PR #223 (this turn) — render precedence fix, merged to main |
 
 ---
 
