@@ -195,46 +195,39 @@ export function buildPassProps(
   passTypeIdentifier: string,
   teamIdentifier: string,
 ) {
-  const shortCode = input.household_id.slice(-6).toUpperCase();
-
   // Strip leading "The " from the household name so "Paschall Family"
   // renders cleanly. Leaves other articles ("Los Mendoza Family")
   // alone; Codex spec only called out "The".
   const cleanFamilyName = input.family_name.replace(/^The\s+/i, "");
 
-  // Per-child front-of-pass field. Apple secondary fields render
-  // side-by-side as label-above-value pairs, which is exactly the
-  // shape we want: grade as the small label, first name as the
-  // value. 1-3 children fit comfortably across the secondary row;
-  // overflow handled below.
-  const MAX_VISIBLE = 3;
+  // Front-of-pass children list. Jason 2026-06-03: the prior V5
+  // shape rendered each child as its own secondary-field column with
+  // GRADE as the label and first name as the value. With 3+ kids it
+  // squeezed each name into ~6 chars of width and read as visual noise.
+  // V6 reshape: single secondary field labeled CHILDREN with a
+  // comma-joined value. Apple wraps to a second line on its own when
+  // the value is long. Per-child grade detail still lives on the
+  // back-of-pass in the `Children` backField (untouched below).
+  //
+  // Cap at 6 visible names to keep the value sane on a phone screen;
+  // overflow renders as "and N more" so the cardinality is honest.
+  const MAX_VISIBLE = 6;
   const visible = input.children.slice(0, MAX_VISIBLE);
   const overflowCount = input.children.length - visible.length;
-  const childFields = visible.map((c, i) => ({
-    key: `child_${i}`,
-    label: (c.grade ?? "").toString().toUpperCase(),
-    value: c.first_name,
-  }));
-  if (overflowCount > 0) {
-    childFields.push({
-      key: "child_more",
-      label: "ALSO",
-      value: `+${overflowCount} more`,
-    });
-  }
-
-  // Empty-state placeholder (single field) — keeps the secondary row
-  // from collapsing when a family hasn't added kids yet.
-  const secondaryFields =
-    childFields.length > 0
-      ? childFields
-      : [
-          {
-            key: "children_empty",
-            label: "CHILDREN",
-            value: "Add in your account",
-          },
-        ];
+  const joinedNames = visible.map((c) => c.first_name).join(", ");
+  const childrenValue =
+    visible.length === 0
+      ? "Add in your account"
+      : overflowCount > 0
+        ? `${joinedNames} and ${overflowCount} more`
+        : joinedNames;
+  const secondaryFields = [
+    {
+      key: "children",
+      label: "CHILDREN",
+      value: childrenValue,
+    },
+  ];
 
   // Back-of-pass child list — bulleted, normal hyphens (no em dashes
   // per Codex). Falls back to a short friendly message when empty.
@@ -313,14 +306,17 @@ export function buildPassProps(
     // white for scanner reliability. There is no `foregroundColor`-
     // equivalent for the barcode in PassKit. So the QR will always
     // render in pure black regardless of the pass's `foregroundColor`
-    // (the indigo brand color). The altText below the QR DOES respect
-    // foregroundColor and renders in indigo.
+    // (the indigo brand color).
     barcodes: [
       {
         format: "PKBarcodeFormatQR" as const,
         message: input.household_id,
         messageEncoding: "iso-8859-1",
-        altText: shortCode,
+        // Jason 2026-06-03: altText (the last-6 of household_id, uppercased)
+        // was a vestigial fallback for "if the QR scanner fails, the
+        // operator could type this in." The kiosk lookup endpoint never
+        // implemented that path, so the code was purely decorative noise
+        // beneath the QR. Removing for cleanliness.
       },
     ],
   };
