@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
-import type { CheckInHousehold, Child } from "@/lib/types";
+import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
 /**
  * GET /api/guardian/household?token=...&church_id=...
@@ -42,43 +42,177 @@ export async function GET(req: NextRequest) {
     const churchLogoUrl =
       (churchData.logo_url as string | null | undefined) ?? null;
 
-    // Find household by QR token
-    const householdsSnap = await churchRef
-      .collection("checkin_households")
+    // Find household by QR token. Try the unified `households` collection
+    // first (the default since the unified-people migration), fall back
+    // to the legacy `checkin_households`. Same dual-shape pattern used
+    // by /api/guardian/wallet-pass-url and /api/checkin/lookup.
+    //
+    // Jason 2026-06-03: Pevensie test household landed in `households`
+    // (unified) and the prior single-lookup version 404'd "Invalid token"
+    // for every newly-created household, blocking /guardian rendering.
+    let householdId: string;
+    let unifiedHousehold: UnifiedHousehold | null = null;
+    let legacyHousehold: CheckInHousehold | null = null;
+
+    const unifiedSnap = await churchRef
+      .collection("households")
       .where("qr_token", "==", token)
       .limit(1)
       .get();
-
-    if (householdsSnap.empty) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 404 },
-      );
+    if (!unifiedSnap.empty) {
+      const doc = unifiedSnap.docs[0];
+      unifiedHousehold = { id: doc.id, ...doc.data() } as UnifiedHousehold;
+      householdId = doc.id;
+    } else {
+      const legacySnap = await churchRef
+        .collection("checkin_households")
+        .where("qr_token", "==", token)
+        .limit(1)
+        .get();
+      if (legacySnap.empty) {
+        return NextResponse.json(
+          { error: "Invalid token" },
+          { status: 404 },
+        );
+      }
+      const doc = legacySnap.docs[0];
+      legacyHousehold = { id: doc.id, ...doc.data() } as CheckInHousehold;
+      householdId = doc.id;
     }
 
-    const householdDoc = householdsSnap.docs[0];
-    const household = {
-      id: householdDoc.id,
-      ...householdDoc.data(),
-    } as CheckInHousehold;
+    // Resolve guardian display info. For legacy households the
+    // denormalized fields on the doc are authoritative. For unified
+    // households, the guardian identity lives on the linked adult
+    // Person — use the 3-step fallback chain (inline fields →
+    // primary_guardian_id → first adult by household_ids
+    // array-contains), same as the admin per-room route.
+    let primaryGuardianName: string | null = null;
+    let primaryGuardianPhone: string | null = null;
+    let secondaryGuardianName: string | null = null;
+    let secondaryGuardianPhone: string | null = null;
 
-    // Load children
-    const childrenSnap = await churchRef
-      .collection("children")
-      .where("household_id", "==", household.id)
-      .where("is_active", "==", true)
-      .get();
-
-    const children = childrenSnap.docs.map((d) => {
-      const data = d.data() as Child;
-      return {
-        id: d.id,
-        first_name: data.first_name,
-        last_name: data.last_name,
-        preferred_name: data.preferred_name,
-        grade: data.grade,
+    if (legacyHousehold) {
+      primaryGuardianName = legacyHousehold.primary_guardian_name ?? null;
+      primaryGuardianPhone = legacyHousehold.primary_guardian_phone ?? null;
+      secondaryGuardianName = legacyHousehold.secondary_guardian_name ?? null;
+      secondaryGuardianPhone = legacyHousehold.secondary_guardian_phone ?? null;
+    } else if (unifiedHousehold) {
+      const hh = unifiedHousehold as UnifiedHousehold & {
+        primary_guardian_name?: string;
+        primary_guardian_phone?: string;
+        primary_guardian_id?: string;
+        secondary_guardian_name?: string;
+        secondary_guardian_phone?: string;
       };
-    });
+      // Step 1: any denormalized fields on the household doc
+      primaryGuardianName = hh.primary_guardian_name ?? null;
+      primaryGuardianPhone = hh.primary_guardian_phone ?? null;
+      secondaryGuardianName = hh.secondary_guardian_name ?? null;
+      secondaryGuardianPhone = hh.secondary_guardian_phone ?? null;
+
+      // Step 2: primary_guardian_id link
+      if ((!primaryGuardianName || !primaryGuardianPhone) && hh.primary_guardian_id) {
+        try {
+          const gSnap = await churchRef
+            .collection("people")
+            .doc(hh.primary_guardian_id)
+            .get();
+          if (gSnap.exists) {
+            const g = gSnap.data() as Person;
+            if (!primaryGuardianName) {
+              primaryGuardianName =
+                (g.name as string) ||
+                [g.first_name, g.last_name].filter(Boolean).join(" ") ||
+                null;
+            }
+            if (!primaryGuardianPhone) primaryGuardianPhone = g.phone || null;
+          }
+        } catch { /* continue to step 3 */ }
+      }
+
+      // Step 3: scan household for any adult Person
+      if (!primaryGuardianName || !primaryGuardianPhone) {
+        try {
+          const adultsSnap = await churchRef
+            .collection("people")
+            .where("household_ids", "array-contains", householdId)
+            .where("person_type", "==", "adult")
+            .limit(5)
+            .get();
+          const adults = adultsSnap.docs
+            .map((d) => d.data() as Person)
+            .filter((p) => p.status !== "inactive");
+          const primary = adults[0];
+          if (primary) {
+            if (!primaryGuardianName) {
+              primaryGuardianName =
+                (primary.name as string) ||
+                [primary.first_name, primary.last_name].filter(Boolean).join(" ") ||
+                null;
+            }
+            if (!primaryGuardianPhone) primaryGuardianPhone = primary.phone || null;
+          }
+          const secondary = adults[1];
+          if (secondary && !secondaryGuardianName) {
+            secondaryGuardianName =
+              (secondary.name as string) ||
+              [secondary.first_name, secondary.last_name].filter(Boolean).join(" ") ||
+              null;
+            if (!secondaryGuardianPhone) secondaryGuardianPhone = secondary.phone || null;
+          }
+        } catch { /* accept partial result */ }
+      }
+    }
+
+    // Load children. Legacy shape reads from the `children` collection;
+    // unified shape reads from `people` where person_type === "child"
+    // and household_ids array-contains the household id.
+    let children: Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      preferred_name?: string;
+      grade?: string;
+    }> = [];
+
+    if (legacyHousehold) {
+      const childrenSnap = await churchRef
+        .collection("children")
+        .where("household_id", "==", householdId)
+        .where("is_active", "==", true)
+        .get();
+      children = childrenSnap.docs.map((d) => {
+        const data = d.data() as Child;
+        return {
+          id: d.id,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          preferred_name: data.preferred_name,
+          grade: data.grade,
+        };
+      });
+    } else if (unifiedHousehold) {
+      const childrenSnap = await churchRef
+        .collection("people")
+        .where("household_ids", "array-contains", householdId)
+        .where("person_type", "==", "child")
+        .get();
+      children = childrenSnap.docs
+        .map((d) => {
+          const data = d.data() as Person & {
+            child_profile?: { grade?: string };
+          };
+          if (data.status === "inactive") return null;
+          return {
+            id: d.id,
+            first_name: data.first_name || "",
+            last_name: data.last_name || "",
+            preferred_name: (data as { preferred_name?: string }).preferred_name,
+            grade: data.child_profile?.grade,
+          };
+        })
+        .filter(<T>(c: T | null): c is T => c !== null);
+    }
 
     // Load recent check-in sessions (last 30 days). The previous
     // query had `.where("household_id","==",X).where("service_date",
@@ -97,7 +231,7 @@ export async function GET(req: NextRequest) {
 
     const sessionsSnap = await churchRef
       .collection("checkInSessions")
-      .where("household_id", "==", household.id)
+      .where("household_id", "==", householdId)
       .get();
 
     const sessions = sessionsSnap.docs
@@ -120,14 +254,14 @@ export async function GET(req: NextRequest) {
       church_name: churchName,
       church_logo_url: churchLogoUrl,
       household: {
-        id: household.id,
-        primary_guardian_name: household.primary_guardian_name,
-        primary_guardian_phone: household.primary_guardian_phone
-          ? `***${household.primary_guardian_phone.slice(-4)}`
+        id: householdId,
+        primary_guardian_name: primaryGuardianName,
+        primary_guardian_phone: primaryGuardianPhone
+          ? `***${primaryGuardianPhone.slice(-4)}`
           : null,
-        secondary_guardian_name: household.secondary_guardian_name || null,
-        secondary_guardian_phone: household.secondary_guardian_phone
-          ? `***${household.secondary_guardian_phone.slice(-4)}`
+        secondary_guardian_name: secondaryGuardianName,
+        secondary_guardian_phone: secondaryGuardianPhone
+          ? `***${secondaryGuardianPhone.slice(-4)}`
           : null,
       },
       children,
