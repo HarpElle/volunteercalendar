@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/context/auth-context";
+import { isAdmin } from "@/lib/utils/permissions";
 import Link from "next/link";
 import QRCode from "qrcode";
 
@@ -43,6 +44,10 @@ const POLL_INTERVAL = 15_000;
 export default function CheckInDashboardPage() {
   const { user, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id;
+  // Emergency Roster is admin/owner-only (legally material — see
+  // /api/admin/emergency-roster route gate). Hide the QuickAction
+  // tile for non-admins instead of letting them bounce off a 403.
+  const userIsAdmin = isAdmin(activeMembership);
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -463,9 +468,10 @@ export default function CheckInDashboardPage() {
                       ? "bg-amber-400"
                       : "bg-vc-sage";
               return (
-                <div
+                <Link
                   key={room.id}
-                  className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-4"
+                  href={`/dashboard/checkin/rooms/${room.id}/today`}
+                  className="block rounded-xl border border-vc-border-light bg-vc-bg-warm p-4 transition-colors hover:border-vc-coral/40 hover:bg-vc-coral/5"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-medium text-vc-indigo text-sm">{room.name}</p>
@@ -489,7 +495,7 @@ export default function CheckInDashboardPage() {
                       {room.checked_out} checked out
                     </p>
                   )}
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -497,13 +503,27 @@ export default function CheckInDashboardPage() {
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <QuickAction
           href="/dashboard/checkin/households"
           label="Manage Households"
           description="Add, edit, or search families"
           icon="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"
         />
+        <QuickAction
+          href="/dashboard/teacher/rooms"
+          label="Teacher View"
+          description="Roster of children in your room (after you check in as a teacher)"
+          icon="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342"
+        />
+        {userIsAdmin && (
+          <QuickAction
+            href="/dashboard/checkin/emergency-roster"
+            label="Emergency Roster"
+            description="Cross-room sweep with medical + parent contact (admin only)"
+            icon="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+          />
+        )}
         <QuickAction
           href="/dashboard/checkin/reports"
           label="Reports"
