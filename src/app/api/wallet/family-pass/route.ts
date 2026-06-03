@@ -61,10 +61,15 @@ export async function GET(req: NextRequest) {
   try {
     const churchRef = adminDb.collection("churches").doc(churchId);
 
-    // Pull household + church + children data.
-    const [churchSnap, householdSnap] = await Promise.all([
+    // Pull household + church + children + campus data.
+    // Campuses fetched in parallel so the location-aware pass
+    // surfaces on the parent's iPhone lock screen when they pull
+    // into the church parking lot (Apple Wallet uses the
+    // `locations` array on the pass — see builder line 78-82).
+    const [churchSnap, householdSnap, campusesSnap] = await Promise.all([
       churchRef.get(),
       churchRef.collection("households").doc(householdId).get(),
+      churchRef.collection("campuses").get(),
     ]);
     if (!householdSnap.exists) {
       return NextResponse.json({ error: "Household not found" }, { status: 404 });
@@ -150,6 +155,29 @@ export async function GET(req: NextRequest) {
       await walletRef.set(fresh);
     }
 
+    // Map campus docs → Apple Wallet locations. Each campus with
+    // GPS coordinates becomes a relevance trigger; pass auto-appears
+    // on the parent's lock screen when they're within ~100m (Apple's
+    // default). Apple's hard cap is 10 locations per pass, which
+    // covers every realistic multi-campus church.
+    //
+    // relevant_text is what shows on the lock screen ("Tap to check
+    // in at {campus name}") — short copy because Apple truncates.
+    const campusLocations = campusesSnap.docs
+      .map((d) => {
+        const c = d.data() as { name?: string; location?: { lat: number; lng: number } | null };
+        if (!c.location || typeof c.location.lat !== "number" || typeof c.location.lng !== "number") {
+          return null;
+        }
+        return {
+          latitude: c.location.lat,
+          longitude: c.location.lng,
+          relevant_text: c.name ? `Check in at ${c.name}` : "Check in at the kiosk",
+        };
+      })
+      .filter((loc): loc is { latitude: number; longitude: number; relevant_text: string } => loc !== null)
+      .slice(0, 10); // Apple PassKit hard limit
+
     // Build + sign the .pkpass.
     const buffer = await buildFamilyPassBuffer({
       household_id: householdId,
@@ -159,6 +187,7 @@ export async function GET(req: NextRequest) {
       children,
       support_url: `${getBaseUrl()}/help`,
       church_logo_url: churchLogoUrl,
+      locations: campusLocations.length > 0 ? campusLocations : undefined,
     });
 
     void audit({
