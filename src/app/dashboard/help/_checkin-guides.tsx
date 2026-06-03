@@ -634,19 +634,15 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
     content: (
       <>
       <p className="mt-3"><strong>Audience:</strong> Admin or coordinator keeping household records current.</p>
-      <p className="mt-3"><strong>Outcome:</strong> You can update guardian details, add or remove a child, and change a child&apos;s grade or default room.</p>
+      <p className="mt-3"><strong>Outcome:</strong> You can update guardian details, add a child, and change a child&apos;s grade or default room.</p>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Editing guardian information</h3>
       <p className="mt-3">Open the household&apos;s detail page and edit the primary or secondary guardian&apos;s information &mdash; name, phone, and contact details.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c1-household-edit-modal</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c1-household-edit-modal.png" alt="C1 household edit modal" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Adding a child</h3>
       <p className="mt-3">From the household page, add a child and fill in their name, grade, and default room. They&apos;ll be available to check in right away.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c1-child-add-confirm</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
-      <hr className="my-6 border-vc-border-light" />
-      <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Removing a child</h3>
-      <p className="mt-3">Removing a child is a soft delete &mdash; the record is hidden rather than erased, so past check-in history stays intact. You&apos;ll be asked to confirm before it&apos;s removed.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c1-child-remove-confirm</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c1-child-add-confirm.png" alt="C1 child add confirm" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Changing grade or default room</h3>
       <p className="mt-3">Update a child&apos;s grade or default room from their entry on the household page. The new room is what the kiosk will auto-assign at the next check-in.</p>
@@ -705,10 +701,10 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
         <li className="mt-1">Add each child &mdash; name, grade, and any allergy or medical notes</li>
         <li className="mt-1">Review the details, then continue into the normal check-in (selecting children, acknowledging any alerts, choosing who can pick up)</li>
       </ol>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c3-visitor-new-family-button</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c3-visitor-guardian-info</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c3-visitor-add-children</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c3-visitor-review</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c3-visitor-new-family-button.png" alt="C3 visitor new family button" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
+      <figure className="my-4"><Image src="/help/checkin/c3-visitor-guardian-info.png" alt="C3 visitor guardian info" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
+      <figure className="my-4"><Image src="/help/checkin/c3-visitor-add-children.png" alt="C3 visitor add children" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
+      <figure className="my-4"><Image src="/help/checkin/c3-visitor-review.png" alt="C3 visitor review" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <p className="mt-3">The new household is saved, so next time the family can be found by phone, QR card, or Apple Wallet pass like anyone else.</p>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Related</h3>
@@ -731,14 +727,14 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">The campus selector</h3>
       <p className="mt-3">When your church has more than one campus, a campus selector lets you choose which one you&apos;re working in. Rooms and services are set up per campus, so what you see follows the campus you&apos;ve selected.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c4-campus-selector</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c4-campus-selector.png" alt="C4 campus selector" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Per-campus rooms and services</h3>
       <ul className="list-disc pl-6 mt-3 space-y-1">
         <li className="mt-1"><strong>Rooms</strong> are configured separately for each campus &mdash; a room at one campus doesn&apos;t appear at another</li>
         <li className="mt-1"><strong>Service times</strong> are also per campus, so each location can run its own schedule</li>
       </ul>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c4-per-campus-rooms</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c4-per-campus-rooms.png" alt="C4 per campus rooms" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Apple Wallet passes across campuses</h3>
       <p className="mt-3">The location-aware pass works at any campus you&apos;ve set GPS coordinates for. When a family is near that campus, their pass surfaces with that campus&apos;s name. Make sure each campus has its coordinates set so the lock-screen prompt fires.</p>
@@ -763,14 +759,14 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">The parent doesn&apos;t have their security code</h3>
       <p className="mt-3">Look up the child&apos;s session in the admin tools &mdash; you can surface the security code from there and confirm it against the child&apos;s name tag.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c5-session-lookup-code</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c5-session-lookup-code.png" alt="C5 session lookup code" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">The parent can&apos;t get their text</h3>
       <p className="mt-3">If the code never reached the parent&apos;s phone, verify their identity another way &mdash; a driver&apos;s license, for instance &mdash; and release the child once you&apos;re satisfied.</p>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">A second guardian arrives instead of the one who checked in</h3>
       <p className="mt-3">The authorized pickup list governs. If the person arriving is on that household&apos;s authorized list, they can collect the child. If they aren&apos;t, don&apos;t release until you&apos;ve confirmed they&apos;re authorized.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c5-authorized-pickup-list</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c5-authorized-pickup-list.png" alt="C5 authorized pickup list" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Related</h3>
       <ul className="list-disc pl-6 mt-3 space-y-1">
@@ -793,9 +789,9 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Authorized pickup contacts</h3>
       <p className="mt-3">From your family pickups page (<code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">/dashboard/account/family/pickups</code>), you can add an authorized pickup contact or request that one be removed.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c6-pickups-page</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c6-pickups-page.png" alt="C6 pickups page" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <p className="mt-3">When you add a contact, every guardian on the household is notified, and the change is recorded in the audit log &mdash; so there&apos;s always a clear record of who can pick up and when that changed.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c6-add-pickup-contact</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c6-add-pickup-contact.png" alt="C6 add pickup contact" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Finding your security code</h3>
       <p className="mt-3">If the security-code text doesn&apos;t reach you, you can view the code on your phone from your account rather than waiting on the message. Have it ready at the kiosk so the volunteer can match it to your child&apos;s name tag.</p>
@@ -820,7 +816,7 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Assigning a room for a service</h3>
       <p className="mt-3">For a given service, assign teachers and aides to the rooms they&apos;ll cover. Planning assignments ahead of time means each room has enough adults to meet your ratio policy when families start arriving.</p>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c7-room-assignments</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c7-room-assignments.png" alt="C7 room assignments" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <p className="mt-3">A scheduled assignment is the plan. The live ratio on Sunday still reflects who has actually <strong>checked into</strong> the room at the kiosk &mdash; so remind volunteers that checking in at the kiosk is what makes them count toward the room (see <strong>A3</strong>).</p>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Where this connects</h3>
@@ -873,7 +869,7 @@ export const CHECKIN_GUIDES: CheckinGuide[] = [
         <li className="mt-1"><strong>Start staffed.</strong> For a first deployment, and for any entrance where pickups happen, use staffed kiosks</li>
         <li className="mt-1"><strong>Add self-service for volume.</strong> A high-traffic check-in-only entrance is a good fit for self-service, as long as pickups and any blocked-pickup households are handled at a staffed station</li>
       </ul>
-      <div className="my-4 rounded-lg border-2 border-dashed border-vc-border bg-vc-bg-warm/40 p-4 text-sm text-vc-text-muted"><strong>Screenshot pending:</strong> <code>c8-station-type-comparison</code> &mdash; see <code>docs/help-guides/checkin/inbox-codex/SKIPPED.md</code></div>
+      <figure className="my-4"><Image src="/help/checkin/c8-station-type-comparison.png" alt="C8 station type comparison" width={1280} height={720} className="rounded-lg border border-vc-border-light w-full h-auto" /></figure>
       <hr className="my-6 border-vc-border-light" />
       <h3 className="font-display text-lg font-semibold text-vc-indigo mt-6 mb-2">Related</h3>
       <ul className="list-disc pl-6 mt-3 space-y-1">
