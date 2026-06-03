@@ -10,6 +10,8 @@ interface ChildData {
   preferred_name?: string;
   grade?: string;
   has_alerts: boolean;
+  /** W10 Jason 2026-06-02: discreet blocked-pickup awareness flag from lookup. */
+  has_blocked_pickup?: boolean;
   photo_url?: string;
   room_name: string;
   pre_checked_in: boolean;
@@ -92,6 +94,7 @@ export function ChildSelection({
               grade={child.grade}
               roomName={child.room_name}
               hasAlerts={child.has_alerts}
+              hasBlockedPickup={child.has_blocked_pickup}
               photoUrl={child.photo_url}
               preCheckedIn={child.pre_checked_in}
               selected={selectedIds.has(child.id)}

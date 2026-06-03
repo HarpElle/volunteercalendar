@@ -213,6 +213,41 @@ async function handleUnifiedLookup(
         .get();
       const preCheckedChildIds = preCheckSnap.docs.map((d) => d.data().child_id);
 
+      // Discreet blocked-pickup awareness (Jason 2026-06-02): mirror the
+      // `has_alerts` boolean pattern so the kiosk renders a small badge
+      // on the child card. Boolean only — names/reasons stay on the
+      // checkout-side BlockedPickupReview modal (the legally-material
+      // gate). Lookup is the most rate-vulnerable surface, so we keep
+      // payload minimal here.
+      const blockedChildIds = new Set<string>();
+      try {
+        const [hhBlockedSnap, childBlockedSnap] = await Promise.all([
+          churchRef
+            .collection("checkin_blocked_pickups")
+            .where("household_id", "==", hhId)
+            .get(),
+          children.length > 0
+            ? churchRef
+                .collection("checkin_blocked_pickups")
+                .where("child_id", "in", children.slice(0, 10).map((c) => c.id))
+                .get()
+            : Promise.resolve(null),
+        ]);
+        if (!hhBlockedSnap.empty) {
+          for (const c of children) blockedChildIds.add(c.id);
+        }
+        if (childBlockedSnap && !childBlockedSnap.empty) {
+          for (const d of childBlockedSnap.docs) {
+            const cid = d.data().child_id as string | undefined;
+            if (cid) blockedChildIds.add(cid);
+          }
+        }
+      } catch {
+        // Don't let a lookup-time block query failure 500 the lookup
+        // itself; checkout-side BlockedPickupReview remains the
+        // legally-material gate.
+      }
+
       return {
         household: {
           id: hhId,
@@ -246,6 +281,8 @@ async function handleUnifiedLookup(
             // allergies + medical_notes intentionally omitted; clients use
             // has_alerts as the boolean indicator and request details from
             // /checkin once the operator has confirmed the child.
+            // W10 Jason 2026-06-02: discreet operator-awareness flag.
+            has_blocked_pickup: blockedChildIds.has(c.id),
             room_name: presetRoomName || gradeRoom?.name || null,
             pre_checked_in: preCheckedChildIds.includes(c.id),
           };

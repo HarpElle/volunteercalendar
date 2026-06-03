@@ -20,6 +20,8 @@ interface HouseholdResult {
     preferred_name?: string;
     grade?: string;
     has_alerts: boolean;
+    /** W10 Jason 2026-06-02: discreet blocked-pickup awareness flag. */
+    has_blocked_pickup?: boolean;
     photo_url?: string;
     room_name: string;
     pre_checked_in: boolean;
