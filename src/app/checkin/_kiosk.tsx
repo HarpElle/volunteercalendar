@@ -117,6 +117,11 @@ type KioskScreen =
   | "success"
   | "checkout-enter"
   | "checkout-success"
+  // Wave 10 (Jason 2026-06-02): parent-arrival ping success screen.
+  // Distinct from "checkout-success" — pickup-ready is just a
+  // signal to the teacher; the actual release still happens through
+  // the standard checkout flow.
+  | "pickup-ready-success"
   | "printer-setup";
 type KioskMode = "checkin" | "checkout";
 
@@ -254,6 +259,9 @@ function CheckInKioskInner() {
   const [household, setHousehold] = useState<HouseholdResult | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
+  // Wave 10 (Jason 2026-06-02): pickup-ready ping result. Just the
+  // child names so the success screen can read "Bringing Jacob and Lily out".
+  const [pickupReadyChildren, setPickupReadyChildren] = useState<string[]>([]);
   // Wave 9 P0-5 sub-PR E: staffed-station override prompt state.
   // When non-null, the modal renders with the listed blocked children
   // and an override button that re-submits with X-Ratio-Override: true.
@@ -728,7 +736,64 @@ function CheckInKioskInner() {
             onActivity();
           }}
           onActivity={onActivity}
+          onPickupReady={async () => {
+            // W10 (Jason 2026-06-02): fire the pickup-ready ping
+            // for the entire household. Endpoint stamps every
+            // open session for today as pickup_ready_at; teacher
+            // dashboards render the prominent indicator.
+            try {
+              const res = await kioskFetch("/api/checkin/pickup-ready", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  church_id: churchId,
+                  household_id: household.household.id,
+                }),
+              });
+              if (res.ok) {
+                const data = (await res.json()) as { child_names?: string[] };
+                setPickupReadyChildren(data.child_names ?? []);
+                setScreen("pickup-ready-success");
+              } else {
+                setError("Couldn't reach the teacher right now. Please ask the kiosk operator.");
+              }
+            } catch {
+              setError("Network error. Please ask the kiosk operator.");
+            }
+          }}
         />
+      )}
+
+      {screen === "pickup-ready-success" && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="w-20 h-20 rounded-full bg-vc-sage/15 flex items-center justify-center mb-6">
+            <svg className="w-12 h-12 text-vc-sage" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-bold text-vc-indigo mb-3">
+            We&rsquo;ve let the teacher know
+          </h1>
+          <p className="text-lg text-gray-600 max-w-md">
+            {pickupReadyChildren.length > 0
+              ? `Bringing ${pickupReadyChildren.join(", ")} out to the lobby in a moment.`
+              : "A teacher will bring your child to the lobby in a moment."}
+          </p>
+          <p className="text-sm text-gray-500 mt-4 max-w-md">
+            Please wait in the lobby with your pickup code ready.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setPickupReadyChildren([]);
+              setScreen("lookup");
+              onActivity();
+            }}
+            className="mt-8 px-8 h-14 rounded-full bg-vc-indigo text-white font-semibold text-lg active:bg-vc-indigo/90 transition-colors"
+          >
+            Done
+          </button>
+        </div>
       )}
 
       {screen === "confirm" && household && (

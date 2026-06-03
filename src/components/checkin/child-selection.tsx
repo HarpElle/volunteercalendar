@@ -22,6 +22,15 @@ interface ChildSelectionProps {
   childList: ChildData[];
   onConfirm: (selectedIds: string[]) => void;
   onBack: () => void;
+  /**
+   * Wave 10 (Jason 2026-06-02): optional handler for the
+   * "I'm here for pickup" path. When provided, renders an
+   * additional button alongside Back / Next that fires the
+   * pickup-ready ping without going through check-in. Distinct
+   * from checkout — security-code release still happens at the
+   * normal checkout flow.
+   */
+  onPickupReady?: () => void;
   onActivity: () => void;
 }
 
@@ -35,6 +44,7 @@ export function ChildSelection({
   onConfirm,
   onBack,
   onActivity,
+  onPickupReady,
 }: ChildSelectionProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(childList.map((c) => c.id)),
@@ -103,6 +113,31 @@ export function ChildSelection({
           ))}
         </div>
       </div>
+
+      {/* Wave 10 (Jason 2026-06-02): pickup-ready ping button.
+          Only renders when the kiosk wired the handler — that lets
+          us deploy the button cleanly without touching every
+          consumer of ChildSelection. */}
+      {onPickupReady && (
+        <div className="max-w-lg mx-auto w-full mt-6">
+          <button
+            type="button"
+            onClick={() => {
+              onPickupReady();
+              onActivity();
+            }}
+            className="w-full h-14 rounded-full bg-vc-sage text-white
+              font-semibold text-lg active:bg-vc-sage/90 transition-colors
+              flex items-center justify-center gap-2"
+          >
+            <span aria-hidden="true">👋</span>
+            I&rsquo;m here for pickup
+          </button>
+          <p className="text-xs text-gray-500 text-center mt-2">
+            We&rsquo;ll let your teacher know to bring your child to the lobby.
+          </p>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-4 mt-8 max-w-lg mx-auto w-full">
