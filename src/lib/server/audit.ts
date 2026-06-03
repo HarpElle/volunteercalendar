@@ -202,6 +202,22 @@ export type AuditAction =
    */
   | "teacher.parent_paged"
   /**
+   * Wave 10 (Jason 2026-06-02): a parent signaled arrival at the
+   * kiosk for pickup. Marks the household's open sessions with
+   * pickup_ready_at; teacher dashboard renders a prominent
+   * indicator until acknowledged. DISTINCT from kiosk.checkout
+   * (the actual release).
+   */
+  | "checkin.pickup_ready"
+  /**
+   * Wave 10 (Jason 2026-06-02): a teacher acknowledged the
+   * pickup-ready ping from their classroom dashboard. Flips the
+   * row state so other staff don't double-respond. Material for
+   * audit when investigating "parent says they pinged but nobody
+   * came" complaints.
+   */
+  | "teacher.pickup_acknowledged"
+  /**
    * Wave 10 W10-5A: a household downloaded (or re-downloaded) their
    * Apple Wallet family pass. The pass carries no medical or
    * contact data, but it does identify a household and list

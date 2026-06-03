@@ -50,6 +50,12 @@ interface RoomChild {
   medications?: string;
   medical_fields: MedicalField[];
   parent_phone_masked: string;
+  /** Wave 10 (Jason 2026-06-02): parent signaled arrival at kiosk. */
+  pickup_ready_at: string | null;
+  /** Wave 10 (Jason 2026-06-02): teacher ack'd the ping. */
+  pickup_acknowledged_at: string | null;
+  /** Wave 10 (Jason 2026-06-02): user_id of the ack-ing teacher. */
+  pickup_acknowledged_by: string | null;
 }
 
 interface DashboardRoom {
@@ -287,9 +293,58 @@ function ChildRow({
 
   const inCooldown = cooldownSecs > 0;
 
+  const pickupReady =
+    !!child.pickup_ready_at && !child.pickup_acknowledged_at;
+  const pickupAcked =
+    !!child.pickup_ready_at && !!child.pickup_acknowledged_at;
+  const [ackPending, setAckPending] = useState(false);
+  const handleAck = useCallback(async () => {
+    if (!user) return;
+    setAckPending(true);
+    try {
+      const token = await user.getIdToken();
+      await fetch("/api/teacher/pickup-ack", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          church_id: churchId,
+          session_id: child.session_id,
+        }),
+      });
+      // Let the 30s poll refresh the row state. We don't optimistic-
+      // update here because other teachers may be racing — the poll
+      // resolves any conflict deterministically.
+    } catch {
+      // silent
+    } finally {
+      setAckPending(false);
+    }
+  }, [user, churchId, child.session_id]);
+
   return (
-    <li className="rounded-xl bg-white border border-vc-border-light p-3 flex items-start gap-3">
+    <li
+      className={`rounded-xl border p-3 flex items-start gap-3 transition-colors ${
+        pickupReady
+          ? "bg-vc-coral/10 border-vc-coral/40 ring-2 ring-vc-coral/30"
+          : pickupAcked
+            ? "bg-vc-sage/5 border-vc-sage/30"
+            : "bg-white border-vc-border-light"
+      }`}
+    >
       <div className="flex-1 min-w-0">
+        {pickupReady && (
+          <p className="text-xs font-semibold text-vc-coral mb-1 uppercase tracking-wide">
+            ⚠ Parent here for pickup
+          </p>
+        )}
+        {pickupAcked && (
+          <p className="text-xs font-medium text-vc-sage mb-1">
+            ✓ Acknowledged — bring child to lobby
+          </p>
+        )}
         <div className="flex items-baseline gap-2 flex-wrap">
           <p className="font-medium text-vc-indigo">{child.child_name}</p>
           {child.grade && (
@@ -328,6 +383,17 @@ function ChildRow({
           Parent: {child.parent_phone_masked}
         </p>
       </div>
+      {pickupReady && (
+        <button
+          type="button"
+          onClick={handleAck}
+          disabled={ackPending}
+          className="text-sm font-semibold px-3 py-2 rounded-lg bg-vc-sage text-white disabled:bg-vc-text-muted disabled:cursor-not-allowed min-w-[100px] min-h-[44px] mr-2"
+          aria-label={`Acknowledge pickup ready for ${child.child_name}`}
+        >
+          {ackPending ? "..." : "On my way"}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setPageModalOpen(true)}
