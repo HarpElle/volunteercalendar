@@ -14,7 +14,11 @@
  * children's-ministry area is secured and parents can't walk to
  * the classroom.
  *
- * Auth: kiosk station token (X-Kiosk-Token header).
+ * Auth: kiosk station token (X-Kiosk-Token header). Uses the
+ * canonical requireKioskToken helper for consistent error shape
+ * with the rest of the kiosk routes (Codex 2026-06-02 hotfix
+ * fixed the prior auth/body-read ordering bug).
+ *
  * Body: { church_id, household_id, service_date? }
  * Response: { sessions_pinged, child_names }
  */
@@ -23,6 +27,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
+import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { audit, kioskActor } from "@/lib/server/audit";
 import type { CheckInSession } from "@/lib/types";
 
@@ -33,45 +38,63 @@ interface PostBody {
 }
 
 export async function POST(req: NextRequest) {
+  // 1. Kiosk token check FIRST — must run before any body read or
+  //    tier check so the right error surfaces when the header is
+  //    missing/invalid (Codex hotfix 2026-06-02).
+  //
+  //    "lookup" scope: this ping just identifies a household; it's
+  //    not performing a check-in or checkout. Same rationale used
+  //    by /api/checkin/guardian-portal-url. No new KioskScope needed.
+  const kiosk = await requireKioskToken(req, "lookup");
+  if (kiosk instanceof NextResponse) return kiosk;
+
+  // 2. Rate limit.
   const limited = rateLimit(req, { limit: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   try {
+    // 3. Tier gate. churchIdFrom: "body" is required because we
+    //    don't pass church_id via URL params. allowAnonymous is on
+    //    because the kiosk token IS the auth — the tier gate just
+    //    enforces that the org has Check-In enabled.
     const gate = await requireModuleTier(req, "checkin", {
+      churchIdFrom: "body",
       allowAnonymous: true,
     });
     if (!gate.ok) return gate.response;
+    const { churchId } = gate.ctx;
 
+    // 4. Read body for remaining fields. requireModuleTier already
+    //    consumed a clone; this is the first authoritative read.
     const body = (await req.json()) as PostBody;
-    const churchId = body.church_id;
     const householdId = body.household_id;
     const date =
       body.service_date || new Date().toISOString().split("T")[0];
-    if (!churchId || !householdId) {
+    if (!householdId) {
       return NextResponse.json(
-        { error: "Missing church_id or household_id" },
+        { error: "Missing household_id" },
         { status: 400 },
       );
     }
 
-    const kioskToken = req.headers.get("X-Kiosk-Token");
-    if (!kioskToken) {
+    // 5. Kiosk church-match — prevent a station from one church
+    //    triggering pickup pings against another church.
+    const churchMismatch = assertKioskChurchMatch(kiosk, churchId);
+    if (churchMismatch) return churchMismatch;
+
+    // 6. Bootstrap tokens lack a station_id — pickup-ready needs
+    //    an enrolled station so the audit trail can identify which
+    //    physical kiosk fired the ping.
+    const stationId = kiosk.station_id;
+    if (!stationId) {
       return NextResponse.json(
-        { error: "Missing X-Kiosk-Token" },
-        { status: 401 },
+        {
+          error:
+            "Pickup ready requires an enrolled kiosk station (bootstrap token cannot fire)",
+        },
+        { status: 403 },
       );
     }
-    const stationsSnap = await adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("kiosk_stations")
-      .where("token", "==", kioskToken)
-      .limit(1)
-      .get();
-    if (stationsSnap.empty) {
-      return NextResponse.json({ error: "Invalid kiosk token" }, { status: 401 });
-    }
-    const stationId = stationsSnap.docs[0].id;
 
     const churchRef = adminDb.collection("churches").doc(churchId);
     const sessionsSnap = await churchRef
@@ -110,7 +133,7 @@ export async function POST(req: NextRequest) {
           childNames.push(data.preferred_name || data.first_name || "Child");
         }
       } catch {
-        // skip
+        // skip — don't fail the whole ping over a name lookup error
       }
     }
     await batch.commit();
