@@ -17,7 +17,7 @@ Multi-tenant SaaS for volunteer scheduling — built for churches, nonprofits, a
 
 ```
 VolunteerCal/
-├── docs/                       # Scaling assessment, roadmap, test plan
+├── docs/                       # Scaling assessment, roadmap, test plan, help guides
 ├── middleware.ts                # Centralized route redirects (old URLs → new pages)
 ├── CLAUDE.md                   # Claude Code conventions
 ├── intense-review-codex.md      # External-style production audit findings and remediation plan
