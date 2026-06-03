@@ -8,6 +8,12 @@ interface ChildCardProps {
   grade?: string;
   roomName: string;
   hasAlerts: boolean;
+  /**
+   * Wave 10 Jason 2026-06-02: discreet flag rendered as a small
+   * "Pickup note" badge so the kiosk operator knows pickup
+   * restrictions are on file. Deliberately neutral copy.
+   */
+  hasBlockedPickup?: boolean;
   photoUrl?: string;
   preCheckedIn: boolean;
   selected: boolean;
@@ -24,6 +30,7 @@ export function ChildCard({
   grade,
   roomName,
   hasAlerts,
+  hasBlockedPickup = false,
   photoUrl,
   preCheckedIn,
   selected,
@@ -92,10 +99,32 @@ export function ChildCard({
       <span className="text-sm text-gray-500">{roomName}</span>
 
       {/* Badges row */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap justify-center">
         {hasAlerts && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
             Allergy
+          </span>
+        )}
+        {hasBlockedPickup && (
+          <span
+            className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium inline-flex items-center gap-1"
+            title="Pickup restrictions on file — operator will verify at checkout"
+          >
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
+              />
+            </svg>
+            Pickup note
           </span>
         )}
         {preCheckedIn && (

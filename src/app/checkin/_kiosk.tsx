@@ -39,6 +39,8 @@ interface HouseholdResult {
     preferred_name?: string;
     grade?: string;
     has_alerts: boolean;
+    /** W10 Jason 2026-06-02: discreet blocked-pickup awareness flag. */
+    has_blocked_pickup?: boolean;
     // Track B.4: medical data no longer returned by /lookup. Fetched
     // just-in-time from /api/checkin/child-alerts when an operator selects
     // an alerted child.
