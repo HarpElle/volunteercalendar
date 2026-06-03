@@ -2,6 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { CHECKIN_GUIDES } from "./_checkin-guides";
 
 interface HelpSection {
   title: string;
@@ -1523,6 +1524,16 @@ interface HelpCategory {
   guides: HelpSection[];
 }
 
+// Wave 10 (Jason 2026-06-02) help-guide incorporation: spread the
+// auto-generated Check-In journey guides into the featureGuides array.
+// Source: docs/help-guides/checkin/inbox-claude-chat/*.md → converted
+// by /tmp/md2jsx.py into _checkin-guides.tsx. Each entry's `tier` is
+// preserved on CHECKIN_GUIDES for future filtering; here we drop it
+// to match the HelpSection shape.
+for (const g of CHECKIN_GUIDES) {
+  featureGuides.push({ title: g.title, content: g.content });
+}
+
 const featureCategories: HelpCategory[] = [
   {
     label: "Scheduling",
@@ -1587,6 +1598,27 @@ const featureCategories: HelpCategory[] = [
       [
         "Children's Check-In",
         "Label Printing Setup",
+        // Tier 1 — Anchor Falls priority
+        "Set up your first check-in kiosk",
+        "Running the kiosk on Sunday morning",
+        "The teacher view on your phone",
+        "Checking on a room from the admin dashboard",
+        "The emergency roster",
+        // Tier 2 — Sunday onward
+        "Adding your family's check-in pass to Apple Wallet",
+        "Letting the room know you're here for pickup",
+        "Texting a parent from your room",
+        "Blocked-pickup entries and checkout verification",
+        "Marking who's actually in your room",
+        // Tier 3 — operational completeness
+        "Editing a household",
+        "Annual grade roll-up",
+        "Registering a first-time family at the kiosk",
+        "Multi-campus check-in",
+        "Recovery scenarios at pickup",
+        "Managing your pickups and finding your code",
+        "Scheduling volunteers for check-in rooms",
+        "Staffed vs. self-service kiosks: a closer look",
       ].includes(g.title),
     ),
   },
