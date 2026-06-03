@@ -468,9 +468,10 @@ export default function CheckInDashboardPage() {
                       ? "bg-amber-400"
                       : "bg-vc-sage";
               return (
-                <div
+                <Link
                   key={room.id}
-                  className="rounded-xl border border-vc-border-light bg-vc-bg-warm p-4"
+                  href={`/dashboard/checkin/rooms/${room.id}/today`}
+                  className="block rounded-xl border border-vc-border-light bg-vc-bg-warm p-4 transition-colors hover:border-vc-coral/40 hover:bg-vc-coral/5"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-medium text-vc-indigo text-sm">{room.name}</p>
@@ -494,7 +495,7 @@ export default function CheckInDashboardPage() {
                       {room.checked_out} checked out
                     </p>
                   )}
-                </div>
+                </Link>
               );
             })}
           </div>
