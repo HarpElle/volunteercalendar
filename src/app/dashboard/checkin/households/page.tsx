@@ -6,11 +6,13 @@ import { useAuth } from "@/lib/context/auth-context";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatHouseholdDisplay } from "@/lib/utils/name";
 
 interface HouseholdSummary {
   id: string;
   primary_guardian_name: string;
   primary_guardian_phone: string;
+  secondary_guardian_name?: string | null;
   created_at: string;
   children_count?: number;
 }
@@ -112,7 +114,10 @@ export default function HouseholdsPage() {
             >
               <div>
                 <p className="font-medium text-vc-indigo">
-                  {h.primary_guardian_name}
+                  {formatHouseholdDisplay({
+                    primary_guardian_name: h.primary_guardian_name,
+                    secondary_guardian_name: h.secondary_guardian_name ?? null,
+                  })}
                 </p>
                 <p className="text-sm text-gray-500">
                   {h.children_count || 0} child{(h.children_count || 0) !== 1 ? "ren" : ""}

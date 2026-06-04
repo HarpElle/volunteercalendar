@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { OrgLogoOrBadge } from "@/components/ui/org-logo-or-badge";
+import { formatHouseholdDisplay } from "@/lib/utils/name";
 
 interface GuardianChild {
   id: string;
@@ -256,7 +257,10 @@ function GuardianPortalInner() {
             {churchName}
           </p>
           <h1 className="text-2xl font-bold text-vc-indigo font-display leading-tight">
-            {household.primary_guardian_name} Family
+            {formatHouseholdDisplay({
+              primary_guardian_name: household.primary_guardian_name,
+              secondary_guardian_name: household.secondary_guardian_name,
+            })}
           </h1>
         </div>
       </div>
