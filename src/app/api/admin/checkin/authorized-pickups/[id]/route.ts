@@ -5,13 +5,20 @@
  * removes a specific authorized pickup contact within the child's
  * `child_profile.authorized_pickups` array.
  *
+ * 2026-06-03 sibling-scope extension: the same routes now also handle
+ * household-scope pickups (stored on the household doc's
+ * `authorized_pickups` array). Scope is read from the body (PATCH) or
+ * query (DELETE); `child_id` and `household_id` are interchangeable
+ * targets gated by the scope value. Defaults to `scope=child` for
+ * backwards-compat with the per-child UI that shipped first.
+ *
  * Path pattern note: this used to live at
  * `children/[personId]/authorized-pickups/[pickupId]/route.ts`, but
  * Next.js 16's app-router bundler chokes on `[param]/static/[param]/
  * route.ts` — even an empty file at that path corrupts ALL
  * Firebase-backed function bundles in production (verified PR #154).
- * Flattening to `authorized-pickups/[id]` with `child_id` in the
- * body/query avoids the bug entirely.
+ * Flattening to `authorized-pickups/[id]` with `child_id` /
+ * `household_id` in the body/query avoids the bug entirely.
  *
  * Photo upload still NOT in scope (sub-PR C).
  *
@@ -26,12 +33,20 @@ import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
+type Scope = "child" | "household";
+
 interface PatchBody {
   church_id?: unknown;
+  scope?: unknown;
   child_id?: unknown;
+  household_id?: unknown;
   name?: unknown;
   phone?: unknown;
   relationship?: unknown;
+}
+
+function readScope(raw: unknown): Scope {
+  return raw === "household" ? "household" : "child";
 }
 
 export async function PATCH(
@@ -53,18 +68,34 @@ export async function PATCH(
     }
 
     const body = (await req.json()) as PatchBody;
-    const childId =
-      typeof body.child_id === "string" && body.child_id.trim().length > 0
-        ? body.child_id.trim()
-        : "";
-    if (!childId) {
-      return NextResponse.json(
-        { error: "child_id is required" },
-        { status: 400 },
-      );
+    const scope = readScope(body.scope);
+
+    let childId = "";
+    let householdId = "";
+    if (scope === "child") {
+      childId =
+        typeof body.child_id === "string" && body.child_id.trim().length > 0
+          ? body.child_id.trim()
+          : "";
+      if (!childId) {
+        return NextResponse.json(
+          { error: "child_id is required when scope=child" },
+          { status: 400 },
+        );
+      }
+    } else {
+      householdId =
+        typeof body.household_id === "string" && body.household_id.trim().length > 0
+          ? body.household_id.trim()
+          : "";
+      if (!householdId) {
+        return NextResponse.json(
+          { error: "household_id is required when scope=household" },
+          { status: 400 },
+        );
+      }
     }
 
-    // Each field is optional on PATCH — only present fields apply.
     const hasName = typeof body.name === "string";
     const hasPhone = "phone" in body;
     const hasRelationship = "relationship" in body;
@@ -76,27 +107,34 @@ export async function PATCH(
       );
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const targetRef =
+      scope === "child"
+        ? churchRef.collection("people").doc(childId)
+        : churchRef.collection("households").doc(householdId);
+    const fieldKey =
+      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
 
     const updated = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(personRef);
-      if (!snap.exists) throw new Error("PERSON_NOT_FOUND");
+      const snap = await tx.get(targetRef);
+      if (!snap.exists) {
+        throw new Error(scope === "child" ? "PERSON_NOT_FOUND" : "HOUSEHOLD_NOT_FOUND");
+      }
       const data = snap.data() ?? {};
       if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
-      if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
+      if (scope === "child" && data.person_type !== "child") {
+        throw new Error("NOT_A_CHILD");
+      }
 
-      const childProfile = data.child_profile ?? {};
-      const existing: PersonAuthorizedPickup[] = Array.isArray(
-        childProfile.authorized_pickups,
-      )
-        ? childProfile.authorized_pickups
-        : [];
+      const existing: PersonAuthorizedPickup[] =
+        scope === "child"
+          ? Array.isArray(data.child_profile?.authorized_pickups)
+            ? data.child_profile.authorized_pickups
+            : []
+          : Array.isArray(data.authorized_pickups)
+            ? data.authorized_pickups
+            : [];
 
-      // Backfill missing IDs before we try to match.
       const withIds = existing.map((p) =>
         p.id ? p : { ...p, id: randomUUID() },
       );
@@ -108,9 +146,7 @@ export async function PATCH(
       const next: PersonAuthorizedPickup = {
         ...current,
         ...(hasName
-          ? {
-              name: String((body as { name: string }).name).trim(),
-            }
+          ? { name: String((body as { name: string }).name).trim() }
           : {}),
         ...(hasPhone
           ? {
@@ -138,8 +174,8 @@ export async function PATCH(
       const nextArray = [...withIds];
       nextArray[idx] = next;
 
-      tx.update(personRef, {
-        "child_profile.authorized_pickups": nextArray,
+      tx.update(targetRef, {
+        [fieldKey]: nextArray,
         updated_at: new Date().toISOString(),
       });
 
@@ -150,9 +186,9 @@ export async function PATCH(
       church_id: churchId,
       actor: userActor(userId),
       action: "pickup.authorized_updated",
-      target_type: "person",
-      target_id: childId,
-      metadata: { pickup_id: pickupId },
+      target_type: scope === "child" ? "person" : "household",
+      target_id: scope === "child" ? childId : householdId,
+      metadata: { pickup_id: pickupId, scope },
       outcome: "ok",
     });
 
@@ -180,41 +216,58 @@ export async function DELETE(
       );
     }
 
+    const scope = readScope(req.nextUrl.searchParams.get("scope"));
     const childId = req.nextUrl.searchParams.get("child_id");
-    if (!childId) {
+    const householdId = req.nextUrl.searchParams.get("household_id");
+
+    if (scope === "child" && !childId) {
       return NextResponse.json(
-        { error: "child_id query param is required" },
+        { error: "child_id query param is required when scope=child" },
+        { status: 400 },
+      );
+    }
+    if (scope === "household" && !householdId) {
+      return NextResponse.json(
+        { error: "household_id query param is required when scope=household" },
         { status: 400 },
       );
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const targetRef =
+      scope === "child"
+        ? churchRef.collection("people").doc(childId!)
+        : churchRef.collection("households").doc(householdId!);
+    const fieldKey =
+      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
 
     await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(personRef);
-      if (!snap.exists) throw new Error("PERSON_NOT_FOUND");
+      const snap = await tx.get(targetRef);
+      if (!snap.exists) {
+        throw new Error(scope === "child" ? "PERSON_NOT_FOUND" : "HOUSEHOLD_NOT_FOUND");
+      }
       const data = snap.data() ?? {};
       if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
-      if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
+      if (scope === "child" && data.person_type !== "child") {
+        throw new Error("NOT_A_CHILD");
+      }
 
-      const childProfile = data.child_profile ?? {};
-      const existing: PersonAuthorizedPickup[] = Array.isArray(
-        childProfile.authorized_pickups,
-      )
-        ? childProfile.authorized_pickups
-        : [];
+      const existing: PersonAuthorizedPickup[] =
+        scope === "child"
+          ? Array.isArray(data.child_profile?.authorized_pickups)
+            ? data.child_profile.authorized_pickups
+            : []
+          : Array.isArray(data.authorized_pickups)
+            ? data.authorized_pickups
+            : [];
 
       const idx = existing.findIndex((p) => p.id === pickupId);
       if (idx === -1) throw new Error("PICKUP_NOT_FOUND");
 
       const nextArray = existing.filter((p) => p.id !== pickupId);
 
-      tx.update(personRef, {
-        "child_profile.authorized_pickups": nextArray,
+      tx.update(targetRef, {
+        [fieldKey]: nextArray,
         updated_at: new Date().toISOString(),
       });
     });
@@ -223,9 +276,9 @@ export async function DELETE(
       church_id: churchId,
       actor: userActor(userId),
       action: "pickup.authorized_removed",
-      target_type: "person",
-      target_id: childId,
-      metadata: { pickup_id: pickupId },
+      target_type: scope === "child" ? "person" : "household",
+      target_id: scope === "child" ? childId! : householdId!,
+      metadata: { pickup_id: pickupId, scope },
       outcome: "ok",
     });
 
@@ -240,6 +293,11 @@ function mapKnownError(error: unknown): NextResponse {
     switch (error.message) {
       case "PERSON_NOT_FOUND":
         return NextResponse.json({ error: "Child not found" }, { status: 404 });
+      case "HOUSEHOLD_NOT_FOUND":
+        return NextResponse.json(
+          { error: "Household not found" },
+          { status: 404 },
+        );
       case "PICKUP_NOT_FOUND":
         return NextResponse.json(
           { error: "Authorized-pickup entry not found" },

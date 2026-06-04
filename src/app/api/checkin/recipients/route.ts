@@ -55,10 +55,11 @@ interface RecipientOption {
   phone: string | null;
   source: "household_adult" | "authorized_pickup";
   ref_id: string;
-  /** For authorized_pickup: the child this entry belongs to. Surfaced
-   *  so the UI can show "Grandma (Sarah's contact)" when multiple
-   *  children have different authorized pickup lists. */
-  child_id?: string;
+  /** For authorized_pickup: the child this entry belongs to, OR null
+   *  when the pickup is household-scope (applies to every child). The
+   *  UI can show "Grandma (Sarah's contact)" for per-child entries and
+   *  "Grandma (household-wide)" for the null case. */
+  child_id?: string | null;
   /** For authorized_pickup: photo if uploaded (visual confirmation). */
   photo_url?: string | null;
 }
@@ -188,9 +189,55 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. For each child, surface their authorized_pickups (filtered for
+    // 2. Household-wide authorized pickups (2026-06-03). Surfaced
+    //    BEFORE per-child pickups so dedup keeps the household-scope
+    //    entry as the canonical one. The household scope was added so
+    //    admins don't have to re-add the same authorized adult to
+    //    every child.
+    if (householdId) {
+      const hhSnap2 = await churchRef
+        .collection("households")
+        .doc(householdId)
+        .get();
+      if (hhSnap2.exists) {
+        const hhData2 = hhSnap2.data() ?? {};
+        if (hhData2.church_id === churchId) {
+          const hhPickups: PersonAuthorizedPickup[] = Array.isArray(
+            hhData2.authorized_pickups,
+          )
+            ? (hhData2.authorized_pickups as PersonAuthorizedPickup[])
+            : [];
+          const now = Date.now();
+          for (const p of hhPickups) {
+            if (p.pending_remove_at) {
+              const t = Date.parse(p.pending_remove_at);
+              if (!Number.isNaN(t) && t <= now) continue;
+            }
+            const normalized = normalizePhoneForDedup(p.phone);
+            if (normalized && phoneSeen.has(normalized)) continue;
+            if (normalized) phoneSeen.add(normalized);
+
+            recipients.push({
+              id: `pickup:household:${householdId}:${
+                p.id ?? `${p.name}-${p.phone}`
+              }`,
+              name: p.name,
+              phone: p.phone ?? null,
+              source: "authorized_pickup",
+              ref_id: p.id ?? "",
+              // child_id null = household-scope (applies to every child).
+              child_id: null,
+              photo_url: p.photo_url ?? null,
+            });
+          }
+        }
+      }
+    }
+
+    // 3. For each child, surface their authorized_pickups (filtered for
     //    elapsed pending-removal entries — same filter as the parent
-    //    self-service page). Deduped against the adults already added.
+    //    self-service page). Deduped against adults + household pickups
+    //    already added.
     for (const childId of childIds) {
       const childSnap = await churchRef
         .collection("people")

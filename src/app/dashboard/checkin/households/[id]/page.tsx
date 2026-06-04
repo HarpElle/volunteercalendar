@@ -15,12 +15,24 @@ import type {
 } from "@/lib/types";
 import { AuthorizedPickupPanel } from "@/components/checkin/authorized-pickup-panel";
 import { BlockedPickupPanel } from "@/components/checkin/blocked-pickup-panel";
+import { extractSurname } from "@/lib/utils/name";
 
 /** Wave 9 P0-2: the household-detail API extends the Child shape with
  *  `authorized_pickups`. Local extension keeps the legacy Child type
  *  untouched while letting the panel consume the new field. */
 interface ChildWithPickups extends Child {
   authorized_pickups?: PersonAuthorizedPickup[];
+}
+
+/**
+ * Best-effort surname for household-wide panel headers and confirm
+ * dialogs. Prefers the explicit household.name (surname-only since
+ * the 2026-06-03 fix); falls back to extractSurname() on the primary
+ * guardian's full name for legacy records.
+ */
+function householdSurname(hh: CheckInHousehold): string {
+  if (hh.name && hh.name.trim()) return extractSurname(hh.name) || hh.name;
+  return extractSurname(hh.primary_guardian_name) || "Family";
 }
 
 const GRADES: { value: ChildGrade; label: string }[] = [
@@ -412,21 +424,53 @@ export default function HouseholdDetailPage() {
         )}
       </div>
 
-      {/* Wave 9 P0-2: Authorized-pickup management per child.
-          Separate section so the compact children list above stays
-          scannable. Each child gets a panel with add / edit / delete /
-          photo capture. */}
+      {/* 2026-06-03 reorder: household-wide panels surface FIRST.
+          For most families the authorized list is the same across
+          siblings (Grandma picks up everyone) and custody orders
+          apply to the whole sibling group. Per-child panels follow
+          for the cases that genuinely vary. Previously the
+          household panel was buried below every per-child section
+          and easy to miss — Jason 2026-06-03 feedback. */}
+      {household && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+            Household-wide pickup rules
+          </h2>
+          <AuthorizedPickupPanel
+            scope="household"
+            householdId={household.id}
+            householdDisplayName={householdSurname(household)}
+            initialPickups={household.authorized_pickups ?? []}
+            onChanged={() => fetchData()}
+          />
+          <BlockedPickupPanel
+            scope="household"
+            householdId={household.id}
+            householdDisplayName={householdSurname(household)}
+          />
+        </div>
+      )}
+
+      {/* Per-child overrides for cases where one child has a
+          different authorized contact list or a child-specific
+          block. The household-wide entries above apply to every
+          child; these sections only need entries for the exceptions. */}
       {children.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-            Authorized pickup contacts
+            Per-child overrides
           </h2>
+          <p className="text-xs text-vc-text-secondary -mt-2">
+            Add entries here only for contacts that apply to ONE
+            child, not the whole household.
+          </p>
           {children.map((child) => (
             <div key={`pickup-${child.id}`} className="space-y-2">
               <p className="text-sm font-medium text-vc-indigo">
                 {child.preferred_name || child.first_name} {child.last_name}
               </p>
               <AuthorizedPickupPanel
+                scope="child"
                 childPersonId={child.id}
                 childDisplayName={child.preferred_name || child.first_name}
                 initialPickups={child.authorized_pickups ?? []}
@@ -439,23 +483,6 @@ export default function HouseholdDetailPage() {
               />
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Wave 9 P0-2 sub-PR E: household-wide blocked-pickup list.
-          Sibling-wide blocks (e.g. custody orders covering all
-          children in the household) are managed here. Child-specific
-          blocks are managed per-child in the section above. */}
-      {household && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-            Household-wide block list
-          </h2>
-          <BlockedPickupPanel
-            scope="household"
-            householdId={household.id}
-            householdDisplayName={household.primary_guardian_name}
-          />
         </div>
       )}
 

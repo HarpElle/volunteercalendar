@@ -7,12 +7,18 @@
  * the photo are NEVER unsigned — the UI calls /api/admin/checkin/photo
  * for a short-TTL signed URL on demand.
  *
+ * 2026-06-03 sibling-scope extension: handles both per-child and
+ * household-scope pickup photos. Scope is read from a form field
+ * (POST) / query param (DELETE); the `household_id` and `child_id`
+ * fields are interchangeable targets gated by scope. Defaults to
+ * `scope=child` for backwards-compat.
+ *
  * Path pattern note: this used to live at
  * `children/[personId]/authorized-pickups/[pickupId]/photo/route.ts`,
  * but Next.js 16's app-router bundler chokes on
  * `[param]/static/[param]/route.ts` (verified PR #154). Flattening to
- * `authorized-pickups/[id]/photo` with `child_id` as a form field /
- * query param avoids the bug entirely.
+ * `authorized-pickups/[id]/photo` with `child_id` / `household_id`
+ * as form/query fields avoids the bug entirely.
  *
  * Auth: same gate as the parent POST/PATCH/DELETE — owner / admin only.
  */
@@ -30,6 +36,12 @@ import {
   uploadCheckInPhoto,
 } from "@/lib/server/checkin-photos";
 
+type Scope = "child" | "household";
+
+function readScope(raw: unknown): Scope {
+  return raw === "household" ? "household" : "child";
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -37,8 +49,6 @@ export async function POST(
   try {
     const { id: pickupId } = await params;
 
-    // requireModuleTier reads church_id from the body OR query. Multipart
-    // forms can't be re-parsed, so accept church_id from a form field too.
     const formData = await req.formData();
     const churchIdField = formData.get("church_id");
     if (typeof churchIdField !== "string" || !churchIdField.trim()) {
@@ -47,18 +57,32 @@ export async function POST(
         { status: 400 },
       );
     }
-    const childIdField = formData.get("child_id");
-    if (typeof childIdField !== "string" || !childIdField.trim()) {
-      return NextResponse.json(
-        { error: "child_id form field is required" },
-        { status: 400 },
-      );
-    }
-    const childId = childIdField.trim();
 
-    // We've already drained the body — supply church_id via a shim URL
-    // so requireModuleTier resolves to the right church without trying
-    // to re-read body.
+    const scopeField = formData.get("scope");
+    const scope = readScope(scopeField);
+
+    let childId = "";
+    let householdId = "";
+    if (scope === "child") {
+      const childIdField = formData.get("child_id");
+      if (typeof childIdField !== "string" || !childIdField.trim()) {
+        return NextResponse.json(
+          { error: "child_id form field is required when scope=child" },
+          { status: 400 },
+        );
+      }
+      childId = childIdField.trim();
+    } else {
+      const householdIdField = formData.get("household_id");
+      if (typeof householdIdField !== "string" || !householdIdField.trim()) {
+        return NextResponse.json(
+          { error: "household_id form field is required when scope=household" },
+          { status: 400 },
+        );
+      }
+      householdId = householdIdField.trim();
+    }
+
     const shimReq = new NextRequest(
       `${req.nextUrl.origin}${req.nextUrl.pathname}?church_id=${encodeURIComponent(churchIdField.trim())}`,
       { method: "POST", headers: req.headers },
@@ -106,34 +130,42 @@ export async function POST(
       );
     }
 
-    // Verify the target pickup exists on the target child in the right church.
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
-    const personSnap = await personRef.get();
-    if (!personSnap.exists) {
-      return NextResponse.json({ error: "Child not found" }, { status: 404 });
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const targetRef =
+      scope === "child"
+        ? churchRef.collection("people").doc(childId)
+        : churchRef.collection("households").doc(householdId);
+    const fieldKey =
+      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
+
+    const targetSnap = await targetRef.get();
+    if (!targetSnap.exists) {
+      return NextResponse.json(
+        { error: scope === "child" ? "Child not found" : "Household not found" },
+        { status: 404 },
+      );
     }
-    const personData = personSnap.data() ?? {};
-    if (personData.church_id !== churchId) {
+    const targetData = targetSnap.data() ?? {};
+    if (targetData.church_id !== churchId) {
       return NextResponse.json(
         { error: "Cross-tenant access denied" },
         { status: 403 },
       );
     }
-    if (personData.person_type !== "child") {
+    if (scope === "child" && targetData.person_type !== "child") {
       return NextResponse.json(
         { error: "Target person is not a child" },
         { status: 400 },
       );
     }
-    const existingPickups: PersonAuthorizedPickup[] = Array.isArray(
-      personData.child_profile?.authorized_pickups,
-    )
-      ? personData.child_profile.authorized_pickups
-      : [];
+    const existingPickups: PersonAuthorizedPickup[] =
+      scope === "child"
+        ? Array.isArray(targetData.child_profile?.authorized_pickups)
+          ? targetData.child_profile.authorized_pickups
+          : []
+        : Array.isArray(targetData.authorized_pickups)
+          ? targetData.authorized_pickups
+          : [];
     const pickupIdx = existingPickups.findIndex((p) => p.id === pickupId);
     if (pickupIdx === -1) {
       return NextResponse.json(
@@ -142,7 +174,6 @@ export async function POST(
       );
     }
 
-    // Upload to Storage.
     const buffer = Buffer.from(await file.arrayBuffer());
     const { storage_path } = await uploadCheckInPhoto({
       churchId,
@@ -153,21 +184,18 @@ export async function POST(
       uploadedBy: userId,
     });
 
-    // Best-effort delete of any prior photo at a *different* path (e.g.
-    // jpg → png swap). Same-path overwrites already replaced the bytes.
     const previousPath = existingPickups[pickupIdx].photo_url ?? null;
     if (previousPath && previousPath !== storage_path) {
       await deleteCheckInPhoto(previousPath);
     }
 
-    // Persist the storage path on the contact.
     const nextPickups = [...existingPickups];
     nextPickups[pickupIdx] = {
       ...nextPickups[pickupIdx],
       photo_url: storage_path,
     };
-    await personRef.update({
-      "child_profile.authorized_pickups": nextPickups,
+    await targetRef.update({
+      [fieldKey]: nextPickups,
       updated_at: new Date().toISOString(),
     });
 
@@ -175,12 +203,13 @@ export async function POST(
       church_id: churchId,
       actor: userActor(userId),
       action: "pickup.authorized_photo_added",
-      target_type: "person",
-      target_id: childId,
+      target_type: scope === "child" ? "person" : "household",
+      target_id: scope === "child" ? childId : householdId,
       metadata: {
         pickup_id: pickupId,
         content_type: file.type,
         bytes: file.size,
+        scope,
       },
       outcome: "ok",
     });
@@ -216,35 +245,53 @@ export async function DELETE(
       );
     }
 
+    const scope = readScope(req.nextUrl.searchParams.get("scope"));
     const childId = req.nextUrl.searchParams.get("child_id");
-    if (!childId) {
+    const householdId = req.nextUrl.searchParams.get("household_id");
+
+    if (scope === "child" && !childId) {
       return NextResponse.json(
-        { error: "child_id query param is required" },
+        { error: "child_id query param is required when scope=child" },
+        { status: 400 },
+      );
+    }
+    if (scope === "household" && !householdId) {
+      return NextResponse.json(
+        { error: "household_id query param is required when scope=household" },
         { status: 400 },
       );
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
-    const personSnap = await personRef.get();
-    if (!personSnap.exists) {
-      return NextResponse.json({ error: "Child not found" }, { status: 404 });
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const targetRef =
+      scope === "child"
+        ? churchRef.collection("people").doc(childId!)
+        : churchRef.collection("households").doc(householdId!);
+    const fieldKey =
+      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
+
+    const targetSnap = await targetRef.get();
+    if (!targetSnap.exists) {
+      return NextResponse.json(
+        { error: scope === "child" ? "Child not found" : "Household not found" },
+        { status: 404 },
+      );
     }
-    const data = personSnap.data() ?? {};
+    const data = targetSnap.data() ?? {};
     if (data.church_id !== churchId) {
       return NextResponse.json(
         { error: "Cross-tenant access denied" },
         { status: 403 },
       );
     }
-    const existing: PersonAuthorizedPickup[] = Array.isArray(
-      data.child_profile?.authorized_pickups,
-    )
-      ? data.child_profile.authorized_pickups
-      : [];
+    const existing: PersonAuthorizedPickup[] =
+      scope === "child"
+        ? Array.isArray(data.child_profile?.authorized_pickups)
+          ? data.child_profile.authorized_pickups
+          : []
+        : Array.isArray(data.authorized_pickups)
+          ? data.authorized_pickups
+          : [];
     const idx = existing.findIndex((p) => p.id === pickupId);
     if (idx === -1) {
       return NextResponse.json(
@@ -260,8 +307,8 @@ export async function DELETE(
 
     const next = [...existing];
     next[idx] = { ...next[idx], photo_url: null };
-    await personRef.update({
-      "child_profile.authorized_pickups": next,
+    await targetRef.update({
+      [fieldKey]: next,
       updated_at: new Date().toISOString(),
     });
 
@@ -269,9 +316,9 @@ export async function DELETE(
       church_id: churchId,
       actor: userActor(userId),
       action: "pickup.authorized_photo_removed",
-      target_type: "person",
-      target_id: childId,
-      metadata: { pickup_id: pickupId },
+      target_type: scope === "child" ? "person" : "household",
+      target_id: scope === "child" ? childId! : householdId!,
+      metadata: { pickup_id: pickupId, scope },
       outcome: "ok",
     });
 

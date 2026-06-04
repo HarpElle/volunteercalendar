@@ -1,32 +1,27 @@
 "use client";
 
 /**
- * <AuthorizedPickupPanel> — Wave 9 P0-2 sub-PR D.
+ * <AuthorizedPickupPanel> — Wave 9 P0-2 sub-PR D + 2026-06-03 scope ext.
  *
- * Per-child management UI for the authorized-pickup list. Mounted on
- * the household detail page once per child in the household. Handles:
- *   - Listing existing contacts with name / phone / relationship / photo
- *   - Adding new contacts (modal)
- *   - Editing existing contacts (modal)
- *   - Removing contacts
- *   - Adding / replacing / removing the per-contact photo
+ * Management UI for the authorized-pickup list. Two mount modes via the
+ * `scope` prop:
  *
- * Uses the new server routes:
- *   POST   /api/admin/checkin/authorized-pickups          (body: child_id + fields)
- *   PATCH  /api/admin/checkin/authorized-pickups/[id]     (body: child_id + fields)
- *   DELETE /api/admin/checkin/authorized-pickups/[id]?church_id=...&child_id=...
- *   POST   /api/admin/checkin/authorized-pickups/[id]/photo   (multipart: church_id + child_id + file)
- *   DELETE /api/admin/checkin/authorized-pickups/[id]/photo?church_id=...&child_id=...
+ *   - scope="child"     → manages contacts specific to one child;
+ *                          reads/writes Person.child_profile.authorized_pickups
+ *                          via the per-child API. Mirrors BlockedPickupPanel
+ *                          scope="child".
+ *   - scope="household" → manages contacts that apply to every child in
+ *                          the household (e.g. "Grandma can pick up any
+ *                          of the Smith kids"). Reads/writes
+ *                          Household.authorized_pickups via the same API
+ *                          with scope=household.
  *
- * Wave 9 P0-2 incident note: these used to live under
- * `children/[personId]/authorized-pickups/...` but Next.js 16's
- * app-router bundler chokes on `[param]/static/[param]/route.ts`
- * patterns (verified PR #154). Flat path lookup uses `child_id` in
- * body/query instead of URL segment.
- *
- * Visual identity: matches the existing household-page card / form
- * conventions (`vc-bg`, `vc-border-light`, `font-display`, coral
- * primary CTA, 44x44 touch targets).
+ * Uses the server routes (scope passed in body/query):
+ *   POST   /api/admin/checkin/authorized-pickups
+ *   PATCH  /api/admin/checkin/authorized-pickups/[id]
+ *   DELETE /api/admin/checkin/authorized-pickups/[id]?church_id=...&scope=...&(child_id|household_id)=...
+ *   POST   /api/admin/checkin/authorized-pickups/[id]/photo   (multipart)
+ *   DELETE /api/admin/checkin/authorized-pickups/[id]/photo?church_id=...&scope=...&(child_id|household_id)=...
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -36,47 +31,87 @@ import { PhotoCapture } from "./photo-capture";
 import { PhotoThumbnail } from "./photo-thumbnail";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
-interface AuthorizedPickupPanelProps {
-  /** Person ID of the child this panel manages. */
+interface AuthorizedPickupPanelChildProps {
+  scope: "child";
   childPersonId: string;
-  /** Display name (e.g. "Sam") used in panel header + dialog copy. */
   childDisplayName: string;
-  /** Initial list from the parent fetch. */
   initialPickups: PersonAuthorizedPickup[];
-  /** Bubbles up after a mutation so the parent can refresh its store
-   *  (parent may also re-fetch the household; we use this for optimistic
-   *  state). */
   onChanged?: () => void;
 }
+
+interface AuthorizedPickupPanelHouseholdProps {
+  scope: "household";
+  householdId: string;
+  householdDisplayName: string;
+  initialPickups: PersonAuthorizedPickup[];
+  onChanged?: () => void;
+}
+
+type AuthorizedPickupPanelProps =
+  | AuthorizedPickupPanelChildProps
+  | AuthorizedPickupPanelHouseholdProps;
 
 type ModalState =
   | { mode: "closed" }
   | { mode: "add" }
   | { mode: "edit"; pickup: PersonAuthorizedPickup };
 
-export function AuthorizedPickupPanel({
-  childPersonId,
-  childDisplayName,
-  initialPickups,
-  onChanged,
-}: AuthorizedPickupPanelProps) {
+export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
   const { user, activeMembership } = useAuth();
   const churchId = activeMembership?.church_id;
-  const [pickups, setPickups] = useState<PersonAuthorizedPickup[]>(initialPickups);
+  const [pickups, setPickups] = useState<PersonAuthorizedPickup[]>(
+    props.initialPickups,
+  );
   const [modal, setModal] = useState<ModalState>({ mode: "closed" });
-  const [busy, setBusy] = useState<string | null>(null); // pickup id currently mutating
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setPickups(initialPickups);
-  }, [initialPickups]);
+    setPickups(props.initialPickups);
+  }, [props.initialPickups]);
 
   const getIdToken = useCallback(async () => {
     if (!user) throw new Error("Not signed in");
     return await user.getIdToken();
   }, [user]);
 
+  const headerTitle =
+    props.scope === "child"
+      ? "Authorized for pickup"
+      : "Authorized for any child (household-wide)";
+  const headerSubcopy =
+    props.scope === "child"
+      ? `People allowed to take ${props.childDisplayName} home.`
+      : `People allowed to take any of the ${props.householdDisplayName} kids home — saves re-adding them per child.`;
+  const emptyCopy =
+    props.scope === "child"
+      ? `No authorized contacts yet. Add the people allowed to pick ${props.childDisplayName} up from check-in.`
+      : "No household-wide contacts yet. Add anyone who's authorized to pick up every child in this household (grandparents, regular family friends, etc.).";
+  const confirmRemoveCopy =
+    props.scope === "child"
+      ? `Remove this authorized pickup contact for ${props.childDisplayName}?`
+      : "Remove this household-wide pickup contact?";
+
+  const bodyTargetParams = () =>
+    props.scope === "child"
+      ? { scope: "child", child_id: props.childPersonId }
+      : { scope: "household", household_id: props.householdId };
+
+  const queryTargetParams = () =>
+    props.scope === "child"
+      ? `scope=child&child_id=${encodeURIComponent(props.childPersonId)}`
+      : `scope=household&household_id=${encodeURIComponent(props.householdId)}`;
+
+  const photoExtraFields: Record<string, string> = {
+    church_id: churchId ?? "",
+    scope: props.scope,
+    ...(props.scope === "child"
+      ? { child_id: props.childPersonId }
+      : { household_id: props.householdId }),
+  };
+
   const refetchChild = useCallback(async () => {
+    if (props.scope !== "child") return;
     if (!user || !churchId) return;
     try {
       const token = await user.getIdToken();
@@ -91,12 +126,12 @@ export function AuthorizedPickupPanel({
           authorized_pickups?: PersonAuthorizedPickup[];
         }>;
       };
-      const me = data.children.find((c) => c.id === childPersonId);
+      const me = data.children.find((c) => c.id === props.childPersonId);
       if (me?.authorized_pickups) setPickups(me.authorized_pickups);
     } catch {
       // silent
     }
-  }, [user, churchId, childPersonId]);
+  }, [user, churchId, props]);
 
   const handleAdd = async (input: {
     name: string;
@@ -108,23 +143,20 @@ export function AuthorizedPickupPanel({
     setError(null);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(
-        `/api/admin/checkin/authorized-pickups`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            church_id: churchId,
-            child_id: childPersonId,
-            name: input.name,
-            phone: input.phone || null,
-            relationship: input.relationship || null,
-          }),
+      const res = await fetch(`/api/admin/checkin/authorized-pickups`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "content-type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          church_id: churchId,
+          ...bodyTargetParams(),
+          name: input.name,
+          phone: input.phone || null,
+          relationship: input.relationship || null,
+        }),
+      });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to add contact");
@@ -132,7 +164,7 @@ export function AuthorizedPickupPanel({
       const { pickup } = (await res.json()) as { pickup: PersonAuthorizedPickup };
       setPickups((prev) => [...prev, pickup]);
       setModal({ mode: "closed" });
-      onChanged?.();
+      props.onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add contact");
     } finally {
@@ -159,7 +191,7 @@ export function AuthorizedPickupPanel({
           },
           body: JSON.stringify({
             church_id: churchId,
-            child_id: childPersonId,
+            ...bodyTargetParams(),
             name: input.name,
             phone: input.phone || null,
             relationship: input.relationship || null,
@@ -173,7 +205,7 @@ export function AuthorizedPickupPanel({
       const { pickup } = (await res.json()) as { pickup: PersonAuthorizedPickup };
       setPickups((prev) => prev.map((p) => (p.id === pickup.id ? pickup : p)));
       setModal({ mode: "closed" });
-      onChanged?.();
+      props.onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update contact");
     } finally {
@@ -183,18 +215,13 @@ export function AuthorizedPickupPanel({
 
   const handleDelete = async (pickupId: string) => {
     if (!user || !churchId) return;
-    if (
-      !window.confirm(
-        `Remove this authorized pickup contact for ${childDisplayName}?`,
-      )
-    )
-      return;
+    if (!window.confirm(confirmRemoveCopy)) return;
     setBusy(pickupId);
     setError(null);
     try {
       const token = await user.getIdToken();
       const res = await fetch(
-        `/api/admin/checkin/authorized-pickups/${pickupId}?church_id=${churchId}&child_id=${childPersonId}`,
+        `/api/admin/checkin/authorized-pickups/${pickupId}?church_id=${churchId}&${queryTargetParams()}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -205,7 +232,7 @@ export function AuthorizedPickupPanel({
         throw new Error(body.error ?? "Failed to remove contact");
       }
       setPickups((prev) => prev.filter((p) => p.id !== pickupId));
-      onChanged?.();
+      props.onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove contact");
     } finally {
@@ -217,7 +244,7 @@ export function AuthorizedPickupPanel({
     setPickups((prev) =>
       prev.map((p) => (p.id === pickupId ? { ...p, photo_url: storagePath } : p)),
     );
-    onChanged?.();
+    props.onChanged?.();
   };
 
   const handlePhotoRemove = async (pickupId: string) => {
@@ -228,7 +255,7 @@ export function AuthorizedPickupPanel({
     try {
       const token = await user.getIdToken();
       const res = await fetch(
-        `/api/admin/checkin/authorized-pickups/${pickupId}/photo?church_id=${churchId}&child_id=${childPersonId}`,
+        `/api/admin/checkin/authorized-pickups/${pickupId}/photo?church_id=${churchId}&${queryTargetParams()}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -241,10 +268,7 @@ export function AuthorizedPickupPanel({
       setPickups((prev) =>
         prev.map((p) => (p.id === pickupId ? { ...p, photo_url: null } : p)),
       );
-      onChanged?.();
-      // PhotoThumbnail also has its own cached URL; the parent re-render
-      // with path: null will clear it. Re-fetching child data is belt-and-
-      // suspenders for the case where the parent reloads anyway.
+      props.onChanged?.();
       void refetchChild();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove photo");
@@ -258,11 +282,9 @@ export function AuthorizedPickupPanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-display font-semibold text-vc-indigo">
-            Authorized for pickup
+            {headerTitle}
           </h3>
-          <p className="text-sm text-vc-text-secondary mt-1">
-            People allowed to take {childDisplayName} home.
-          </p>
+          <p className="text-sm text-vc-text-secondary mt-1">{headerSubcopy}</p>
         </div>
         <Button
           variant="outline"
@@ -281,13 +303,6 @@ export function AuthorizedPickupPanel({
         </div>
       )}
 
-      {/*
-        Wave 9 P0-2 sub-PR G: hide entries whose pending_remove_at has
-        already elapsed (effectively removed). Entries whose pending
-        timestamp is in the FUTURE still render with a "Pending removal"
-        badge so the admin is aware of guardian-initiated cooling-off
-        actions.
-      */}
       {(() => {
         const nowMs = Date.now();
         const visible = pickups.filter((p) => {
@@ -297,8 +312,7 @@ export function AuthorizedPickupPanel({
         if (visible.length === 0) {
           return (
             <div className="rounded-lg border border-dashed border-vc-border-light bg-vc-bg-warm px-4 py-6 text-center text-sm text-vc-text-secondary">
-              No authorized contacts yet. Add the people allowed to pick{" "}
-              {childDisplayName} up from check-in.
+              {emptyCopy}
             </div>
           );
         }
@@ -309,83 +323,80 @@ export function AuthorizedPickupPanel({
                 p.pending_remove_at &&
                 Date.parse(p.pending_remove_at) > nowMs;
               return (
-            <li
-              key={p.id ?? `${p.name}|${p.phone ?? ""}`}
-              className="flex items-start gap-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-3"
-            >
-              <PhotoThumbnail
-                path={p.photo_url}
-                alt={`${p.name} pickup photo`}
-                className="w-16 h-16 flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium text-vc-indigo">{p.name}</p>
-                  {pendingRemoval && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
-                      Pending removal{" "}
-                      {new Date(p.pending_remove_at!).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                {p.relationship && (
-                  <p className="text-sm text-vc-text-secondary">
-                    {p.relationship}
-                  </p>
-                )}
-                {p.phone && (
-                  <p className="text-sm text-vc-text-secondary">{p.phone}</p>
-                )}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {p.id && (
-                    <PhotoCapture
-                      uploadUrl={`/api/admin/checkin/authorized-pickups/${p.id}/photo`}
-                      extraFields={{
-                        church_id: churchId ?? "",
-                        child_id: childPersonId,
-                      }}
-                      getIdToken={getIdToken}
-                      onSuccess={(path) => handlePhotoSuccess(p.id!, path)}
-                      triggerLabel={p.photo_url ? "Replace photo" : "Add photo"}
-                    />
-                  )}
-                  {p.id && p.photo_url && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handlePhotoRemove(p.id!)}
-                      disabled={busy === p.id}
-                      className="min-h-[44px]"
-                    >
-                      Remove photo
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setModal({ mode: "edit", pickup: p })}
-                    disabled={busy === p.id}
-                    className="min-h-[44px]"
-                  >
-                    Edit
-                  </Button>
-                  {p.id && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(p.id!)}
-                      disabled={busy === p.id}
-                      className="min-h-[44px] text-vc-danger hover:bg-vc-danger/5"
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </li>
+                <li
+                  key={p.id ?? `${p.name}|${p.phone ?? ""}`}
+                  className="flex items-start gap-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-3"
+                >
+                  <PhotoThumbnail
+                    path={p.photo_url}
+                    alt={`${p.name} pickup photo`}
+                    className="w-16 h-16 flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-vc-indigo">{p.name}</p>
+                      {pendingRemoval && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
+                          Pending removal{" "}
+                          {new Date(p.pending_remove_at!).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    {p.relationship && (
+                      <p className="text-sm text-vc-text-secondary">
+                        {p.relationship}
+                      </p>
+                    )}
+                    {p.phone && (
+                      <p className="text-sm text-vc-text-secondary">{p.phone}</p>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {p.id && (
+                        <PhotoCapture
+                          uploadUrl={`/api/admin/checkin/authorized-pickups/${p.id}/photo`}
+                          extraFields={photoExtraFields}
+                          getIdToken={getIdToken}
+                          onSuccess={(path) => handlePhotoSuccess(p.id!, path)}
+                          triggerLabel={p.photo_url ? "Replace photo" : "Add photo"}
+                        />
+                      )}
+                      {p.id && p.photo_url && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePhotoRemove(p.id!)}
+                          disabled={busy === p.id}
+                          className="min-h-[44px]"
+                        >
+                          Remove photo
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setModal({ mode: "edit", pickup: p })}
+                        disabled={busy === p.id}
+                        className="min-h-[44px]"
+                      >
+                        Edit
+                      </Button>
+                      {p.id && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(p.id!)}
+                          disabled={busy === p.id}
+                          className="min-h-[44px] text-vc-danger hover:bg-vc-danger/5"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </li>
               );
             })}
           </ul>
@@ -449,20 +460,20 @@ function PickupFormModal({
     >
       <form
         onSubmit={submit}
-        className="bg-vc-bg rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4"
+        className="bg-vc-bg rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto"
       >
         <h2 className="text-xl font-display font-semibold text-vc-indigo">
-          {initial ? "Edit contact" : "Add authorized contact"}
+          {initial ? "Edit contact" : "Add pickup contact"}
         </h2>
         <div>
           <label
-            htmlFor="pickup-name"
+            htmlFor="ap-name"
             className="block text-sm font-medium text-vc-indigo mb-1"
           >
             Name *
           </label>
           <input
-            id="pickup-name"
+            id="ap-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -474,30 +485,30 @@ function PickupFormModal({
         </div>
         <div>
           <label
-            htmlFor="pickup-relationship"
+            htmlFor="ap-relationship"
             className="block text-sm font-medium text-vc-indigo mb-1"
           >
             Relationship
           </label>
           <input
-            id="pickup-relationship"
+            id="ap-relationship"
             type="text"
             value={relationship}
             onChange={(e) => setRelationship(e.target.value)}
-            placeholder="grandmother, neighbor, etc."
+            placeholder="Grandparent, Aunt, Family friend…"
             maxLength={100}
             className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
           />
         </div>
         <div>
           <label
-            htmlFor="pickup-phone"
+            htmlFor="ap-phone"
             className="block text-sm font-medium text-vc-indigo mb-1"
           >
             Phone
           </label>
           <input
-            id="pickup-phone"
+            id="ap-phone"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}

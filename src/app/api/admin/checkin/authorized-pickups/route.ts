@@ -37,7 +37,11 @@ import type { PersonAuthorizedPickup } from "@/lib/types";
 
 interface PostBody {
   church_id?: unknown;
+  /** scope="child" requires child_id. scope="household" requires
+   *  household_id. Defaults to "child" for backwards-compat. */
+  scope?: unknown;
   child_id?: unknown;
+  household_id?: unknown;
   name?: unknown;
   phone?: unknown;
   relationship?: unknown;
@@ -57,15 +61,33 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json()) as PostBody;
-    const childId =
-      typeof body.child_id === "string" && body.child_id.trim().length > 0
-        ? body.child_id.trim()
-        : "";
-    if (!childId) {
-      return NextResponse.json(
-        { error: "child_id is required" },
-        { status: 400 },
-      );
+    const scope =
+      body.scope === "household" || body.scope === "child" ? body.scope : "child";
+
+    let childId = "";
+    let householdId = "";
+    if (scope === "child") {
+      childId =
+        typeof body.child_id === "string" && body.child_id.trim().length > 0
+          ? body.child_id.trim()
+          : "";
+      if (!childId) {
+        return NextResponse.json(
+          { error: "child_id is required when scope=child" },
+          { status: 400 },
+        );
+      }
+    } else {
+      householdId =
+        typeof body.household_id === "string" && body.household_id.trim().length > 0
+          ? body.household_id.trim()
+          : "";
+      if (!householdId) {
+        return NextResponse.json(
+          { error: "household_id is required when scope=household" },
+          { status: 400 },
+        );
+      }
     }
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -97,11 +119,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
+    const churchRef = adminDb.collection("churches").doc(churchId);
 
     const newPickup: PersonAuthorizedPickup = {
       id: randomUUID(),
@@ -113,44 +131,77 @@ export async function POST(req: NextRequest) {
       added_by_user_id: userId,
     };
 
-    await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(personRef);
-      if (!snap.exists) {
-        throw new Error("PERSON_NOT_FOUND");
-      }
-      const data = snap.data() ?? {};
-      if (data.church_id !== churchId) {
-        throw new Error("CROSS_TENANT");
-      }
-      if (data.person_type !== "child") {
-        throw new Error("NOT_A_CHILD");
-      }
-      const childProfile = data.child_profile ?? {};
-      const existing: PersonAuthorizedPickup[] = Array.isArray(
-        childProfile.authorized_pickups,
-      )
-        ? childProfile.authorized_pickups
-        : [];
+    if (scope === "child") {
+      const personRef = churchRef.collection("people").doc(childId);
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(personRef);
+        if (!snap.exists) {
+          throw new Error("PERSON_NOT_FOUND");
+        }
+        const data = snap.data() ?? {};
+        if (data.church_id !== churchId) {
+          throw new Error("CROSS_TENANT");
+        }
+        if (data.person_type !== "child") {
+          throw new Error("NOT_A_CHILD");
+        }
+        const childProfile = data.child_profile ?? {};
+        const existing: PersonAuthorizedPickup[] = Array.isArray(
+          childProfile.authorized_pickups,
+        )
+          ? childProfile.authorized_pickups
+          : [];
 
-      // Backfill missing `id` on legacy records so subsequent edits can
-      // target a stable identifier (we promise this in the type comment).
-      const backfilled = existing.map((p) =>
-        p.id ? p : { ...p, id: randomUUID() },
-      );
+        const backfilled = existing.map((p) =>
+          p.id ? p : { ...p, id: randomUUID() },
+        );
 
-      tx.update(personRef, {
-        "child_profile.authorized_pickups": [...backfilled, newPickup],
-        updated_at: new Date().toISOString(),
+        tx.update(personRef, {
+          "child_profile.authorized_pickups": [...backfilled, newPickup],
+          updated_at: new Date().toISOString(),
+        });
       });
-    });
+    } else {
+      // scope === "household". Writes to the household doc's
+      // `authorized_pickups` array. Read at check-in time alongside
+      // per-child pickups by /api/checkin/recipients so the operator
+      // sees "Grandma" once for every Smith kid she covers.
+      const householdRef = churchRef.collection("households").doc(householdId);
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(householdRef);
+        if (!snap.exists) {
+          throw new Error("HOUSEHOLD_NOT_FOUND");
+        }
+        const data = snap.data() ?? {};
+        if (data.church_id !== churchId) {
+          throw new Error("CROSS_TENANT");
+        }
+        const existing: PersonAuthorizedPickup[] = Array.isArray(
+          data.authorized_pickups,
+        )
+          ? data.authorized_pickups
+          : [];
+        const backfilled = existing.map((p) =>
+          p.id ? p : { ...p, id: randomUUID() },
+        );
+        tx.update(householdRef, {
+          authorized_pickups: [...backfilled, newPickup],
+          updated_at: new Date().toISOString(),
+        });
+      });
+    }
 
     void audit({
       church_id: churchId,
       actor: userActor(userId),
       action: "pickup.authorized_added",
-      target_type: "person",
-      target_id: childId,
-      metadata: { pickup_id: newPickup.id, has_phone: phone !== null },
+      target_type: scope === "child" ? "person" : "household",
+      target_id: scope === "child" ? childId : householdId,
+      metadata: {
+        pickup_id: newPickup.id,
+        has_phone: phone !== null,
+        scope,
+      },
       outcome: "ok",
     });
 
@@ -159,6 +210,12 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error) {
       if (error.message === "PERSON_NOT_FOUND") {
         return NextResponse.json({ error: "Child not found" }, { status: 404 });
+      }
+      if (error.message === "HOUSEHOLD_NOT_FOUND") {
+        return NextResponse.json(
+          { error: "Household not found" },
+          { status: 404 },
+        );
       }
       if (error.message === "CROSS_TENANT") {
         return NextResponse.json(

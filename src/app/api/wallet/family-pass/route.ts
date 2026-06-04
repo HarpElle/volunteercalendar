@@ -29,6 +29,7 @@ import { getBaseUrl } from "@/lib/utils/base-url";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { randomBytes } from "crypto";
 import { log } from "@/lib/log";
+import { extractSurname } from "@/lib/utils/name";
 import type { Person, WalletPass } from "@/lib/types";
 
 // Apple's official MIME type for .pkpass bundles. iOS Safari uses
@@ -111,16 +112,6 @@ export async function GET(req: NextRequest) {
     // Blended-family slash form (e.g. "Smith/Jones") when guardians'
     // surnames differ is a deliberate follow-up — flagged but not
     // implemented per Jason's earlier "not needed for tonight" call.
-    function extractSurname(raw: string): string {
-      const stripped = raw
-        .replace(/^The\s+/i, "")
-        .replace(/\s+Family$/i, "")
-        .trim();
-      if (!stripped) return "";
-      const tokens = stripped.split(/\s+/);
-      return tokens[tokens.length - 1];
-    }
-
     let familyName = "";
     const primaryId = (householdData.primary_guardian_id as string | null) ?? null;
     if (primaryId) {

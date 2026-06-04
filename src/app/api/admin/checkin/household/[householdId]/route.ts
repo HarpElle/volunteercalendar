@@ -84,16 +84,47 @@ async function loadUnifiedHousehold(
     else if (data.person_type === "child") childPeople.push({ id: d.id, data });
   }
 
-  const primary = adults[0]?.data;
-  const secondary = adults[1]?.data;
+  // Pick the primary adult deterministically. Honor the explicit
+  // `primary_guardian_id` pointer on the household doc when set
+  // (2026-06-03 fix - previously this picked `adults[0]` whose
+  // ordering is undefined). Fall back to first-adult for legacy
+  // records that pre-date the pointer.
+  const primaryGuardianId =
+    typeof hhData.primary_guardian_id === "string" && hhData.primary_guardian_id
+      ? hhData.primary_guardian_id
+      : null;
+  const secondaryGuardianId =
+    typeof hhData.secondary_guardian_id === "string" && hhData.secondary_guardian_id
+      ? hhData.secondary_guardian_id
+      : null;
+  const primaryFromPointer = primaryGuardianId
+    ? adults.find((a) => a.id === primaryGuardianId)
+    : undefined;
+  const primary = primaryFromPointer?.data ?? adults[0]?.data;
+  const secondaryFromPointer = secondaryGuardianId
+    ? adults.find((a) => a.id === secondaryGuardianId)
+    : undefined;
+  // Secondary = explicit pointer, else any adult other than primary.
+  const secondary =
+    secondaryFromPointer?.data ??
+    adults.find((a) => a.data !== primary)?.data ??
+    null;
 
   const household: Record<string, unknown> = {
     id: householdId,
     church_id: hhData.church_id,
+    primary_guardian_id: primaryGuardianId,
     primary_guardian_name: primary?.name || hhData.name || "Unknown",
     primary_guardian_phone: primary?.phone || null,
+    secondary_guardian_id: secondaryGuardianId,
     secondary_guardian_name: secondary?.name || null,
     secondary_guardian_phone: secondary?.phone || null,
+    name: hhData.name || null,
+    // Household-wide authorized pickups (2026-06-03). Mirrors per-child
+    // authorized_pickups but applies to every child in the household.
+    authorized_pickups: Array.isArray(hhData.authorized_pickups)
+      ? hhData.authorized_pickups
+      : [],
     qr_token: hhData.qr_token || null,
     imported_from: hhData.imported_from || "manual",
     created_at: hhData.created_at,
@@ -224,6 +255,8 @@ export async function PUT(
         );
       }
 
+      const hhData = hhDoc.data() ?? {};
+
       const adultsSnap = await churchRef
         .collection("people")
         .where("household_ids", "array-contains", householdId)
@@ -232,15 +265,38 @@ export async function PUT(
       const adults = adultsSnap.docs;
       const now = new Date().toISOString();
 
-      // Update primary adult (first adult in the household)
+      // Resolve primary + secondary deterministically - prefer the
+      // explicit pointers on the household doc, fall back to insertion
+      // order for legacy records (2026-06-03 fix). Without this, the
+      // PUT could rewrite the wrong adult.
+      const primaryGuardianId =
+        typeof hhData.primary_guardian_id === "string"
+          ? hhData.primary_guardian_id
+          : null;
+      const secondaryGuardianId =
+        typeof hhData.secondary_guardian_id === "string"
+          ? hhData.secondary_guardian_id
+          : null;
+      const primaryDoc =
+        (primaryGuardianId
+          ? adults.find((a) => a.id === primaryGuardianId)
+          : undefined) ?? adults[0];
+      const secondaryDoc =
+        (secondaryGuardianId
+          ? adults.find((a) => a.id === secondaryGuardianId)
+          : undefined) ??
+        adults.find((a) => a.id !== primaryDoc?.id) ??
+        null;
+
+      // Update primary adult
       if ("primary_guardian_name" in body || "primary_guardian_phone" in body) {
-        if (adults.length === 0) {
+        if (!primaryDoc) {
           return NextResponse.json(
             { error: "No primary guardian found for this household" },
             { status: 400 },
           );
         }
-        const primaryRef = adults[0].ref;
+        const primaryRef = primaryDoc.ref;
         const updates: Record<string, unknown> = { updated_at: now };
         if (body.primary_guardian_name) {
           updates.name = body.primary_guardian_name;
@@ -268,7 +324,7 @@ export async function PUT(
         "secondary_guardian_name" in body ||
         "secondary_guardian_phone" in body
       ) {
-        const secondaryRef = adults[1]?.ref;
+        const secondaryRef = secondaryDoc?.ref;
         const wantsSecondary = !!body.secondary_guardian_name;
         if (wantsSecondary && secondaryRef) {
           const updates: Record<string, unknown> = { updated_at: now };
@@ -293,12 +349,14 @@ export async function PUT(
           }
           await secondaryRef.update(updates);
         } else if (wantsSecondary && !secondaryRef) {
-          // Create a new secondary adult person linked to this household
+          // Create a new secondary adult Person AND link it on the
+          // household doc in the same logical step (2026-06-03).
+          const secondaryNewRef = churchRef.collection("people").doc();
           const parts = String(body.secondary_guardian_name).split(" ");
           const normalized = body.secondary_guardian_phone
             ? normalizePhone(body.secondary_guardian_phone)
             : null;
-          await churchRef.collection("people").add({
+          await secondaryNewRef.set({
             church_id,
             person_type: "adult",
             first_name: parts[0] || "",
@@ -329,9 +387,11 @@ export async function PUT(
             created_at: now,
             updated_at: now,
           });
+          await hhDoc.ref.update({ secondary_guardian_id: secondaryNewRef.id });
         } else if (!wantsSecondary && secondaryRef) {
-          // Removing the secondary guardian: drop them from this household.
-          const currentData = adults[1].data();
+          // Removing the secondary guardian: drop them from this
+          // household AND clear the pointer.
+          const currentData = secondaryDoc!.data();
           const newIds = (currentData.household_ids as string[] | undefined)?.filter(
             (h) => h !== householdId,
           ) || [];
@@ -343,6 +403,7 @@ export async function PUT(
               updated_at: now,
             });
           }
+          await hhDoc.ref.update({ secondary_guardian_id: null });
         }
       }
 

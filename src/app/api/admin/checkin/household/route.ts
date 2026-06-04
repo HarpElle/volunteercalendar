@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
 import type { CheckInHousehold } from "@/lib/types";
+import { extractSurname, parseName } from "@/lib/utils/name";
 
 /**
  * GET /api/admin/checkin/household?church_id=...
@@ -62,15 +63,18 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Find primary adult per household for guardian name
+      // Index adults two ways: by id for O(1) lookup when a household
+      // has primary_guardian_id, by household for the legacy fallback.
       const adultsSnap = await churchRef
         .collection("people")
         .where("person_type", "==", "adult")
         .where("status", "==", "active")
         .get();
 
+      const adultsById = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
       const adultsByHousehold = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
       for (const doc of adultsSnap.docs) {
+        adultsById.set(doc.id, doc);
         const hhIds = doc.data().household_ids as string[] | undefined;
         if (hhIds) {
           for (const hid of hhIds) {
@@ -81,7 +85,10 @@ export async function GET(req: NextRequest) {
 
       const households = hhSnap.docs.map((doc) => {
         const data = doc.data();
-        const adult = adultsByHousehold.get(doc.id)?.data();
+        const primaryId = (data.primary_guardian_id as string | undefined) ?? null;
+        const adult =
+          (primaryId ? adultsById.get(primaryId) : undefined)?.data() ??
+          adultsByHousehold.get(doc.id)?.data();
         return {
           id: doc.id,
           primary_guardian_name: adult?.name || data.name || "Unknown",
@@ -191,31 +198,29 @@ export async function POST(req: NextRequest) {
     const useUnified = !peopleSample.empty;
 
     if (useUnified) {
-      // Create unified household + adult Person docs
+      // Create unified household + adult Person docs.
+      //
+      // 2026-06-03 fix: previously this wrote `name: primary_guardian_name`
+      // (e.g. "Helen Pevensie") and never linked `primary_guardian_id`
+      // back to the household doc. That broke wallet pass FAMILY display,
+      // admin room drill-down, and guardian-portal lookups - all needed
+      // surname-extraction / first-adult-wins fallbacks. Now we store the
+      // surname directly + carry an explicit primary_guardian_id pointer,
+      // so the downstream fallbacks only fire for legacy data.
       const householdId = adminDb.collection("_").doc().id;
       const qrToken = randomBytes(16).toString("hex");
 
-      const hhData: Record<string, unknown> = {
-        id: householdId,
-        church_id,
-        name: primary_guardian_name,
-        qr_token: qrToken,
-        created_at: now,
-        updated_at: now,
-      };
-      await churchRef.collection("households").doc(householdId).set(hhData);
-
-      // Create primary guardian as Person
+      // Allocate the primary Person ref up front so we can stamp
+      // primary_guardian_id on the household doc in the same batch.
+      const primaryPersonRef = churchRef.collection("people").doc();
       const phoneDigits = normalizedPhone.replace(/\D/g, "");
-      const nameParts = primary_guardian_name.split(" ");
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || "";
+      const primaryParsed = parseName(primary_guardian_name);
 
       const primaryPerson: Record<string, unknown> = {
         church_id,
         person_type: "adult",
-        first_name: firstName,
-        last_name: lastName,
+        first_name: primaryParsed.first_name,
+        last_name: primaryParsed.last_name,
         preferred_name: null,
         name: primary_guardian_name,
         search_name: primary_guardian_name.toLowerCase(),
@@ -242,23 +247,28 @@ export async function POST(req: NextRequest) {
         created_at: now,
         updated_at: now,
       };
-      await churchRef.collection("people").add(primaryPerson);
 
-      // Create secondary guardian if provided
+      // Optional secondary guardian.
+      let secondaryPersonRef: FirebaseFirestore.DocumentReference | null = null;
+      let secondaryPerson: Record<string, unknown> | null = null;
       if (secondary_guardian_name) {
-        const secNameParts = secondary_guardian_name.split(" ");
-        const secPerson: Record<string, unknown> = {
+        secondaryPersonRef = churchRef.collection("people").doc();
+        const secondaryParsed = parseName(secondary_guardian_name);
+        const normalizedSecondaryPhone = secondary_guardian_phone
+          ? normalizePhone(secondary_guardian_phone)
+          : null;
+        secondaryPerson = {
           church_id,
           person_type: "adult",
-          first_name: secNameParts[0] || "",
-          last_name: secNameParts.slice(1).join(" ") || "",
+          first_name: secondaryParsed.first_name,
+          last_name: secondaryParsed.last_name,
           preferred_name: null,
           name: secondary_guardian_name,
           search_name: secondary_guardian_name.toLowerCase(),
           email: null,
-          phone: secondary_guardian_phone ? normalizePhone(secondary_guardian_phone) : null,
-          search_phones: secondary_guardian_phone
-            ? [normalizePhone(secondary_guardian_phone)?.replace(/\D/g, "") || ""]
+          phone: normalizedSecondaryPhone,
+          search_phones: normalizedSecondaryPhone
+            ? [normalizedSecondaryPhone.replace(/\D/g, "")]
             : [],
           photo_url: null,
           user_id: null,
@@ -280,8 +290,34 @@ export async function POST(req: NextRequest) {
           created_at: now,
           updated_at: now,
         };
-        await churchRef.collection("people").add(secPerson);
       }
+
+      // Household doc: surname-only name + explicit guardian pointers.
+      // Falls back to the full guardian name if the surname can't be
+      // extracted (single-token input with no whitespace).
+      const surname =
+        extractSurname(primaryParsed.last_name) ||
+        extractSurname(primary_guardian_name) ||
+        primary_guardian_name;
+      const hhData: Record<string, unknown> = {
+        id: householdId,
+        church_id,
+        name: surname,
+        primary_guardian_id: primaryPersonRef.id,
+        secondary_guardian_id: secondaryPersonRef?.id ?? null,
+        qr_token: qrToken,
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Single batched write so a failure in any leg leaves no orphans.
+      const batch = adminDb.batch();
+      batch.set(churchRef.collection("households").doc(householdId), hhData);
+      batch.set(primaryPersonRef, primaryPerson);
+      if (secondaryPersonRef && secondaryPerson) {
+        batch.set(secondaryPersonRef, secondaryPerson);
+      }
+      await batch.commit();
 
       // Return in legacy-compatible shape for the admin UI
       const result: Record<string, unknown> = {
