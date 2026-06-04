@@ -30,6 +30,28 @@ import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { randomBytes } from "crypto";
 import { log } from "@/lib/log";
 import { extractSurname, formatHouseholdDisplay } from "@/lib/utils/name";
+
+// Age proxy for wallet-pass child ordering. Mirrors the grade
+// progression used by the annual grade-rollover cron — 6th-grader is
+// rank 9 (oldest), nursery is rank 0 (youngest). Null / unknown
+// grades return -1 so they sort to the bottom.
+function gradeAgeRank(grade: string | null | undefined): number {
+  if (!grade) return -1;
+  const order = [
+    "nursery",
+    "toddler",
+    "pre-k",
+    "kindergarten",
+    "1st",
+    "2nd",
+    "3rd",
+    "4th",
+    "5th",
+    "6th",
+  ];
+  const idx = order.indexOf(grade);
+  return idx === -1 ? -1 : idx;
+}
 import type { Person, WalletPass } from "@/lib/types";
 
 // Apple's official MIME type for .pkpass bundles. iOS Safari uses
@@ -201,7 +223,17 @@ export async function GET(req: NextRequest) {
           grade: ((cp.grade as string) ?? null) || null,
         };
       })
-      .sort((a, b) => a.first_name.localeCompare(b.first_name));
+      // Oldest first (Jason 2026-06-04). Without DOB we use grade as
+      // an age proxy: 6th highest, nursery lowest. Children with no
+      // grade set sort last (likely brand-new entries). Alphabetical
+      // first_name is the tiebreaker so siblings in the same grade
+      // (e.g. twins) get a deterministic order.
+      .sort((a, b) => {
+        const ra = gradeAgeRank(a.grade);
+        const rb = gradeAgeRank(b.grade);
+        if (ra !== rb) return rb - ra; // higher rank = older = first
+        return a.first_name.localeCompare(b.first_name);
+      });
 
     // Load or create the WalletPass record. Auth token is generated
     // once per household and persists across re-downloads so a

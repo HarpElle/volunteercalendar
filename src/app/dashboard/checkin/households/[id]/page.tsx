@@ -21,8 +21,13 @@ import { formatPhone } from "@/lib/utils/phone";
 /** Wave 9 P0-2: the household-detail API extends the Child shape with
  *  `authorized_pickups`. Local extension keeps the legacy Child type
  *  untouched while letting the panel consume the new field. */
-interface ChildWithPickups extends Child {
+interface ChildWithPickups extends Omit<Child, "allergies" | "medical_notes"> {
   authorized_pickups?: PersonAuthorizedPickup[];
+  // Editing modal pre-populates from these (already returned by the
+  // household-detail GET; relaxed to allow null since the unified
+  // shape stores explicit null rather than `undefined` for "no value").
+  allergies?: string | null;
+  medical_notes?: string | null;
 }
 
 /**
@@ -66,6 +71,10 @@ export default function HouseholdDetailPage() {
   const [showAddChild, setShowAddChild] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  // Per-child edit/remove modal state (2026-06-04 admin parity with
+  // Family Portal). Holds the targeted child or null when closed.
+  const [editingChild, setEditingChild] = useState<ChildWithPickups | null>(null);
+  const [removingChild, setRemovingChild] = useState<ChildWithPickups | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [sendingQrSms, setSendingQrSms] = useState(false);
   const [qrSmsSent, setQrSmsSent] = useState(false);
@@ -407,12 +416,15 @@ export default function HouseholdDetailPage() {
         ) : (
           <div className="divide-y divide-gray-100">
             {children.map((child) => (
-              <div key={child.id} className="py-3 flex items-center justify-between">
-                <div>
+              <div
+                key={child.id}
+                className="py-3 flex items-start justify-between gap-3"
+              >
+                <div className="flex-1 min-w-0">
                   <p className="font-medium text-vc-indigo">
                     {child.preferred_name || child.first_name} {child.last_name}
                   </p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {child.grade && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-vc-indigo/10 text-vc-indigo/70">
                         {child.grade}
@@ -423,11 +435,29 @@ export default function HouseholdDetailPage() {
                         Allergy/Medical
                       </span>
                     )}
+                    {!child.is_active && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                        Inactive
+                      </span>
+                    )}
                   </div>
                 </div>
-                <span className={`text-xs font-medium ${child.is_active ? "text-vc-sage" : "text-gray-400"}`}>
-                  {child.is_active ? "Active" : "Inactive"}
-                </span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditingChild(child)}
+                    className="text-xs text-vc-coral font-medium px-2 py-1 min-h-[32px] hover:bg-vc-coral/5 rounded transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemovingChild(child)}
+                    className="text-xs text-vc-text-muted hover:text-red-600 font-medium px-2 py-1 min-h-[32px] hover:bg-red-50 rounded transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -526,6 +556,27 @@ export default function HouseholdDetailPage() {
             onClose={() => setShowAddChild(false)}
             onCreated={() => {
               setShowAddChild(false);
+              fetchData();
+            }}
+          />
+        )}
+        {editingChild && (
+          <EditChildModal
+            child={editingChild}
+            onClose={() => setEditingChild(null)}
+            onSaved={() => {
+              setEditingChild(null);
+              fetchData();
+            }}
+          />
+        )}
+        {removingChild && household && (
+          <RemoveChildConfirmModal
+            child={removingChild}
+            householdId={household.id}
+            onClose={() => setRemovingChild(null)}
+            onRemoved={() => {
+              setRemovingChild(null);
               fetchData();
             }}
           />
@@ -984,6 +1035,321 @@ function AddChildModal({ householdId, onClose, onCreated }: AddChildModalProps) 
             </Button>
           </div>
         </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/*  Edit Child Modal — admin parity with the Family Portal              */
+/* -------------------------------------------------------------------- */
+
+interface EditChildModalProps {
+  child: ChildWithPickups;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function EditChildModal({ child, onClose, onSaved }: EditChildModalProps) {
+  const { user, activeMembership } = useAuth();
+  const churchId = activeMembership?.church_id;
+
+  const [firstName, setFirstName] = useState(child.first_name ?? "");
+  const [lastName, setLastName] = useState(child.last_name ?? "");
+  const [preferredName, setPreferredName] = useState(child.preferred_name ?? "");
+  const [grade, setGrade] = useState<string>(child.grade ?? "");
+  const [allergies, setAllergies] = useState(child.allergies ?? "");
+  const [medicalNotes, setMedicalNotes] = useState(child.medical_notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || !churchId) return;
+    if (!firstName.trim() || !lastName.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/admin/checkin/children/${child.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            church_id: churchId,
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            preferred_name: preferredName.trim() || null,
+            grade: grade || null,
+            allergies: allergies.trim() || null,
+            medical_notes: medicalNotes.trim() || null,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `Failed to save (${res.status})`);
+      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 12 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 12 }}
+        transition={{ type: "spring", duration: 0.35 }}
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+      >
+        <h2 className="font-display text-lg font-semibold text-vc-indigo mb-1">
+          Edit child
+        </h2>
+        <p className="text-sm text-vc-text-secondary mb-5">
+          Update {child.preferred_name || child.first_name}&apos;s details.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="edit-child-first" className={labelClasses}>
+                First name <span className="text-vc-coral">*</span>
+              </label>
+              <input
+                id="edit-child-first"
+                type="text"
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-child-last" className={labelClasses}>
+                Last name <span className="text-vc-coral">*</span>
+              </label>
+              <input
+                id="edit-child-last"
+                type="text"
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className={inputClasses}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="edit-child-pref" className={labelClasses}>
+              Preferred name
+            </label>
+            <input
+              id="edit-child-pref"
+              type="text"
+              value={preferredName}
+              onChange={(e) => setPreferredName(e.target.value)}
+              placeholder="What they actually go by"
+              className={inputClasses}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-child-grade" className={labelClasses}>
+              Grade
+            </label>
+            <select
+              id="edit-child-grade"
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+              className={inputClasses}
+            >
+              <option value="">Select grade...</option>
+              {GRADES.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="edit-child-allergies" className={labelClasses}>
+              Allergies
+            </label>
+            <input
+              id="edit-child-allergies"
+              type="text"
+              value={allergies}
+              onChange={(e) => setAllergies(e.target.value)}
+              placeholder="e.g. peanuts, dairy"
+              className={inputClasses}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-child-medical" className={labelClasses}>
+              Medical notes
+            </label>
+            <textarea
+              id="edit-child-medical"
+              value={medicalNotes}
+              onChange={(e) => setMedicalNotes(e.target.value)}
+              placeholder="Any medical conditions or special instructions..."
+              rows={2}
+              className={`${inputClasses} resize-none`}
+            />
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="submit"
+              disabled={saving || !firstName.trim() || !lastName.trim()}
+              className="flex-1"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/*  Remove Child Confirm — admin-side, same soft-delete semantics       */
+/* -------------------------------------------------------------------- */
+
+interface RemoveChildConfirmModalProps {
+  child: ChildWithPickups;
+  householdId: string;
+  onClose: () => void;
+  onRemoved: () => void;
+}
+
+function RemoveChildConfirmModal({
+  child,
+  householdId,
+  onClose,
+  onRemoved,
+}: RemoveChildConfirmModalProps) {
+  const { user, activeMembership } = useAuth();
+  const churchId = activeMembership?.church_id;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const displayName = child.preferred_name || child.first_name;
+
+  async function handleConfirm() {
+    if (!user || !churchId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/admin/checkin/children/${child.id}?church_id=${churchId}&household_id=${householdId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `Failed to remove (${res.status})`);
+      }
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 12 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 12 }}
+        transition={{ type: "spring", duration: 0.35 }}
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+      >
+        <h2 className="font-display text-lg font-semibold text-vc-indigo mb-3">
+          Remove {displayName} from this household?
+        </h2>
+        <p className="text-sm text-vc-text-secondary mb-5 leading-relaxed">
+          {displayName} will be dropped from this household&apos;s
+          check-in roster. They&apos;ll appear as &quot;Inactive&quot; in
+          the People tab and can be restored later. If {displayName}{" "}
+          also belongs to another household, that membership stays in
+          place.
+        </p>
+
+        {error && (
+          <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="danger"
+            onClick={handleConfirm}
+            disabled={busy}
+            className="flex-1"
+          >
+            {busy ? "Removing…" : `Remove ${displayName}`}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+        </div>
       </motion.div>
     </motion.div>
   );
