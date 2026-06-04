@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/swap-escalation",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/grade-rollover",
+      "schedule": "0 14 * * *"
     }
   ]
 }
