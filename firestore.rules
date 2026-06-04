@@ -469,6 +469,14 @@ service cloud.firestore {
         allow read, write: if false; // Admin SDK only
       }
 
+      // 2026-06-04: admin → kiosk command queue. Created by the
+      // POST /api/admin/kiosk-commands route, polled by the kiosk via
+      // GET /api/checkin/kiosk-commands, marked complete via PATCH —
+      // all server-side via Admin SDK.
+      match /kiosk_commands/{cmdId} {
+        allow read, write: if false; // Admin SDK only
+      }
+
       // Wave 10 W10-5A: per-household Apple/Google Wallet pass
       // records. Admin SDK writes only — the wallet-pass endpoints
       // do all the auth + download bookkeeping server-side.
