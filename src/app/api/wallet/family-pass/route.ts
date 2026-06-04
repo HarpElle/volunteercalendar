@@ -29,7 +29,7 @@ import { getBaseUrl } from "@/lib/utils/base-url";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
 import { randomBytes } from "crypto";
 import { log } from "@/lib/log";
-import { extractSurname } from "@/lib/utils/name";
+import { extractSurname, formatHouseholdDisplay } from "@/lib/utils/name";
 import type { Person, WalletPass } from "@/lib/types";
 
 // Apple's official MIME type for .pkpass bundles. iOS Safari uses
@@ -130,6 +130,57 @@ export async function GET(req: NextRequest) {
     }
     if (!familyName) familyName = "Family";
 
+    // Long-form FAMILY display for the front of the pass:
+    // "Pevensie, Helen & Roger" or "Doe, John & Smith, Jane". Pulls the
+    // primary + secondary guardian names from linked Person docs (most
+    // reliable source); falls back to legacy denormalized fields on
+    // the household doc; falls back to just the surname when neither
+    // is available. Matches what /dashboard/checkin/households/[id]
+    // and the Family Portal render.
+    let primaryGuardianFullName: string | null = null;
+    let secondaryGuardianFullName: string | null = null;
+    const hhPrimaryId =
+      (householdData.primary_guardian_id as string | null) ?? null;
+    const hhSecondaryId =
+      (householdData.secondary_guardian_id as string | null) ?? null;
+    if (hhPrimaryId) {
+      try {
+        const s = await churchRef.collection("people").doc(hhPrimaryId).get();
+        if (s.exists) {
+          const p = s.data() as Person;
+          primaryGuardianFullName =
+            (p.name as string) ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+            null;
+        }
+      } catch { /* fall through to denormalized fields */ }
+    }
+    if (hhSecondaryId) {
+      try {
+        const s = await churchRef.collection("people").doc(hhSecondaryId).get();
+        if (s.exists) {
+          const p = s.data() as Person;
+          secondaryGuardianFullName =
+            (p.name as string) ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+            null;
+        }
+      } catch { /* ignore */ }
+    }
+    // Legacy denormalized fallback (checkin_households shape).
+    if (!primaryGuardianFullName) {
+      primaryGuardianFullName =
+        (householdData.primary_guardian_name as string | undefined) ?? null;
+    }
+    if (!secondaryGuardianFullName) {
+      secondaryGuardianFullName =
+        (householdData.secondary_guardian_name as string | undefined) ?? null;
+    }
+    const familyDisplayName = formatHouseholdDisplay({
+      primary_guardian_name: primaryGuardianFullName,
+      secondary_guardian_name: secondaryGuardianFullName,
+    });
+
     // Children: query Person docs of type=child with household_ids
     // containing this household.
     const childrenSnap = await churchRef
@@ -210,6 +261,7 @@ export async function GET(req: NextRequest) {
       household_id: householdId,
       auth_token: authToken,
       family_name: familyName,
+      family_display_name: familyDisplayName,
       church_name: churchName,
       children,
       support_url: `${getBaseUrl()}/help`,

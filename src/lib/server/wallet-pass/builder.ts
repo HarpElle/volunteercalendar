@@ -58,11 +58,18 @@ export interface FamilyPassInput {
   /** Per-household auth token (dormant in v1; reserved for remote update). */
   auth_token: string;
   /**
-   * Display name on the pass front. Inbound values usually include the
-   * leading "The " article ("The Paschall Family"); the builder strips
-   * it so the pass reads as "Paschall Family" per Codex spec.
+   * Surname only — used for the iOS title bar ("Pevensie Check-In")
+   * where text is tightly constrained. Legacy inputs may include the
+   * leading "The " article; the builder strips it.
    */
   family_name: string;
+  /**
+   * Optional long-form display ("Pevensie, Helen & Roger" /
+   * "Doe, John & Smith, Jane") used as the FAMILY field value on
+   * the front of the pass. Falls back to `family_name` when not
+   * provided so existing callers don't break.
+   */
+  family_display_name?: string;
   /** Church/org name shown next to the VolunteerCal mark at the top. */
   church_name: string;
   children: FamilyPassChild[];
@@ -270,7 +277,11 @@ export function buildPassProps(
         {
           key: "family",
           label: "FAMILY",
-          value: cleanFamilyName,
+          // family_display_name (when provided) is the long form
+          // "Pevensie, Helen & Roger" — fits on the front of the pass
+          // and matches the household/list/portal display. Falls back
+          // to the surname-only cleanFamilyName for backwards-compat.
+          value: (input.family_display_name ?? cleanFamilyName).replace(/^The\s+/i, ""),
         },
       ],
       secondaryFields,

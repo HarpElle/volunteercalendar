@@ -110,7 +110,13 @@ export async function GET(req: NextRequest) {
       secondaryGuardianName = hh.secondary_guardian_name ?? null;
       secondaryGuardianPhone = hh.secondary_guardian_phone ?? null;
 
-      // Step 2: primary_guardian_id link
+      // Step 2: primary_guardian_id link (+ secondary_guardian_id).
+      // 2026-06-03 fix: previously only resolved primary. After the
+      // household-create flow started setting both pointers, the
+      // secondary guardian was being dropped on the Family Portal
+      // because step 3 only fired when primary was missing.
+      const hhSecondaryId =
+        (hh as { secondary_guardian_id?: string }).secondary_guardian_id;
       if ((!primaryGuardianName || !primaryGuardianPhone) && hh.primary_guardian_id) {
         try {
           const gSnap = await churchRef
@@ -129,9 +135,33 @@ export async function GET(req: NextRequest) {
           }
         } catch { /* continue to step 3 */ }
       }
+      if ((!secondaryGuardianName || !secondaryGuardianPhone) && hhSecondaryId) {
+        try {
+          const gSnap = await churchRef
+            .collection("people")
+            .doc(hhSecondaryId)
+            .get();
+          if (gSnap.exists) {
+            const g = gSnap.data() as Person;
+            if (!secondaryGuardianName) {
+              secondaryGuardianName =
+                (g.name as string) ||
+                [g.first_name, g.last_name].filter(Boolean).join(" ") ||
+                null;
+            }
+            if (!secondaryGuardianPhone) secondaryGuardianPhone = g.phone || null;
+          }
+        } catch { /* continue to step 3 */ }
+      }
 
-      // Step 3: scan household for any adult Person
-      if (!primaryGuardianName || !primaryGuardianPhone) {
+      // Step 3: scan household for any adult Person — fires when
+      // either primary OR secondary still has gaps.
+      if (
+        !primaryGuardianName ||
+        !primaryGuardianPhone ||
+        !secondaryGuardianName ||
+        !secondaryGuardianPhone
+      ) {
         try {
           const adultsSnap = await churchRef
             .collection("people")
@@ -300,26 +330,173 @@ export async function PUT(req: NextRequest) {
     }
 
     const churchRef = adminDb.collection("churches").doc(church_id);
+    const now = new Date().toISOString();
 
-    // Find household by QR token
-    const householdsSnap = await churchRef
+    // Dual-shape lookup. Try unified `households` first (the default
+    // since the unified-people migration), fall back to legacy
+    // `checkin_households`. 2026-06-03 fix: PUT previously only
+    // searched checkin_households, so edits from the Family Portal
+    // silently no-op'd for any household created post-migration.
+    const unifiedSnap = await churchRef
+      .collection("households")
+      .where("qr_token", "==", token)
+      .limit(1)
+      .get();
+
+    if (!unifiedSnap.empty) {
+      // Unified path — write name/phone to the linked Person docs.
+      const hhDoc = unifiedSnap.docs[0];
+      const hhData = hhDoc.data();
+      const householdId = hhDoc.id;
+      const primaryGuardianId =
+        typeof hhData.primary_guardian_id === "string"
+          ? hhData.primary_guardian_id
+          : null;
+      const secondaryGuardianId =
+        typeof hhData.secondary_guardian_id === "string"
+          ? hhData.secondary_guardian_id
+          : null;
+
+      // Update primary Person.
+      if (
+        (primary_guardian_name !== undefined || primary_guardian_phone !== undefined) &&
+        primaryGuardianId
+      ) {
+        const personRef = churchRef.collection("people").doc(primaryGuardianId);
+        const updates: Record<string, unknown> = { updated_at: now };
+        if (primary_guardian_name !== undefined) {
+          const cleaned = primary_guardian_name.trim();
+          updates.name = cleaned;
+          updates.search_name = cleaned.toLowerCase();
+          const parts = cleaned.split(" ");
+          updates.first_name = parts[0] || "";
+          updates.last_name = parts.slice(1).join(" ") || "";
+        }
+        if (primary_guardian_phone !== undefined) {
+          const np = normalizePhone(primary_guardian_phone);
+          updates.phone = np;
+          updates.search_phones = [np.replace(/\D/g, "")];
+        }
+        await personRef.update(updates);
+      }
+
+      // Update or create secondary Person.
+      if (
+        secondary_guardian_name !== undefined ||
+        secondary_guardian_phone !== undefined
+      ) {
+        const wantsSecondary = !!(secondary_guardian_name && secondary_guardian_name.trim());
+        if (wantsSecondary && secondaryGuardianId) {
+          const personRef = churchRef.collection("people").doc(secondaryGuardianId);
+          const updates: Record<string, unknown> = { updated_at: now };
+          if (secondary_guardian_name !== undefined) {
+            const cleaned = secondary_guardian_name.trim();
+            updates.name = cleaned;
+            updates.search_name = cleaned.toLowerCase();
+            const parts = cleaned.split(" ");
+            updates.first_name = parts[0] || "";
+            updates.last_name = parts.slice(1).join(" ") || "";
+          }
+          if (secondary_guardian_phone !== undefined) {
+            const np = secondary_guardian_phone
+              ? normalizePhone(secondary_guardian_phone)
+              : null;
+            updates.phone = np;
+            updates.search_phones = np ? [np.replace(/\D/g, "")] : [];
+          }
+          await personRef.update(updates);
+        } else if (wantsSecondary && !secondaryGuardianId) {
+          // No existing secondary — create one + link from the household.
+          const newSecondaryRef = churchRef.collection("people").doc();
+          const cleaned = secondary_guardian_name!.trim();
+          const parts = cleaned.split(" ");
+          const np = secondary_guardian_phone
+            ? normalizePhone(secondary_guardian_phone)
+            : null;
+          await newSecondaryRef.set({
+            church_id,
+            person_type: "adult",
+            first_name: parts[0] || "",
+            last_name: parts.slice(1).join(" ") || "",
+            preferred_name: null,
+            name: cleaned,
+            search_name: cleaned.toLowerCase(),
+            email: null,
+            phone: np,
+            search_phones: np ? [np.replace(/\D/g, "")] : [],
+            photo_url: null,
+            user_id: null,
+            membership_id: null,
+            status: "active",
+            is_volunteer: false,
+            ministry_ids: [],
+            role_ids: [],
+            campus_ids: [],
+            household_ids: [householdId],
+            scheduling_profile: null,
+            child_profile: null,
+            stats: null,
+            imported_from: "manual",
+            background_check: null,
+            role_constraints: null,
+            volunteer_journey: null,
+            qr_token: null,
+            created_at: now,
+            updated_at: now,
+          });
+          await hhDoc.ref.update({
+            secondary_guardian_id: newSecondaryRef.id,
+            updated_at: now,
+          });
+        } else if (!wantsSecondary && secondaryGuardianId) {
+          // Caller cleared the secondary name — drop from household
+          // membership AND clear the pointer (same pattern admin uses).
+          const personRef = churchRef.collection("people").doc(secondaryGuardianId);
+          const personSnap = await personRef.get();
+          if (personSnap.exists) {
+            const personData = personSnap.data() ?? {};
+            const newIds = (personData.household_ids as string[] | undefined)?.filter(
+              (h) => h !== householdId,
+            ) ?? [];
+            if (newIds.length === 0) {
+              await personRef.delete();
+            } else {
+              await personRef.update({
+                household_ids: newIds,
+                updated_at: now,
+              });
+            }
+          }
+          await hhDoc.ref.update({
+            secondary_guardian_id: null,
+            updated_at: now,
+          });
+        }
+      }
+
+      await hhDoc.ref.update({ updated_at: now });
+      return NextResponse.json({ updated: true });
+    }
+
+    // Legacy path — write denormalized fields on checkin_households.
+    const legacySnap = await churchRef
       .collection("checkin_households")
       .where("qr_token", "==", token)
       .limit(1)
       .get();
 
-    if (householdsSnap.empty) {
+    if (legacySnap.empty) {
       return NextResponse.json(
         { error: "Invalid token" },
         { status: 404 },
       );
     }
 
-    const householdDoc = householdsSnap.docs[0];
+    const householdDoc = legacySnap.docs[0];
 
     // Only allow updating guardian names and phones
     const updates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     };
 
     if (primary_guardian_name !== undefined) {

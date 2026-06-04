@@ -15,7 +15,7 @@ import type {
 } from "@/lib/types";
 import { AuthorizedPickupPanel } from "@/components/checkin/authorized-pickup-panel";
 import { BlockedPickupPanel } from "@/components/checkin/blocked-pickup-panel";
-import { extractSurname } from "@/lib/utils/name";
+import { extractSurname, formatHouseholdDisplay } from "@/lib/utils/name";
 import { formatPhone } from "@/lib/utils/phone";
 
 /** Wave 9 P0-2: the household-detail API extends the Child shape with
@@ -252,7 +252,10 @@ export default function HouseholdDetailPage() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-vc-indigo font-display">
-          {household.primary_guardian_name}
+          {formatHouseholdDisplay({
+            primary_guardian_name: household.primary_guardian_name,
+            secondary_guardian_name: household.secondary_guardian_name,
+          })}
         </h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowEdit(true)}>

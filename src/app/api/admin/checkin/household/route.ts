@@ -63,8 +63,9 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Index adults two ways: by id for O(1) lookup when a household
-      // has primary_guardian_id, by household for the legacy fallback.
+      // Index adults: byId for O(1) pointer lookup, byHousehold (two
+      // deep) so we can surface a secondary guardian's name when no
+      // pointer is set.
       const adultsSnap = await churchRef
         .collection("people")
         .where("person_type", "==", "adult")
@@ -72,13 +73,15 @@ export async function GET(req: NextRequest) {
         .get();
 
       const adultsById = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
-      const adultsByHousehold = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      const adultsByHousehold = new Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>();
       for (const doc of adultsSnap.docs) {
         adultsById.set(doc.id, doc);
         const hhIds = doc.data().household_ids as string[] | undefined;
         if (hhIds) {
           for (const hid of hhIds) {
-            if (!adultsByHousehold.has(hid)) adultsByHousehold.set(hid, doc);
+            const existing = adultsByHousehold.get(hid) ?? [];
+            if (existing.length < 2) existing.push(doc);
+            adultsByHousehold.set(hid, existing);
           }
         }
       }
@@ -86,14 +89,21 @@ export async function GET(req: NextRequest) {
       const households = hhSnap.docs.map((doc) => {
         const data = doc.data();
         const primaryId = (data.primary_guardian_id as string | undefined) ?? null;
-        const adult =
-          (primaryId ? adultsById.get(primaryId) : undefined)?.data() ??
-          adultsByHousehold.get(doc.id)?.data();
+        const secondaryId = (data.secondary_guardian_id as string | undefined) ?? null;
+        const householdAdults = adultsByHousehold.get(doc.id) ?? [];
+        const primaryDoc =
+          (primaryId ? adultsById.get(primaryId) : undefined) ??
+          householdAdults[0];
+        const secondaryDoc =
+          (secondaryId ? adultsById.get(secondaryId) : undefined) ??
+          householdAdults.find((a) => a.id !== primaryDoc?.id);
+        const primary = primaryDoc?.data();
+        const secondary = secondaryDoc?.data();
         return {
           id: doc.id,
-          primary_guardian_name: adult?.name || data.name || "Unknown",
-          primary_guardian_phone: adult?.phone || null,
-          secondary_guardian_name: null,
+          primary_guardian_name: primary?.name || data.name || "Unknown",
+          primary_guardian_phone: primary?.phone || null,
+          secondary_guardian_name: secondary?.name || null,
           qr_token: data.qr_token || null,
           children_count: countMap.get(doc.id) || 0,
           created_at: data.created_at,
