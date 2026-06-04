@@ -175,6 +175,20 @@ export interface ChurchSettings {
   proximity_check_in_enabled?: boolean;
   /** Geofence radius in meters */
   proximity_radius_meters?: number;
+  /**
+   * Annual grade rollover policy (2026-06-03).
+   *   "manual"    — no auto-advance; staff updates grades by hand
+   *   "june"      — advance on June 1 (end of school year)
+   *   "august"    — advance on August 1 (start of school year)
+   *   "september" — advance on September 1 (after Labor Day)
+   * Default: "manual". The daily cron at /api/cron/grade-rollover
+   * checks each church on every 1st-of-the-month; when today matches
+   * the configured month, it advances every active child by one grade
+   * (6th → status=inactive, "graduated"). Skips any child whose
+   * updated_at is within the last 60 days to avoid stomping recent
+   * parent edits (Jason 2026-06-03 Family Portal feedback).
+   */
+  grade_rollover?: "manual" | "june" | "august" | "september";
 }
 
 // --- Campuses (Multi-Site) ---

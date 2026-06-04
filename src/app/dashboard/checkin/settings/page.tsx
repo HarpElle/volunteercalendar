@@ -16,6 +16,7 @@ import { CheckinVolunteerSettings } from "@/components/settings/checkin-voluntee
 import { CheckinThresholdsSettings } from "@/components/settings/checkin-thresholds-settings";
 import { ErtSettingsSection } from "@/components/settings/ert-settings-section";
 import { MedicalVisibilitySection } from "@/components/settings/medical-visibility-section";
+import { GradeRolloverSettings } from "@/components/settings/grade-rollover-settings";
 import { KioskStationsSettings } from "@/components/settings/kiosk-stations-settings";
 import { AccessDenied } from "@/components/ui/access-denied";
 
@@ -153,6 +154,8 @@ function CheckInsContent() {
               <ErtSettingsSection churchId={churchId!} />
 
               <MedicalVisibilitySection churchId={churchId!} />
+
+              <GradeRolloverSettings churchId={churchId!} />
 
               <div className="space-y-4">
                 <p className="text-sm text-vc-text-secondary">
