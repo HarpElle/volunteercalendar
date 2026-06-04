@@ -540,21 +540,44 @@ function BlockedPickupFormModal({
     initial?.reason ?? "court_order",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [expiresAt, setExpiresAt] = useState(
-    initial?.expires_at ? initial.expires_at.split("T")[0] : "",
-  );
+  // 2026-06-03 date UX rework. Three previous problems:
+  //   1. Empty <input type="date" /> in Safari Mac renders today's
+  //      date as a placeholder hint - users perceived this as "today
+  //      is selected" when the React state was actually empty.
+  //   2. Trying to step the year produced a partial/invalid date that
+  //      Safari rejected with "needs valid date" before submit ran.
+  //   3. No visual cue that empty = indefinite block.
+  // Fix: a hasExpiry checkbox controls whether the date input is
+  // even rendered. Unchecked -> indefinite (empty string stored).
+  // Checked -> input gets a real default value (+6 months) and a
+  // `min` of today so the picker refuses to step backward.
+  const initialIso = initial?.expires_at?.split("T")[0] ?? "";
+  const [hasExpiry, setHasExpiry] = useState(Boolean(initialIso));
+  const todayIso = new Date().toISOString().split("T")[0];
+  const defaultExpiryIso = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 6);
+    return d.toISOString().split("T")[0];
+  })();
+  const [expiresAt, setExpiresAt] = useState(initialIso || defaultExpiryIso);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    // Guard against manually-typed past dates that slip past the
+    // browser's min attribute.
+    if (hasExpiry) {
+      if (!expiresAt || expiresAt < todayIso) return;
+    }
     void onSubmit({
       name: name.trim(),
       phone: phone.trim(),
       reason,
       notes: notes.trim(),
-      expires_at: expiresAt
-        ? new Date(`${expiresAt}T00:00:00Z`).toISOString()
-        : "",
+      expires_at:
+        hasExpiry && expiresAt
+          ? new Date(`${expiresAt}T00:00:00Z`).toISOString()
+          : "",
     });
   };
 
@@ -649,23 +672,44 @@ function BlockedPickupFormModal({
           />
         </div>
         <div>
-          <label
-            htmlFor="bp-expires"
-            className="block text-sm font-medium text-vc-indigo mb-1"
-          >
-            Expires (optional)
+          <span className="block text-sm font-medium text-vc-indigo mb-1">
+            Expiration
+          </span>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!hasExpiry}
+              onChange={(e) => setHasExpiry(!e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-vc-border-light text-vc-coral focus:ring-vc-coral"
+            />
+            <span className="text-sm text-vc-indigo">
+              Indefinite (no expiry) — the block stays in effect until
+              an admin removes it.
+            </span>
           </label>
-          <input
-            id="bp-expires"
-            type="date"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
-          />
-          <p className="text-xs text-vc-text-secondary mt-1">
-            Use for time-limited orders (e.g. emergency protective orders).
-            Leave blank for indefinite blocks.
-          </p>
+          {hasExpiry && (
+            <div className="mt-3 pl-6 space-y-2">
+              <label
+                htmlFor="bp-expires"
+                className="block text-sm font-medium text-vc-indigo"
+              >
+                Expires on
+              </label>
+              <input
+                id="bp-expires"
+                type="date"
+                value={expiresAt}
+                min={todayIso}
+                onChange={(e) => setExpiresAt(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
+              />
+              <p className="text-xs text-vc-text-secondary">
+                Use for time-limited orders (e.g. emergency protective
+                orders). Defaults to six months out — change to match
+                the order's actual end date.
+              </p>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 pt-2">
           <Button

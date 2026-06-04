@@ -1229,10 +1229,36 @@ export interface SongUsageRecord {
 export interface CheckInHousehold {
   id: string;
   church_id: string;
+  /**
+   * Family display name — surname only ("Pevensie") for households
+   * created post 2026-06-03; legacy records may hold the primary
+   * guardian's full name or "The {Surname} Family". Wallet pass + UI
+   * rendering use extractSurname() (src/lib/utils/name.ts) when they
+   * need just the surname.
+   */
+  name?: string;
+  /**
+   * Stable pointer to the primary guardian's Person doc. Added
+   * 2026-06-03 to fix non-deterministic primary-guardian resolution
+   * across detail views, the wallet pass, and admin room drill-down.
+   * Legacy records without this pointer fall back to first-adult-wins
+   * scans of the household members.
+   */
+  primary_guardian_id?: string | null;
+  /** Companion pointer for the secondary guardian. */
+  secondary_guardian_id?: string | null;
   primary_guardian_name: string;
   primary_guardian_phone: string; // E.164 format: "+15125551234"
   secondary_guardian_name?: string;
   secondary_guardian_phone?: string;
+  /**
+   * Household-wide authorized-pickup contacts (added 2026-06-03).
+   * Applies to every child in the household — saves admins from
+   * re-adding the same authorized adult per child. Read at check-in
+   * time by /api/checkin/recipients alongside each child's
+   * `child_profile.authorized_pickups`.
+   */
+  authorized_pickups?: PersonAuthorizedPickup[];
   /** Stable QR check-in token — URL: /checkin?token={qr_token} */
   qr_token: string;
   photo_url?: string;

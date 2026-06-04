@@ -25,3 +25,30 @@ export function formatInitials(name: string): string {
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
+
+/**
+ * Pull just the family surname out of a household-name-ish string.
+ *
+ * Handles the three real shapes we see:
+ *   "Helen Pevensie"       -> "Pevensie"   (legacy create flow stored full name)
+ *   "The Pevensie Family"  -> "Pevensie"   (formatted variant)
+ *   "Pevensie"             -> "Pevensie"   (clean post-fix create flow)
+ *
+ * Known limitation: surname particles ("Mary van der Berg") collapse to
+ * the last token ("Berg"). Rare enough in the church-roster use case
+ * that we accept the loss - the explicit `last_name` field on the
+ * linked Person doc is the preferred source when available.
+ *
+ * Returns "" when nothing useful can be extracted; callers fall back
+ * to "Family" / similar.
+ */
+export function extractSurname(raw: string): string {
+  if (!raw) return "";
+  const stripped = raw
+    .replace(/^The\s+/i, "")
+    .replace(/\s+Family$/i, "")
+    .trim();
+  if (!stripped) return "";
+  const tokens = stripped.split(/\s+/);
+  return tokens[tokens.length - 1];
+}
