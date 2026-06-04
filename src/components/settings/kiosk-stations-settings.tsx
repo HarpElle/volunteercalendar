@@ -41,6 +41,16 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
   const [creating, setCreating] = useState(false);
   const [activationToShow, setActivationToShow] =
     useState<ActivationToShow | null>(null);
+  // Per-station test-print state (2026-06-04). Keyed by station id;
+  // each entry tracks the in-flight command's id + status while we
+  // poll for the result. Auto-clears 6s after the kiosk reports back.
+  const [testPrint, setTestPrint] = useState<
+    Record<string, {
+      commandId: string;
+      status: "pending" | "completed" | "failed";
+      error?: string;
+    }>
+  >({});
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -217,6 +227,108 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
       setError(e instanceof Error ? e.message : "Unknown error");
     }
   }
+
+  const handleSendTestPrint = useCallback(
+    async (stationId: string) => {
+      if (!user) return;
+      setTestPrint((prev) => ({
+        ...prev,
+        [stationId]: { commandId: "", status: "pending" },
+      }));
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/admin/kiosk-commands", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            church_id: churchId,
+            target_station_id: stationId,
+            type: "test_print",
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Server returned ${res.status}`);
+        }
+        const { command } = await res.json();
+        setTestPrint((prev) => ({
+          ...prev,
+          [stationId]: { commandId: command.id, status: "pending" },
+        }));
+
+        // Poll for result. Kiosk polls every 15s, so we wait up to
+        // ~30s before giving up. Show "Sending..." in the meantime;
+        // kiosk reports completed/failed via PATCH.
+        const deadline = Date.now() + 30_000;
+        const poll = async () => {
+          if (Date.now() > deadline) {
+            setTestPrint((prev) => ({
+              ...prev,
+              [stationId]: {
+                commandId: command.id,
+                status: "failed",
+                error: "Kiosk didn't respond within 30 seconds — it may be offline",
+              },
+            }));
+            return;
+          }
+          try {
+            const pollRes = await fetch(
+              `/api/admin/kiosk-commands/${command.id}?church_id=${encodeURIComponent(churchId)}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            if (pollRes.ok) {
+              const data = await pollRes.json();
+              const cmd = data.command;
+              if (cmd.status === "completed") {
+                setTestPrint((prev) => ({
+                  ...prev,
+                  [stationId]: { commandId: command.id, status: "completed" },
+                }));
+                setTimeout(
+                  () =>
+                    setTestPrint((prev) => {
+                      const { [stationId]: _drop, ...rest } = prev;
+                      return rest;
+                    }),
+                  6_000,
+                );
+                return;
+              }
+              if (cmd.status === "failed") {
+                setTestPrint((prev) => ({
+                  ...prev,
+                  [stationId]: {
+                    commandId: command.id,
+                    status: "failed",
+                    error: cmd.error_message || "Test print failed",
+                  },
+                }));
+                return;
+              }
+            }
+          } catch {
+            // ignore — try again next tick
+          }
+          setTimeout(poll, 2_000);
+        };
+        setTimeout(poll, 2_000);
+      } catch (err) {
+        setTestPrint((prev) => ({
+          ...prev,
+          [stationId]: {
+            commandId: "",
+            status: "failed",
+            error: err instanceof Error ? err.message : "Unknown error",
+          },
+        }));
+      }
+    },
+    [user, churchId],
+  );
 
   return (
     <div className="space-y-6">
@@ -402,12 +514,33 @@ export function KioskStationsSettings({ churchId }: { churchId: string }) {
                     </button>
                     <button
                       type="button"
+                      onClick={() => handleSendTestPrint(s.id)}
+                      disabled={testPrint[s.id]?.status === "pending"}
+                      className="rounded-lg border border-vc-border-light px-3 py-1.5 text-xs font-medium text-vc-indigo transition-colors hover:bg-vc-bg-warm disabled:opacity-50"
+                      title="Send a test label to this kiosk's printer"
+                    >
+                      {testPrint[s.id]?.status === "pending"
+                        ? "Sending…"
+                        : "Send test print"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleRevoke(s.id, s.name)}
                       className="rounded-lg border border-vc-coral/40 px-3 py-1.5 text-xs font-medium text-vc-coral transition-colors hover:bg-vc-coral/5"
                     >
                       Revoke
                     </button>
                   </div>
+                )}
+                {testPrint[s.id]?.status === "completed" && (
+                  <p className="w-full text-xs text-vc-sage font-medium pl-1">
+                    ✓ Test label printed
+                  </p>
+                )}
+                {testPrint[s.id]?.status === "failed" && (
+                  <p className="w-full text-xs text-red-600 pl-1">
+                    Test failed: {testPrint[s.id]?.error ?? "unknown error"}
+                  </p>
                 )}
               </li>
             ))}

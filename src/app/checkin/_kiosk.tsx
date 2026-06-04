@@ -21,6 +21,7 @@ import { CheckoutEntry, type CheckoutResult } from "@/components/checkin/checkou
 import { CheckoutSuccess } from "@/components/checkin/checkout-success";
 import { KioskInstallPrompt } from "@/components/checkin/kiosk-install-prompt";
 import { PrinterSetupWizard } from "@/components/checkin/printer-setup-wizard";
+import { printLabels, type KioskPrinterConfig } from "@/lib/services/kiosk-print-bridge";
 
 // --- Types for kiosk state ---
 
@@ -195,6 +196,144 @@ function CheckInKioskInner() {
   const [kioskName, setKioskName] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [hasPrinterConfig, setHasPrinterConfig] = useState(false);
+  // Test-print button state (2026-06-04). Shows inline feedback under
+  // the Printer row in Settings: "Sending test label...", "Test label
+  // sent!", or "Test failed: {reason}".
+  const [testPrintStatus, setTestPrintStatus] = useState<
+    | { state: "idle" }
+    | { state: "sending" }
+    | { state: "success" }
+    | { state: "failed"; error: string }
+  >({ state: "idle" });
+
+  // Test-print handler (2026-06-04). Calls the kiosk-token-authed
+  // /api/checkin/printer-test endpoint to get a realistic label payload,
+  // then ships it via the existing printLabels() bridge — same path
+  // real check-ins use, so a success here genuinely means the next
+  // child label will print too. Pulls printer config from localStorage
+  // (the only place the kiosk persists it).
+  const handleTestPrint = useCallback(async () => {
+    setTestPrintStatus({ state: "sending" });
+    try {
+      const stored = localStorage.getItem("vc_kiosk_printer");
+      if (!stored) {
+        throw new Error("No printer configured on this kiosk");
+      }
+      const config = JSON.parse(stored) as KioskPrinterConfig;
+      const churchIdForTest =
+        getStoredKioskChurchId() ?? new URLSearchParams(window.location.search).get("church_id");
+      if (!churchIdForTest) {
+        throw new Error("No church context — try re-loading the kiosk");
+      }
+      const res = await kioskFetch("/api/checkin/printer-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          church_id: churchIdForTest,
+          printer_type: config.printer_type,
+          label_size: config.label_size,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Server returned ${res.status}`);
+      }
+      const data = (await res.json()) as { label_payload: string };
+      const result = await printLabels(
+        [{ format: "png", data: data.label_payload, printer_id: "test" }],
+        config,
+      );
+      if (!result.success) {
+        throw new Error(
+          (result.errors && result.errors.join("; ")) ||
+            "Printer rejected the label",
+        );
+      }
+      setTestPrintStatus({ state: "success" });
+      // Auto-clear after 4s so subsequent taps feel fresh.
+      setTimeout(() => setTestPrintStatus({ state: "idle" }), 4000);
+    } catch (err) {
+      setTestPrintStatus({
+        state: "failed",
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }, []);
+
+  // Keep a ref so the polling loop can always invoke the latest
+  // handleTestPrint without re-installing the interval on every render.
+  const handleTestPrintRef = useRef(handleTestPrint);
+  useEffect(() => {
+    handleTestPrintRef.current = handleTestPrint;
+  }, [handleTestPrint]);
+
+  // 2026-06-04 admin → kiosk command poll. Every 15s the kiosk asks
+  // for any pending commands targeting its station, executes them, and
+  // PATCHes back the result. Today the only command type is
+  // "test_print"; future expansions (refresh config, force log-out,
+  // soft-reset) drop in here.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    async function processCommand(cmd: {
+      id: string;
+      type: string;
+    }): Promise<{ ok: boolean; error?: string }> {
+      if (cmd.type !== "test_print") {
+        return { ok: false, error: `Unsupported command type: ${cmd.type}` };
+      }
+      try {
+        await handleTestPrintRef.current();
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown error",
+        };
+      }
+    }
+
+    async function tick() {
+      if (cancelled) return;
+      try {
+        const res = await kioskFetch("/api/checkin/kiosk-commands");
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          commands: Array<{ id: string; type: string }>;
+        };
+        if (!data.commands?.length) return;
+        for (const cmd of data.commands) {
+          const result = await processCommand(cmd);
+          if (cancelled) return;
+          await kioskFetch(`/api/checkin/kiosk-commands/${cmd.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: result.ok ? "completed" : "failed",
+              error_message: result.ok ? null : result.error ?? null,
+            }),
+          });
+        }
+      } catch {
+        // Polling is best-effort — swallow errors so a transient
+        // network blip doesn't surface in the UI.
+      }
+    }
+
+    // First tick after 3s so we don't spam during initial page render;
+    // subsequent ticks every 15s.
+    const initial = setTimeout(() => {
+      void tick();
+      timer = setInterval(() => void tick(), 15_000);
+    }, 3_000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initial);
+      if (timer) clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     // Track B: an activated kiosk has a token in localStorage. If there's
@@ -888,6 +1027,7 @@ function CheckInKioskInner() {
           stationName={kioskName}
           onComplete={() => {
             setHasPrinterConfig(true);
+            setTestPrintStatus({ state: "idle" });
             resetKiosk();
           }}
           onSkip={() => {
@@ -1064,7 +1204,7 @@ function CheckInKioskInner() {
                 type="button"
                 onClick={() => { setShowSettings(false); setScreen("printer-setup"); }}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-vc-border-light
-                  hover:border-vc-coral hover:bg-vc-coral/5 transition-colors text-left mb-3 min-h-[44px]"
+                  hover:border-vc-coral hover:bg-vc-coral/5 transition-colors text-left min-h-[44px]"
               >
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -1081,6 +1221,33 @@ function CheckInKioskInner() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                 </svg>
               </button>
+
+              {hasPrinterConfig && (
+                <div className="mb-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestPrint}
+                    disabled={testPrintStatus.state === "sending"}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-vc-coral/40 text-vc-coral
+                      hover:bg-vc-coral/5 transition-colors min-h-[44px] disabled:opacity-50 text-sm font-medium"
+                  >
+                    {testPrintStatus.state === "sending"
+                      ? "Sending test label…"
+                      : "Send test label"}
+                  </button>
+                  {testPrintStatus.state === "success" && (
+                    <p className="text-xs text-vc-sage mt-2 text-center font-medium">
+                      ✓ Test label sent — check the printer
+                    </p>
+                  )}
+                  {testPrintStatus.state === "failed" && (
+                    <p className="text-xs text-red-600 mt-2 text-center">
+                      Test failed: {testPrintStatus.error}
+                    </p>
+                  )}
+                </div>
+              )}
+              {!hasPrinterConfig && <div className="mb-3" />}
 
               {/* Switch Church — only when set via localStorage */}
               {!urlChurchId && (

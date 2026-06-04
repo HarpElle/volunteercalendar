@@ -2466,3 +2466,35 @@ export interface KioskToken {
   expires_at?: string | null;
   device_fingerprint?: string | null;
 }
+
+/**
+ * Admin → kiosk command queue (2026-06-04). Lets owners/admins trigger
+ * actions on a remote kiosk (test print, refresh config, etc.) without
+ * physically standing at the device.
+ *
+ * Lives at `churches/{churchId}/kiosk_commands/{cmdId}`. Admin-SDK-only
+ * via Firestore rules; all access goes through the routes:
+ *   - POST  /api/admin/kiosk-commands         (admin enqueues)
+ *   - GET   /api/checkin/kiosk-commands       (kiosk polls its pending)
+ *   - PATCH /api/checkin/kiosk-commands/[id]  (kiosk reports result)
+ *   - GET   /api/admin/kiosk-commands/[id]    (admin polls for result)
+ *
+ * The kiosk polls every ~15s while it's active. Commands older than
+ * 10 minutes with status="pending" are considered stale (the kiosk
+ * isn't responding) and the admin UI surfaces that distinctly.
+ */
+export interface KioskCommand {
+  id: string;
+  church_id: string;
+  type: "test_print";
+  target_station_id: string;
+  status: "pending" | "completed" | "failed";
+  created_at: string;
+  created_by_user_id: string;
+  /** When the kiosk first picked the command up — non-null means
+   *  another tab / refresh shouldn't process it again. */
+  picked_up_at?: string | null;
+  completed_at?: string | null;
+  /** Populated when status="failed" so the admin sees why. */
+  error_message?: string | null;
+}
