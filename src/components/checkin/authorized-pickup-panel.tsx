@@ -30,12 +30,18 @@ import { Button } from "@/components/ui/button";
 import { PhotoCapture } from "./photo-capture";
 import { PhotoThumbnail } from "./photo-thumbnail";
 import type { PersonAuthorizedPickup } from "@/lib/types";
+import { formatPhone } from "@/lib/utils/phone";
 
 interface AuthorizedPickupPanelChildProps {
   scope: "child";
   childPersonId: string;
   childDisplayName: string;
   initialPickups: PersonAuthorizedPickup[];
+  /** Household-wide entries surfaced read-only on the per-child panel
+   *  so the operator sees the full picture for this child (mirrors
+   *  what BlockedPickupPanel already does). Edit/remove for these
+   *  lives on the household panel. */
+  householdInheritedPickups?: PersonAuthorizedPickup[];
   onChanged?: () => void;
 }
 
@@ -75,22 +81,26 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
     return await user.getIdToken();
   }, [user]);
 
+  // Voice unified with BlockedPickupPanel — same heading template
+  // ("Authorized" / "Not authorized" for {Name} | for any child) and
+  // matching sub-copy structure so the two panels read as siblings
+  // instead of two unrelated components.
   const headerTitle =
     props.scope === "child"
-      ? "Authorized for pickup"
-      : "Authorized for any child (household-wide)";
+      ? `Authorized for ${props.childDisplayName}`
+      : "Authorized for any child";
   const headerSubcopy =
     props.scope === "child"
-      ? `People allowed to take ${props.childDisplayName} home.`
-      : `People allowed to take any of the ${props.householdDisplayName} kids home — saves re-adding them per child.`;
+      ? `Anyone here can pick ${props.childDisplayName} up — in addition to the household-wide list above.`
+      : "Anyone here can pick up any child in this household — saves re-adding them per child.";
   const emptyCopy =
     props.scope === "child"
-      ? `No authorized contacts yet. Add the people allowed to pick ${props.childDisplayName} up from check-in.`
-      : "No household-wide contacts yet. Add anyone who's authorized to pick up every child in this household (grandparents, regular family friends, etc.).";
+      ? `No per-child overrides for ${props.childDisplayName}. Add a contact here only if they should pick up ${props.childDisplayName} but NOT the other kids.`
+      : "Nobody added yet. Add grandparents, regular family friends, or anyone else who's allowed to pick up every child.";
   const confirmRemoveCopy =
     props.scope === "child"
-      ? `Remove this authorized pickup contact for ${props.childDisplayName}?`
-      : "Remove this household-wide pickup contact?";
+      ? `Remove this authorized contact for ${props.childDisplayName}?`
+      : "Remove this household-wide authorized contact?";
 
   const bodyTargetParams = () =>
     props.scope === "child"
@@ -305,10 +315,29 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
 
       {(() => {
         const nowMs = Date.now();
-        const visible = pickups.filter((p) => {
+        // Filter elapsed pending-removals out of both lists.
+        const ownVisible = pickups.filter((p) => {
           if (!p.pending_remove_at) return true;
           return Date.parse(p.pending_remove_at) > nowMs;
         });
+        // Household-wide cascade entries (per-child mode only). Tag
+        // them so the renderer can show the read-only badge + hide
+        // controls. Editing these lives on the household panel —
+        // mirrors how BlockedPickupPanel handles its cascade.
+        const inherited =
+          props.scope === "child"
+            ? (props.householdInheritedPickups ?? []).filter((p) => {
+                if (!p.pending_remove_at) return true;
+                return Date.parse(p.pending_remove_at) > nowMs;
+              })
+            : [];
+        const visible: Array<{
+          pickup: PersonAuthorizedPickup;
+          source: "own" | "inherited";
+        }> = [
+          ...inherited.map((p) => ({ pickup: p, source: "inherited" as const })),
+          ...ownVisible.map((p) => ({ pickup: p, source: "own" as const })),
+        ];
         if (visible.length === 0) {
           return (
             <div className="rounded-lg border border-dashed border-vc-border-light bg-vc-bg-warm px-4 py-6 text-center text-sm text-vc-text-secondary">
@@ -318,13 +347,14 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
         }
         return (
           <ul className="space-y-3">
-            {visible.map((p) => {
+            {visible.map(({ pickup: p, source }) => {
               const pendingRemoval =
                 p.pending_remove_at &&
                 Date.parse(p.pending_remove_at) > nowMs;
+              const isInherited = source === "inherited";
               return (
                 <li
-                  key={p.id ?? `${p.name}|${p.phone ?? ""}`}
+                  key={`${source}:${p.id ?? `${p.name}|${p.phone ?? ""}`}`}
                   className="flex items-start gap-3 rounded-lg border border-vc-border-light bg-vc-bg-warm p-3"
                 >
                   <PhotoThumbnail
@@ -335,6 +365,11 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-vc-indigo">{p.name}</p>
+                      {isInherited && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-vc-indigo/10 text-vc-indigo/70">
+                          Household-wide
+                        </span>
+                      )}
                       {pendingRemoval && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-vc-coral/10 text-vc-coral font-medium">
                           Pending removal{" "}
@@ -348,8 +383,11 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
                       </p>
                     )}
                     {p.phone && (
-                      <p className="text-sm text-vc-text-secondary">{p.phone}</p>
+                      <p className="text-sm text-vc-text-secondary">
+                        {formatPhone(p.phone)}
+                      </p>
                     )}
+                    {!isInherited && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {p.id && (
                         <PhotoCapture
@@ -395,6 +433,7 @@ export function AuthorizedPickupPanel(props: AuthorizedPickupPanelProps) {
                         </Button>
                       )}
                     </div>
+                    )}
                   </div>
                 </li>
               );
