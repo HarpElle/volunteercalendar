@@ -12,7 +12,30 @@ interface GuardianChild {
   last_name: string;
   preferred_name?: string;
   grade?: string;
+  allergies?: string | null;
+  medical_notes?: string | null;
+  has_alerts?: boolean;
 }
+
+const VALID_GRADES = [
+  { value: "", label: "—" },
+  { value: "nursery", label: "Nursery" },
+  { value: "toddler", label: "Toddler" },
+  { value: "pre-k", label: "Pre-K" },
+  { value: "kindergarten", label: "Kindergarten" },
+  { value: "1st", label: "1st Grade" },
+  { value: "2nd", label: "2nd Grade" },
+  { value: "3rd", label: "3rd Grade" },
+  { value: "4th", label: "4th Grade" },
+  { value: "5th", label: "5th Grade" },
+  { value: "6th", label: "6th Grade" },
+] as const;
+
+type ChildEditorState =
+  | { mode: "closed" }
+  | { mode: "add" }
+  | { mode: "edit"; child: GuardianChild }
+  | { mode: "remove"; child: GuardianChild };
 
 interface CheckInSession {
   id: string;
@@ -75,6 +98,11 @@ function GuardianPortalInner() {
   // Wallet sheet.
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
+
+  // Child editor state (2026-06-03 Family Portal self-service).
+  const [childEditor, setChildEditor] = useState<ChildEditorState>({ mode: "closed" });
+  const [childBusy, setChildBusy] = useState(false);
+  const [childError, setChildError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!token || !churchId) return;
@@ -193,6 +221,72 @@ function GuardianPortalInner() {
       setSaveMessage("Network error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Child mutation handlers — POST/PUT/DELETE to /api/guardian/children.
+  const submitChildEditor = async (input: {
+    first_name: string;
+    last_name: string;
+    preferred_name: string;
+    grade: string;
+    allergies: string;
+    medical_notes: string;
+  }) => {
+    if (!token || !churchId) return;
+    setChildBusy(true);
+    setChildError(null);
+    try {
+      const isEdit = childEditor.mode === "edit";
+      const url = isEdit
+        ? `/api/guardian/children/${(childEditor as { child: GuardianChild }).child.id}`
+        : "/api/guardian/children";
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          church_id: churchId,
+          first_name: input.first_name,
+          last_name: input.last_name,
+          preferred_name: input.preferred_name || null,
+          grade: input.grade || null,
+          allergies: input.allergies || null,
+          medical_notes: input.medical_notes || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Save failed");
+      }
+      setChildEditor({ mode: "closed" });
+      await fetchData();
+    } catch (err) {
+      setChildError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setChildBusy(false);
+    }
+  };
+
+  const handleRemoveChild = async (child: GuardianChild) => {
+    if (!token || !churchId) return;
+    setChildBusy(true);
+    setChildError(null);
+    try {
+      const res = await fetch(
+        `/api/guardian/children/${child.id}?token=${encodeURIComponent(token)}&church_id=${encodeURIComponent(churchId)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Remove failed");
+      }
+      setChildEditor({ mode: "closed" });
+      await fetchData();
+    } catch (err) {
+      setChildError(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setChildBusy(false);
     }
   };
 
@@ -384,36 +478,124 @@ function GuardianPortalInner() {
         )}
       </div>
 
-      {/* Children */}
+      {/* Children — editable list (2026-06-03 self-service). */}
       <div className="bg-white rounded-xl border border-vc-border-light p-5 mb-4">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Children ({children.length})
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+            Children ({children.length})
+          </h2>
+          <button
+            type="button"
+            onClick={() => {
+              setChildError(null);
+              setChildEditor({ mode: "add" });
+            }}
+            className="text-sm text-vc-coral font-medium min-h-[32px]"
+          >
+            + Add child
+          </button>
+        </div>
+
         {children.length === 0 ? (
-          <p className="text-sm text-vc-text-muted">No children on file.</p>
+          <p className="text-sm text-vc-text-muted">
+            No children on file. Tap "Add child" above to register your
+            first one.
+          </p>
         ) : (
-          <div className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {children.map((c) => (
-              <div
+              <li
                 key={c.id}
-                className="flex items-center justify-between py-1.5"
+                className="py-3 flex items-start justify-between gap-3"
               >
-                <p className="text-sm font-medium text-vc-indigo">
-                  {c.preferred_name || c.first_name} {c.last_name}
-                </p>
-                {c.grade && (
-                  <span className="text-xs text-vc-text-muted bg-gray-50 px-2 py-0.5 rounded-full">
-                    {c.grade}
-                  </span>
-                )}
-              </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-vc-indigo">
+                      {c.preferred_name || c.first_name} {c.last_name}
+                    </p>
+                    {c.grade && (
+                      <span className="text-xs text-vc-text-muted bg-gray-50 px-2 py-0.5 rounded-full">
+                        {c.grade}
+                      </span>
+                    )}
+                    {c.has_alerts && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                        Allergy / Medical
+                      </span>
+                    )}
+                  </div>
+                  {(c.allergies || c.medical_notes) && (
+                    <p className="text-xs text-vc-text-secondary mt-1 truncate">
+                      {[c.allergies, c.medical_notes].filter(Boolean).join(" • ")}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChildError(null);
+                      setChildEditor({ mode: "edit", child: c });
+                    }}
+                    className="text-xs text-vc-coral font-medium min-h-[32px] px-2"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChildError(null);
+                      setChildEditor({ mode: "remove", child: c });
+                    }}
+                    className="text-xs text-vc-text-muted hover:text-red-600 font-medium min-h-[32px] px-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-        <p className="text-xs text-vc-text-muted mt-3">
-          To add or remove children, please contact church staff.
-        </p>
+
+        {/* Grade-rollover disclaimer (Jason 2026-06-03 callout).
+            Until the annual auto-advance feature ships, this just
+            explains that staff may bulk-update grades each year so
+            parents don't get surprised. */}
+        <div className="mt-4 rounded-lg bg-vc-bg-warm border border-vc-border-light px-3 py-2.5">
+          <p className="text-xs text-vc-text-secondary leading-relaxed">
+            <span className="font-medium text-vc-indigo">Heads up:</span>{" "}
+            your church may bulk-advance everyone's grade at the start
+            of each school year. If you update a grade and the church
+            then runs the annual rollover, your child could end up one
+            grade too high. Check with church staff if you're unsure
+            when they do it.
+          </p>
+        </div>
       </div>
+
+      {/* Child editor modals */}
+      {(childEditor.mode === "add" || childEditor.mode === "edit") && (
+        <ChildEditorModal
+          initial={
+            childEditor.mode === "edit"
+              ? childEditor.child
+              : undefined
+          }
+          busy={childBusy}
+          error={childError}
+          onCancel={() => setChildEditor({ mode: "closed" })}
+          onSubmit={submitChildEditor}
+        />
+      )}
+      {childEditor.mode === "remove" && (
+        <ChildRemoveConfirm
+          child={childEditor.child}
+          busy={childBusy}
+          error={childError}
+          onCancel={() => setChildEditor({ mode: "closed" })}
+          onConfirm={() => handleRemoveChild(childEditor.child)}
+        />
+      )}
 
       {/* QR Code */}
       {qrDataUrl && (
@@ -538,4 +720,275 @@ function formatDateLabel(isoDate: string): string {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
   return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+/**
+ * <ChildEditorModal> — Family Portal add/edit form for a child.
+ *
+ * Used for both "add new child" (initial undefined) and "edit existing"
+ * (initial = the child). Fields:
+ *   - First / last / preferred name
+ *   - Grade dropdown
+ *   - Allergies (textarea)
+ *   - Medical notes (textarea)
+ *
+ * Server-side validation is the source of truth — this form does the
+ * minimum client-side guarding (required fields, max lengths).
+ */
+function ChildEditorModal({
+  initial,
+  busy,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  initial?: GuardianChild;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (input: {
+    first_name: string;
+    last_name: string;
+    preferred_name: string;
+    grade: string;
+    allergies: string;
+    medical_notes: string;
+  }) => void | Promise<void>;
+}) {
+  const [firstName, setFirstName] = useState(initial?.first_name ?? "");
+  const [lastName, setLastName] = useState(initial?.last_name ?? "");
+  const [preferredName, setPreferredName] = useState(initial?.preferred_name ?? "");
+  const [grade, setGrade] = useState(initial?.grade ?? "");
+  const [allergies, setAllergies] = useState(initial?.allergies ?? "");
+  const [medicalNotes, setMedicalNotes] = useState(initial?.medical_notes ?? "");
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstName.trim() || !lastName.trim()) return;
+    void onSubmit({
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      preferred_name: preferredName.trim(),
+      grade,
+      allergies: allergies.trim(),
+      medical_notes: medicalNotes.trim(),
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={initial ? "Edit child" : "Add child"}
+    >
+      <form
+        onSubmit={submit}
+        className="bg-vc-bg rounded-2xl shadow-xl max-w-md w-full p-6 space-y-3 max-h-[90vh] overflow-y-auto"
+      >
+        <h2 className="text-xl font-display font-semibold text-vc-indigo">
+          {initial ? "Edit child" : "Add child"}
+        </h2>
+        <div>
+          <label
+            htmlFor="gc-first"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            First name *
+          </label>
+          <input
+            id="gc-first"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            maxLength={100}
+            autoFocus
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="gc-last"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            Last name *
+          </label>
+          <input
+            id="gc-last"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            maxLength={100}
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="gc-pref"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            Preferred name (optional)
+          </label>
+          <input
+            id="gc-pref"
+            type="text"
+            value={preferredName}
+            onChange={(e) => setPreferredName(e.target.value)}
+            maxLength={100}
+            placeholder="What they actually go by"
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="gc-grade"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            Grade
+          </label>
+          <select
+            id="gc-grade"
+            value={grade}
+            onChange={(e) => setGrade(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral min-h-[44px]"
+          >
+            {VALID_GRADES.map((g) => (
+              <option key={g.value || "none"} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            htmlFor="gc-allergies"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            Allergies
+          </label>
+          <textarea
+            id="gc-allergies"
+            value={allergies}
+            onChange={(e) => setAllergies(e.target.value)}
+            rows={2}
+            maxLength={2000}
+            placeholder="Peanuts, tree nuts, etc."
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral resize-y"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="gc-med"
+            className="block text-xs font-medium text-vc-text-secondary mb-1"
+          >
+            Medical notes
+          </label>
+          <textarea
+            id="gc-med"
+            value={medicalNotes}
+            onChange={(e) => setMedicalNotes(e.target.value)}
+            rows={2}
+            maxLength={2000}
+            placeholder="Asthma rescue inhaler in backpack, etc."
+            className="w-full px-3 py-2 rounded-lg border border-vc-border-light focus:border-vc-coral focus:ring-1 focus:ring-vc-coral resize-y"
+          />
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-2">
+          <button
+            type="submit"
+            disabled={busy || !firstName.trim() || !lastName.trim()}
+            className="flex-1 min-h-[44px] rounded-full bg-vc-coral text-white font-semibold text-sm disabled:opacity-50"
+          >
+            {busy ? "Saving…" : initial ? "Save changes" : "Add child"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 min-h-[44px] rounded-full border border-vc-border-light text-vc-text-secondary font-semibold text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * <ChildRemoveConfirm> — confirmation step before DELETE.
+ *
+ * Wording is intentionally "Remove from this household" rather than
+ * "Delete child" — the server-side soft-delete logic keeps the
+ * Person doc around (status=inactive when no households remain;
+ * otherwise just drops the membership). This matches divorced /
+ * blended-family realities where a child belongs to multiple
+ * households.
+ */
+function ChildRemoveConfirm({
+  child,
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  child: GuardianChild;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const displayName = child.preferred_name || child.first_name;
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Remove ${displayName} from household`}
+    >
+      <div className="bg-vc-bg rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+        <h2 className="text-xl font-display font-semibold text-vc-indigo">
+          Remove {displayName} from this household?
+        </h2>
+        <p className="text-sm text-vc-text-secondary leading-relaxed">
+          This drops {displayName} from this household's check-in roster.
+          Church staff can restore them from the People tab. If{" "}
+          {displayName} also belongs to another household, that
+          membership stays in place.
+        </p>
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+        <div className="flex gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 min-h-[44px] rounded-full bg-red-600 text-white font-semibold text-sm disabled:opacity-50"
+          >
+            {busy ? "Removing…" : `Remove ${displayName}`}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 min-h-[44px] rounded-full border border-vc-border-light text-vc-text-secondary font-semibold text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

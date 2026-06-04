@@ -203,6 +203,9 @@ export async function GET(req: NextRequest) {
       last_name: string;
       preferred_name?: string;
       grade?: string;
+      allergies?: string | null;
+      medical_notes?: string | null;
+      has_alerts?: boolean;
     }> = [];
 
     if (legacyHousehold) {
@@ -230,15 +233,28 @@ export async function GET(req: NextRequest) {
       children = childrenSnap.docs
         .map((d) => {
           const data = d.data() as Person & {
-            child_profile?: { grade?: string };
+            child_profile?: {
+              grade?: string;
+              allergies?: string | null;
+              medical_notes?: string | null;
+              has_alerts?: boolean;
+            };
           };
           if (data.status === "inactive") return null;
+          const cp = data.child_profile ?? {};
           return {
             id: d.id,
             first_name: data.first_name || "",
             last_name: data.last_name || "",
             preferred_name: (data as { preferred_name?: string }).preferred_name,
-            grade: data.child_profile?.grade,
+            grade: cp.grade,
+            // 2026-06-03: surface editable fields so the Family Portal
+            // can pre-populate the edit modal without a second fetch.
+            // Empty string -> null normalization to match what the
+            // PUT endpoint accepts.
+            allergies: cp.allergies ?? null,
+            medical_notes: cp.medical_notes ?? null,
+            has_alerts: cp.has_alerts ?? false,
           };
         })
         .filter(<T>(c: T | null): c is T => c !== null);
