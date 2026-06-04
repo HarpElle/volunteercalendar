@@ -16,6 +16,7 @@ import type {
 import { AuthorizedPickupPanel } from "@/components/checkin/authorized-pickup-panel";
 import { BlockedPickupPanel } from "@/components/checkin/blocked-pickup-panel";
 import { extractSurname } from "@/lib/utils/name";
+import { formatPhone } from "@/lib/utils/phone";
 
 /** Wave 9 P0-2: the household-detail API extends the Child shape with
  *  `authorized_pickups`. Local extension keeps the legacy Child type
@@ -68,6 +69,12 @@ export default function HouseholdDetailPage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [sendingQrSms, setSendingQrSms] = useState(false);
   const [qrSmsSent, setQrSmsSent] = useState(false);
+  // Per-child overrides section is collapsed by default — most
+  // families don't need per-child entries (the household-wide list
+  // covers the common case). Click to expand for exception cases.
+  // Jason 2026-06-03 feedback: defaulting to expanded made the page
+  // feel "very busy".
+  const [perChildExpanded, setPerChildExpanded] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user || !churchId || !id) return;
@@ -235,15 +242,15 @@ export default function HouseholdDetailPage() {
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       <Link
         href="/dashboard/checkin/households"
-        className="text-sm text-vc-coral font-medium mb-4 inline-block"
+        className="text-sm text-vc-coral font-medium inline-block"
       >
         &larr; Back to Households
       </Link>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-vc-indigo font-display">
           {household.primary_guardian_name}
         </h1>
@@ -264,7 +271,7 @@ export default function HouseholdDetailPage() {
       </div>
 
       {/* Guardian info */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
           Guardian Information
         </h2>
@@ -275,7 +282,7 @@ export default function HouseholdDetailPage() {
               {household.primary_guardian_name}
             </p>
             <p className="text-sm text-gray-500">
-              {household.primary_guardian_phone}
+              {formatPhone(household.primary_guardian_phone)}
             </p>
           </div>
           {household.secondary_guardian_name && (
@@ -285,7 +292,7 @@ export default function HouseholdDetailPage() {
                 {household.secondary_guardian_name}
               </p>
               <p className="text-sm text-gray-500">
-                {household.secondary_guardian_phone || "\u2014"}
+                {formatPhone(household.secondary_guardian_phone)}
               </p>
             </div>
           )}
@@ -293,7 +300,7 @@ export default function HouseholdDetailPage() {
       </div>
 
       {/* QR Code */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
           QR Check-In Code
         </h2>
@@ -454,35 +461,57 @@ export default function HouseholdDetailPage() {
       {/* Per-child overrides for cases where one child has a
           different authorized contact list or a child-specific
           block. The household-wide entries above apply to every
-          child; these sections only need entries for the exceptions. */}
+          child; these sections only need entries for the exceptions.
+          Collapsed by default to keep the page scannable. */}
       {children.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-            Per-child overrides
-          </h2>
-          <p className="text-xs text-vc-text-secondary -mt-2">
-            Add entries here only for contacts that apply to ONE
-            child, not the whole household.
-          </p>
-          {children.map((child) => (
-            <div key={`pickup-${child.id}`} className="space-y-2">
-              <p className="text-sm font-medium text-vc-indigo">
-                {child.preferred_name || child.first_name} {child.last_name}
-              </p>
-              <AuthorizedPickupPanel
-                scope="child"
-                childPersonId={child.id}
-                childDisplayName={child.preferred_name || child.first_name}
-                initialPickups={child.authorized_pickups ?? []}
-                onChanged={() => fetchData()}
-              />
-              <BlockedPickupPanel
-                scope="child"
-                childPersonId={child.id}
-                childDisplayName={child.preferred_name || child.first_name}
-              />
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setPerChildExpanded((v) => !v)}
+            aria-expanded={perChildExpanded}
+            className="w-full flex items-center justify-between gap-3 text-left rounded-lg border border-vc-border-light bg-white px-4 py-3 hover:bg-vc-bg-warm transition-colors min-h-[44px]"
+          >
+            <span>
+              <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                Per-child overrides
+              </span>
+              <span className="block text-xs text-vc-text-secondary mt-0.5">
+                Only needed when one child has a different list from
+                the rest of the household.
+              </span>
+            </span>
+            <span
+              className="text-sm font-medium text-vc-indigo flex items-center gap-1"
+              aria-hidden="true"
+            >
+              {perChildExpanded ? "Hide" : `Show (${children.length})`}
+              <span className="text-xs">{perChildExpanded ? "▾" : "▸"}</span>
+            </span>
+          </button>
+          {perChildExpanded && (
+            <div className="space-y-4 pl-1">
+              {children.map((child) => (
+                <div key={`pickup-${child.id}`} className="space-y-2">
+                  <p className="text-sm font-medium text-vc-indigo">
+                    {child.preferred_name || child.first_name} {child.last_name}
+                  </p>
+                  <AuthorizedPickupPanel
+                    scope="child"
+                    childPersonId={child.id}
+                    childDisplayName={child.preferred_name || child.first_name}
+                    initialPickups={child.authorized_pickups ?? []}
+                    householdInheritedPickups={household?.authorized_pickups ?? []}
+                    onChanged={() => fetchData()}
+                  />
+                  <BlockedPickupPanel
+                    scope="child"
+                    childPersonId={child.id}
+                    childDisplayName={child.preferred_name || child.first_name}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 

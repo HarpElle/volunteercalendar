@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { PhotoCapture } from "./photo-capture";
 import { PhotoThumbnail } from "./photo-thumbnail";
 import type { BlockedPickup } from "@/lib/types";
+import { formatPhone } from "@/lib/utils/phone";
 
 const REASON_LABELS: Record<BlockedPickup["reason"], string> = {
   court_order: "Court order",
@@ -340,14 +341,17 @@ export function BlockedPickupPanel(props: BlockedPickupPanelProps) {
   // Visual scope: per-child panels also display household-wide blocks
   // that affect this child (read-only — editing them lives on the
   // per-household panel).
+  // Voice unified with AuthorizedPickupPanel — matching template
+  // so the two panels read as a related pair instead of independent
+  // components (Jason 2026-06-03 feedback).
   const scopeHeading =
     props.scope === "child"
-      ? "Not authorized for pickup"
-      : "Sibling-wide blocks";
+      ? `Not authorized for ${props.childDisplayName}`
+      : "Not authorized for any child";
   const scopeSubcopy =
     props.scope === "child"
-      ? `People who must NOT take ${props.childDisplayName} home from check-in.`
-      : `Blocks that apply to every child in ${props.householdDisplayName}. Court orders and similar custody-wide restrictions live here.`;
+      ? `Anyone here is blocked from picking ${props.childDisplayName} up — in addition to the household-wide list above.`
+      : "Anyone here is blocked from picking up any child in this household — court orders and custody-wide restrictions go here.";
 
   return (
     <div className="rounded-xl border border-vc-danger/20 bg-vc-danger/5 p-5 space-y-4">
@@ -379,7 +383,9 @@ export function BlockedPickupPanel(props: BlockedPickupPanelProps) {
         <p className="text-sm text-vc-text-secondary py-4">Loading…</p>
       ) : entries.length === 0 ? (
         <div className="rounded-lg border border-dashed border-vc-danger/30 bg-white px-4 py-6 text-center text-sm text-vc-text-secondary">
-          No entries on the block list.
+          {props.scope === "child"
+            ? `No per-child blocks yet. Add an entry here only if someone should be blocked for ${props.childDisplayName} but NOT the whole household.`
+            : "Nobody added yet. Add anyone who should be blocked from picking up every child (custody orders, restraining orders, etc.)."}
         </div>
       ) : (
         <ul className="space-y-3">
@@ -414,7 +420,7 @@ export function BlockedPickupPanel(props: BlockedPickupPanelProps) {
                   </div>
                   {e.phone && (
                     <p className="text-sm text-vc-text-secondary mt-1">
-                      {e.phone}
+                      {formatPhone(e.phone)}
                     </p>
                   )}
                   {e.notes && (
