@@ -29,6 +29,7 @@ const VALID_GRADES = [
   { value: "4th", label: "4th Grade" },
   { value: "5th", label: "5th Grade" },
   { value: "6th", label: "6th Grade" },
+  { value: "7th", label: "7th Grade" },
 ] as const;
 
 type ChildEditorState =

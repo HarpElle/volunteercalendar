@@ -53,6 +53,7 @@ const VALID_GRADES = new Set([
   "4th",
   "5th",
   "6th",
+  "7th",
 ]);
 
 export async function POST(req: NextRequest) {

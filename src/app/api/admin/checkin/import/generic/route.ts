@@ -392,6 +392,7 @@ const GRADE_MAP: Record<string, ChildGrade> = {
   "4th": "4th", "4th grade": "4th", fourth: "4th",
   "5th": "5th", "5th grade": "5th", fifth: "5th",
   "6th": "6th", "6th grade": "6th", sixth: "6th",
+  "7th": "7th", "7th grade": "7th", seventh: "7th",
 };
 
 function mapGrade(raw: string): ChildGrade | undefined {

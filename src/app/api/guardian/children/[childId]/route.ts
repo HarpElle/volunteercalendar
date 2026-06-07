@@ -50,6 +50,7 @@ const VALID_GRADES = new Set([
   "4th",
   "5th",
   "6th",
+  "7th",
 ]);
 
 /** Resolve household via QR token. Returns the household doc + id or a

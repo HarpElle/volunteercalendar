@@ -44,6 +44,7 @@ const ALL_GRADES: { value: ChildGrade; label: string }[] = [
   { value: "4th", label: "4th" },
   { value: "5th", label: "5th" },
   { value: "6th", label: "6th" },
+  { value: "7th", label: "7th" },
 ];
 
 /**
