@@ -507,6 +507,7 @@ function normalizeGrade(raw: string | undefined): ChildGrade | undefined {
     "4th",
     "5th",
     "6th",
+    "7th",
   ];
   return valid.includes(v as ChildGrade) ? (v as ChildGrade) : undefined;
 }

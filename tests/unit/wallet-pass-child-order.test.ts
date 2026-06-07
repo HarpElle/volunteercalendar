@@ -20,6 +20,7 @@ function gradeAgeRank(grade: string | null | undefined): number {
     "4th",
     "5th",
     "6th",
+    "7th",
   ];
   const idx = order.indexOf(grade);
   return idx === -1 ? -1 : idx;

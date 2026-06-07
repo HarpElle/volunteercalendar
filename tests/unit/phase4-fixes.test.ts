@@ -28,7 +28,8 @@ type ChildGrade =
   | "3rd"
   | "4th"
   | "5th"
-  | "6th";
+  | "6th"
+  | "7th";
 
 function normalizeGrade(raw: string | undefined): ChildGrade | undefined {
   if (!raw) return undefined;
@@ -44,6 +45,7 @@ function normalizeGrade(raw: string | undefined): ChildGrade | undefined {
     "4th",
     "5th",
     "6th",
+    "7th",
   ];
   return valid.includes(v as ChildGrade) ? (v as ChildGrade) : undefined;
 }

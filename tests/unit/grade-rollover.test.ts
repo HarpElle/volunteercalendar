@@ -23,10 +23,11 @@ describe("nextGradeAfterRollover", () => {
     expect(nextGradeAfterRollover("3rd")).toBe("4th");
     expect(nextGradeAfterRollover("4th")).toBe("5th");
     expect(nextGradeAfterRollover("5th")).toBe("6th");
+    expect(nextGradeAfterRollover("6th")).toBe("7th");
   });
 
-  it("returns 'graduate' sentinel for 6th graders", () => {
-    expect(nextGradeAfterRollover("6th")).toBe("graduate");
+  it("returns 'graduate' sentinel for 7th graders", () => {
+    expect(nextGradeAfterRollover("7th")).toBe("graduate");
   });
 });
 
