@@ -39,6 +39,13 @@ export type AuditAction =
   | "org.tier_change"
   | "org.transfer_ownership"
   /**
+   * Grok F-002: org admin updated org-level church settings (name, timezone,
+   * org_type, CCLI, or a settings.* key) via PATCH /api/organization —
+   * replaces the prior direct client Firestore write. Metadata lists which
+   * top-level fields changed (not values).
+   */
+  | "org.settings_update"
+  /**
    * Wave 11 Org Branding: org admin uploaded a new logo to Firebase
    * Storage and updated the church doc's logo_url. Metadata captures
    * the new URL + file size + format (no PII). The previous logo, if

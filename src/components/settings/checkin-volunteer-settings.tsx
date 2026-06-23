@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateDocument } from "@/lib/firebase/firestore";
+import { patchOrganization } from "@/lib/api/organization";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Church, Campus } from "@/lib/types";
@@ -53,7 +53,7 @@ export function CheckinVolunteerSettings({
         proximity_check_in_enabled: proximityEnabled,
         proximity_radius_meters: proximityRadius,
       };
-      await updateDocument("churches", churchId, { settings: updatedSettings });
+      await patchOrganization(churchId, { settings: updatedSettings });
       setChurch({ ...church, settings: updatedSettings });
       setSuccess("Check-in settings saved.");
       setTimeout(() => setSuccess(""), 3000);
