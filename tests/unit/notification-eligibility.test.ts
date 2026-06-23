@@ -346,4 +346,81 @@ describe("decideSchedulerVerdict", () => {
       });
     });
   });
+
+  // ── Per-user opt-out overrides in_app_only (Codex retest #3) ──────
+  // The retest #2 fix had org_in_app_only short-circuiting before
+  // membership / opt-out checks. Production with Karen
+  // channels=["none"] under in_app_only got a schedule_assignment
+  // inbox row — directly contradicting the user's explicit choice.
+  // The correct precedence:
+  //   structural blocks (no link, no/inactive membership, user opt-out)
+  //   > org_in_app_only (which only suppresses OUTBOUND for an
+  //     otherwise-eligible recipient).
+  describe("structural blocks override in_app_only (Codex retest #3)", () => {
+    it("volunteer opt-out (channels:['none']) blocks inbox even under in_app_only", () => {
+      const v = decideVolunteerVerdict(
+        IN_APP_ONLY,
+        mkMembership({ reminder_preferences: { channels: ["none"] } }),
+        true,
+      );
+      expect(v.email).toBe(false);
+      expect(v.sms).toBe(false);
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("user_opted_out");
+    });
+
+    it("inactive volunteer membership blocks inbox even under in_app_only", () => {
+      const v = decideVolunteerVerdict(
+        IN_APP_ONLY,
+        mkMembership({ status: "inactive" }),
+        true,
+      );
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("membership_inactive");
+    });
+
+    it("no membership + in_app_only blocks all", () => {
+      const v = decideVolunteerVerdict(IN_APP_ONLY, null, true);
+      expect(v.email).toBe(false);
+      expect(v.sms).toBe(false);
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("org_in_app_only");
+    });
+
+    it("no user link + in_app_only blocks all", () => {
+      const v = decideVolunteerVerdict(IN_APP_ONLY, null, false);
+      expect(v.email).toBe(false);
+      expect(v.sms).toBe(false);
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("org_in_app_only");
+    });
+
+    it("scheduler with prefs_off blocks inbox even under in_app_only (non-urgent)", () => {
+      const offForAbsence = mkMembership({
+        role: "scheduler",
+        scheduler_notification_preferences: {
+          enabled_types: [],
+          channels: { standard: ["email"], urgent: ["email", "sms"] },
+          ministry_scope: [],
+        },
+      });
+      const v = decideSchedulerVerdict(IN_APP_ONLY, offForAbsence, "absence_alert", false);
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("scheduler_prefs_off");
+    });
+
+    it("active opted-in volunteer under in_app_only still gets the inbox row (happy path preserved)", () => {
+      const v = decideVolunteerVerdict(
+        IN_APP_ONLY,
+        mkMembership({ reminder_preferences: { channels: ["email"] } }),
+        true,
+      );
+      expect(v).toEqual({
+        email: false,
+        sms: false,
+        inApp: true,
+        reason: "org_in_app_only",
+      });
+    });
+  });
 });
