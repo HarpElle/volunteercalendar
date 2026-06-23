@@ -64,7 +64,23 @@ export interface SchedulerEligibilityInput {
 export interface ChannelVerdict {
   email: boolean;
   sms: boolean;
-  /** When both flags are false, a short tag explaining why — useful
+  /** Whether the recipient should still receive an in-app inbox
+   *  notification when this verdict gates outbound email/SMS.
+   *
+   *  - `true` when the user is reachable AT ALL: email OR sms is on,
+   *    OR the org is specifically in `in_app_only` mode (the entire
+   *    POINT of that mode — silence outbound, keep the inbox).
+   *  - `false` when the user is structurally unreachable: no membership,
+   *    inactive membership, no user link, explicit opt-out of the type
+   *    via scheduler_notification_preferences, or future org `paused`
+   *    mode.
+   *
+   *  Routes that fire in-app via `createUserNotification` should gate
+   *  on this flag so a deactivated user or an opted-out scheduler
+   *  doesn't accumulate inbox noise.
+   */
+  inApp: boolean;
+  /** When channels are blocked, a short tag explaining why — useful
    *  for log lines and metrics (e.g. "user_opted_out", "org_paused"). */
   reason?: string;
 }
@@ -78,8 +94,23 @@ export interface OrgGate {
 const BLOCKED = (reason: string): ChannelVerdict => ({
   email: false,
   sms: false,
+  inApp: false,
   reason,
 });
+
+/**
+ * Variant of BLOCKED used by `org_in_app_only` — outbound email/SMS
+ * are suppressed but the in-app inbox still writes (the entire
+ * intent of the in_app_only mode: demo orgs / staging where you
+ * want to see workflow behavior without burning Resend/Twilio
+ * quota or spamming real recipients).
+ */
+const IN_APP_ONLY: ChannelVerdict = {
+  email: false,
+  sms: false,
+  inApp: true,
+  reason: "org_in_app_only",
+};
 
 // ─── Pure decision helpers (unit-tested) ────────────────────────────
 
@@ -90,13 +121,19 @@ export function decideVolunteerVerdict(
   defaultChannelsIfMissing: string[] = ["email"],
 ): ChannelVerdict {
   if (!orgGate.live) {
+    // The one mode where in-app inbox still writes. Future "paused"
+    // mode (when added) would BLOCK in-app too.
+    if (orgGate.reason === "in_app_only") return IN_APP_ONLY;
     return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
   }
 
   if (!userIdResolved) {
+    // No linked user account → no inbox to write to, but caller can
+    // still attempt to email/SMS via Person-doc contact info.
     return {
       email: true,
       sms: orgGate.tier !== "free",
+      inApp: false,
       reason: "no_user_link",
     };
   }
@@ -105,6 +142,7 @@ export function decideVolunteerVerdict(
     return {
       email: true,
       sms: orgGate.tier !== "free",
+      inApp: false,
       reason: "no_membership",
     };
   }
@@ -125,10 +163,16 @@ export function decideVolunteerVerdict(
   const wantsEmail = channels.includes("email");
   const wantsSms = channels.includes("sms");
   const smsEligible = orgGate.tier !== "free";
+  const email = wantsEmail;
+  const sms = smsEligible && wantsSms;
 
   return {
-    email: wantsEmail,
-    sms: smsEligible && wantsSms,
+    email,
+    sms,
+    // Active user with non-"none" prefs → inbox writes too. The user
+    // has chosen what channels they want; the inbox is always part
+    // of the experience.
+    inApp: email || sms,
   };
 }
 
@@ -139,6 +183,13 @@ export function decideSchedulerVerdict(
   urgent: boolean,
 ): ChannelVerdict {
   if (!orgGate.live) {
+    // Org in_app_only: suppress outbound email/SMS but the scheduler
+    // STILL gets the in-app inbox row so they can see the alert in
+    // the UI. Codex 2026-06-23 verification surfaced this as a bug
+    // in the absence route — the in-app row was being dropped along
+    // with email/SMS. The fix is centralised here so every route
+    // that gates on resolveSchedulerEligibility gets the right answer.
+    if (orgGate.reason === "in_app_only") return IN_APP_ONLY;
     return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
   }
 
@@ -154,7 +205,8 @@ export function decideSchedulerVerdict(
   }
 
   if (urgent) {
-    return { email: true, sms: orgGate.tier !== "free", reason: "urgent" };
+    const sms = orgGate.tier !== "free";
+    return { email: true, sms, inApp: true, reason: "urgent" };
   }
 
   const { email, sms } = shouldNotifyScheduler(
@@ -163,9 +215,11 @@ export function decideSchedulerVerdict(
     orgGate.tier,
   );
   if (!email && !sms) {
+    // User opted out of this notification type — block inbox writes
+    // too. They've explicitly said they don't want this type at all.
     return BLOCKED("scheduler_prefs_off");
   }
-  return { email, sms };
+  return { email, sms, inApp: true };
 }
 
 // ─── Firestore-touching orchestrators ───────────────────────────────

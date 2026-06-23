@@ -216,11 +216,17 @@ export async function POST(req: NextRequest) {
         urgent,
       });
 
-      // Org-level pause overrides even urgent. If we hit one of the
-      // org_ reasons, skip entirely — no fan-out at all from a paused
-      // org regardless of urgency.
-      if (eligibility.reason?.startsWith("org_")) continue;
-
+      // Codex 2026-06-23 fix: when org is in_app_only, the resolver
+      // returns email=false, sms=false, inApp=true. We must STILL
+      // fall through to write the in-app inbox row — the prior
+      // `if (eligibility.reason?.startsWith("org_")) continue;`
+      // dropped it. The inApp flag is the single source of truth
+      // for whether the inbox write should fire.
+      //
+      // Per-user opt-outs (scheduler_prefs_off → inApp=false) and
+      // org_paused (future, also inApp=false) still skip entirely.
+      // Urgent overrides per-user prefs but NOT org-level state
+      // (the resolver checks org first).
       const { email: sendEmail, sms: sendSmsFlag } = decideAbsenceChannels({
         urgent,
         prefsEmail: eligibility.email,
@@ -229,7 +235,7 @@ export async function POST(req: NextRequest) {
         hasPhone: !!recipientPhone,
       });
 
-      if (!sendEmail && !sendSmsFlag) continue;
+      if (!sendEmail && !sendSmsFlag && !eligibility.inApp) continue;
 
       // Send email
       if (sendEmail && recipientEmail) {
@@ -280,22 +286,27 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Fire-and-forget: in-app absence alert notification for scheduler
-      try {
-        await createUserNotification({
-          user_id: mUserId,
-          church_id,
-          type: "absence_alert",
-          title: urgent
-            ? `URGENT: ${volunteerName} can't make it today`
-            : `${volunteerName} can't make it`,
-          body: urgent
-            ? `${roleName} TODAY (${serviceDate}). Find a sub ASAP.`
-            : `${roleName} on ${serviceDate}`,
-          metadata: { link_href: "/dashboard/schedules" },
-        });
-      } catch (notifErr) {
-        log.error("Absence alert user notification failed", { error: notifErr });
+      // Fire-and-forget: in-app absence alert notification for scheduler.
+      // Gate on eligibility.inApp so deactivated schedulers and explicit
+      // opt-outs don't accumulate inbox noise. In `org_in_app_only` mode
+      // this is the ONLY channel that fires.
+      if (eligibility.inApp) {
+        try {
+          await createUserNotification({
+            user_id: mUserId,
+            church_id,
+            type: "absence_alert",
+            title: urgent
+              ? `URGENT: ${volunteerName} can't make it today`
+              : `${volunteerName} can't make it`,
+            body: urgent
+              ? `${roleName} TODAY (${serviceDate}). Find a sub ASAP.`
+              : `${roleName} on ${serviceDate}`,
+            metadata: { link_href: "/dashboard/schedules" },
+          });
+        } catch (notifErr) {
+          log.error("Absence alert user notification failed", { error: notifErr });
+        }
       }
     }
 
