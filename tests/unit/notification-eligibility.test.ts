@@ -205,7 +205,9 @@ describe("decideSchedulerVerdict", () => {
   });
 
   it("urgent bypasses per-user channel prefs", () => {
-    // Scheduler with ALL channels off in prefs — urgent still gets through.
+    // Scheduler with ALL scheduler_notification_preferences channels
+    // off — urgent still gets through. This is the W12-B contract:
+    // urgent overrides scheduler_notification_preferences.
     const optedOut = mkMembership({
       role: "scheduler",
       scheduler_notification_preferences: {
@@ -218,6 +220,58 @@ describe("decideSchedulerVerdict", () => {
     expect(v.email).toBe(true);
     expect(v.sms).toBe(true);
     expect(v.reason).toBe("urgent");
+  });
+
+  // ── Master opt-out beats urgent + in_app_only (Codex retest #4) ───
+  // reminder_preferences.channels=["none"] is the "I want NOTHING"
+  // kill switch — STRONGER than the urgent override. Codex retest #4
+  // caught urgent absence writing an inbox row to a channels=["none"]
+  // scheduler. The distinction: urgent overrides
+  // scheduler_notification_preferences (test above) but NOT the
+  // master reminder_preferences opt-out (tests below).
+  describe("master reminder_preferences opt-out (Codex retest #4)", () => {
+    it("channels=['none'] blocks urgent absence inbox row — THE retest #4 regression", () => {
+      const masterOptOut = mkMembership({
+        role: "scheduler",
+        reminder_preferences: { channels: ["none"] },
+        scheduler_notification_preferences: {
+          enabled_types: ["absence_alert"],
+          channels: { standard: ["email"], urgent: ["email", "sms"] },
+          ministry_scope: [],
+        },
+      });
+      const v = decideSchedulerVerdict(LIVE_PAID, masterOptOut, "absence_alert", true);
+      expect(v.email).toBe(false);
+      expect(v.sms).toBe(false);
+      expect(v.inApp).toBe(false);
+      expect(v.reason).toBe("user_opted_out");
+    });
+
+    it("channels=['none'] blocks under in_app_only too (no inbox fallback)", () => {
+      const masterOptOut = mkMembership({
+        role: "scheduler",
+        reminder_preferences: { channels: ["none"] },
+        scheduler_notification_preferences: {
+          enabled_types: ["absence_alert"],
+          channels: { standard: ["email"], urgent: ["email", "sms"] },
+          ministry_scope: [],
+        },
+      });
+      const urgentV = decideSchedulerVerdict(IN_APP_ONLY, masterOptOut, "absence_alert", true);
+      const standardV = decideSchedulerVerdict(IN_APP_ONLY, masterOptOut, "absence_alert", false);
+      expect(urgentV.inApp).toBe(false);
+      expect(urgentV.reason).toBe("user_opted_out");
+      expect(standardV.inApp).toBe(false);
+      expect(standardV.reason).toBe("user_opted_out");
+    });
+
+    it("undefined reminder_preferences falls through to scheduler prefs (not blocked)", () => {
+      // A scheduler who never touched reminder_preferences must NOT be
+      // silenced — the master kill switch only fires when explicitly set.
+      const v = decideSchedulerVerdict(LIVE_PAID, SCHED_ALL, "absence_alert", true);
+      expect(v.email).toBe(true);
+      expect(v.reason).toBe("urgent");
+    });
   });
 
   it("urgent on free tier still suppresses SMS (tier physics, not prefs)", () => {

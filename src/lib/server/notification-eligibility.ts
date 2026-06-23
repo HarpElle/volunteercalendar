@@ -206,14 +206,16 @@ export function decideSchedulerVerdict(
   notificationType: SchedulerNotificationType,
   urgent: boolean,
 ): ChannelVerdict {
-  // Codex 2026-06-23 retest #3 — same precedence rewrite as the
-  // volunteer verdict above. Pre-existing routes that filter
-  // membershipsSnap on status="active" upstream were masking this
-  // bug; fixing both helpers keeps the resolver invariants honest.
+  // Codex 2026-06-23 retest #3/#4 — precedence rewrite. Pre-existing
+  // routes that filter membershipsSnap on status="active" upstream
+  // were masking some of these; fixing both helpers keeps the
+  // resolver invariants honest.
   //   1. Hard org pause (future)                 — total silence
   //   2. Structural recipient blocks              — total silence
-  //   3. Urgent — bypasses per-user prefs, still
-  //      respects in_app_only (outbound off)
+  //   2b. Master opt-out reminder_preferences.channels=["none"]
+  //       — total silence, even urgent + in_app_only (retest #4)
+  //   3. Urgent — bypasses scheduler_notification_preferences,
+  //      still respects in_app_only (outbound off)
   //   4. Per-user scheduler prefs / in_app_only
 
   // 1. Hard pause (future).
@@ -227,6 +229,22 @@ export function decideSchedulerVerdict(
   }
   if (membership.status !== "active") {
     return BLOCKED(`membership_${membership.status}`);
+  }
+
+  // 2b. Master opt-out. `reminder_preferences.channels=["none"]` is
+  //     the user's "I want NOTHING from this org" kill switch — the
+  //     same field decideVolunteerVerdict honors. It is STRONGER than
+  //     the urgent override and the in_app_only inbox fallback:
+  //     someone who set this gets no email, no SMS, AND no inbox row,
+  //     even for a day-of emergency absence. Codex retest #4 caught
+  //     urgent absence writing an inbox row to a channels=["none"]
+  //     scheduler. Only block when the field is EXPLICITLY set to
+  //     include "none" — undefined means "never customized," which
+  //     falls through to scheduler_notification_preferences below.
+  //     This is intentionally distinct from scheduler_notification_
+  //     preferences, which urgent CAN still override (W12-B).
+  if (membership.reminder_preferences?.channels?.includes("none")) {
+    return BLOCKED("user_opted_out");
   }
 
   // 3. Urgent path. Bypasses per-user channel prefs but respects
