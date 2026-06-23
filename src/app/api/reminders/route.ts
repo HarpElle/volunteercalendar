@@ -7,7 +7,7 @@ import type { NotificationType, NotificationChannel } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
-import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
+import { resolveVolunteerEligibility, checkOrgGate } from "@/lib/server/notification-eligibility";
 import { log } from "@/lib/log";
 import type { DocumentReference } from "firebase-admin/firestore";
 
@@ -234,6 +234,14 @@ export async function POST(request: Request) {
 
     const origin = getBaseUrl(request);
 
+    // Antigravity F-002 perf: fetch the org gate ONCE here and pass it
+    // into every per-assignment resolveVolunteerEligibility below. The
+    // resolve stays inside the loop (each needs its own person +
+    // membership read, and the loop has interleaved transactional
+    // claims), but the org doc is no longer re-read per assignment —
+    // dropping reminder-run reads from 3×N to org-once + 2×N.
+    const orgGate = await checkOrgGate(church_id);
+
     let sentEmail = 0;
     let sentSms = 0;
     let skipped = 0;
@@ -279,17 +287,30 @@ export async function POST(request: Request) {
       // user has expressed no preference — preserving the pre-Phase-2
       // semantic that the church default fills the gap. User opt-in
       // always wins; defaults never cap an explicit pref.
-      const eligibility = await resolveVolunteerEligibility({
-        churchId: church_id,
-        personId: assignment.person_id as string,
-        notificationType: "reminder",
-        defaultChannelsIfMissing: defaultChannels,
-      });
+      const eligibility = await resolveVolunteerEligibility(
+        {
+          churchId: church_id,
+          personId: assignment.person_id as string,
+          notificationType: "reminder",
+          defaultChannelsIfMissing: defaultChannels,
+        },
+        orgGate,
+      );
       const channels: string[] = [];
       if (eligibility.email) channels.push("email");
       if (eligibility.sms) channels.push("sms");
 
-      if (channels.length === 0) {
+      // Phase 4b gap #1: under org `in_app_only` the verdict is
+      // {email:false, sms:false, inApp:true} — outbound is silenced but
+      // the in-app reminder MUST still fire. Previously an empty
+      // `channels` array short-circuited the whole recipient (including
+      // the createUserNotification at the bottom), dropping in-app
+      // reminders entirely. Now we only fully skip when the recipient is
+      // structurally unreachable (inApp=false too: opt-out, inactive
+      // membership, hard org pause). When inApp=true we fall through; the
+      // email/SMS sends below stay gated on their own `channels` entries,
+      // so an empty channels list just means "in-app only this pass."
+      if (channels.length === 0 && !eligibility.inApp) {
         skipped++;
         continue;
       }
@@ -405,9 +426,17 @@ export async function POST(request: Request) {
         }
       }
 
-      // Fire-and-forget: create in-app reminder notification
+      // Fire-and-forget: create in-app reminder notification.
+      // Phase 4b gap #1: gated on eligibility.inApp so this fires under
+      // org `in_app_only` (outbound off, inbox on) AND is suppressed for
+      // structurally-unreachable recipients (opt-out, inactive
+      // membership). Reachable-but-unlinked recipients (no_user_link,
+      // inApp=false) also resolve to no uid below, so this is the
+      // explicit, intent-matching gate.
       try {
-        const reminderUserId = await resolveUserId(church_id, assignment.volunteer_id as string);
+        const reminderUserId = eligibility.inApp
+          ? await resolveUserId(church_id, assignment.volunteer_id as string)
+          : null;
         if (reminderUserId) {
           const reminderTitle = hours <= 24
             ? "Reminder: You're serving tomorrow"
