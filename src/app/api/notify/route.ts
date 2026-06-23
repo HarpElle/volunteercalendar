@@ -124,6 +124,25 @@ export async function POST(request: NextRequest) {
     let skipped = 0;
     const errors: string[] = [];
 
+    // Codex 2026-06-23 retest #2 fix: resolve eligibility ONCE per
+    // volunteer so the email loop AND the later in-app loop share
+    // the same decision. Previously the in-app loop iterated over
+    // byVolunteer.keys() without consulting the resolver — so a
+    // volunteer with channels=["none"] still got a schedule_assignment
+    // inbox row, contradicting the Phase 2 contract that explicit
+    // opt-out blocks ALL channels (eligibility.inApp goes false).
+    const eligibilityByVol = new Map<string, Awaited<ReturnType<typeof resolveVolunteerEligibility>>>();
+    for (const volId of byVolunteer.keys()) {
+      eligibilityByVol.set(
+        volId,
+        await resolveVolunteerEligibility({
+          churchId: church_id,
+          personId: volId,
+          notificationType: "assignment_change",
+        }),
+      );
+    }
+
     for (const [volId, volAssignments] of byVolunteer) {
       const volunteer = volunteerMap.get(volId);
       if (!volunteer) {
@@ -137,15 +156,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Phase 2: honor membership-level opt-out before queueing the
-      // batched re-invitation email. In-app notifications (further
-      // down this route) intentionally fire regardless — those don't
-      // hit Resend and are the user's continuous source of truth.
-      const eligibility = await resolveVolunteerEligibility({
-        churchId: church_id,
-        personId: volId,
-        notificationType: "assignment_change",
-      });
+      const eligibility = eligibilityByVol.get(volId)!;
       if (!eligibility.email) {
         skipped += volAssignments.length;
         continue;
@@ -202,6 +213,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Fire-and-forget: create in-app notifications for assigned volunteers
+    // who haven't structurally opted out. Gated on eligibility.inApp:
+    // an explicit opt-out (`channels: ["none"]`), inactive membership, or
+    // future org `paused` mode all return inApp=false → no inbox row.
+    // `in_app_only` org mode returns inApp=true → inbox writes (the
+    // entire point of that mode).
     try {
       const notifPayloads: Array<{
         user_id: string;
@@ -219,8 +235,10 @@ export async function POST(request: NextRequest) {
         }),
       );
 
-      for (const { uid } of resolvedIds) {
+      for (const { volId, uid } of resolvedIds) {
         if (!uid) continue;
+        const eligibility = eligibilityByVol.get(volId);
+        if (!eligibility?.inApp) continue;
         notifPayloads.push({
           user_id: uid,
           church_id,

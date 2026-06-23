@@ -6,7 +6,6 @@ import { resolveSchedulerEligibility } from "@/lib/server/notification-eligibili
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
-import { decideAbsenceChannels } from "@/lib/server/absence-channels";
 import { audit, userActor } from "@/lib/server/audit";
 
 interface AbsenceBody {
@@ -216,24 +215,22 @@ export async function POST(req: NextRequest) {
         urgent,
       });
 
-      // Codex 2026-06-23 fix: when org is in_app_only, the resolver
-      // returns email=false, sms=false, inApp=true. We must STILL
-      // fall through to write the in-app inbox row — the prior
-      // `if (eligibility.reason?.startsWith("org_")) continue;`
-      // dropped it. The inApp flag is the single source of truth
-      // for whether the inbox write should fire.
+      // Codex 2026-06-23 retest #2 fix: the W12-B urgent-overrides-prefs
+      // contract is now encoded INSIDE the resolver — when urgent=true
+      // and the org gate / membership are healthy, decideSchedulerVerdict
+      // returns email=true, sms=true, inApp=true. When the org is in
+      // in_app_only mode, the resolver returns email=false, sms=false,
+      // inApp=true regardless of urgency, which is the correct precedence
+      // (org state is structural; urgent is a per-user bypass).
       //
-      // Per-user opt-outs (scheduler_prefs_off → inApp=false) and
-      // org_paused (future, also inApp=false) still skip entirely.
-      // Urgent overrides per-user prefs but NOT org-level state
-      // (the resolver checks org first).
-      const { email: sendEmail, sms: sendSmsFlag } = decideAbsenceChannels({
-        urgent,
-        prefsEmail: eligibility.email,
-        prefsSms: eligibility.sms,
-        hasEmail: !!recipientEmail,
-        hasPhone: !!recipientPhone,
-      });
+      // Previously this site called decideAbsenceChannels(urgent, prefs)
+      // ON TOP of the resolver — but decideAbsenceChannels honors urgent
+      // by IGNORING prefsEmail/prefsSms and sending if contact info
+      // exists. That re-promoted org_in_app_only's email/SMS back to
+      // ON, breaking the org-level suppression. The fix: trust the
+      // resolver. Layer only the has-contact-info check on top.
+      const sendEmail = eligibility.email && !!recipientEmail;
+      const sendSmsFlag = eligibility.sms && !!recipientPhone;
 
       if (!sendEmail && !sendSmsFlag && !eligibility.inApp) continue;
 

@@ -288,9 +288,12 @@ export async function resolveVolunteerEligibility(
   input: VolunteerEligibilityInput,
 ): Promise<ChannelVerdict> {
   const orgGate = await checkOrgGate(input.churchId);
-  if (!orgGate.live) {
-    return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
-  }
+  // Codex 2026-06-23 retest #2 fix: previously a duplicate
+  // `if (!orgGate.live)` short-circuit here returned a vanilla
+  // BLOCKED before the pure helper could resolve in_app_only to
+  // the IN_APP_ONLY verdict (inApp=true). Let the pure helper
+  // make the org-gate decision — it's the only place that knows
+  // how to distinguish in_app_only from a hard pause.
   const userId = await resolveUserIdFromPersonId(
     input.churchId,
     input.personId,
@@ -316,9 +319,11 @@ export async function resolveSchedulerEligibility(
   input: SchedulerEligibilityInput,
 ): Promise<ChannelVerdict> {
   const orgGate = await checkOrgGate(input.churchId);
-  if (!orgGate.live) {
-    return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
-  }
+  // Codex 2026-06-23 retest #2 fix: see resolveVolunteerEligibility
+  // above. The duplicate org-gate short-circuit hid in_app_only's
+  // inApp=true verdict from every scheduler route, including
+  // /api/notify/absence which then went on to (incorrectly) apply
+  // the urgent-override-prefs branch in decideAbsenceChannels.
   const membership = await getMembership(input.churchId, input.userId);
   return decideSchedulerVerdict(
     orgGate,
