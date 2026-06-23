@@ -41,6 +41,13 @@ export interface VolunteerEligibilityInput {
   /** People-doc id (Person), NOT user uid. */
   personId: string;
   notificationType: VolunteerNotificationType;
+  /** Fallback channels to use when the membership exists but has no
+   *  explicit reminder_preferences set. Reminders pass the church's
+   *  `default_reminder_channels` here so org-wide defaults still
+   *  apply for users who haven't customized. Other notification
+   *  paths (publish, notify, swap) leave this undefined and inherit
+   *  the resolver's hardcoded `["email"]`. */
+  defaultChannelsIfMissing?: string[];
 }
 
 export interface SchedulerEligibilityInput {
@@ -80,6 +87,7 @@ export function decideVolunteerVerdict(
   orgGate: OrgGate,
   membership: Membership | null,
   userIdResolved: boolean,
+  defaultChannelsIfMissing: string[] = ["email"],
 ): ChannelVerdict {
   if (!orgGate.live) {
     return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
@@ -104,7 +112,12 @@ export function decideVolunteerVerdict(
     return BLOCKED(`membership_${membership.status}`);
   }
 
-  const channels = membership.reminder_preferences?.channels ?? ["email"];
+  // When the user has explicit prefs → honor them. When they don't →
+  // fall back to the caller-provided default (typically the church's
+  // org-wide `default_reminder_channels`). User pref always wins;
+  // the default only fills the gap, never caps an opt-in.
+  const channels =
+    membership.reminder_preferences?.channels ?? defaultChannelsIfMissing;
   if (channels.includes("none")) {
     return BLOCKED("user_opted_out");
   }
@@ -221,7 +234,12 @@ export async function resolveVolunteerEligibility(
   const membership = userId
     ? await getMembership(input.churchId, userId)
     : null;
-  return decideVolunteerVerdict(orgGate, membership, !!userId);
+  return decideVolunteerVerdict(
+    orgGate,
+    membership,
+    !!userId,
+    input.defaultChannelsIfMissing,
+  );
 }
 
 /**
