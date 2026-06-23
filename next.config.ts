@@ -210,7 +210,13 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/:path*",
+        // Antigravity F-001: Next.js applies ALL matching header rules and a
+        // later rule's value for the same key WINS. The earlier
+        // /calendar/public block can't "unset" X-Frame-Options, so a plain
+        // /:path* catch-all re-clobbers it with DENY and breaks the embed.
+        // Exclude /calendar/public from the catch-all via negative lookahead
+        // so ONLY the embed-friendly block above applies there.
+        source: "/((?!calendar/public).*)",
         headers: [
           ...baseSafetyHeaders,
           { key: "X-Frame-Options", value: "DENY" }, // belt-and-suspenders w/ frame-ancestors
