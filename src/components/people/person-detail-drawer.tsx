@@ -38,6 +38,7 @@ const PERMISSION_FLAGS: { flag: PermissionFlag; label: string; description: stri
   { flag: "event_coordinator", label: "Event Coordinator", description: "Can create and manage events" },
   { flag: "facility_coordinator", label: "Facility Coordinator", description: "Can manage rooms and resources" },
   { flag: "checkin_volunteer", label: "Check-In Volunteer", description: "Can operate the check-in kiosk" },
+  { flag: "checkin_manager", label: "Check-In Manager", description: "Can administer Child Check-In and open any classroom view" },
 ];
 
 const JOURNEY_STATUS_OPTIONS: { value: JourneyStepStatus; label: string }[] = [
@@ -123,6 +124,7 @@ export function PersonDetailDrawer({
     event_coordinator: !!membership?.event_coordinator,
     facility_coordinator: !!membership?.facility_coordinator,
     checkin_volunteer: !!membership?.checkin_volunteer,
+    checkin_manager: !!membership?.checkin_manager,
   });
   const [savingPerms, setSavingPerms] = useState(false);
 
@@ -167,6 +169,7 @@ export function PersonDetailDrawer({
         event_coordinator: !!membership?.event_coordinator,
         facility_coordinator: !!membership?.facility_coordinator,
         checkin_volunteer: !!membership?.checkin_volunteer,
+        checkin_manager: !!membership?.checkin_manager,
       });
       setSaving(false);
       setSavingPerms(false);

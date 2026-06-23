@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { loadChild } from "@/lib/server/checkin-helpers";
+import {
+  loadChild,
+  resolveChurchServiceDate,
+  listCheckinRooms,
+} from "@/lib/server/checkin-helpers";
 import { audit, userActor } from "@/lib/server/audit";
 
 /**
@@ -292,7 +296,9 @@ export async function GET(req: NextRequest) {
       }
 
       case "live": {
-        const today = date || new Date().toISOString().split("T")[0];
+        // Default to today in the CHURCH timezone (not UTC) so the live
+        // dashboard doesn't blank out after the evening UTC rollover.
+        const today = await resolveChurchServiceDate(churchRef, date);
         const sessionsSnap = await churchRef
           .collection("checkInSessions")
           .where("service_date", "==", today)
@@ -306,6 +312,23 @@ export async function GET(req: NextRequest) {
           string,
           { name: string; checked_in: number; checked_out: number; capacity: number | null }
         > = {};
+
+        // Seed with every check-in room (active + has grades) so the
+        // dashboard shows all classrooms (zero counts included) even before
+        // the first check-in of the day — the admin's "drop into any
+        // classroom" entry point shouldn't disappear on quiet days.
+        // NOTE: `checkin_enabled` is a CHURCH FeatureFlags field, not a room
+        // field — a `where("checkin_enabled","==",true)` query matches
+        // nothing (Codex P3-1). Use the shared `listCheckinRooms` predicate.
+        const checkinRooms = await listCheckinRooms(churchRef);
+        for (const room of checkinRooms) {
+          roomBreakdown[room.id] = {
+            name: room.name,
+            checked_in: 0,
+            checked_out: 0,
+            capacity: room.capacity,
+          };
+        }
 
         for (const doc of sessionsSnap.docs) {
           const data = doc.data();
@@ -342,10 +365,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           date: today,
           sessions,
-          rooms: Object.entries(roomBreakdown).map(([id, r]) => ({
-            id,
-            ...r,
-          })),
+          rooms: Object.entries(roomBreakdown)
+            .map(([id, r]) => ({ id, ...r }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
         });
       }
 

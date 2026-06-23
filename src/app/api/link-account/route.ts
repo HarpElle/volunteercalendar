@@ -43,10 +43,6 @@ export async function POST(req: NextRequest) {
       .get();
 
     const churchIds = new Set<string>();
-    const volunteerName = profileData?.display_name
-      || orphanedSnap.docs[0]?.data().volunteer_name
-      || decoded.name
-      || email;
     const volunteerPhone = profileData?.phone || null;
     const volunteerAvailability = {
       blockout_dates: profileData?.global_availability?.blockout_dates || [],
@@ -76,6 +72,17 @@ export async function POST(req: NextRequest) {
         invitedRoles.set(data.church_id, data.role || "volunteer");
       }
     }
+
+    // Name priority: what the user typed at registration, then the name the
+    // admin entered on the invite, then guest-signup name, then token, then email.
+    const invitedName = pendingSnap.docs
+      .map((d) => d.data().name)
+      .find((n) => typeof n === "string" && n.trim());
+    const volunteerName = profileData?.display_name
+      || invitedName
+      || orphanedSnap.docs[0]?.data().volunteer_name
+      || decoded.name
+      || email;
 
     // --- 3. Create volunteer + membership for each church ---
     let firstChurchId: string | null = null;

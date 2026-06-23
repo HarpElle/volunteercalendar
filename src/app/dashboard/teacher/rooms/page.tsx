@@ -81,6 +81,10 @@ interface DashboardRoom {
 interface DashboardData {
   teacher: { id: string; name: string };
   date: string;
+  /** True when the caller has classroom oversight (owner/admin/
+   *  checkin_manager flag) — the API then returns every check-in-
+   *  enabled room instead of only rooms they're checked into. */
+  oversight?: boolean;
   rooms: DashboardRoom[];
 }
 
@@ -159,29 +163,49 @@ export default function TeacherDashboardPage() {
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div>
         <Link
-          href="/dashboard/account"
+          href={data.oversight ? "/dashboard/checkin" : "/dashboard/account"}
           className="text-sm text-vc-coral font-medium mb-2 inline-block"
         >
-          ← Back to Account
+          {data.oversight ? "← Back to Check-In" : "← Back to Account"}
         </Link>
         <h1 className="text-2xl font-display font-bold text-vc-indigo">
-          My rooms today
+          {data.oversight ? "Classrooms" : "My rooms today"}
         </h1>
         <p className="text-sm text-vc-text-secondary mt-1">
-          {data.teacher.name} · {data.date}
+          {data.oversight
+            ? `All check-in rooms · ${data.date}`
+            : `${data.teacher.name} · ${data.date}`}
         </p>
       </div>
 
       {data.rooms.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-vc-border-light bg-vc-bg-warm p-10 text-center">
-          <p className="text-vc-indigo font-medium">
-            You&rsquo;re not currently checked into a room.
-          </p>
-          <p className="text-sm text-vc-text-secondary mt-2">
-            Stop by a staffed kiosk and ask the operator to check you in
-            to your assigned room. This page will update automatically.
-          </p>
-        </div>
+        data.oversight ? (
+          <div className="rounded-2xl border border-dashed border-vc-border-light bg-vc-bg-warm p-10 text-center">
+            <p className="text-vc-indigo font-medium">
+              No rooms have check-in enabled yet.
+            </p>
+            <p className="text-sm text-vc-text-secondary mt-2">
+              Enable check-in for one or more rooms under{" "}
+              <Link
+                href="/dashboard/checkin/rooms"
+                className="text-vc-coral font-medium"
+              >
+                Room Setup
+              </Link>{" "}
+              and they&rsquo;ll appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-vc-border-light bg-vc-bg-warm p-10 text-center">
+            <p className="text-vc-indigo font-medium">
+              You&rsquo;re not currently checked into a room.
+            </p>
+            <p className="text-sm text-vc-text-secondary mt-2">
+              Stop by a staffed kiosk and ask the operator to check you in
+              to your assigned room. This page will update automatically.
+            </p>
+          </div>
+        )
       ) : (
         data.rooms.map((roomData) => (
           <RoomCard

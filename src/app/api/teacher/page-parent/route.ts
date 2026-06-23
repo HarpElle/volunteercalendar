@@ -42,6 +42,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import { hasClassroomOversight } from "@/lib/server/classroom-oversight";
 import { sendSms } from "@/lib/services/sms";
 import { audit, userActor } from "@/lib/server/audit";
 import { normalizePhone } from "@/lib/utils/phone";
@@ -144,25 +145,37 @@ export async function POST(req: NextRequest) {
 
     const churchRef = adminDb.collection("churches").doc(churchId);
 
-    // Gate 1: caller's Person doc.
+    // Classroom oversight (owner/admin/checkin_manager flag) may page
+    // from any room without a Person doc or a room check-in.
+    const oversight = await hasClassroomOversight(churchId, uid);
+
+    // Gate 1: caller's Person doc (oversight callers may not have one).
     const personSnap = await churchRef
       .collection("people")
       .where("user_id", "==", uid)
       .where("person_type", "==", "adult")
       .limit(1)
       .get();
-    if (personSnap.empty) {
+    if (personSnap.empty && !oversight) {
       return NextResponse.json(
         { error: "Not registered as a volunteer in this church" },
         { status: 403 },
       );
     }
-    const teacherPersonId = personSnap.docs[0].id;
-    const teacherName =
-      (personSnap.docs[0].data().preferred_name as string) ||
-      (personSnap.docs[0].data().first_name as string) ||
-      (personSnap.docs[0].data().name as string) ||
-      "A teacher";
+    let teacherPersonId = uid;
+    let teacherName = "The check-in team";
+    if (!personSnap.empty) {
+      teacherPersonId = personSnap.docs[0].id;
+      teacherName =
+        (personSnap.docs[0].data().preferred_name as string) ||
+        (personSnap.docs[0].data().first_name as string) ||
+        (personSnap.docs[0].data().name as string) ||
+        "A teacher";
+    } else {
+      const userSnap = await adminDb.doc(`users/${uid}`).get();
+      teacherName =
+        (userSnap.data()?.display_name as string) || teacherName;
+    }
 
     // Load session.
     const sessionSnap = await churchRef
@@ -180,24 +193,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Gate 2: caller is checked in to the session's room TODAY.
-    const myCheckinsSnap = await churchRef
-      .collection("roomVolunteerCheckins")
-      .where("person_id", "==", teacherPersonId)
-      .where("room_id", "==", session.room_id)
-      .where("service_date", "==", session.service_date)
-      .get();
-    const isCheckedInToRoom = myCheckinsSnap.docs.some(
-      (d) => (d.data() as RoomVolunteerCheckIn).checked_out_at == null,
-    );
-    if (!isCheckedInToRoom) {
-      return NextResponse.json(
-        {
-          error:
-            "You can only page parents for children in rooms you're checked into",
-        },
-        { status: 403 },
+    // Gate 2: caller is checked in to the session's room TODAY —
+    // bypassed for classroom oversight.
+    if (!oversight) {
+      const myCheckinsSnap = await churchRef
+        .collection("roomVolunteerCheckins")
+        .where("person_id", "==", teacherPersonId)
+        .where("room_id", "==", session.room_id)
+        .where("service_date", "==", session.service_date)
+        .get();
+      const isCheckedInToRoom = myCheckinsSnap.docs.some(
+        (d) => (d.data() as RoomVolunteerCheckIn).checked_out_at == null,
       );
+      if (!isCheckedInToRoom) {
+        return NextResponse.json(
+          {
+            error:
+              "You can only page parents for children in rooms you're checked into",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // Per-teacher-per-session cooldown.
@@ -285,6 +301,7 @@ export async function POST(req: NextRequest) {
         recipients_count: sendTo.length,
         note_provided: note.length > 0,
         note: note || null,
+        oversight,
       },
       outcome: "ok",
     });

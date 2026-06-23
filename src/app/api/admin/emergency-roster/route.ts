@@ -50,7 +50,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
-import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import {
+  loadChild,
+  loadHouseholdPhone,
+  churchServiceDate,
+} from "@/lib/server/checkin-helpers";
 import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
 import type {
@@ -118,9 +122,7 @@ export async function GET(req: NextRequest) {
         { status: 400 },
       );
     }
-    const date =
-      req.nextUrl.searchParams.get("date") ||
-      new Date().toISOString().split("T")[0];
+    const explicitDate = req.nextUrl.searchParams.get("date");
     const reasonRaw = req.nextUrl.searchParams.get("reason") ?? "";
     const reason = reasonRaw
       .replace(/[\r\n]+/g, " ")
@@ -146,6 +148,14 @@ export async function GET(req: NextRequest) {
     const churchName =
       (churchSnap.exists ? (churchSnap.data()?.name as string) : "") ||
       "This church";
+
+    // Service date = explicit param, else today in the CHURCH timezone (not
+    // UTC). A safety-critical surface: the UTC default silently dropped an
+    // actively checked-in child during the evening rollover (Codex P2-1).
+    const date = churchServiceDate(
+      churchSnap.data()?.timezone as string | undefined,
+      explicitDate,
+    );
 
     // Active sessions for the date. Filter "active" in-process to
     // avoid the Firestore null-equality skip.

@@ -27,6 +27,7 @@ import {
   KIOSK_TOKEN_KEY,
 } from "@/lib/kiosk-client";
 import type { BlockedPickup } from "@/lib/types";
+import { formatPhone } from "@/lib/utils/phone";
 
 interface BlockedPickupReviewProps {
   blocks: BlockedPickup[];
@@ -105,7 +106,7 @@ export function BlockedPickupReview({
                   </div>
                   {b.phone && (
                     <p className="text-sm text-vc-text-secondary mt-1">
-                      Phone: {b.phone}
+                      Phone: {formatPhone(b.phone)}
                     </p>
                   )}
                   {b.notes && (

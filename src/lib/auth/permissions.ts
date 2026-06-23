@@ -29,6 +29,8 @@ export function hasPermission(membership: Membership, permission: PermissionFlag
       return membership.facility_coordinator === true;
     case "checkin_volunteer":
       return membership.checkin_volunteer === true;
+    case "checkin_manager":
+      return membership.checkin_manager === true;
     default:
       return false;
   }

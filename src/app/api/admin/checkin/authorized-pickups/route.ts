@@ -37,8 +37,10 @@ import type { PersonAuthorizedPickup } from "@/lib/types";
 
 interface PostBody {
   church_id?: unknown;
-  /** scope="child" requires child_id. scope="household" requires
-   *  household_id. Defaults to "child" for backwards-compat. */
+  /** scope="child" → child_id required (writes to Person.child_profile.authorized_pickups).
+   *  scope="household" → household_id required (writes to Household.authorized_pickups).
+   *  Defaults to "child" for backwards-compat with the per-child UI that
+   *  shipped first (Wave 9 P0-2). */
   scope?: unknown;
   child_id?: unknown;
   household_id?: unknown;
@@ -61,8 +63,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json()) as PostBody;
+
+    // Scope discriminator. Default = "child" preserves the original
+    // contract; only the new household scope needs callers to pass it
+    // explicitly. Same shape (child | household) BlockedPickup already
+    // uses — keeps the two pickup APIs visually symmetric.
     const scope =
-      body.scope === "household" || body.scope === "child" ? body.scope : "child";
+      body.scope === "household" || body.scope === "child"
+        ? body.scope
+        : "child";
 
     let childId = "";
     let householdId = "";
@@ -152,6 +161,8 @@ export async function POST(req: NextRequest) {
           ? childProfile.authorized_pickups
           : [];
 
+        // Backfill missing `id` on legacy records so subsequent edits can
+        // target a stable identifier (we promise this in the type comment).
         const backfilled = existing.map((p) =>
           p.id ? p : { ...p, id: randomUUID() },
         );
@@ -165,7 +176,7 @@ export async function POST(req: NextRequest) {
       // scope === "household". Writes to the household doc's
       // `authorized_pickups` array. Read at check-in time alongside
       // per-child pickups by /api/checkin/recipients so the operator
-      // sees "Grandma" once for every Smith kid she covers.
+      // sees "Grandma" once for every Smith kid she's authorized for.
       const householdRef = churchRef.collection("households").doc(householdId);
       await adminDb.runTransaction(async (tx) => {
         const snap = await tx.get(householdRef);

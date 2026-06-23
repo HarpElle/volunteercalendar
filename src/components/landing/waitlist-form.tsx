@@ -163,7 +163,7 @@ export function WaitlistForm() {
                         id="name"
                         name="name"
                         required
-                        placeholder="Jason Paschall"
+                        placeholder="Jane Doe"
                         className={inputClasses}
                       />
                     </div>

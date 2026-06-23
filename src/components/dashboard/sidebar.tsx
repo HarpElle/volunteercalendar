@@ -83,6 +83,15 @@ const ICON = {
 /*  Item builders                                                      */
 /* ------------------------------------------------------------------ */
 
+/** The Check-In nav item — shared between the admin shell and the volunteer
+ *  shell (a check-in manager / volunteer who isn't a scheduler still needs it). */
+const CHECKIN_NAV_ITEM: NavItem = {
+  label: "Check-In",
+  href: "/dashboard/checkin",
+  iconPath: ICON.checkin,
+  tierModule: "checkin",
+};
+
 function getAdminItems(): NavItem[] {
   // Phase 1 transition: links point at current routes. Phase 2/3 update the targets.
   return [
@@ -91,7 +100,7 @@ function getAdminItems(): NavItem[] {
     { label: "Schedules", href: "/dashboard/schedules", iconPath: ICON.schedules },
     { label: "People", href: "/dashboard/people", iconPath: ICON.people },
     { label: "Rooms", href: "/dashboard/rooms", iconPath: ICON.rooms, tierModule: "rooms" },
-    { label: "Check-In", href: "/dashboard/checkin", iconPath: ICON.checkin, tierModule: "checkin" },
+    CHECKIN_NAV_ITEM,
     { label: "Worship Prep", href: "/dashboard/worship", iconPath: ICON.worship, tierModule: "worship" },
   ];
 }
@@ -209,7 +218,14 @@ export function Sidebar({
   // Decide which item list to render
   const isVolunteerOnly = !!activeMembership && !userIsScheduler;
   const primaryItems = isVolunteerOnly
-    ? getVolunteerItems(!!hasPrerequisites, !!hasUnreadNotifications)
+    ? [
+        ...getVolunteerItems(!!hasPrerequisites, !!hasUnreadNotifications),
+        // A check-in volunteer / check-in manager who isn't a scheduler still
+        // needs Check-In in their nav. renderNavItem's userCanAccessCheckin
+        // gate is the authority on visibility; this just makes the item
+        // available in the volunteer shell (Codex P3-8).
+        ...(userCanAccessCheckin ? [CHECKIN_NAV_ITEM] : []),
+      ]
     : getAdminItems();
 
   function renderNavItem(item: NavItem) {

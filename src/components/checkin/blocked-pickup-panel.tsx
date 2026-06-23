@@ -546,20 +546,23 @@ function BlockedPickupFormModal({
     initial?.reason ?? "court_order",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+
   // 2026-06-03 date UX rework. Three previous problems:
-  //   1. Empty <input type="date" /> in Safari Mac renders today's
-  //      date as a placeholder hint - users perceived this as "today
-  //      is selected" when the React state was actually empty.
-  //   2. Trying to step the year produced a partial/invalid date that
-  //      Safari rejected with "needs valid date" before submit ran.
+  //   1. Empty <input type="date" /> in Safari Mac renders today's date
+  //      as a placeholder hint — users perceived this as "today is
+  //      selected" when actually the React state was empty.
+  //   2. When users tried to "push it ahead" via the stepper, the
+  //      partial year ended up rejected by Safari's HTML5 validation
+  //      with a "needs valid date" message before submit even ran.
   //   3. No visual cue that empty = indefinite block.
-  // Fix: a hasExpiry checkbox controls whether the date input is
-  // even rendered. Unchecked -> indefinite (empty string stored).
-  // Checked -> input gets a real default value (+6 months) and a
+  // Fix: a hasExpiry checkbox controls whether the date field renders.
+  // When unchecked → indefinite (no expiry stored). When checked →
+  // the date input gets a real value (defaults to +6 months) and a
   // `min` of today so the picker refuses to step backward.
   const initialIso = initial?.expires_at?.split("T")[0] ?? "";
   const [hasExpiry, setHasExpiry] = useState(Boolean(initialIso));
   const todayIso = new Date().toISOString().split("T")[0];
+  // Default: 6 months out, formatted YYYY-MM-DD.
   const defaultExpiryIso = (() => {
     const d = new Date();
     d.setMonth(d.getMonth() + 6);
@@ -570,10 +573,13 @@ function BlockedPickupFormModal({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    // Guard against manually-typed past dates that slip past the
-    // browser's min attribute.
+    // Guard: when hasExpiry is on, the date input has noValidate-style
+    // safety via min={todayIso}, but a manually-typed value below today
+    // can still slip through in some browsers. Reject explicitly.
     if (hasExpiry) {
-      if (!expiresAt || expiresAt < todayIso) return;
+      if (!expiresAt || expiresAt < todayIso) {
+        return;
+      }
     }
     void onSubmit({
       name: name.trim(),

@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { resolveChurchServiceDate } from "@/lib/server/checkin-helpers";
 import type { CheckInSession, Person, Room, RoomVolunteerCheckIn } from "@/lib/types";
 
 export async function GET(
@@ -43,28 +44,37 @@ export async function GET(
     const { roomId } = await params;
     const { searchParams } = new URL(req.url);
     const churchId = searchParams.get("church_id");
-    const date =
-      searchParams.get("date") || new Date().toISOString().split("T")[0];
+    const explicitDate = searchParams.get("date");
     if (!churchId) {
       return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
     }
 
-    // Role gate: admin or owner only
+    // Role gate: admin/owner, or the provisionable checkin_manager flag
     const membershipSnap = await adminDb
       .doc(`memberships/${uid}_${churchId}`)
       .get();
     if (!membershipSnap.exists) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
-    const role = (membershipSnap.data()?.role as string) ?? "";
-    if (role !== "admin" && role !== "owner") {
+    const membership = membershipSnap.data()!;
+    const role = (membership.role as string) ?? "";
+    if (
+      role !== "admin" &&
+      role !== "owner" &&
+      membership.checkin_manager !== true
+    ) {
       return NextResponse.json(
-        { error: "Admin or owner role required" },
+        { error: "Admin, owner, or check-in manager access required" },
         { status: 403 },
       );
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
+
+    // Service date = explicit param, else today in the CHURCH timezone (not
+    // UTC). Without this, the evening UTC rollover hid actively checked-in
+    // children on this drill-down (Codex P3-7 follow-up).
+    const date = await resolveChurchServiceDate(churchRef, explicitDate);
 
     // Load room
     const roomSnap = await churchRef.collection("rooms").doc(roomId).get();

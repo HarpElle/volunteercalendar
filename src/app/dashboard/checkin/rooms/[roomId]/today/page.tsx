@@ -16,6 +16,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import { formatPhone } from "@/lib/utils/phone";
 
 interface ChildRow {
   session_id: string;
@@ -234,7 +235,7 @@ export default function AdminRoomTodayPage() {
                                 href={`tel:${c.primary_guardian_phone}`}
                                 className="text-vc-coral hover:underline"
                               >
-                                {c.primary_guardian_phone}
+                                {formatPhone(c.primary_guardian_phone)}
                               </a>
                             </>
                           )}

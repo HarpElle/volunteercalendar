@@ -21,6 +21,86 @@
  */
 
 import type { firestore } from "firebase-admin";
+import { todayInTimezone } from "@/lib/utils/date";
+
+// ─── Service-date resolution ───────────────────────────────────────────────
+// The check-in "service date" (YYYY-MM-DD) is the day a session belongs to.
+// The kiosk stamps it in church-LOCAL time. Read surfaces MUST anchor their
+// default "today" to the same church-local date — NOT UTC.
+//
+// Why this is centralized: every read route used to default to
+// `new Date().toISOString().split("T")[0]`, which is UTC. For any US church
+// that rolls the date over in the evening (Abbott Loop is America/Anchorage,
+// UTC-8 — 8:47pm local is already the next UTC day), so the emergency roster,
+// teacher dashboard, and admin room views silently showed zero actively
+// checked-in children. Codex 2026-06-22 caught the whole cluster.
+
+/**
+ * Resolve the service date from an explicit query param, else today in the
+ * church's timezone. Use the sync `churchServiceDate` variant when the church
+ * doc (or just its timezone) is already in hand to avoid a redundant read.
+ */
+export async function resolveChurchServiceDate(
+  churchRef: firestore.DocumentReference,
+  explicitDate?: string | null,
+): Promise<string> {
+  if (explicitDate) return explicitDate;
+  const snap = await churchRef.get();
+  const tz = snap.exists
+    ? ((snap.data()?.timezone as string | undefined) ?? null)
+    : null;
+  return todayInTimezone(tz);
+}
+
+/** Sync service-date resolver for callers that already loaded the timezone. */
+export function churchServiceDate(
+  timezone: string | undefined | null,
+  explicitDate?: string | null,
+): string {
+  return explicitDate || todayInTimezone(timezone);
+}
+
+// ─── Check-in room eligibility ─────────────────────────────────────────────
+// IMPORTANT: `checkin_enabled` is a CHURCH-level FeatureFlags field, NOT a
+// Room field. Querying `where("checkin_enabled","==",true)` on the rooms
+// collection matches nothing (Codex 2026-06-22 P3-1/P3-3). A room participates
+// in children's check-in when it is active and has at least one configured
+// grade — the same predicate Room Setup and `assignRoomByGrade` use.
+
+/** True if a room participates in children's check-in (active + has grades). */
+export function isCheckinRoom(room: {
+  is_active?: boolean;
+  default_grades?: unknown;
+}): boolean {
+  return (
+    room.is_active !== false &&
+    Array.isArray(room.default_grades) &&
+    room.default_grades.length > 0
+  );
+}
+
+/** Every check-in room for a church (id + name + capacity), name-sorted. */
+export async function listCheckinRooms(
+  churchRef: firestore.DocumentReference,
+): Promise<Array<{ id: string; name: string; capacity: number | null }>> {
+  const snap = await churchRef.collection("rooms").get();
+  const out: Array<{ id: string; name: string; capacity: number | null }> = [];
+  for (const d of snap.docs) {
+    const data = d.data() as {
+      is_active?: boolean;
+      default_grades?: unknown;
+      name?: string;
+      capacity?: number;
+    };
+    if (!isCheckinRoom(data)) continue;
+    out.push({
+      id: d.id,
+      name: data.name || "Room",
+      capacity: data.capacity ?? null,
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** Normalized child shape used everywhere downstream. */
 export interface NormalizedChild {

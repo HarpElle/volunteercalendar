@@ -60,6 +60,13 @@ export interface Membership {
   scheduler_notification_preferences?: SchedulerNotificationPreferences;
   /** Grants access to check-in dashboard, households, children, reports without full scheduler role */
   checkin_volunteer?: boolean;
+  /**
+   * Administers Child Check-In without full admin role: can open the
+   * classroom view for ANY room (roster, attendance, page-parent,
+   * pickup acks) and the per-room admin drill-down. Owners/admins
+   * have this implicitly.
+   */
+  checkin_manager?: boolean;
   /** Grants access to event management without full admin role */
   event_coordinator?: boolean;
   /** Grants access to room/resource management without full admin role */
@@ -1871,7 +1878,11 @@ export interface RoomSettings {
 
 // ─── Permission System ─────────────────────────────────────────────────────
 
-export type PermissionFlag = "event_coordinator" | "facility_coordinator" | "checkin_volunteer";
+export type PermissionFlag =
+  | "event_coordinator"
+  | "facility_coordinator"
+  | "checkin_volunteer"
+  | "checkin_manager";
 
 // ─── Background Check Integration ─────────────────────────────────────────
 
