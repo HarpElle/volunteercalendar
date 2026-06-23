@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { resend } from "@/lib/resend";
+import { requireCronSecret } from "@/lib/server/authz";
 import {
   buildPurchaseThankYouEmail,
   buildReEngagementEmail,
@@ -13,15 +14,18 @@ import {
  *   purchase-thank-you — sent after Stripe checkout
  *   re-engagement     — sent to inactive free-tier users (cron)
  *   upsell            — sent to active free-tier users nearing limits (cron)
+ *
+ * Auth: standard CRON_SECRET via requireCronSecret. Fails closed
+ * with 503 when CRON_SECRET env var is missing (previously the
+ * inline `if (cronSecret && ...)` check passed through to the send
+ * path, which would let any unauthenticated POST burn Resend quota
+ * on a misconfigured preview/staging env). Now consistent with the
+ * pattern at src/app/api/cron/swap-escalation/route.ts and friends.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    // Verify internal API key for cron/webhook callers
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const blocked = requireCronSecret(request);
+    if (blocked) return blocked;
 
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json(

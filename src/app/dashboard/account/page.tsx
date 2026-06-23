@@ -96,6 +96,7 @@ export default function AccountPage() {
   );
   const [schedNotifSaving, setSchedNotifSaving] = useState(false);
   const [schedNotifSuccess, setSchedNotifSuccess] = useState("");
+  const [schedNotifError, setSchedNotifError] = useState("");
 
   // App integration feeds state
   const [creatingIntegration, setCreatingIntegration] = useState(false);
@@ -529,18 +530,39 @@ export default function AccountPage() {
   // --- Scheduler notification preferences handler ---
 
   async function handleSchedNotifSave() {
-    if (!activeMembership) return;
+    if (!activeMembership || !user) return;
     setSchedNotifSaving(true);
     setSchedNotifSuccess("");
+    setSchedNotifError("");
     try {
-      await updateDocument("memberships", activeMembership.id, {
-        scheduler_notification_preferences: schedNotifPrefs,
-        updated_at: new Date().toISOString(),
+      // Phase 1.2 fix: was a direct client Firestore write via
+      // updateDocument(), but Firestore rules' self-update allowlist
+      // didn't include scheduler_notification_preferences — the write
+      // was silently rejected and the catch was empty, so schedulers
+      // thought they'd saved but the toggle never persisted. Now goes
+      // through /api/memberships/[id] PATCH which (a) has the field
+      // in its schema and (b) surfaces real errors here.
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/memberships/${activeMembership.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scheduler_notification_preferences: schedNotifPrefs,
+        }),
       });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Save failed (${res.status})`);
+      }
       setSchedNotifSuccess("Notification preferences saved.");
       setTimeout(() => setSchedNotifSuccess(""), 3000);
-    } catch {
-      // silent
+    } catch (err) {
+      setSchedNotifError(
+        err instanceof Error ? err.message : "Save failed",
+      );
     } finally {
       setSchedNotifSaving(false);
     }
@@ -1305,6 +1327,9 @@ export default function AccountPage() {
 
             {/* Save */}
             {schedNotifSuccess && <p className="text-sm text-vc-sage">{schedNotifSuccess}</p>}
+            {schedNotifError && (
+              <p className="text-sm text-vc-coral">{schedNotifError}</p>
+            )}
             <Button size="sm" loading={schedNotifSaving} onClick={handleSchedNotifSave}>
               Save Notification Preferences
             </Button>

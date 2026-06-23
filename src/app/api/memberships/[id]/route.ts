@@ -37,6 +37,25 @@ import type { OrgRole, MembershipStatus, ReminderChannel } from "@/lib/types";
 // Reminder channels schema mirrors the union in @/lib/types.
 const ReminderChannelSchema = z.enum(["email", "sms", "calendar", "none"]);
 
+// Mirrors SchedulerNotificationType + SchedulerNotificationPreferences
+// in @/lib/types. Kept in lockstep with the type so a future addition
+// (e.g., a new notification type) requires updating both.
+const SchedulerNotificationTypeSchema = z.enum([
+  "assignment_change",
+  "absence_alert",
+  "swap_request",
+  "self_removal",
+  "schedule_published",
+]);
+const SchedulerNotificationPreferencesSchema = z.object({
+  enabled_types: z.array(SchedulerNotificationTypeSchema),
+  channels: z.object({
+    standard: z.array(z.enum(["email", "none"])),
+    urgent: z.array(z.enum(["email", "sms", "none"])),
+  }),
+  ministry_scope: z.array(z.string()),
+});
+
 const PatchBodySchema = z.object({
   status: z
     .enum([
@@ -53,6 +72,7 @@ const PatchBodySchema = z.object({
       channels: z.array(ReminderChannelSchema),
     })
     .optional(),
+  scheduler_notification_preferences: SchedulerNotificationPreferencesSchema.optional(),
 });
 
 interface MembershipDoc {
@@ -189,6 +209,10 @@ export async function PATCH(
   if (body.ministry_scope !== undefined) update.ministry_scope = body.ministry_scope;
   if (body.reminder_preferences !== undefined) {
     update.reminder_preferences = body.reminder_preferences;
+  }
+  if (body.scheduler_notification_preferences !== undefined) {
+    update.scheduler_notification_preferences =
+      body.scheduler_notification_preferences;
   }
 
   try {
