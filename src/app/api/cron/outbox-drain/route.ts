@@ -74,7 +74,14 @@ export async function GET(req: NextRequest) {
         }
       } else if (entry.kind === "sms") {
         const p = entry.payload as OutboxSmsPayload;
-        await sendSms({ to: p.to, body: p.body });
+        // sendSms returns { success, error } instead of throwing —
+        // ignore that and we'd mark the entry sent on every Twilio
+        // failure, killing the retry/backoff path. Inspect the
+        // result and surface the error to the catch block below.
+        const smsResult = await sendSms({ to: p.to, body: p.body });
+        if (!smsResult.success) {
+          throw new Error(smsResult.error || "SMS send failed");
+        }
       } else {
         throw new Error(`Unknown outbox kind: ${entry.kind}`);
       }

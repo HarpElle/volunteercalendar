@@ -26,7 +26,7 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { setDoc, doc, getDoc, getDocs, collection, query, where } from "firebase/firestore";
+import { setDoc, doc, getDoc, getDocs, collection, query, where, updateDoc } from "firebase/firestore";
 
 const CHURCH_A = "church-a";
 const CHURCH_B = "church-b";
@@ -559,3 +559,58 @@ describe("Firestore rules — assignment read lockdown (Wave 2.2b)", () => {
     await assertSucceeds(getDocs(assignmentsRef));
   });
 });
+
+describe("Firestore rules — membership self-update (Phase 1.2 fix)", () => {
+  it("scheduler CAN self-update scheduler_notification_preferences (regression: was silently rejected before the rule fix)", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    const ref = doc(ctx.firestore(), `memberships/${SCHEDULER_A}_${CHURCH_A}`);
+    await assertSucceeds(
+      updateDoc(ref, {
+        scheduler_notification_preferences: {
+          enabled_types: ["absence_alert"],
+          channels: { standard: ["email"], urgent: ["email", "sms"] },
+          ministry_scope: [],
+        },
+        updated_at: new Date(2026, 5, 23).toISOString(),
+      }),
+    );
+  });
+
+  it("scheduler CAN self-update reminder_preferences (regression coverage)", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    const ref = doc(ctx.firestore(), `memberships/${SCHEDULER_A}_${CHURCH_A}`);
+    await assertSucceeds(
+      updateDoc(ref, {
+        reminder_preferences: { channels: ["none"] },
+        updated_at: new Date(2026, 5, 23).toISOString(),
+      }),
+    );
+  });
+
+  it("scheduler CANNOT self-update role via the self-update path", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    const ref = doc(ctx.firestore(), `memberships/${SCHEDULER_A}_${CHURCH_A}`);
+    await assertFails(
+      updateDoc(ref, {
+        role: "admin",
+        updated_at: new Date(2026, 5, 23).toISOString(),
+      }),
+    );
+  });
+
+  it("different user CANNOT update someone else's scheduler_notification_preferences", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    const ref = doc(ctx.firestore(), `memberships/${SCHEDULER_A}_${CHURCH_A}`);
+    await assertFails(
+      updateDoc(ref, {
+        scheduler_notification_preferences: {
+          enabled_types: [],
+          channels: { standard: ["none"], urgent: ["none"] },
+          ministry_scope: [],
+        },
+        updated_at: new Date(2026, 5, 23).toISOString(),
+      }),
+    );
+  });
+});
+

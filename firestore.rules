@@ -127,12 +127,17 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'updated_at']);
 
-      // Users can update their own reminder preferences
+      // Users can update their own reminder + scheduler-notification
+      // preferences. Both are user-settings on the membership doc.
+      // Phase 1.2 fix: scheduler_notification_preferences was previously
+      // omitted, so the Account page's direct-client write was silently
+      // rejected by rules — schedulers thought they'd disabled emails
+      // but never had.
       allow update: if request.auth != null
         && resource.data.user_id == request.auth.uid
         && resource.data.status == 'active'
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['reminder_preferences', 'updated_at']);
+          .hasOnly(['reminder_preferences', 'scheduler_notification_preferences', 'updated_at']);
 
       // Org admins can update memberships (approve, change role, deactivate)
       allow update: if request.auth != null

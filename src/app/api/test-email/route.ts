@@ -1,36 +1,39 @@
-import { NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { NextRequest, NextResponse } from "next/server";
+import { requirePlatformAdmin } from "@/lib/server/authz";
 import { buildReminderEmail, buildConfirmationEmail } from "@/lib/utils/email-templates";
 import { resend } from "@/lib/resend";
 
 /**
  * POST /api/test-email
  *
- * Sends a test email to the authenticated admin so they can preview templates.
+ * Sends a test email to the authenticated platform admin so they can
+ * preview templates. The recipient is ALWAYS the caller's own verified
+ * email — the route accepts no other `to` address. Prevents the
+ * route from being used as an abuse vector to burn Resend quota or
+ * send arbitrary mail.
  *
- * Body: { type: "reminder" | "confirmation", email: string }
- * Auth: Bearer token (admin only — verified via Firebase Admin SDK)
+ * Body: { type: "reminder" | "confirmation" }
+ * Auth: platform-admin Bearer token (env-var UID whitelist).
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const token = authHeader.split("Bearer ")[1];
-    const decoded = await adminAuth.verifyIdToken(token);
-
-    if (!decoded.uid) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    const callerEmail = auth.email;
+    if (!callerEmail) {
+      return NextResponse.json(
+        { error: "Authenticated user has no email; cannot send test" },
+        { status: 400 },
+      );
     }
 
     const body = await request.json();
-    const { type, email } = body as { type: string; email: string };
+    const { type } = body as { type: string };
 
-    if (!type || !email) {
+    if (!type) {
       return NextResponse.json(
-        { error: "Missing required fields: type, email" },
+        { error: "Missing required field: type" },
         { status: 400 },
       );
     }
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
     const sendResult = await resend.emails.send({
       from: "VolunteerCal Test <noreply@harpelle.com>",
       replyTo: "info@volunteercal.com",
-      to: [email],
+      to: [callerEmail],
       subject,
       html,
       text,
@@ -95,7 +98,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Test ${type} email sent to ${email}`,
+      message: `Test ${type} email sent to ${callerEmail}`,
       result: sendResult,
     });
   } catch (error) {
