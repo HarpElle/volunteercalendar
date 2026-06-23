@@ -275,18 +275,19 @@ export async function POST(request: Request) {
       // the user's membership-stored reminder_preferences (the prior
       // `volunteer.reminder_preferences` read was looking on the
       // Person doc — Cursor F-002 — and almost always missed).
-      // defaultChannels stays the source for opt-IN width: if the
-      // resolver says email+sms but the church default is email-only,
-      // we still respect the org default by intersecting.
+      // defaultChannels is passed in as the fallback used when the
+      // user has expressed no preference — preserving the pre-Phase-2
+      // semantic that the church default fills the gap. User opt-in
+      // always wins; defaults never cap an explicit pref.
       const eligibility = await resolveVolunteerEligibility({
         churchId: church_id,
         personId: assignment.person_id as string,
         notificationType: "reminder",
+        defaultChannelsIfMissing: defaultChannels,
       });
-      const resolvedChannels: string[] = [];
-      if (eligibility.email && defaultChannels.includes("email")) resolvedChannels.push("email");
-      if (eligibility.sms && defaultChannels.includes("sms")) resolvedChannels.push("sms");
-      const channels: string[] = resolvedChannels;
+      const channels: string[] = [];
+      if (eligibility.email) channels.push("email");
+      if (eligibility.sms) channels.push("sms");
 
       if (channels.length === 0) {
         skipped++;

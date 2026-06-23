@@ -217,10 +217,13 @@ describe("POST /api/reminders — idempotency (Wave 2.1)", () => {
     expect(mockEmailSend).toHaveBeenCalledTimes(1);
     expect(mockSendSms).not.toHaveBeenCalled();
 
-    // The volunteer now switches to multi-channel. (In production this
-    // is a Settings UI change updating people/{id}.reminder_preferences.)
+    // The volunteer now switches to multi-channel. Phase 2 moved the
+    // source of truth from people/{id}.reminder_preferences (the field
+    // Cursor F-002 flagged as wrong) to memberships/{uid_churchId}.
+    // reminder_preferences. The Account page Settings UI already
+    // writes to memberships in production.
     await adminDb
-      .doc(`churches/${T.churchId}/people/${PERSON_ID}`)
+      .doc(`memberships/${T.volunteerUid}_${T.churchId}`)
       .update({ reminder_preferences: { channels: ["email", "sms"] } });
 
     const res2 = await POST(postRequest({ church_id: T.churchId, hours: 48 }));
