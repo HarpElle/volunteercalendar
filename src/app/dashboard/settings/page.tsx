@@ -17,6 +17,7 @@ import {
 import { CampusesSettings } from "@/components/settings/campuses-settings";
 import { SecuritySection } from "@/components/settings/security-section";
 import { BrandingSection } from "@/components/settings/branding-section";
+import { NotificationModeSection } from "@/components/settings/notification-mode-section";
 import { SettingsShell } from "@/components/dashboard/settings-shell";
 import { isAdmin, isOwner } from "@/lib/utils/permissions";
 
@@ -205,6 +206,17 @@ function SettingsContent() {
             calendar-feed rotation action here. */}
         {churchId && isAdmin(activeMembership) && (
           <SecuritySection churchId={churchId} user={user} />
+        )}
+
+        {/* Notification mode — owner-only. Phase 4a: org-level gate
+            on outbound email + SMS. Demo orgs default to in_app_only;
+            real orgs default to live. */}
+        {church && churchId && isOwner(activeMembership) && (
+          <NotificationModeSection
+            churchId={churchId}
+            church={church}
+            setChurch={setChurch}
+          />
         )}
 
         {/* About VolunteerCal — visible to everyone in the org.

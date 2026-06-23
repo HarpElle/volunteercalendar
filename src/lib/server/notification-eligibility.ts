@@ -171,14 +171,24 @@ export function decideSchedulerVerdict(
 // ─── Firestore-touching orchestrators ───────────────────────────────
 
 /**
- * Org-level gate. Phase 4a will read `ChurchSettings.notification_mode`
- * here. Today: always "live", returns the church's subscription tier
- * for downstream SMS gating.
+ * Org-level gate. Reads `ChurchSettings.notification_mode`. When
+ * "in_app_only", returns `live: false, reason: "in_app_only"` so all
+ * volunteer + scheduler email/SMS verdicts BLOCK. In-app notification
+ * writes happen outside the resolver path and are unaffected.
+ *
+ * On lookup failure: returns live + free-tier (safe-fallback: don't
+ * silence the org just because Firestore hiccuped).
  */
 export async function checkOrgGate(churchId: string): Promise<OrgGate> {
   try {
     const churchDoc = await adminDb.doc(`churches/${churchId}`).get();
-    const tier = (churchDoc.data()?.subscription_tier as string) || "free";
+    const data = churchDoc.data() ?? {};
+    const tier = (data.subscription_tier as string) || "free";
+    const settings = (data.settings as Record<string, unknown> | undefined) ?? {};
+    const mode = settings.notification_mode as string | undefined;
+    if (mode === "in_app_only") {
+      return { live: false, tier, reason: "in_app_only" };
+    }
     return { live: true, tier };
   } catch (err) {
     log.warn("notification-eligibility: org gate lookup failed", {

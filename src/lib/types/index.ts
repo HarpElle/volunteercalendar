@@ -196,6 +196,19 @@ export interface ChurchSettings {
    * parent edits (Jason 2026-06-03 Family Portal feedback).
    */
   grade_rollover?: "manual" | "june" | "august" | "september";
+  /**
+   * Org-level notification gateway (Phase 4a, 2026-06-23).
+   *   "live"         — default; email + SMS + in-app all fire normally
+   *   "in_app_only"  — email + SMS suppressed at the eligibility
+   *                    resolver; in-app inbox notifications still
+   *                    write. Use for demo orgs + automated testing
+   *                    so reviewers can poke around without burning
+   *                    Resend / Twilio quota or spamming real users.
+   * Future: "paused" would also block in-app — not implemented yet
+   * (no concrete customer ask). The resolver treats undefined as
+   * "live" for backwards compatibility.
+   */
+  notification_mode?: "live" | "in_app_only";
 }
 
 // --- Campuses (Multi-Site) ---

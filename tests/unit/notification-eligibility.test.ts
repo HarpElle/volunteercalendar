@@ -17,6 +17,7 @@ import type { Membership } from "@/lib/types";
 const LIVE_PAID = { live: true, tier: "starter" };
 const LIVE_FREE = { live: true, tier: "free" };
 const PAUSED = { live: false, tier: "starter", reason: "paused" };
+const IN_APP_ONLY = { live: false, tier: "starter", reason: "in_app_only" };
 
 function mkMembership(overrides: Partial<Membership> = {}): Membership {
   return {
@@ -113,6 +114,27 @@ describe("decideVolunteerVerdict", () => {
     const v = decideVolunteerVerdict(LIVE_PAID, mkMembership(), true);
     expect(v).toEqual({ email: true, sms: false });
   });
+
+  it("honors defaultChannelsIfMissing when membership has no prefs (Phase 2 hotfix #255)", () => {
+    const v = decideVolunteerVerdict(
+      LIVE_PAID,
+      mkMembership(),
+      true,
+      ["email", "sms"],
+    );
+    expect(v).toEqual({ email: true, sms: true });
+  });
+
+  it("in_app_only org mode blocks email + SMS (Phase 4a)", () => {
+    const v = decideVolunteerVerdict(
+      IN_APP_ONLY,
+      mkMembership({ reminder_preferences: { channels: ["email", "sms"] } }),
+      true,
+    );
+    expect(v.email).toBe(false);
+    expect(v.sms).toBe(false);
+    expect(v.reason).toBe("org_in_app_only");
+  });
 });
 
 describe("decideSchedulerVerdict", () => {
@@ -193,6 +215,13 @@ describe("decideSchedulerVerdict", () => {
     // IS urgent (per src/lib/constants), so we expect email+sms here too.
     expect(v.email).toBe(true);
     expect(v.sms).toBe(true);
+  });
+
+  it("in_app_only org mode blocks scheduler email+SMS (Phase 4a) — even urgent", () => {
+    const v = decideSchedulerVerdict(IN_APP_ONLY, SCHED_ALL, "absence_alert", true);
+    expect(v.email).toBe(false);
+    expect(v.sms).toBe(false);
+    expect(v.reason).toBe("org_in_app_only");
   });
 
   it("non-urgent blocks when scheduler turned off the type", () => {
