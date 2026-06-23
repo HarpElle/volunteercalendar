@@ -9,6 +9,7 @@ import { parseBody, z } from "@/lib/server/validation";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
 
 const BodySchema = z.object({
   church_id: z.string().min(1),
@@ -143,6 +144,17 @@ export async function POST(
 
       if (!volunteer?.email) continue;
 
+      // Phase 2: honor the volunteer's stored opt-out before generating
+      // a confirmation token and queueing the email. We still issue the
+      // confirm token + outbox entry when eligibility blocks, since the
+      // confirm flow is the user's path to RE-enable themselves; we only
+      // skip the actual send. Channel decision happens at send time below.
+      const eligibility = await resolveVolunteerEligibility({
+        churchId: church_id,
+        personId: assignment.person_id,
+        notificationType: "confirmation",
+      });
+
       const confirmToken = crypto.randomUUID();
       batch.update(doc.ref, { confirmation_token: confirmToken });
 
@@ -157,6 +169,8 @@ export async function POST(
         startTime: service?.start_time || "",
         confirmUrl: `${baseUrl}/confirm/${confirmToken}`,
       });
+
+      if (!eligibility.email) continue;
 
       pendingEmails.push({
         assignmentDocRef: doc.ref,

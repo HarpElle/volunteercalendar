@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { resend } from "@/lib/resend";
+import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
 import {
   buildBatchConfirmationEmail,
   type BatchAssignment,
@@ -132,6 +133,20 @@ export async function POST(request: NextRequest) {
 
       const email = volunteer.email as string;
       if (!email) {
+        skipped += volAssignments.length;
+        continue;
+      }
+
+      // Phase 2: honor membership-level opt-out before queueing the
+      // batched re-invitation email. In-app notifications (further
+      // down this route) intentionally fire regardless — those don't
+      // hit Resend and are the user's continuous source of truth.
+      const eligibility = await resolveVolunteerEligibility({
+        churchId: church_id,
+        personId: volId,
+        notificationType: "assignment_change",
+      });
+      if (!eligibility.email) {
         skipped += volAssignments.length;
         continue;
       }
