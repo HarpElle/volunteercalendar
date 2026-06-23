@@ -39,7 +39,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
-import { loadChild, loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import {
+  loadChild,
+  loadHouseholdPhone,
+  resolveChurchServiceDate,
+  listCheckinRooms,
+} from "@/lib/server/checkin-helpers";
+import { hasClassroomOversight } from "@/lib/server/classroom-oversight";
 import {
   getRosterFieldStates,
   resolveMedicalVisibility,
@@ -112,10 +118,6 @@ export async function GET(req: NextRequest) {
         { status: 400 },
       );
     }
-    const date =
-      req.nextUrl.searchParams.get("date") ||
-      new Date().toISOString().split("T")[0];
-
     // Tier gate (allowAnonymous because the caller isn't routed via
     // an admin-role check — we use the Person + active-room-checkin
     // combination as the gate).
@@ -127,42 +129,76 @@ export async function GET(req: NextRequest) {
 
     const churchRef = adminDb.collection("churches").doc(churchId);
 
+    // Service date = explicit param, else today in the CHURCH timezone
+    // (not UTC — see resolveChurchServiceDate). Without this, the evening
+    // UTC rollover hides actively checked-in rooms (Codex P4-1).
+    const date = await resolveChurchServiceDate(
+      churchRef,
+      req.nextUrl.searchParams.get("date"),
+    );
+
+    // Classroom oversight (owner/admin/checkin_manager flag): may view
+    // every check-in-enabled room without being checked in as a room
+    // volunteer. Everyone else stays person-anchored.
+    const oversight = await hasClassroomOversight(churchId, uid);
+
     // Resolve the caller's Person doc. Must be an adult volunteer in
-    // this church.
+    // this church — unless they carry classroom oversight (an admin
+    // may not have a Person record at all).
     const personSnap = await churchRef
       .collection("people")
       .where("user_id", "==", uid)
       .where("person_type", "==", "adult")
       .limit(1)
       .get();
-    if (personSnap.empty) {
+    if (personSnap.empty && !oversight) {
       return NextResponse.json(
         { error: "Not registered as a volunteer in this church" },
         { status: 403 },
       );
     }
-    const personId = personSnap.docs[0].id;
-    const personData = personSnap.docs[0].data();
-    const personName =
-      (personData.preferred_name as string) ||
-      (personData.first_name as string) ||
-      (personData.name as string) ||
-      "Teacher";
+    let personId: string | null = null;
+    let personName = "Check-In Team";
+    if (!personSnap.empty) {
+      personId = personSnap.docs[0].id;
+      const personData = personSnap.docs[0].data();
+      personName =
+        (personData.preferred_name as string) ||
+        (personData.first_name as string) ||
+        (personData.name as string) ||
+        "Teacher";
+    } else {
+      const userSnap = await adminDb.doc(`users/${uid}`).get();
+      personName = (userSnap.data()?.display_name as string) || personName;
+    }
 
-    // Find the volunteer's active RoomVolunteerCheckIns for this date.
-    const myCheckinsSnap = await churchRef
-      .collection("roomVolunteerCheckins")
-      .where("person_id", "==", personId)
-      .where("service_date", "==", date)
-      .get();
-    const myActiveCheckins = myCheckinsSnap.docs
-      .map((d) => d.data() as RoomVolunteerCheckIn)
-      .filter((v) => (v.checked_out_at ?? null) === null);
+    // Which rooms can the caller see?
+    //   - oversight: every check-in-enabled room (the admin "drop into
+    //     any classroom" path).
+    //   - teacher: rooms with an active RoomVolunteerCheckIn for them.
+    let roomIds: string[] = [];
+    if (oversight) {
+      // Every check-in room (active + has grades) — NOT a `checkin_enabled`
+      // query; that field lives on the church, not the room.
+      const checkinRooms = await listCheckinRooms(churchRef);
+      roomIds = checkinRooms.map((r) => r.id);
+    } else if (personId) {
+      const myCheckinsSnap = await churchRef
+        .collection("roomVolunteerCheckins")
+        .where("person_id", "==", personId)
+        .where("service_date", "==", date)
+        .get();
+      const myActiveCheckins = myCheckinsSnap.docs
+        .map((d) => d.data() as RoomVolunteerCheckIn)
+        .filter((v) => (v.checked_out_at ?? null) === null);
+      roomIds = [...new Set(myActiveCheckins.map((c) => c.room_id))];
+    }
 
-    if (myActiveCheckins.length === 0) {
+    if (roomIds.length === 0) {
       return NextResponse.json({
-        teacher: { id: personId, name: personName },
+        teacher: { id: personId ?? uid, name: personName },
         date,
+        oversight,
         rooms: [],
       });
     }
@@ -213,8 +249,7 @@ export async function GET(req: NextRequest) {
       total_checked_in: number;
     }> = [];
 
-    for (const checkin of myActiveCheckins) {
-      const roomId = checkin.room_id;
+    for (const roomId of roomIds) {
       const roomSnap = await churchRef.collection("rooms").doc(roomId).get();
       if (!roomSnap.exists) continue;
       const room = roomSnap.data() as Room;
@@ -319,16 +354,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Stable display order — matters most in oversight mode where the
+    // list covers every classroom.
+    rooms.sort((a, b) => a.room.name.localeCompare(b.room.name));
+
     // Audit emit (deduped per 5-minute window).
-    if (shouldEmitViewAudit(churchId, personId, date)) {
+    if (shouldEmitViewAudit(churchId, personId ?? uid, date)) {
       void audit({
         church_id: churchId,
         actor: userActor(uid),
         action: "teacher.dashboard_viewed",
         target_type: "person",
-        target_id: personId,
+        target_id: personId ?? uid,
         metadata: {
           date,
+          oversight,
           room_count: rooms.length,
           children_count: rooms.reduce(
             (a, r) => a + r.total_checked_in,
@@ -340,8 +380,9 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      teacher: { id: personId, name: personName },
+      teacher: { id: personId ?? uid, name: personName },
       date,
+      oversight,
       rooms,
     });
   } catch (error) {

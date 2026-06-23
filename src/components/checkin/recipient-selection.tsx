@@ -25,6 +25,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { kioskFetch } from "@/lib/kiosk-client";
+import { formatPhone } from "@/lib/utils/phone";
 
 interface AvailableRecipient {
   id: string;
@@ -284,7 +285,7 @@ export function RecipientSelection({
               <p className="font-medium text-vc-indigo">{m.name}</p>
               <p className="text-xs text-vc-text-muted">
                 One-time entry
-                {m.phone ? ` · ${m.phone}` : " · no phone"}
+                {m.phone ? ` · ${formatPhone(m.phone)}` : " · no phone"}
               </p>
             </div>
             <button

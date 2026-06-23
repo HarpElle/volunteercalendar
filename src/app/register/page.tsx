@@ -115,7 +115,7 @@ function RegisterForm() {
               type="text"
               required
               autoComplete="name"
-              placeholder="Jason Paschall"
+              placeholder="Jane Doe"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);

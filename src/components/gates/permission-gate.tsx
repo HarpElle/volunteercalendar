@@ -74,7 +74,7 @@ export function usePermission(featureOrPermission: FeatureArea | PermissionFlag)
   }
 
   // Try as PermissionFlag
-  const permFlags: PermissionFlag[] = ["event_coordinator", "facility_coordinator", "checkin_volunteer"];
+  const permFlags: PermissionFlag[] = ["event_coordinator", "facility_coordinator", "checkin_volunteer", "checkin_manager"];
   if (permFlags.includes(featureOrPermission as PermissionFlag)) {
     return hasPermission(m, featureOrPermission as PermissionFlag);
   }

@@ -16,8 +16,14 @@ const CHECKIN_NAV_ADMIN_ROLES: OrgRole[] = ["owner", "admin"];
  * use `shouldShowCheckinNav` instead — stricter, requires explicit
  * checkin_volunteer flag for schedulers.
  */
-export function canAccessCheckin(membership: Pick<Membership, "role" | "checkin_volunteer">): boolean {
-  return CHECKIN_ADMIN_ROLES.includes(membership.role) || membership.checkin_volunteer === true;
+export function canAccessCheckin(
+  membership: Pick<Membership, "role" | "checkin_volunteer" | "checkin_manager">,
+): boolean {
+  return (
+    CHECKIN_ADMIN_ROLES.includes(membership.role) ||
+    membership.checkin_volunteer === true ||
+    membership.checkin_manager === true
+  );
 }
 
 /**
@@ -34,8 +40,14 @@ export function canAccessCheckin(membership: Pick<Membership, "role" | "checkin_
  * Codex Phase 1 v3 retest finding: scheduler-without-checkin_volunteer
  * should not see Check-In in nav even on Growth/Pro tiers.
  */
-export function shouldShowCheckinNav(membership: Pick<Membership, "role" | "checkin_volunteer">): boolean {
-  return CHECKIN_NAV_ADMIN_ROLES.includes(membership.role) || membership.checkin_volunteer === true;
+export function shouldShowCheckinNav(
+  membership: Pick<Membership, "role" | "checkin_volunteer" | "checkin_manager">,
+): boolean {
+  return (
+    CHECKIN_NAV_ADMIN_ROLES.includes(membership.role) ||
+    membership.checkin_volunteer === true ||
+    membership.checkin_manager === true
+  );
 }
 
 /**
@@ -44,4 +56,24 @@ export function shouldShowCheckinNav(membership: Pick<Membership, "role" | "chec
  */
 export function canManageCheckinSettings(membership: Pick<Membership, "role">): boolean {
   return membership.role === "owner" || membership.role === "admin";
+}
+
+/**
+ * Can this member open the classroom view for ANY room (roster,
+ * attendance, page-parent, pickup acks) and the per-room admin
+ * drill-down — without being checked in as a room volunteer?
+ *
+ * Owners/admins implicitly; everyone else needs the provisionable
+ * `checkin_manager` permission flag (People → member → Access).
+ * Server-side mirror: `hasClassroomOversight` in
+ * `src/lib/server/classroom-oversight.ts`.
+ */
+export function canOverseeClassrooms(
+  membership: Pick<Membership, "role" | "checkin_manager">,
+): boolean {
+  return (
+    membership.role === "owner" ||
+    membership.role === "admin" ||
+    membership.checkin_manager === true
+  );
 }

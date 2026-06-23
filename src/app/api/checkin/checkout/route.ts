@@ -5,7 +5,7 @@ import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { sendSms } from "@/lib/services/sms";
 import { audit, kioskActor, SYSTEM_ACTOR } from "@/lib/server/audit";
-import { loadHouseholdPhone } from "@/lib/server/checkin-helpers";
+import { loadHouseholdPhone, loadChild } from "@/lib/server/checkin-helpers";
 import { normalizePhone } from "@/lib/utils/phone";
 import { timingSafeEqual } from "crypto";
 import type { BlockedPickup, CheckInSession, CheckInAlert } from "@/lib/types";
@@ -300,20 +300,20 @@ export async function POST(req: NextRequest) {
     }
     await batch.commit();
 
-    // Load child names
-    const childDocs = await Promise.all(
-      childIds.map((id) => churchRef.collection("children").doc(id).get()),
+    // Load child names. loadChild resolves BOTH unified (people) and legacy
+    // (children) storage — a plain children/{id} read returns nothing for
+    // Pro-tier orgs, so the response surfaced child_name "Unknown" even for
+    // valid children (Codex P4-2).
+    const loadedChildren = await Promise.all(
+      childIds.map((id) => loadChild(churchRef, id)),
     );
 
-    const children = childDocs.map((snap, i) => {
-      const data = snap.exists ? snap.data()! : {};
-      return {
-        child_name: snap.exists
-          ? `${data.preferred_name || data.first_name} ${data.last_name}`
-          : "Unknown",
-        room_name: activeSessions[i].data().room_name || "Unknown",
-      };
-    });
+    const children = loadedChildren.map((child, i) => ({
+      child_name: child
+        ? `${child.display_name} ${child.last_name}`.trim()
+        : "Unknown",
+      room_name: activeSessions[i].data().room_name || "Unknown",
+    }));
 
     // Guardian + recipient SMS on checkout (fire-and-forget)
     // Wave 10 W10-1: pulls present_recipients from the first session
@@ -450,12 +450,11 @@ async function checkoutSession(
     checked_out_by_user_id: volunteerUserId || null,
   });
 
-  const childSnap = await churchRef
-    .collection("children")
-    .doc(session.child_id)
-    .get();
-  const childName = childSnap.exists
-    ? `${childSnap.data()!.preferred_name || childSnap.data()!.first_name} ${childSnap.data()!.last_name}`
+  // loadChild resolves unified (people) + legacy (children) storage; a plain
+  // children/{id} read returns nothing for Pro-tier orgs (Codex P4-2).
+  const child = await loadChild(churchRef, session.child_id);
+  const childName = child
+    ? `${child.display_name} ${child.last_name}`.trim()
     : "Unknown";
 
   const children = [{ child_name: childName, room_name: session.room_name }];

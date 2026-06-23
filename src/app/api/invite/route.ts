@@ -58,8 +58,16 @@ export async function POST(request: NextRequest) {
     });
     if (userDayLimited) return userDayLimited;
 
+    // Read the request body exactly once. Cloning the request and reading
+    // the stream twice ("await request.clone().json()" here, then
+    // "await request.json()" below) is fragile in the Next/undici runtime
+    // and threw "Body has already been read" on the invite happy path
+    // (Codex 2026-06-22 P1-3). Parse once, reuse everywhere.
+    const body = await request.json();
+    const { email, name, churchId, role, ministryScope } = body;
+
     // Verify inviter is admin+ for this church
-    const inviterMembershipId = `${inviterUid}_${(await request.clone().json()).churchId}`;
+    const inviterMembershipId = `${inviterUid}_${churchId}`;
     const inviterMembershipSnap = await adminDb.collection("memberships").doc(inviterMembershipId).get();
     if (!inviterMembershipSnap.exists) {
       return NextResponse.json({ error: "Not a member of this organization" }, { status: 403 });
@@ -68,9 +76,6 @@ export async function POST(request: NextRequest) {
     if (!["admin", "owner"].includes(inviterMembership.role) || inviterMembership.status !== "active") {
       return NextResponse.json({ error: "Only admins can invite members" }, { status: 403 });
     }
-
-    const body = await request.json();
-    const { email, name, churchId, role, ministryScope } = body;
 
     if (!email || !churchId || !role) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -212,7 +217,9 @@ export async function POST(request: NextRequest) {
 
       // Send invite email with registration link
       const baseUrl = getBaseUrl(request);
-      const acceptUrl = `${baseUrl}/register?redirect=/join/${churchId}&email=${encodeURIComponent(email)}`;
+      const acceptUrl = `${baseUrl}/register?redirect=/join/${churchId}&email=${encodeURIComponent(email)}${
+        name ? `&name=${encodeURIComponent(name)}` : ""
+      }`;
 
       if (process.env.RESEND_API_KEY) {
         const emailContent = buildInviteEmail({

@@ -8,7 +8,7 @@ import { useTierGate, type ModuleId } from "@/components/dashboard/tier-lock";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { isAdmin, isScheduler } from "@/lib/utils/permissions";
-import type { SubscriptionTier, OrgRole } from "@/lib/types";
+import type { SubscriptionTier, OrgRole, Membership } from "@/lib/types";
 
 /**
  * Route-level tier gate. Wrap a module layout's children with this and
@@ -48,6 +48,7 @@ export function TierGateBoundary({
   module,
   children,
   requiredRole = "scheduler",
+  allowWhen,
 }: {
   module: ModuleId;
   children: React.ReactNode;
@@ -62,6 +63,14 @@ export function TierGateBoundary({
    * see the operational UI. Now blocked.
    */
   requiredRole?: RoleRequirement;
+  /**
+   * Permission-based bypass for the role check. When it returns true for
+   * the active membership, the role gate is satisfied regardless of
+   * `requiredRole` (tier still gates). Check-In passes `canAccessCheckin`
+   * here so the `checkin_volunteer` / `checkin_manager` flags grant entry
+   * even to members whose org role is plain volunteer (Codex P3-8).
+   */
+  allowWhen?: (membership: Membership | null) => boolean;
 }) {
   const { activeMembership, profile } = useAuth();
   const churchId = activeMembership?.church_id || profile?.church_id;
@@ -119,7 +128,8 @@ export function TierGateBoundary({
       requiredRole === "admin"
         ? isAdmin(activeMembership)
         : isScheduler(activeMembership);
-    if (!hasRole) {
+    const bypass = allowWhen ? allowWhen(activeMembership ?? null) : false;
+    if (!hasRole && !bypass) {
       return (
         <AccessDeniedScreen
           module={module}

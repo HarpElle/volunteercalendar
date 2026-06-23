@@ -29,12 +29,6 @@ interface LiveStats {
   rooms: RoomBreakdown[];
 }
 
-/** Get today's date as YYYY-MM-DD in the browser's local timezone. */
-function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
 const POLL_INTERVAL = 15_000;
 
 /**
@@ -189,9 +183,12 @@ export default function CheckInDashboardPage() {
     if (!user || !churchId) return;
     try {
       const token = await user.getIdToken();
-      const today = localToday();
+      // No explicit date — the server resolves "today" in the CHURCH
+      // timezone (see resolveChurchServiceDate). Passing a browser-local
+      // date here would disagree with the church-local date when the admin
+      // views from a different timezone than the church.
       const res = await fetch(
-        `/api/admin/checkin/report?church_id=${churchId}&type=live&date=${today}`,
+        `/api/admin/checkin/report?church_id=${churchId}&type=live`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
@@ -238,13 +235,12 @@ export default function CheckInDashboardPage() {
     }
   }, [user, churchId, fetchStats]);
 
-  // Filter stats to today's local date so counts exclude stale UTC-dated records
-  const todayForStats = localToday();
-  const todaySessionsForStats = stats?.sessions?.filter((s) => {
-    const d = new Date(s.checked_in_at);
-    const ld = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return ld === todayForStats;
-  }) ?? [];
+  // The live report already returns only sessions for the church-local
+  // service date (stats.date). Anchor the count filter to that, not the
+  // browser-local date — otherwise an admin in a different timezone than
+  // the church miscounts at the UTC boundary.
+  const todaySessionsForStats =
+    stats?.sessions?.filter((s) => s.service_date === stats.date) ?? [];
   const checkedIn = todaySessionsForStats.filter((s) => !s.checked_out_at).length;
   const checkedOut = todaySessionsForStats.filter((s) => s.checked_out_at).length;
   const total = todaySessionsForStats.length;
@@ -512,8 +508,8 @@ export default function CheckInDashboardPage() {
         />
         <QuickAction
           href="/dashboard/teacher/rooms"
-          label="Teacher View"
-          description="Roster of children in your room (after you check in as a teacher)"
+          label="Classroom View"
+          description="Room rosters, attendance, and parent paging — admins and check-in managers see every room"
           icon="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342"
         />
         {userIsAdmin && (
@@ -546,15 +542,12 @@ export default function CheckInDashboardPage() {
 
       {/* Recent sessions */}
       {!loading && stats?.sessions && stats.sessions.length > 0 && (() => {
-        // Filter to only sessions whose checked_in_at falls on today's local date.
-        // Existing records may have service_date stored in UTC, so we can't rely on
-        // that field alone — the actual timestamp is the source of truth.
-        const today = localToday();
-        const todaySessions = stats.sessions.filter((s) => {
-          const d = new Date(s.checked_in_at);
-          const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          return localDate === today;
-        });
+        // The server already scoped these to the church-local service date
+        // (stats.date); keep them as-is rather than re-deriving "today" from
+        // browser-local timestamps.
+        const todaySessions = stats.sessions.filter(
+          (s) => s.service_date === stats.date,
+        );
 
         const q = activitySearch.toLowerCase();
         const filtered = q

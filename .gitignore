@@ -16,6 +16,10 @@ migration-map.json
 # testing
 /coverage
 
+# Local testing workspace — credentials, session notes, screenshots, etc.
+# Never push to GitHub.
+/TestingResources/
+
 # next.js
 /.next/
 /out/
@@ -47,6 +51,7 @@ next-env.d.ts
 # local agent / tooling workspaces (machine-specific, not committed)
 .agents/
 VolunteerCalTestingByCodex/
+coordination/
 
 # Firestore emulator runtime log (regenerated on every emulator run)
 firestore-debug.log

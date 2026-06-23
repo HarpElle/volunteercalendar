@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/context/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import { formatPhone } from "@/lib/utils/phone";
 
 interface RosterChild {
   session_id: string;
@@ -454,7 +455,7 @@ function RoomSection({
               <p className="text-sm text-vc-text-secondary mt-1 print:text-black">
                 <strong>Parent:</strong>{" "}
                 {c.parent.name ? `${c.parent.name} · ` : ""}
-                {c.parent.phone ?? "no phone on file"}
+                {c.parent.phone ? formatPhone(c.parent.phone) : "no phone on file"}
               </p>
               {c.authorized_pickups.length > 0 && (
                 <p className="text-xs text-vc-text-muted mt-1 print:text-black">
@@ -464,7 +465,7 @@ function RoomSection({
                       [
                         p.name,
                         p.relationship,
-                        p.phone,
+                        p.phone ? formatPhone(p.phone) : null,
                       ]
                         .filter(Boolean)
                         .join(" · "),

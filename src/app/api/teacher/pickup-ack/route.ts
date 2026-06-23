@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { audit, userActor } from "@/lib/server/audit";
+import { hasClassroomOversight } from "@/lib/server/classroom-oversight";
 import type { CheckInSession, RoomVolunteerCheckIn } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
@@ -54,37 +55,42 @@ export async function POST(req: NextRequest) {
     }
     const session = sessionSnap.data() as CheckInSession;
 
-    const peopleSnap = await churchRef
-      .collection("people")
-      .where("user_id", "==", uid)
-      .limit(1)
-      .get();
-    if (peopleSnap.empty) {
-      return NextResponse.json(
-        { error: "Not a member of this church" },
-        { status: 403 },
-      );
-    }
-    const callerPersonId = peopleSnap.docs[0].id;
+    // Same-room gate — bypassed for classroom oversight
+    // (owner/admin/checkin_manager flag).
+    const oversight = await hasClassroomOversight(churchId, uid);
+    if (!oversight) {
+      const peopleSnap = await churchRef
+        .collection("people")
+        .where("user_id", "==", uid)
+        .limit(1)
+        .get();
+      if (peopleSnap.empty) {
+        return NextResponse.json(
+          { error: "Not a member of this church" },
+          { status: 403 },
+        );
+      }
+      const callerPersonId = peopleSnap.docs[0].id;
 
-    const today = new Date().toISOString().split("T")[0];
-    const volSnap = await churchRef
-      .collection("roomVolunteerCheckins")
-      .where("person_id", "==", callerPersonId)
-      .where("room_id", "==", session.room_id)
-      .where("service_date", "==", today)
-      .get();
-    const activeRoomCheckin = volSnap.docs
-      .map((d) => d.data() as RoomVolunteerCheckIn)
-      .find((v) => !v.checked_out_at);
-    if (!activeRoomCheckin) {
-      return NextResponse.json(
-        {
-          error:
-            "You must be checked into this room to acknowledge a pickup",
-        },
-        { status: 403 },
-      );
+      const today = new Date().toISOString().split("T")[0];
+      const volSnap = await churchRef
+        .collection("roomVolunteerCheckins")
+        .where("person_id", "==", callerPersonId)
+        .where("room_id", "==", session.room_id)
+        .where("service_date", "==", today)
+        .get();
+      const activeRoomCheckin = volSnap.docs
+        .map((d) => d.data() as RoomVolunteerCheckIn)
+        .find((v) => !v.checked_out_at);
+      if (!activeRoomCheckin) {
+        return NextResponse.json(
+          {
+            error:
+              "You must be checked into this room to acknowledge a pickup",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const nowIso = new Date().toISOString();
@@ -102,6 +108,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         room_id: session.room_id,
         child_id: session.child_id,
+        oversight,
       },
       outcome: "ok",
     });

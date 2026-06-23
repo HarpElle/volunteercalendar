@@ -30,13 +30,13 @@ export function formatInitials(name: string): string {
  * Pull just the family surname out of a household-name-ish string.
  *
  * Handles the three real shapes we see:
- *   "Helen Pevensie"       -> "Pevensie"   (legacy create flow stored full name)
- *   "The Pevensie Family"  -> "Pevensie"   (formatted variant)
- *   "Pevensie"             -> "Pevensie"   (clean post-fix create flow)
+ *   "Helen Pevensie"       → "Pevensie"   (legacy create flow stored full name)
+ *   "The Pevensie Family"  → "Pevensie"   (formatted variant)
+ *   "Pevensie"             → "Pevensie"   (clean post-fix create flow)
  *
  * Known limitation: surname particles ("Mary van der Berg") collapse to
  * the last token ("Berg"). Rare enough in the church-roster use case
- * that we accept the loss - the explicit `last_name` field on the
+ * that we accept the loss — the explicit `last_name` field on the
  * linked Person doc is the preferred source when available.
  *
  * Returns "" when nothing useful can be extracted; callers fall back

@@ -86,7 +86,7 @@ async function loadUnifiedHousehold(
 
   // Pick the primary adult deterministically. Honor the explicit
   // `primary_guardian_id` pointer on the household doc when set
-  // (2026-06-03 fix - previously this picked `adults[0]` whose
+  // (2026-06-03 fix — previously this picked `adults[0]`, whose
   // ordering is undefined). Fall back to first-adult for legacy
   // records that pre-date the pointer.
   const primaryGuardianId =
@@ -121,7 +121,9 @@ async function loadUnifiedHousehold(
     secondary_guardian_phone: secondary?.phone || null,
     name: hhData.name || null,
     // Household-wide authorized pickups (2026-06-03). Mirrors per-child
-    // authorized_pickups but applies to every child in the household.
+    // authorized_pickups but applies to every child in the household —
+    // think "Grandma can pick up any of the Smith kids." Empty array for
+    // households created before this field existed.
     authorized_pickups: Array.isArray(hhData.authorized_pickups)
       ? hhData.authorized_pickups
       : [],
@@ -254,7 +256,6 @@ export async function PUT(
           { status: 404 },
         );
       }
-
       const hhData = hhDoc.data() ?? {};
 
       const adultsSnap = await churchRef
@@ -265,10 +266,11 @@ export async function PUT(
       const adults = adultsSnap.docs;
       const now = new Date().toISOString();
 
-      // Resolve primary + secondary deterministically - prefer the
+      // Resolve primary + secondary deterministically — prefer the
       // explicit pointers on the household doc, fall back to insertion
       // order for legacy records (2026-06-03 fix). Without this, the
-      // PUT could rewrite the wrong adult.
+      // PUT could rewrite Helen's record when the user meant Roger, or
+      // vice versa.
       const primaryGuardianId =
         typeof hhData.primary_guardian_id === "string"
           ? hhData.primary_guardian_id
@@ -349,8 +351,10 @@ export async function PUT(
           }
           await secondaryRef.update(updates);
         } else if (wantsSecondary && !secondaryRef) {
-          // Create a new secondary adult Person AND link it on the
-          // household doc in the same logical step (2026-06-03).
+          // Create a new secondary adult person linked to this household.
+          // Allocate the doc ID up front so we can stamp
+          // `secondary_guardian_id` on the household doc in the same
+          // transaction.
           const secondaryNewRef = churchRef.collection("people").doc();
           const parts = String(body.secondary_guardian_name).split(" ");
           const normalized = body.secondary_guardian_phone
@@ -389,8 +393,8 @@ export async function PUT(
           });
           await hhDoc.ref.update({ secondary_guardian_id: secondaryNewRef.id });
         } else if (!wantsSecondary && secondaryRef) {
-          // Removing the secondary guardian: drop them from this
-          // household AND clear the pointer.
+          // Removing the secondary guardian: drop them from this household
+          // AND clear the pointer.
           const currentData = secondaryDoc!.data();
           const newIds = (currentData.household_ids as string[] | undefined)?.filter(
             (h) => h !== householdId,

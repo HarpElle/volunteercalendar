@@ -26,6 +26,11 @@ export async function sendSms(params: SendSmsParams): Promise<SmsResult> {
   const fromNumber = process.env.TWILIO_FROM_NUMBER;
 
   if (!accountSid || !authToken || !fromNumber) {
+    // Callers fire-and-forget, so this log line is the only trace a
+    // misconfigured environment leaves. Keep it loud.
+    console.error(
+      "[sms] send skipped: Twilio not configured (missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_FROM_NUMBER)",
+    );
     return {
       success: false,
       sid: null,
@@ -59,8 +64,12 @@ export async function sendSms(params: SendSmsParams): Promise<SmsResult> {
     });
 
     const data = await res.json();
+    const maskedTo = `${to.slice(0, 5)}***${to.slice(-2)}`;
 
     if (!res.ok) {
+      console.error(
+        `[sms] Twilio send failed (HTTP ${res.status}) to ${maskedTo}: ${data.message || "no error message"}`,
+      );
       return {
         success: false,
         sid: null,
@@ -68,12 +77,16 @@ export async function sendSms(params: SendSmsParams): Promise<SmsResult> {
       };
     }
 
+    console.log(`[sms] sent sid=${data.sid || "?"} to ${maskedTo}`);
     return {
       success: true,
       sid: data.sid || null,
       error: null,
     };
   } catch (err) {
+    console.error(
+      `[sms] Twilio request threw: ${err instanceof Error ? err.message : "unknown error"}`,
+    );
     return {
       success: false,
       sid: null,
