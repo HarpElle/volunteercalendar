@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { updateDocument } from "@/lib/firebase/firestore";
+import { patchOrganization } from "@/lib/api/organization";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -67,7 +67,7 @@ export function GeneralSettings({
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      await updateDocument("churches", churchId, {
+      await patchOrganization(churchId, {
         name: orgName,
         slug,
         org_type: orgType,
@@ -190,7 +190,7 @@ export function CcliLicenseSection({
         ccli_number: ccliNumber.trim() || null,
         ccli_attestation_at: attested ? new Date().toISOString() : null,
       };
-      await updateDocument("churches", churchId, updates);
+      await patchOrganization(churchId, updates);
       setChurch({
         ...church,
         ccli_number: (updates.ccli_number as string | null),

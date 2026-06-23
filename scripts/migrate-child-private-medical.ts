@@ -91,6 +91,10 @@ async function migrateChurch(
 
 async function main() {
   const apply = process.argv.includes("--apply");
+  // Anchor Falls (production) is skipped by default. Migrating it is a
+  // deliberate act requiring BOTH this flag and --church <anchorFallsId>,
+  // authorized by Jason 2026-06-23 ahead of going live on child check-in.
+  const includeAnchorFalls = process.argv.includes("--include-anchor-falls");
   const churchArgIdx = process.argv.indexOf("--church");
   const singleChurch = churchArgIdx >= 0 ? process.argv[churchArgIdx + 1] : null;
 
@@ -117,9 +121,12 @@ async function main() {
   let totalClean = 0;
 
   for (const c of churches) {
-    if (c.id === ANCHOR_FALLS) {
-      console.log(`\n  ⏭  SKIP Anchor Falls (${c.id}) — off limits`);
+    if (c.id === ANCHOR_FALLS && !includeAnchorFalls) {
+      console.log(`\n  ⏭  SKIP Anchor Falls (${c.id}) — off limits (pass --include-anchor-falls to override)`);
       continue;
+    }
+    if (c.id === ANCHOR_FALLS) {
+      console.log(`\n  ⚠️  INCLUDING Anchor Falls (${c.id}) — explicit override`);
     }
     const name = (c.data()?.name as string) || c.id;
     console.log(`\n  Church: ${name} (${c.id.slice(0, 8)}…)`);

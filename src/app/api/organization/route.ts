@@ -226,6 +226,82 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * PATCH /api/organization
+ * Admin-gated update of org-level church fields. Replaces direct client
+ * Firestore writes from the settings panels (Grok F-002): those bypassed
+ * server validation + audit and relied solely on Firestore rules. Now the
+ * write is role-checked (admin+), field-whitelisted, settings-merged, and
+ * audited server-side via the Admin SDK.
+ *
+ * Body: { church_id, patch: { name?, slug?, org_type?, timezone?,
+ *         ccli_number?, ccli_attestation_at?, settings? } }
+ * `settings` is shallow-merged into the existing church.settings so a
+ * partial settings patch never clobbers unrelated keys.
+ */
+const PatchBodySchema = z.object({
+  church_id: z.string().min(1),
+  patch: z
+    .object({
+      name: z.string().min(1).optional(),
+      slug: z.string().optional(),
+      org_type: z.string().optional(),
+      timezone: z.string().optional(),
+      ccli_number: z.string().nullable().optional(),
+      ccli_attestation_at: z.string().nullable().optional(),
+      settings: z.record(z.string(), z.unknown()).optional(),
+    })
+    .refine((p) => Object.keys(p).length > 0, "patch must not be empty"),
+});
+
+export async function PATCH(req: NextRequest) {
+  const noAuth = assertBearerToken(req);
+  if (noAuth) return noAuth;
+
+  const body = await parseBody(req, PatchBodySchema);
+  if (body instanceof NextResponse) return body;
+
+  // Admin-or-above on THIS org. 401 missing token, 403 not-admin.
+  const auth = await requireMembership(req, body.church_id, "admin");
+  if (auth instanceof NextResponse) return auth;
+
+  const churchRef = adminDb.doc(`churches/${body.church_id}`);
+  const snap = await churchRef.get();
+  if (!snap.exists) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  const { settings, ...scalarPatch } = body.patch;
+  const update: Record<string, unknown> = { ...scalarPatch };
+  if (settings) {
+    // Shallow-merge so a partial settings patch keeps existing keys.
+    const existing = (snap.data()?.settings as Record<string, unknown>) ?? {};
+    update.settings = { ...existing, ...settings };
+  }
+
+  try {
+    await churchRef.update(update);
+  } catch (err) {
+    log.error("PATCH /api/organization update failed", {
+      error: err,
+      church_id: body.church_id,
+    });
+    return NextResponse.json({ error: "Update failed" }, { status: 500 });
+  }
+
+  void audit({
+    church_id: body.church_id,
+    actor: userActor(auth.uid),
+    action: "org.settings_update",
+    target_type: "church",
+    target_id: body.church_id,
+    outcome: "ok",
+    metadata: { fields: Object.keys(body.patch) },
+  });
+
+  return NextResponse.json({ success: true });
+}
+
+/**
  * DELETE /api/organization
  * Cascading delete of an organization and all its data.
  * Requires: owner role, confirmed with org name in body.
