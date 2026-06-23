@@ -30,6 +30,10 @@ import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+} from "@/lib/server/child-medical";
+import {
   CHECKIN_PHOTO_ALLOWED_TYPES,
   CHECKIN_PHOTO_MAX_BYTES,
   deleteCheckInPhoto,
@@ -135,8 +139,9 @@ export async function POST(
       scope === "child"
         ? churchRef.collection("people").doc(childId)
         : churchRef.collection("households").doc(householdId);
-    const fieldKey =
-      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
+    // Only used by the household branch below; the child branch writes the
+    // private medical subdoc via writeChildPrivateMedical (Phase 3).
+    const fieldKey = "authorized_pickups";
 
     const targetSnap = await targetRef.get();
     if (!targetSnap.exists) {
@@ -158,11 +163,22 @@ export async function POST(
         { status: 400 },
       );
     }
+    // Phase 3: for child scope, the pickups array lives in the private
+    // medical subdoc (not the parent people doc validated above). Read it
+    // here and keep `childMedical` for the write-back below. Household
+    // scope reads the array straight off the household doc as before.
+    const childMedical =
+      scope === "child"
+        ? await getChildPrivateMedical(
+            churchRef,
+            childId,
+            (targetData.child_profile as Record<string, unknown> | undefined) ??
+              null,
+          )
+        : null;
     const existingPickups: PersonAuthorizedPickup[] =
       scope === "child"
-        ? Array.isArray(targetData.child_profile?.authorized_pickups)
-          ? targetData.child_profile.authorized_pickups
-          : []
+        ? childMedical!.authorized_pickups
         : Array.isArray(targetData.authorized_pickups)
           ? targetData.authorized_pickups
           : [];
@@ -194,10 +210,21 @@ export async function POST(
       ...nextPickups[pickupIdx],
       photo_url: storage_path,
     };
-    await targetRef.update({
-      [fieldKey]: nextPickups,
-      updated_at: new Date().toISOString(),
-    });
+    if (scope === "child") {
+      // Phase 3: write the photo metadata back to the private medical
+      // subdoc, NOT the parent people doc.
+      writeChildPrivateMedical(
+        churchRef,
+        childId,
+        { ...childMedical!, authorized_pickups: nextPickups },
+        new Date().toISOString(),
+      );
+    } else {
+      await targetRef.update({
+        [fieldKey]: nextPickups,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     void audit({
       church_id: churchId,
@@ -267,8 +294,9 @@ export async function DELETE(
       scope === "child"
         ? churchRef.collection("people").doc(childId!)
         : churchRef.collection("households").doc(householdId!);
-    const fieldKey =
-      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
+    // Only used by the household branch below; the child branch writes the
+    // private medical subdoc via writeChildPrivateMedical (Phase 3).
+    const fieldKey = "authorized_pickups";
 
     const targetSnap = await targetRef.get();
     if (!targetSnap.exists) {
@@ -284,11 +312,19 @@ export async function DELETE(
         { status: 403 },
       );
     }
+    // Phase 3: for child scope, the pickups array lives in the private
+    // medical subdoc; read it here and keep `childMedical` for write-back.
+    const childMedical =
+      scope === "child"
+        ? await getChildPrivateMedical(
+            churchRef,
+            childId!,
+            (data.child_profile as Record<string, unknown> | undefined) ?? null,
+          )
+        : null;
     const existing: PersonAuthorizedPickup[] =
       scope === "child"
-        ? Array.isArray(data.child_profile?.authorized_pickups)
-          ? data.child_profile.authorized_pickups
-          : []
+        ? childMedical!.authorized_pickups
         : Array.isArray(data.authorized_pickups)
           ? data.authorized_pickups
           : [];
@@ -307,10 +343,20 @@ export async function DELETE(
 
     const next = [...existing];
     next[idx] = { ...next[idx], photo_url: null };
-    await targetRef.update({
-      [fieldKey]: next,
-      updated_at: new Date().toISOString(),
-    });
+    if (scope === "child") {
+      // Phase 3: write back to the private medical subdoc, NOT the parent.
+      writeChildPrivateMedical(
+        churchRef,
+        childId!,
+        { ...childMedical!, authorized_pickups: next },
+        new Date().toISOString(),
+      );
+    } else {
+      await targetRef.update({
+        [fieldKey]: next,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     void audit({
       church_id: churchId,

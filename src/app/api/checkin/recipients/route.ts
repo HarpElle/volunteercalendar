@@ -41,6 +41,7 @@ import {
 } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { log } from "@/lib/log";
+import { getChildPrivateMedical } from "@/lib/server/child-medical";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
 interface PostBody {
@@ -246,11 +247,16 @@ export async function POST(req: NextRequest) {
       if (!childSnap.exists) continue;
       const childData = childSnap.data() ?? {};
       if (childData.church_id !== churchId) continue;
+      // Phase 3: authorized_pickups moved to the private medical subdoc.
+      // Dual-read with the parent child_profile as the legacy fallback.
       const childProfile =
         (childData.child_profile as Record<string, unknown>) ?? {};
-      const pickups = Array.isArray(childProfile.authorized_pickups)
-        ? (childProfile.authorized_pickups as PersonAuthorizedPickup[])
-        : [];
+      const medical = await getChildPrivateMedical(
+        churchRef,
+        childId,
+        childProfile,
+      );
+      const pickups = medical.authorized_pickups;
       const now = Date.now();
       for (const p of pickups) {
         // Same elapsed-pending filter as the parent surface (P0-2 G).

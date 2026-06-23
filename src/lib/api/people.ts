@@ -4,6 +4,14 @@
  * All functions read from `churches/{churchId}/people` using the
  * Firebase v9 modular SDK. Used by the scheduling page, check-in kiosk,
  * admin views, and calendar feeds.
+ *
+ * @deprecated Phase 3 — do not use for child Person reads; returns raw
+ * Person incl. child_profile (which may carry the five private
+ * child-medical fields on un-migrated docs). Use role-filtered server
+ * DTOs instead. This module is currently unused; it is retained but
+ * must not be revived for child-medical-bearing reads without first
+ * stripping via stripPrivateMedicalFromChildProfile (see
+ * src/lib/server/child-medical.ts).
  */
 
 import {

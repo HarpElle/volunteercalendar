@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { getChildPrivateMedicalBatch } from "@/lib/server/child-medical";
 
 /**
  * GET /api/admin/checkin/household/[householdId]
@@ -133,35 +134,64 @@ async function loadUnifiedHousehold(
     updated_at: hhData.updated_at,
   };
 
-  const children = childPeople
-    .filter((c) => c.data.status === "active")
-    .map((c) => {
-      const cp = c.data.child_profile || {};
-      return {
-        id: c.id,
-        church_id: c.data.church_id,
-        household_id: householdId,
-        first_name: c.data.first_name,
-        last_name: c.data.last_name,
-        preferred_name: c.data.preferred_name || null,
-        date_of_birth: cp.date_of_birth || null,
-        grade: cp.grade || null,
-        photo_url: c.data.photo_url || cp.photo_url || null,
-        default_room_id: cp.default_room_id || null,
-        has_alerts: cp.has_alerts || false,
-        allergies: cp.allergies || null,
-        medical_notes: cp.medical_notes || null,
-        // Wave 9 P0-2: include authorized-pickup contacts so the
-        // household admin UI can render the per-child panel without
-        // a second Firestore round-trip.
-        authorized_pickups: Array.isArray(cp.authorized_pickups)
-          ? cp.authorized_pickups
-          : [],
-        is_active: c.data.status === "active",
-        created_at: c.data.created_at,
-        updated_at: c.data.updated_at,
-      };
-    });
+  const activeChildren = childPeople.filter(
+    (c) => c.data.status === "active",
+  );
+
+  // Phase 3: child medical fields (DOB/allergies/notes/pickups) now live in
+  // a private subdoc. Batch-read them, falling back per-child to the legacy
+  // parent child_profile during the migration window.
+  const childIds = activeChildren.map((c) => c.id);
+  const fallbackByPersonId = new Map<
+    string,
+    Record<string, unknown> | null | undefined
+  >();
+  for (const c of activeChildren) {
+    fallbackByPersonId.set(
+      c.id,
+      (c.data.child_profile as Record<string, unknown>) ?? null,
+    );
+  }
+  const medicalById = await getChildPrivateMedicalBatch(
+    churchRef,
+    childIds,
+    fallbackByPersonId,
+  );
+
+  const children = activeChildren.map((c) => {
+    const cp = c.data.child_profile || {};
+    const medical = medicalById.get(c.id) ?? {
+      date_of_birth: null,
+      allergies: null,
+      medical_notes: null,
+      medications: null,
+      authorized_pickups: [],
+    };
+    return {
+      id: c.id,
+      church_id: c.data.church_id,
+      household_id: householdId,
+      first_name: c.data.first_name,
+      last_name: c.data.last_name,
+      preferred_name: c.data.preferred_name || null,
+      date_of_birth: medical.date_of_birth || null,
+      grade: cp.grade || null,
+      photo_url: c.data.photo_url || cp.photo_url || null,
+      default_room_id: cp.default_room_id || null,
+      has_alerts: cp.has_alerts || false,
+      allergies: medical.allergies || null,
+      medical_notes: medical.medical_notes || null,
+      // Wave 9 P0-2: include authorized-pickup contacts so the
+      // household admin UI can render the per-child panel without
+      // a second Firestore round-trip.
+      authorized_pickups: Array.isArray(medical.authorized_pickups)
+        ? medical.authorized_pickups
+        : [],
+      is_active: c.data.status === "active",
+      created_at: c.data.created_at,
+      updated_at: c.data.updated_at,
+    };
+  });
 
   return { household, children };
 }

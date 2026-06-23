@@ -56,6 +56,10 @@ import {
   churchServiceDate,
 } from "@/lib/server/checkin-helpers";
 import { audit, userActor } from "@/lib/server/audit";
+import {
+  getChildPrivateMedicalBatch,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import { log } from "@/lib/log";
 import type {
   CheckInSession,
@@ -206,10 +210,48 @@ export async function GET(req: NextRequest) {
       }),
     );
 
+    // Phase 3: the five private medical fields (incl. authorized_pickups)
+    // moved out of the parent child_profile into a private subdoc. This
+    // roster iterates EVERY checked-in child, so read them in ONE batched
+    // getAll instead of a per-child fetch. Build a fallback Map from each
+    // child's parent child_profile (one batched getAll of the people docs)
+    // so un-migrated children still resolve during the migration window.
+    const childIds = [
+      ...new Set(
+        activeSessions
+          .map((s) => s.data.child_id)
+          .filter(
+            (id): id is string => typeof id === "string" && id.trim().length > 0,
+          ),
+      ),
+    ];
+    const fallbackByPersonId = new Map<
+      string,
+      Record<string, unknown> | null | undefined
+    >();
+    if (childIds.length > 0) {
+      const personSnaps = await adminDb.getAll(
+        ...childIds.map((id) => churchRef.collection("people").doc(id)),
+      );
+      personSnaps.forEach((snap, i) => {
+        const id = childIds[i];
+        const cp = snap.exists
+          ? ((snap.data() as { child_profile?: Record<string, unknown> })
+              ?.child_profile ?? null)
+          : null;
+        fallbackByPersonId.set(id, cp);
+      });
+    }
+    const medicalById = await getChildPrivateMedicalBatch(
+      churchRef,
+      childIds,
+      fallbackByPersonId,
+    );
+
     // Helper: build the per-child payload. Loads child + household
-    // phone + child_profile.authorized_pickups (embedded in the
-    // child Person doc). Tolerant of missing / malformed ids — an
-    // evacuation tool MUST NOT 500 because one session has bad
+    // phone, plus the private medical record (incl. authorized_pickups)
+    // from the batched read above. Tolerant of missing / malformed ids —
+    // an evacuation tool MUST NOT 500 because one session has bad
     // data; the marshal still sees the others.
     const buildChild = async (
       session: CheckInSession,
@@ -231,30 +273,14 @@ export async function GET(req: NextRequest) {
         : null;
       const displayName = child?.display_name ?? "Unknown";
       const lastName = child?.last_name ?? "";
-      const childMedications = (child as { medications?: string | null } | null)
-        ?.medications;
-      // Pull authorized_pickups directly off the child Person doc;
-      // loadChild returns a flattened shape that doesn't carry it.
-      let rawPickups: PersonAuthorizedPickup[] = [];
-      if (validChildId) {
-        try {
-          const childPersonSnap = await churchRef
-            .collection("people")
-            .doc(validChildId)
-            .get();
-          const childPerson = childPersonSnap.exists
-            ? (childPersonSnap.data() as Person)
-            : null;
-          const childProfile = ((
-            childPerson as unknown as { child_profile?: Record<string, unknown> }
-          )?.child_profile ?? {}) as Record<string, unknown>;
-          rawPickups = Array.isArray(childProfile.authorized_pickups)
-            ? (childProfile.authorized_pickups as PersonAuthorizedPickup[])
-            : [];
-        } catch {
-          // Legacy / malformed child doc — best-effort.
-        }
-      }
+      // Phase 3: the private medical record (allergies/medical_notes/
+      // medications/authorized_pickups) comes from the batched read above.
+      // loadChild returns a flattened shape that doesn't carry pickups.
+      const medical: ChildPrivateMedical | undefined = validChildId
+        ? medicalById.get(validChildId)
+        : undefined;
+      const rawPickups: PersonAuthorizedPickup[] =
+        medical?.authorized_pickups ?? [];
       // Try the household primary's first/last name for the parent
       // label; falls back to null when absent.
       let parentName: string | null = null;
@@ -291,15 +317,18 @@ export async function GET(req: NextRequest) {
         checked_in_at: session.checked_in_at,
         has_alerts: child?.has_alerts ?? false,
         // EMERGENCY OVERRIDE: read raw values from the medical snapshot
-        // (or the child doc fallback). No medical_visibility gating.
+        // (or the private medical record fallback). No medical_visibility
+        // gating.
         allergies:
-          session.medical_snapshot?.allergies ?? child?.allergies ?? null,
+          session.medical_snapshot?.allergies ?? medical?.allergies ?? null,
         medical_notes:
           session.medical_snapshot?.medical_notes ??
-          child?.medical_notes ??
+          medical?.medical_notes ??
           null,
         medications:
-          session.medical_snapshot?.medications ?? childMedications ?? null,
+          session.medical_snapshot?.medications ??
+          medical?.medications ??
+          null,
         parent: { name: parentName, phone },
         authorized_pickups: rawPickups.map((p) => ({
           name: p.name,

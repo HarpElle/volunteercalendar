@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { audit, userActor } from "@/lib/server/audit";
+import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 
 /**
  * GET /api/admin/checkin/children/[childId]?church_id=...
@@ -84,14 +89,17 @@ export async function GET(
       const d = personSnap.data() ?? {};
       if (d.person_type === "child") {
         const cp = (d.child_profile as Record<string, unknown>) ?? {};
+        // Phase 3: allergies/medical_notes now live in the private subdoc;
+        // dual-read with the parent child_profile as the migration fallback.
+        const medical = await getChildPrivateMedical(churchRef, childId, cp);
         return NextResponse.json({
           id: childId,
           first_name: d.first_name,
           last_name: d.last_name,
           preferred_name: d.preferred_name ?? null,
           grade: cp.grade ?? null,
-          allergies: cp.allergies ?? null,
-          medical_notes: cp.medical_notes ?? null,
+          allergies: medical.allergies ?? null,
+          medical_notes: medical.medical_notes ?? null,
           has_alerts: cp.has_alerts ?? false,
           status: d.status,
         });
@@ -216,43 +224,69 @@ export async function PUT(
           }
           updates["child_profile.grade"] = v;
         }
-        if ("allergies" in body) {
-          const v =
+
+        // Phase 3: allergies + medical_notes now live in the private medical
+        // subdoc, NOT on the parent child_profile. Compute the new values
+        // here but write them via the helper below.
+        const cp = (data.child_profile as Record<string, unknown>) ?? {};
+        const allergiesTouched = "allergies" in body;
+        const medicalNotesTouched = "medical_notes" in body;
+        let newAllergies: string | null = null;
+        if (allergiesTouched) {
+          newAllergies =
             typeof body.allergies === "string" && body.allergies.trim()
               ? body.allergies.trim().slice(0, 2000)
               : null;
-          updates["child_profile.allergies"] = v;
         }
-        if ("medical_notes" in body) {
-          const v =
+        let newMedicalNotes: string | null = null;
+        if (medicalNotesTouched) {
+          newMedicalNotes =
             typeof body.medical_notes === "string" &&
             body.medical_notes.trim()
               ? body.medical_notes.trim().slice(0, 2000)
               : null;
-          updates["child_profile.medical_notes"] = v;
         }
 
-        // Recompute has_alerts if either alert-relevant field touched.
-        if (
-          "child_profile.allergies" in updates ||
-          "child_profile.medical_notes" in updates
-        ) {
-          const cp = (data.child_profile as Record<string, unknown>) ?? {};
-          const finalAllergies =
-            "child_profile.allergies" in updates
-              ? updates["child_profile.allergies"]
-              : cp.allergies;
-          const finalMedical =
-            "child_profile.medical_notes" in updates
-              ? updates["child_profile.medical_notes"]
-              : cp.medical_notes;
+        // Recompute has_alerts (a SAFE field that stays on the parent) if
+        // either alert-relevant field was touched. Use the current private
+        // medical record (dual-read fallback to parent cp) for untouched
+        // values.
+        let medical: ChildPrivateMedical | null = null;
+        if (allergiesTouched || medicalNotesTouched) {
+          medical = await getChildPrivateMedical(churchRef, childId, cp);
+          const finalAllergies = allergiesTouched
+            ? newAllergies
+            : medical.allergies;
+          const finalMedical = medicalNotesTouched
+            ? newMedicalNotes
+            : medical.medical_notes;
           updates["child_profile.has_alerts"] = !!(
             finalAllergies || finalMedical
           );
         }
 
-        updates.updated_at = new Date().toISOString();
+        const now = new Date().toISOString();
+        updates.updated_at = now;
         await personRef.update(updates);
+
+        // Persist the sensitive fields to the private subdoc, preserving the
+        // private fields that weren't touched by this request.
+        if (medical) {
+          writeChildPrivateMedical(
+            churchRef,
+            childId,
+            {
+              date_of_birth: medical.date_of_birth,
+              allergies: allergiesTouched ? newAllergies : medical.allergies,
+              medical_notes: medicalNotesTouched
+                ? newMedicalNotes
+                : medical.medical_notes,
+              medications: medical.medications,
+              authorized_pickups: medical.authorized_pickups,
+            },
+            now,
+          );
+        }
 
         void audit({
           church_id,
@@ -270,14 +304,21 @@ export async function PUT(
         const refreshed = await personRef.get();
         const r = refreshed.data() ?? {};
         const rcp = (r.child_profile as Record<string, unknown>) ?? {};
+        // Phase 3: read the (just-written) sensitive fields from the private
+        // subdoc, falling back to the refreshed parent cp during migration.
+        const refreshedMedical = await getChildPrivateMedical(
+          churchRef,
+          childId,
+          rcp,
+        );
         return NextResponse.json({
           id: childId,
           first_name: r.first_name,
           last_name: r.last_name,
           preferred_name: r.preferred_name ?? null,
           grade: rcp.grade ?? null,
-          allergies: rcp.allergies ?? null,
-          medical_notes: rcp.medical_notes ?? null,
+          allergies: refreshedMedical.allergies ?? null,
+          medical_notes: refreshedMedical.medical_notes ?? null,
           has_alerts: rcp.has_alerts ?? false,
         });
       }

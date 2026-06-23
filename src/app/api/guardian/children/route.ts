@@ -30,6 +30,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
+import {
+  stripPrivateMedicalFromChildProfile,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 
 interface PostBody {
   token?: unknown;
@@ -165,16 +170,17 @@ export async function POST(req: NextRequest) {
       campus_ids: [],
       household_ids: [householdId],
       scheduling_profile: null,
-      child_profile: {
-        date_of_birth: null,
+      // Phase 3: the five private medical fields (date_of_birth,
+      // allergies, medical_notes, medications, authorized_pickups) move
+      // to the private subdoc; only the safe summary fields stay on the
+      // parent. stripPrivateMedicalFromChildProfile guarantees no
+      // private field leaks back onto the volunteer-readable doc.
+      child_profile: stripPrivateMedicalFromChildProfile({
         grade,
         photo_url: null,
         default_room_id: null,
         has_alerts: hasAlerts,
-        allergies,
-        medical_notes: medicalNotes,
-        authorized_pickups: [],
-      },
+      }),
       stats: null,
       imported_from: "guardian_portal",
       background_check: null,
@@ -189,7 +195,20 @@ export async function POST(req: NextRequest) {
       updated_at: now,
     };
 
-    const newRef = await churchRef.collection("people").add(personData);
+    // Use an explicit doc ref (not .add()) so the new id is known before
+    // writing the private medical subdoc.
+    const newRef = churchRef.collection("people").doc();
+    await newRef.set(personData);
+
+    // Write the private medical subdoc for the new child.
+    const medical: ChildPrivateMedical = {
+      date_of_birth: null,
+      allergies,
+      medical_notes: medicalNotes,
+      medications: null,
+      authorized_pickups: [],
+    };
+    writeChildPrivateMedical(churchRef, newRef.id, medical, now);
 
     void audit({
       church_id: churchId,

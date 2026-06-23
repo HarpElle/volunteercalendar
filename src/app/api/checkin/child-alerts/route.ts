@@ -18,6 +18,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { assertKioskChurchMatch, requireKioskToken } from "@/lib/server/authz";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, kioskActor } from "@/lib/server/audit";
+import { getChildPrivateMedical } from "@/lib/server/child-medical";
 
 const MAX_CHILDREN_PER_REQUEST = 12;
 
@@ -85,11 +86,21 @@ export async function POST(req: NextRequest) {
         const hasAlerts = !!cp.has_alerts;
         const entry: (typeof results)[number] = { id, has_alerts: hasAlerts };
         if (hasAlerts) {
-          if (typeof cp.allergies === "string" && cp.allergies.trim().length > 0) {
-            entry.allergies = cp.allergies as string;
+          // Phase 3: allergies/medical_notes moved to the private medical
+          // subdoc. Dual-read with `cp` as the legacy fallback. has_alerts
+          // stays on the parent child_profile (safe summary field).
+          const medical = await getChildPrivateMedical(churchRef, id, cp);
+          if (
+            typeof medical.allergies === "string" &&
+            medical.allergies.trim().length > 0
+          ) {
+            entry.allergies = medical.allergies;
           }
-          if (typeof cp.medical_notes === "string" && cp.medical_notes.trim().length > 0) {
-            entry.medical_notes = cp.medical_notes as string;
+          if (
+            typeof medical.medical_notes === "string" &&
+            medical.medical_notes.trim().length > 0
+          ) {
+            entry.medical_notes = medical.medical_notes;
           }
           revealedIds.push(id);
         }

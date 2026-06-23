@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { resolveChurchServiceDate } from "@/lib/server/checkin-helpers";
+import { getChildPrivateMedical } from "@/lib/server/child-medical";
 import type { CheckInSession, Person, Room, RoomVolunteerCheckIn } from "@/lib/types";
 
 export async function GET(
@@ -117,6 +118,14 @@ export async function GET(
       const cp =
         (child as Person & { child_profile?: Record<string, unknown> })
           .child_profile ?? {};
+
+      // Phase 3: allergies/medical_notes/medications now live in the private
+      // medical subdoc; dual-read with the parent child_profile as fallback.
+      const medical = await getChildPrivateMedical(
+        churchRef,
+        session.child_id as string,
+        cp,
+      );
 
       // Load household for guardian contact.
       //
@@ -219,9 +228,9 @@ export async function GET(
         grade: (cp.grade as string) ?? null,
         checked_in_at: session.checked_in_at,
         checked_out_at: session.checked_out_at ?? null,
-        allergies: (cp.allergies as string) ?? null,
-        medical_notes: (cp.medical_notes as string) ?? null,
-        medications: (cp.medications as string) ?? null,
+        allergies: medical.allergies ?? null,
+        medical_notes: medical.medical_notes ?? null,
+        medications: medical.medications ?? null,
         primary_guardian_name: primaryGuardianName,
         primary_guardian_phone: primaryGuardianPhone,
       });

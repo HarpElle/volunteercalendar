@@ -33,6 +33,10 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
+import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
 interface PostBody {
@@ -141,37 +145,43 @@ export async function POST(req: NextRequest) {
     };
 
     if (scope === "child") {
+      // Phase 3: authorized_pickups now lives in the private medical
+      // subdoc (churches/{id}/people/{childId}/private/medical), not on
+      // the parent people doc. Validate against the parent doc (existence,
+      // tenant, person_type), then read-modify-write the private subdoc.
       const personRef = churchRef.collection("people").doc(childId);
-      await adminDb.runTransaction(async (tx) => {
-        const snap = await tx.get(personRef);
-        if (!snap.exists) {
-          throw new Error("PERSON_NOT_FOUND");
-        }
-        const data = snap.data() ?? {};
-        if (data.church_id !== churchId) {
-          throw new Error("CROSS_TENANT");
-        }
-        if (data.person_type !== "child") {
-          throw new Error("NOT_A_CHILD");
-        }
-        const childProfile = data.child_profile ?? {};
-        const existing: PersonAuthorizedPickup[] = Array.isArray(
-          childProfile.authorized_pickups,
-        )
-          ? childProfile.authorized_pickups
-          : [];
+      const snap = await personRef.get();
+      if (!snap.exists) {
+        throw new Error("PERSON_NOT_FOUND");
+      }
+      const data = snap.data() ?? {};
+      if (data.church_id !== churchId) {
+        throw new Error("CROSS_TENANT");
+      }
+      if (data.person_type !== "child") {
+        throw new Error("NOT_A_CHILD");
+      }
+      const childProfile =
+        (data.child_profile as Record<string, unknown> | undefined) ?? null;
+      const medical = await getChildPrivateMedical(
+        churchRef,
+        childId,
+        childProfile,
+      );
+      const existing = medical.authorized_pickups;
 
-        // Backfill missing `id` on legacy records so subsequent edits can
-        // target a stable identifier (we promise this in the type comment).
-        const backfilled = existing.map((p) =>
-          p.id ? p : { ...p, id: randomUUID() },
-        );
+      // Backfill missing `id` on legacy records so subsequent edits can
+      // target a stable identifier (we promise this in the type comment).
+      const backfilled = existing.map((p) =>
+        p.id ? p : { ...p, id: randomUUID() },
+      );
 
-        tx.update(personRef, {
-          "child_profile.authorized_pickups": [...backfilled, newPickup],
-          updated_at: new Date().toISOString(),
-        });
-      });
+      writeChildPrivateMedical(
+        churchRef,
+        childId,
+        { ...medical, authorized_pickups: [...backfilled, newPickup] },
+        new Date().toISOString(),
+      );
     } else {
       // scope === "household". Writes to the household doc's
       // `authorized_pickups` array. Read at check-in time alongside

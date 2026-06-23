@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import {
+  getChildPrivateMedicalBatch,
+  stripPrivateMedicalFromChildProfile,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import type { Child } from "@/lib/types";
 
 /**
@@ -71,10 +77,38 @@ export async function GET(req: NextRequest) {
 
       const snap = await childQuery.get();
 
+      // Phase 3: child medical fields (DOB/allergies/notes/pickups) now
+      // live in a private subdoc. Batch-read them, falling back per-child
+      // to the legacy parent child_profile during the migration window.
+      const personIds = snap.docs.map((doc) => doc.id);
+      const fallbackByPersonId = new Map<
+        string,
+        Record<string, unknown> | null | undefined
+      >();
+      for (const doc of snap.docs) {
+        fallbackByPersonId.set(
+          doc.id,
+          (doc.data().child_profile as Record<string, unknown>) ?? null,
+        );
+      }
+      const medicalById = await getChildPrivateMedicalBatch(
+        churchRef,
+        personIds,
+        fallbackByPersonId,
+      );
+
       // Map Person docs to legacy Child shape for admin UI compatibility
       const children = snap.docs.map((doc) => {
         const d = doc.data();
         const cp = d.child_profile || {};
+        const medical =
+          medicalById.get(doc.id) ?? {
+            date_of_birth: null,
+            allergies: null,
+            medical_notes: null,
+            medications: null,
+            authorized_pickups: [],
+          };
         return {
           id: doc.id,
           church_id: d.church_id,
@@ -82,18 +116,18 @@ export async function GET(req: NextRequest) {
           first_name: d.first_name,
           last_name: d.last_name,
           preferred_name: d.preferred_name || null,
-          date_of_birth: cp.date_of_birth || null,
+          date_of_birth: medical.date_of_birth || null,
           grade: cp.grade || null,
           photo_url: d.photo_url || cp.photo_url || null,
           default_room_id: cp.default_room_id || null,
           has_alerts: cp.has_alerts || false,
-          allergies: cp.allergies || null,
-          medical_notes: cp.medical_notes || null,
+          allergies: medical.allergies || null,
+          medical_notes: medical.medical_notes || null,
           // Wave 9 P0-2: surface authorized-pickup contacts so the
           // household admin UI can render the per-child panel from
           // one fetch.
-          authorized_pickups: Array.isArray(cp.authorized_pickups)
-            ? cp.authorized_pickups
+          authorized_pickups: Array.isArray(medical.authorized_pickups)
+            ? medical.authorized_pickups
             : [],
           is_active: d.status === "active",
           created_at: d.created_at,
@@ -169,6 +203,19 @@ export async function POST(req: NextRequest) {
       const now = new Date().toISOString();
       const hasAlerts = !!(body.allergies || body.medical_notes);
 
+      // Phase 3: keep only safe summary fields on the parent child_profile;
+      // the five sensitive fields are split into the private medical subdoc.
+      const safeChildProfile = stripPrivateMedicalFromChildProfile({
+        date_of_birth: body.date_of_birth || null,
+        grade: body.grade || null,
+        photo_url: body.photo_url || null,
+        default_room_id: body.default_room_id || null,
+        has_alerts: hasAlerts,
+        allergies: body.allergies || null,
+        medical_notes: body.medical_notes || null,
+        authorized_pickups: [],
+      });
+
       const personData: Record<string, unknown> = {
         church_id,
         person_type: "child",
@@ -190,16 +237,7 @@ export async function POST(req: NextRequest) {
         campus_ids: [],
         household_ids: [household_id],
         scheduling_profile: null,
-        child_profile: {
-          date_of_birth: body.date_of_birth || null,
-          grade: body.grade || null,
-          photo_url: body.photo_url || null,
-          default_room_id: body.default_room_id || null,
-          has_alerts: hasAlerts,
-          allergies: body.allergies || null,
-          medical_notes: body.medical_notes || null,
-          authorized_pickups: [],
-        },
+        child_profile: safeChildProfile,
         stats: null,
         imported_from: "manual",
         background_check: null,
@@ -211,6 +249,16 @@ export async function POST(req: NextRequest) {
       };
 
       const newRef = await churchRef.collection("people").add(personData);
+
+      // Write the private medical subdoc for the new child.
+      const medical: ChildPrivateMedical = {
+        date_of_birth: body.date_of_birth || null,
+        allergies: body.allergies || null,
+        medical_notes: body.medical_notes || null,
+        medications: body.medications || null,
+        authorized_pickups: [],
+      };
+      writeChildPrivateMedical(churchRef, newRef.id, medical, now);
 
       // Return in legacy-compatible shape for admin UI
       const result: Record<string, unknown> = {
