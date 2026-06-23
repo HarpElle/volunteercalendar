@@ -342,8 +342,18 @@ async function resolveUserIdFromPersonId(
  */
 export async function resolveVolunteerEligibility(
   input: VolunteerEligibilityInput,
+  /**
+   * Antigravity F-002 perf: callers that resolve eligibility for MANY
+   * recipients in a loop should fetch the org gate ONCE
+   * (`checkOrgGate`) and pass it here, then run the per-recipient
+   * resolves in `Promise.all`. That turns 3×N sequential reads (org +
+   * person + membership, re-fetching the identical org doc every
+   * iteration) into org-once + 2×N parallel — avoiding the Vercel
+   * function-timeout risk on large publishes. Omit for single sends.
+   */
+  prefetchedOrgGate?: OrgGate,
 ): Promise<ChannelVerdict> {
-  const orgGate = await checkOrgGate(input.churchId);
+  const orgGate = prefetchedOrgGate ?? (await checkOrgGate(input.churchId));
   // Codex 2026-06-23 retest #2 fix: previously a duplicate
   // `if (!orgGate.live)` short-circuit here returned a vanilla
   // BLOCKED before the pure helper could resolve in_app_only to
@@ -373,8 +383,11 @@ export async function resolveVolunteerEligibility(
  */
 export async function resolveSchedulerEligibility(
   input: SchedulerEligibilityInput,
+  /** Pre-fetched org gate for loop callers — see resolveVolunteerEligibility
+   *  (Antigravity F-002 perf). */
+  prefetchedOrgGate?: OrgGate,
 ): Promise<ChannelVerdict> {
-  const orgGate = await checkOrgGate(input.churchId);
+  const orgGate = prefetchedOrgGate ?? (await checkOrgGate(input.churchId));
   // Codex 2026-06-23 retest #2 fix: see resolveVolunteerEligibility
   // above. The duplicate org-gate short-circuit hid in_app_only's
   // inApp=true verdict from every scheduler route, including

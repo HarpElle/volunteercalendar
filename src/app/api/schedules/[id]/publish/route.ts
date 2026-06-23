@@ -9,7 +9,7 @@ import { parseBody, z } from "@/lib/server/validation";
 import type { Schedule, Assignment, Person, Service } from "@/lib/types";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
-import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
+import { resolveVolunteerEligibility, checkOrgGate } from "@/lib/server/notification-eligibility";
 
 const BodySchema = z.object({
   church_id: z.string().min(1),
@@ -137,6 +137,29 @@ export async function POST(
     };
     const pendingEmails: PendingEmail[] = [];
 
+    // Antigravity F-002 perf: resolve eligibility for EVERY assignment
+    // in parallel BEFORE the build loop. Fetch the org gate once and
+    // pass it into each resolve, turning 3×N sequential reads (org doc
+    // re-fetched per assignment) into org-once + 2×N parallel — large
+    // publishes no longer risk the Vercel function timeout. Keyed by
+    // assignment doc id so the build loop below reads its verdict.
+    const orgGate = await checkOrgGate(church_id);
+    const eligibilityEntries = await Promise.all(
+      assignSnap.docs.map(async (doc) => {
+        const personId = (doc.data() as Assignment).person_id;
+        const eligibility = await resolveVolunteerEligibility(
+          {
+            churchId: church_id,
+            personId,
+            notificationType: "confirmation",
+          },
+          orgGate,
+        );
+        return [doc.id, eligibility] as const;
+      }),
+    );
+    const eligibilityByAssignment = new Map(eligibilityEntries);
+
     for (const doc of assignSnap.docs) {
       const assignment = { id: doc.id, ...doc.data() } as Assignment;
       const volunteer = volunteersMap.get(assignment.person_id);
@@ -149,11 +172,7 @@ export async function POST(
       // confirm token + outbox entry when eligibility blocks, since the
       // confirm flow is the user's path to RE-enable themselves; we only
       // skip the actual send. Channel decision happens at send time below.
-      const eligibility = await resolveVolunteerEligibility({
-        churchId: church_id,
-        personId: assignment.person_id,
-        notificationType: "confirmation",
-      });
+      const eligibility = eligibilityByAssignment.get(doc.id)!;
 
       const confirmToken = crypto.randomUUID();
       batch.update(doc.ref, { confirmation_token: confirmToken });

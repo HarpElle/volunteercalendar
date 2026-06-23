@@ -12,7 +12,7 @@ import type { SwapRequest, Person, Assignment } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { audit, userActor } from "@/lib/server/audit";
 import { resend } from "@/lib/resend";
-import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
+import { resolveVolunteerEligibility, checkOrgGate } from "@/lib/server/notification-eligibility";
 import { buildSwapRequestBroadcastEmail } from "@/lib/utils/emails/swap-request-broadcast";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { buildSwapTransferUpdate } from "@/lib/server/swap-transfer";
@@ -159,6 +159,10 @@ export async function POST(request: Request) {
         .filter((p) => p.id !== assignment.volunteer_id);
 
       const dateLabel = assignment.service_date;
+      // Antigravity F-002 perf: fetch the org gate ONCE before the
+      // per-teammate fan-out, then pass it into every eligibility
+      // resolve so we don't re-read the church doc N times.
+      const orgGate = await checkOrgGate(church_id);
       const results = await Promise.all(
         teammates.map(async (t) => {
           const uid = await resolveUserId(church_id, t.id);
@@ -174,40 +178,47 @@ export async function POST(request: Request) {
           const recipientName =
             (profile?.display_name as string) || t.name || "there";
 
-          // 1. In-app notification (existing behavior).
-          let notified = false;
-          try {
-            await createUserNotification({
-              user_id: uid,
-              church_id,
-              type: "swap_request",
-              title: `Sub needed: ${assignment.role_title}`,
-              body: `${requesterName} can't make ${dateLabel}. Tap to cover.`,
-              metadata: {
-                link_href: "/dashboard/my-schedule#open-swaps",
-                swap_id: ref.id,
-              },
-            });
-            notified = true;
-          } catch {
-            // continue — try email regardless
-          }
-
-          // 2. Email (new — the primary discovery channel).
-          // Phase 2: honor teammate's per-membership opt-out before
-          // emailing. In-app notification (above) still fires — that's
-          // the always-on inbox they consented to by joining.
-          let emailed = false;
-          let emailEligible = false;
-          if (recipientEmail) {
-            const eligibility = await resolveVolunteerEligibility({
+          // Phase 2 + Phase 4b gap #2: resolve eligibility ONCE for this
+          // teammate and gate BOTH the in-app notification and the email
+          // on it. Previously the in-app `createUserNotification` fired
+          // unconditionally (only the email was gated) — so a teammate
+          // with channels=["none"] / inactive membership still got a
+          // swap_request inbox row. inApp=true also covers org
+          // in_app_only mode (outbound off, inbox on, the point of it).
+          const eligibility = await resolveVolunteerEligibility(
+            {
               churchId: church_id,
               personId: t.id,
               notificationType: "swap_request_to_teammate",
-            });
-            emailEligible = eligibility.email;
+            },
+            orgGate,
+          );
+
+          // 1. In-app notification — now gated on eligibility.inApp.
+          let notified = false;
+          if (eligibility.inApp) {
+            try {
+              await createUserNotification({
+                user_id: uid,
+                church_id,
+                type: "swap_request",
+                title: `Sub needed: ${assignment.role_title}`,
+                body: `${requesterName} can't make ${dateLabel}. Tap to cover.`,
+                metadata: {
+                  link_href: "/dashboard/my-schedule#open-swaps",
+                  swap_id: ref.id,
+                },
+              });
+              notified = true;
+            } catch {
+              // continue — try email regardless
+            }
           }
-          if (recipientEmail && emailEligible) {
+
+          // 2. Email (the primary discovery channel). Gated on the same
+          // verdict's email flag.
+          let emailed = false;
+          if (recipientEmail && eligibility.email) {
             try {
               const email = buildSwapRequestBroadcastEmail({
                 recipientName,

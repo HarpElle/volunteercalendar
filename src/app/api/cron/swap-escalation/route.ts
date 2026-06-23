@@ -25,7 +25,7 @@ import { withCronRun } from "@/lib/server/cron-runs";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { log } from "@/lib/log";
 import { resend } from "@/lib/resend";
-import { resolveSchedulerEligibility } from "@/lib/server/notification-eligibility";
+import { resolveSchedulerEligibility, checkOrgGate } from "@/lib/server/notification-eligibility";
 import {
   shouldEscalateSwap,
   addOneDayIso,
@@ -124,6 +124,13 @@ export async function GET(request: NextRequest) {
         .where("status", "==", "active")
         .get();
 
+      // Antigravity F-002 perf: fetch the org gate ONCE per church and
+      // pass it into every recipient's resolveSchedulerEligibility below
+      // (the recipient loop is nested two deep: swaps × recipients). The
+      // gate only varies by church, so one read per church replaces the
+      // prior read-per-recipient.
+      const orgGate = await checkOrgGate(churchId);
+
       for (const { ref: swapRef, swap } of swaps) {
         if (!shouldEscalateSwap({ swap, todayIso, tomorrowIso })) continue;
 
@@ -191,12 +198,16 @@ export async function GET(request: NextRequest) {
 
           // Phase 2: scheduler-eligibility gate. Honors enabled_types
           // + channel routing + org-pause. Escalation is "swap_request"
-          // in the SchedulerNotificationType taxonomy.
-          const eligibility = await resolveSchedulerEligibility({
-            churchId,
-            userId,
-            notificationType: "swap_request",
-          });
+          // in the SchedulerNotificationType taxonomy. F-002: pass the
+          // per-church prefetched gate so the org doc isn't re-read here.
+          const eligibility = await resolveSchedulerEligibility(
+            {
+              churchId,
+              userId,
+              notificationType: "swap_request",
+            },
+            orgGate,
+          );
 
           // 1. Email
           if (recipientEmail && eligibility.email) {
@@ -233,31 +244,40 @@ export async function GET(request: NextRequest) {
 
           // 2. In-app notification (reuse swap_request type — the
           // scheduler's inbox already understands that surface).
-          try {
-            await createUserNotification({
-              user_id: userId,
-              church_id: churchId,
-              type: "swap_request",
-              title: `Open swap still uncovered: ${swap.role_title}`,
-              body: `${swap.requester_name} needs a sub on ${swap.service_date} (${teamName}). No teammate has covered yet.`,
-              metadata: {
-                link_href: "/dashboard/schedules",
+          // Phase 4b gap #2: gate on eligibility.inApp (reusing the
+          // verdict resolved above for the email gate). Previously this
+          // fired unconditionally, so a scheduler who opted out
+          // (channels=["none"]), is inactive, or is in an org-paused
+          // state still got an inbox row. inApp=true still covers org
+          // in_app_only mode (outbound off, inbox on) and the urgent
+          // path — the resolver owns that precedence.
+          if (eligibility.inApp) {
+            try {
+              await createUserNotification({
+                user_id: userId,
+                church_id: churchId,
+                type: "swap_request",
+                title: `Open swap still uncovered: ${swap.role_title}`,
+                body: `${swap.requester_name} needs a sub on ${swap.service_date} (${teamName}). No teammate has covered yet.`,
+                metadata: {
+                  link_href: "/dashboard/schedules",
+                  swap_id: swap.id,
+                  // Carried as a string flag — UserNotification.metadata
+                  // is typed Record<string, string|null>. The future
+                  // inbox renderer can branch on this to label the row
+                  // "Escalated" instead of just "Sub needed".
+                  escalated: "true",
+                },
+              });
+              notifsSent++;
+            } catch (err) {
+              log.warn("swap-escalation: in-app notification failed", {
+                error: err,
+                church_id: churchId,
                 swap_id: swap.id,
-                // Carried as a string flag — UserNotification.metadata
-                // is typed Record<string, string|null>. The future
-                // inbox renderer can branch on this to label the row
-                // "Escalated" instead of just "Sub needed".
-                escalated: "true",
-              },
-            });
-            notifsSent++;
-          } catch (err) {
-            log.warn("swap-escalation: in-app notification failed", {
-              error: err,
-              church_id: churchId,
-              swap_id: swap.id,
-              user_id: userId,
-            });
+                user_id: userId,
+              });
+            }
           }
         }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { resend } from "@/lib/resend";
-import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
+import { resolveVolunteerEligibility, checkOrgGate } from "@/lib/server/notification-eligibility";
 import {
   buildBatchConfirmationEmail,
   type BatchAssignment,
@@ -131,16 +131,29 @@ export async function POST(request: NextRequest) {
     // volunteer with channels=["none"] still got a schedule_assignment
     // inbox row, contradicting the Phase 2 contract that explicit
     // opt-out blocks ALL channels (eligibility.inApp goes false).
+    //
+    // Antigravity F-002 perf: fetch the org gate ONCE before resolving,
+    // then resolve every volunteer's eligibility in parallel passing the
+    // prefetched gate — turns 3×N sequential reads (org re-fetched each
+    // iteration) into org-once + 2×N parallel. Map shape unchanged so
+    // the rest of the route is untouched.
+    const orgGate = await checkOrgGate(church_id);
     const eligibilityByVol = new Map<string, Awaited<ReturnType<typeof resolveVolunteerEligibility>>>();
-    for (const volId of byVolunteer.keys()) {
-      eligibilityByVol.set(
+    const eligibilityResults = await Promise.all(
+      Array.from(byVolunteer.keys()).map(async (volId) => ({
         volId,
-        await resolveVolunteerEligibility({
-          churchId: church_id,
-          personId: volId,
-          notificationType: "assignment_change",
-        }),
-      );
+        eligibility: await resolveVolunteerEligibility(
+          {
+            churchId: church_id,
+            personId: volId,
+            notificationType: "assignment_change",
+          },
+          orgGate,
+        ),
+      })),
+    );
+    for (const { volId, eligibility } of eligibilityResults) {
+      eligibilityByVol.set(volId, eligibility);
     }
 
     for (const [volId, volAssignments] of byVolunteer) {

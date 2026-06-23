@@ -31,8 +31,37 @@ function getResendInstance(): Resend {
   return _resendInstance;
 }
 
+/**
+ * Dry-run egress (Phase 4b / Antigravity I-001): when RESEND_DRY_RUN is
+ * truthy, OR no RESEND_API_KEY is set outside production, `resend.emails.send`
+ * logs the payload and returns a mock success instead of calling Resend.
+ * Lets heavy test runs (publishing test schedules) exercise the full send
+ * path without burning Resend's daily quota or needing a key locally.
+ */
+function isDryRun(): boolean {
+  if (process.env.RESEND_DRY_RUN === "true" || process.env.RESEND_DRY_RUN === "1") {
+    return true;
+  }
+  return process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY;
+}
+
+const dryRunEmails = {
+  async send(payload: unknown) {
+    const p = (payload ?? {}) as { to?: unknown; subject?: unknown };
+    console.info(
+      `[resend:dry-run] suppressed send → to=${JSON.stringify(p.to)} subject=${JSON.stringify(p.subject)}`,
+    );
+    return { data: { id: "dry-run" }, error: null };
+  },
+};
+
 export const resend = new Proxy({} as Resend, {
   get(_target, prop) {
+    // Intercept `.emails` in dry-run BEFORE constructing the SDK, so a
+    // missing key in dev/test doesn't throw — the stub handles the send.
+    if (prop === "emails" && isDryRun()) {
+      return dryRunEmails;
+    }
     const instance = getResendInstance();
     const value = (instance as unknown as Record<string | symbol, unknown>)[
       prop as string | symbol
