@@ -25,6 +25,7 @@ import { withCronRun } from "@/lib/server/cron-runs";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { log } from "@/lib/log";
 import { resend } from "@/lib/resend";
+import { resolveSchedulerEligibility } from "@/lib/server/notification-eligibility";
 import {
   shouldEscalateSwap,
   addOneDayIso,
@@ -188,8 +189,17 @@ export async function GET(request: NextRequest) {
           const recipientName =
             (profile.display_name as string) || "Scheduler";
 
+          // Phase 2: scheduler-eligibility gate. Honors enabled_types
+          // + channel routing + org-pause. Escalation is "swap_request"
+          // in the SchedulerNotificationType taxonomy.
+          const eligibility = await resolveSchedulerEligibility({
+            churchId,
+            userId,
+            notificationType: "swap_request",
+          });
+
           // 1. Email
-          if (recipientEmail) {
+          if (recipientEmail && eligibility.email) {
             try {
               const built = buildSwapEscalationEmail({
                 recipientName,

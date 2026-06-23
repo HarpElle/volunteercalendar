@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildAbsenceAlertEmail } from "@/lib/utils/emails/absence-alert";
 import { sendSms } from "@/lib/services/sms";
-import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
-import type { Membership } from "@/lib/types";
+import { resolveSchedulerEligibility } from "@/lib/server/notification-eligibility";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 import { log } from "@/lib/log";
@@ -153,11 +152,12 @@ export async function POST(req: NextRequest) {
     const volSnap = await adminDb.doc(`churches/${church_id}/people/${volunteerId}`).get();
     const volunteerName = volSnap.exists ? (volSnap.data()!.name as string) || "Volunteer" : "Volunteer";
 
-    // Get church name + tier
+    // Get church name. Subscription tier is now read inside the
+    // notification-eligibility resolver, so we no longer carry it
+    // through here.
     const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
     const churchData = churchSnap.exists ? churchSnap.data()! : {};
     const churchName = (churchData.name as string) || "Organization";
-    const subscriptionTier = (churchData.subscription_tier as string) || "free";
     // W11-C: church logo for email header. Null/undefined = template
     // falls back to the existing text-only header.
     const churchLogoUrl =
@@ -200,20 +200,31 @@ export async function POST(req: NextRequest) {
       const recipientName = (profileData.display_name as string) || "there";
       const recipientPhone = (profileData.phone as string) || "";
 
-      // W12-B: route channel decision through the pure helper so
-      // the urgent-override-prefs contract is regression-tested in
-      // isolation. Non-urgent path = same shouldNotifyScheduler-
-      // driven behavior as before. Urgent path = bypass prefs.
-      const membershipAsType = { id: mDoc.id, ...mData } as Membership;
-      const prefs = shouldNotifyScheduler(
-        membershipAsType,
-        "absence_alert",
-        subscriptionTier,
-      );
+      // Phase 2: route eligibility through the shared resolver so
+      // org-pause + membership-status get checked alongside scheduler
+      // prefs. resolveSchedulerEligibility internally calls
+      // shouldNotifyScheduler when urgent=false (preserving the
+      // W12-B contract); when urgent=true it bypasses per-user prefs
+      // (also W12-B) but still respects org-pause and membership status.
+      // decideAbsenceChannels then layers the urgent-overrides-prefs
+      // + has-channel logic on top — the test in
+      // tests/unit/absence-channels.test.ts locks that contract.
+      const eligibility = await resolveSchedulerEligibility({
+        churchId: church_id,
+        userId: mUserId,
+        notificationType: "absence_alert",
+        urgent,
+      });
+
+      // Org-level pause overrides even urgent. If we hit one of the
+      // org_ reasons, skip entirely — no fan-out at all from a paused
+      // org regardless of urgency.
+      if (eligibility.reason?.startsWith("org_")) continue;
+
       const { email: sendEmail, sms: sendSmsFlag } = decideAbsenceChannels({
         urgent,
-        prefsEmail: prefs.email,
-        prefsSms: prefs.sms,
+        prefsEmail: eligibility.email,
+        prefsSms: eligibility.sms,
         hasEmail: !!recipientEmail,
         hasPhone: !!recipientPhone,
       });

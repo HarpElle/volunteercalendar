@@ -7,6 +7,7 @@ import type { NotificationType, NotificationChannel } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { resend } from "@/lib/resend";
+import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
 import { log } from "@/lib/log";
 import type { DocumentReference } from "firebase-admin/firestore";
 
@@ -270,11 +271,24 @@ export async function POST(request: Request) {
       const phone = (volunteer.phone as string) || null;
       const volName = (volunteer.name as string) || "Volunteer";
 
-      // Determine which channels to use for this volunteer
-      const volPrefs = (volunteer.reminder_preferences as Record<string, unknown>)?.channels as string[] | undefined;
-      const channels: string[] = volPrefs?.length ? volPrefs : defaultChannels;
+      // Phase 2: route through the eligibility resolver so we honor
+      // the user's membership-stored reminder_preferences (the prior
+      // `volunteer.reminder_preferences` read was looking on the
+      // Person doc — Cursor F-002 — and almost always missed).
+      // defaultChannels stays the source for opt-IN width: if the
+      // resolver says email+sms but the church default is email-only,
+      // we still respect the org default by intersecting.
+      const eligibility = await resolveVolunteerEligibility({
+        churchId: church_id,
+        personId: assignment.person_id as string,
+        notificationType: "reminder",
+      });
+      const resolvedChannels: string[] = [];
+      if (eligibility.email && defaultChannels.includes("email")) resolvedChannels.push("email");
+      if (eligibility.sms && defaultChannels.includes("sms")) resolvedChannels.push("sms");
+      const channels: string[] = resolvedChannels;
 
-      if (channels.length === 1 && channels[0] === "none") {
+      if (channels.length === 0) {
         skipped++;
         continue;
       }

@@ -12,6 +12,7 @@ import type { SwapRequest, Person, Assignment } from "@/lib/types";
 import { resolveUserId, createUserNotification } from "@/lib/services/user-notifications";
 import { audit, userActor } from "@/lib/server/audit";
 import { resend } from "@/lib/resend";
+import { resolveVolunteerEligibility } from "@/lib/server/notification-eligibility";
 import { buildSwapRequestBroadcastEmail } from "@/lib/utils/emails/swap-request-broadcast";
 import { getBaseUrl } from "@/lib/utils/base-url";
 import { buildSwapTransferUpdate } from "@/lib/server/swap-transfer";
@@ -193,8 +194,20 @@ export async function POST(request: Request) {
           }
 
           // 2. Email (new — the primary discovery channel).
+          // Phase 2: honor teammate's per-membership opt-out before
+          // emailing. In-app notification (above) still fires — that's
+          // the always-on inbox they consented to by joining.
           let emailed = false;
+          let emailEligible = false;
           if (recipientEmail) {
+            const eligibility = await resolveVolunteerEligibility({
+              churchId: church_id,
+              personId: t.id,
+              notificationType: "swap_request_to_teammate",
+            });
+            emailEligible = eligibility.email;
+          }
+          if (recipientEmail && emailEligible) {
             try {
               const email = buildSwapRequestBroadcastEmail({
                 recipientName,
