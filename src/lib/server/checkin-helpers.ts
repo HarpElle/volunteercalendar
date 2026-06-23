@@ -22,6 +22,7 @@
 
 import type { firestore } from "firebase-admin";
 import { todayInTimezone } from "@/lib/utils/date";
+import { getChildPrivateMedical } from "@/lib/server/child-medical";
 
 // ─── Service-date resolution ───────────────────────────────────────────────
 // The check-in "service date" (YYYY-MM-DD) is the day a session belongs to.
@@ -157,15 +158,20 @@ export async function loadChild(
     if (p.person_type !== "child") return null;
     const cp = (p.child_profile as Record<string, unknown> | undefined) || {};
     const first_name = (p.first_name as string) || "";
+    // Phase 3: medical fields (allergies/medical_notes/medications) now live
+    // in the private subcollection. Dual-read with `cp` as the legacy
+    // fallback so un-migrated children still resolve during the migration
+    // window. Safe fields (has_alerts/default_room_id/grade) stay on parent.
+    const medical = await getChildPrivateMedical(churchRef, childId, cp);
     return {
       id: personSnap.id,
       first_name,
       last_name: (p.last_name as string) || "",
       preferred_name: (p.preferred_name as string) || null,
       has_alerts: !!cp.has_alerts,
-      allergies: (cp.allergies as string) || undefined,
-      medical_notes: (cp.medical_notes as string) || undefined,
-      medications: (cp.medications as string) || undefined,
+      allergies: medical.allergies || undefined,
+      medical_notes: medical.medical_notes || undefined,
+      medications: medical.medications || undefined,
       default_room_id: (cp.default_room_id as string) || undefined,
       grade: (cp.grade as string) || undefined,
       display_name: (p.preferred_name as string) || first_name,
