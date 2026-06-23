@@ -23,7 +23,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setDoc, doc, getDoc, getDocs, collection, query, where, updateDoc } from "firebase/firestore";
@@ -35,6 +35,9 @@ const ADMIN_A = "admin-a";
 const VOLUNTEER_A = "volunteer-a";
 const VOLUNTEER_B = "volunteer-b";
 const SCHEDULER_A = "scheduler-a";
+// Phase 3: check-in-role members for private-medical read tests.
+const CHECKIN_VOL_A = "checkin-vol-a";
+const CHECKIN_MGR_A = "checkin-mgr-a";
 
 let testEnv: RulesTestEnvironment;
 
@@ -91,6 +94,21 @@ beforeEach(async () => {
       role: "volunteer",
       status: "active",
     });
+    // Phase 3: a volunteer with the check-in role, and a check-in manager.
+    await set(`memberships/${CHECKIN_VOL_A}_${CHURCH_A}`, {
+      user_id: CHECKIN_VOL_A,
+      church_id: CHURCH_A,
+      role: "volunteer",
+      status: "active",
+      checkin_volunteer: true,
+    });
+    await set(`memberships/${CHECKIN_MGR_A}_${CHURCH_A}`, {
+      user_id: CHECKIN_MGR_A,
+      church_id: CHURCH_A,
+      role: "volunteer",
+      status: "active",
+      checkin_manager: true,
+    });
 
     // Seed church docs
     await set(`churches/${CHURCH_A}`, {
@@ -104,6 +122,28 @@ beforeEach(async () => {
 
     // Seed sample data in subcollections
     await set(`churches/${CHURCH_A}/people/p1`, { name: "Alice" });
+    // Phase 3: a child Person with ONLY safe summary fields on the parent
+    // doc + the sensitive medical data in the private subdoc.
+    await set(`churches/${CHURCH_A}/people/child1`, {
+      person_type: "child",
+      first_name: "Test",
+      last_name: "Child",
+      child_profile: {
+        grade: "pre-k",
+        default_room_id: "room1",
+        has_alerts: true,
+        photo_url: null,
+      },
+    });
+    await set(`churches/${CHURCH_A}/people/child1/private/medical`, {
+      date_of_birth: "2020-01-02",
+      allergies: "Peanuts",
+      medical_notes: "Asthma rescue inhaler in bag",
+      medications: "Albuterol",
+      authorized_pickups: [
+        { id: "pickup1", name: "Aunt Jane", relationship: "Aunt", phone: "555-0100" },
+      ],
+    });
     await set(`churches/${CHURCH_A}/ministries/m1`, { name: "Worship" });
     await set(`churches/${CHURCH_A}/services/s1`, { name: "Sunday" });
 
@@ -614,3 +654,159 @@ describe("Firestore rules — membership self-update (Phase 1.2 fix)", () => {
   });
 });
 
+
+describe("Firestore rules — Phase 3 child private-medical isolation", () => {
+  // ── Parent people doc stays volunteer-readable + free of medical data ──
+  it("active volunteer CAN read a child's parent people doc", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertSucceeds(
+      getDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1`)),
+    );
+  });
+
+  it("parent child doc fixture carries NO private medical keys (data hygiene)", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1`),
+      );
+      const cp = (snap.data()?.child_profile ?? {}) as Record<string, unknown>;
+      expect("date_of_birth" in cp).toBe(false);
+      expect("allergies" in cp).toBe(false);
+      expect("medical_notes" in cp).toBe(false);
+      expect("medications" in cp).toBe(false);
+      expect("authorized_pickups" in cp).toBe(false);
+      // Safe summary fields remain.
+      expect(cp.grade).toBe("pre-k");
+      expect(cp.has_alerts).toBe(true);
+    });
+  });
+
+  // ── private/medical read gate ──
+  it("active ordinary volunteer CANNOT read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_A);
+    await assertFails(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("plain scheduler (no check-in role) CANNOT read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertFails(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("owner CAN read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(OWNER_A);
+    await assertSucceeds(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("admin CAN read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertSucceeds(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("checkin_volunteer CAN read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(CHECKIN_VOL_A);
+    await assertSucceeds(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("checkin_manager CAN read private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(CHECKIN_MGR_A);
+    await assertSucceeds(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  it("cross-church active member CANNOT read another church's private/medical", async () => {
+    const ctx = testEnv.authenticatedContext(VOLUNTEER_B);
+    await assertFails(
+      getDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+      ),
+    );
+  });
+
+  // ── private/medical is Admin-SDK-write-only ──
+  it("even an admin CANNOT client-write private/medical (Admin-SDK only)", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_A);
+    await assertFails(
+      setDoc(
+        doc(ctx.firestore(), `churches/${CHURCH_A}/people/child1/private/medical`),
+        { allergies: "tampered" },
+      ),
+    );
+  });
+
+  // ── parent-write validation: no medical keys back into child_profile ──
+  it("scheduler CANNOT write child_profile.medical_notes onto the parent people doc", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/people/child2`), {
+        person_type: "child",
+        first_name: "Re",
+        last_name: "Introduced",
+        child_profile: { grade: "1st", medical_notes: "should be rejected" },
+      }),
+    );
+  });
+
+  it("scheduler CANNOT write child_profile.authorized_pickups onto the parent people doc", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/people/child3`), {
+        person_type: "child",
+        child_profile: {
+          grade: "2nd",
+          authorized_pickups: [{ name: "X", phone: null, relationship: null }],
+        },
+      }),
+    );
+  });
+
+  it("scheduler CAN write a child parent doc with only SAFE child_profile fields", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/people/child4`), {
+        person_type: "child",
+        first_name: "Safe",
+        last_name: "Only",
+        child_profile: {
+          grade: "3rd",
+          default_room_id: "room1",
+          has_alerts: false,
+          photo_url: null,
+        },
+      }),
+    );
+  });
+
+  it("scheduler CAN write a non-child people doc with no child_profile", async () => {
+    const ctx = testEnv.authenticatedContext(SCHEDULER_A);
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), `churches/${CHURCH_A}/people/adult1`), {
+        person_type: "adult",
+        first_name: "Grown",
+        last_name: "Up",
+      }),
+    );
+  });
+});

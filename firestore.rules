@@ -38,6 +38,36 @@ service cloud.firestore {
         && memberRole(churchId) in ['scheduler', 'admin', 'owner'];
     }
 
+    // ─── Phase 3: child private-medical access ───
+    // Who may READ churches/{c}/people/{id}/private/medical (date_of_birth,
+    // allergies, medical_notes, medications, authorized_pickups): admins/
+    // owners + members with a check-in role. Ordinary volunteers + plain
+    // schedulers cannot. Writes are Admin-SDK-only (see the match block).
+    function hasCheckinPrivateRead(churchId) {
+      return isActiveMember(churchId)
+        && (
+          memberRole(churchId) in ['admin', 'owner']
+          || getMembership(churchId).data.checkin_volunteer == true
+          || getMembership(churchId).data.checkin_manager == true
+        );
+    }
+
+    // Guardrail: a client write to a parent people doc must NOT (re)introduce
+    // the five private child-medical keys into child_profile. Firestore rules
+    // can't redact fields on read, so the parent doc must stay physically
+    // free of them — this is the write-time enforcement. KEEP IN SYNC with
+    // PRIVATE_MEDICAL_FIELDS in src/lib/server/child-medical.ts.
+    function parentPersonHasNoPrivateChildMedical(data) {
+      return !('child_profile' in data)
+        || !(
+          'date_of_birth' in data.child_profile
+          || 'allergies' in data.child_profile
+          || 'medical_notes' in data.child_profile
+          || 'medications' in data.child_profile
+          || 'authorized_pickups' in data.child_profile
+        );
+    }
+
     // ─── Assignments (collection group) ───
     // Confirmation reads/writes now go through Admin SDK in /api/confirm.
     // Dashboard reads use subcollection rules at churches/{churchId}/...
@@ -177,7 +207,21 @@ service cloud.firestore {
 
       match /people/{docId} {
         allow read: if isActiveMember(churchId);
-        allow write: if isSchedulerOrAbove(churchId);
+        // Scheduler+ writes, but the parent doc must NEVER carry the five
+        // private child-medical keys (Phase 3). Those live in the private
+        // subcollection below and are written Admin-SDK-side.
+        allow write: if isSchedulerOrAbove(churchId)
+          && parentPersonHasNoPrivateChildMedical(request.resource.data);
+
+        // Phase 3: private child-medical data (date_of_birth, allergies,
+        // medical_notes, medications, authorized_pickups). Read-gated to
+        // admins + check-in roles; writes are Admin-SDK-only so they're
+        // audited + validated server-side (no direct client writes).
+        match /private/{privateDocId} {
+          allow read: if privateDocId == 'medical'
+            && hasCheckinPrivateRead(churchId);
+          allow write: if false;
+        }
       }
 
       match /ministries/{docId} {
