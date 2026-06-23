@@ -25,6 +25,10 @@ import {
 } from "@/lib/server/family-pickups";
 import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
+import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
 interface PostBody {
@@ -97,41 +101,43 @@ export async function POST(
       throw err;
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const personRef = churchRef.collection("people").doc(childId);
 
     const effectiveAt = coolingOffEffectiveAt();
     let targetName = "the contact";
 
-    await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(personRef);
-      if (!snap.exists) throw new Error("PERSON_VANISHED");
-      const data = snap.data() ?? {};
-      const childProfile = data.child_profile ?? {};
-      const existing: PersonAuthorizedPickup[] = Array.isArray(
-        childProfile.authorized_pickups,
-      )
-        ? childProfile.authorized_pickups
-        : [];
-      const idx = existing.findIndex((p) => p.id === pickupId);
-      if (idx === -1) {
-        throw new Error("PICKUP_NOT_FOUND");
-      }
-      targetName = existing[idx].name;
-      const updated = existing.slice();
-      updated[idx] = {
-        ...updated[idx],
-        pending_remove_at: effectiveAt,
-        pending_remove_by_user_id: uid,
-      };
-      tx.update(personRef, {
-        "child_profile.authorized_pickups": updated,
-        updated_at: new Date().toISOString(),
-      });
-    });
+    // Phase 3: authorized_pickups lives in the private medical subdoc, not
+    // the parent people doc. Validate the parent doc still exists, then
+    // read-modify-write the pending-removal markers on the private subdoc.
+    const snap = await personRef.get();
+    if (!snap.exists) throw new Error("PERSON_VANISHED");
+    const childProfile =
+      (snap.data()?.child_profile as Record<string, unknown> | undefined) ??
+      null;
+    const medical = await getChildPrivateMedical(
+      churchRef,
+      childId,
+      childProfile,
+    );
+    const existing: PersonAuthorizedPickup[] = medical.authorized_pickups;
+    const idx = existing.findIndex((p) => p.id === pickupId);
+    if (idx === -1) {
+      throw new Error("PICKUP_NOT_FOUND");
+    }
+    targetName = existing[idx].name;
+    const updated = existing.slice();
+    updated[idx] = {
+      ...updated[idx],
+      pending_remove_at: effectiveAt,
+      pending_remove_by_user_id: uid,
+    };
+    writeChildPrivateMedical(
+      churchRef,
+      childId,
+      { ...medical, authorized_pickups: updated },
+      new Date().toISOString(),
+    );
 
     void audit({
       church_id: churchId,

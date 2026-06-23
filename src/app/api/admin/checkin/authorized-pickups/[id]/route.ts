@@ -31,6 +31,10 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireModuleTier } from "@/lib/server/require-module-tier";
 import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
+import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
 type Scope = "child" | "household";
@@ -108,33 +112,14 @@ export async function PATCH(
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
-    const targetRef =
-      scope === "child"
-        ? churchRef.collection("people").doc(childId)
-        : churchRef.collection("households").doc(householdId);
-    const fieldKey =
-      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
 
-    const updated = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(targetRef);
-      if (!snap.exists) {
-        throw new Error(scope === "child" ? "PERSON_NOT_FOUND" : "HOUSEHOLD_NOT_FOUND");
-      }
-      const data = snap.data() ?? {};
-      if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
-      if (scope === "child" && data.person_type !== "child") {
-        throw new Error("NOT_A_CHILD");
-      }
-
-      const existing: PersonAuthorizedPickup[] =
-        scope === "child"
-          ? Array.isArray(data.child_profile?.authorized_pickups)
-            ? data.child_profile.authorized_pickups
-            : []
-          : Array.isArray(data.authorized_pickups)
-            ? data.authorized_pickups
-            : [];
-
+    // Shared mutation: given the current pickups array, locate the entry
+    // by id, apply the field edits + validation, and return the new array
+    // plus the updated entry. Used by both scopes so the edit semantics
+    // stay identical regardless of where the array is stored.
+    const applyEdit = (
+      existing: PersonAuthorizedPickup[],
+    ): { nextArray: PersonAuthorizedPickup[]; next: PersonAuthorizedPickup } => {
       const withIds = existing.map((p) =>
         p.id ? p : { ...p, id: randomUUID() },
       );
@@ -173,14 +158,66 @@ export async function PATCH(
 
       const nextArray = [...withIds];
       nextArray[idx] = next;
+      return { nextArray, next };
+    };
 
-      tx.update(targetRef, {
-        [fieldKey]: nextArray,
-        updated_at: new Date().toISOString(),
+    let updated: PersonAuthorizedPickup;
+    if (scope === "child") {
+      // Phase 3: child pickups live in the private medical subdoc, not on
+      // the parent people doc. Validate via the parent doc, then
+      // read-modify-write the private subdoc.
+      const personRef = churchRef.collection("people").doc(childId);
+      const snap = await personRef.get();
+      if (!snap.exists) throw new Error("PERSON_NOT_FOUND");
+      const data = snap.data() ?? {};
+      if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
+      if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
+
+      const childProfile =
+        (data.child_profile as Record<string, unknown> | undefined) ?? null;
+      const medical = await getChildPrivateMedical(
+        churchRef,
+        childId,
+        childProfile,
+      );
+      const { nextArray, next } = applyEdit(medical.authorized_pickups);
+      writeChildPrivateMedical(
+        churchRef,
+        childId,
+        { ...medical, authorized_pickups: nextArray },
+        new Date().toISOString(),
+      );
+      updated = next;
+    } else {
+      // scope === "household": writes to the household doc's
+      // authorized_pickups array (Admin-SDK/rules-protected). Unchanged.
+      const targetRef = churchRef.collection("households").doc(householdId);
+      const fieldKey = "authorized_pickups";
+
+      updated = await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(targetRef);
+        if (!snap.exists) {
+          throw new Error("HOUSEHOLD_NOT_FOUND");
+        }
+        const data = snap.data() ?? {};
+        if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
+
+        const existing: PersonAuthorizedPickup[] = Array.isArray(
+          data.authorized_pickups,
+        )
+          ? data.authorized_pickups
+          : [];
+
+        const { nextArray, next } = applyEdit(existing);
+
+        tx.update(targetRef, {
+          [fieldKey]: nextArray,
+          updated_at: new Date().toISOString(),
+        });
+
+        return next;
       });
-
-      return next;
-    });
+    }
 
     void audit({
       church_id: churchId,
@@ -234,43 +271,69 @@ export async function DELETE(
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
-    const targetRef =
-      scope === "child"
-        ? churchRef.collection("people").doc(childId!)
-        : churchRef.collection("households").doc(householdId!);
-    const fieldKey =
-      scope === "child" ? "child_profile.authorized_pickups" : "authorized_pickups";
 
-    await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(targetRef);
-      if (!snap.exists) {
-        throw new Error(scope === "child" ? "PERSON_NOT_FOUND" : "HOUSEHOLD_NOT_FOUND");
-      }
+    if (scope === "child") {
+      // Phase 3: child pickups live in the private medical subdoc, not on
+      // the parent people doc. Validate via the parent doc, then
+      // read-modify-write the private subdoc.
+      const personRef = churchRef.collection("people").doc(childId!);
+      const snap = await personRef.get();
+      if (!snap.exists) throw new Error("PERSON_NOT_FOUND");
       const data = snap.data() ?? {};
       if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
-      if (scope === "child" && data.person_type !== "child") {
-        throw new Error("NOT_A_CHILD");
-      }
+      if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
 
-      const existing: PersonAuthorizedPickup[] =
-        scope === "child"
-          ? Array.isArray(data.child_profile?.authorized_pickups)
-            ? data.child_profile.authorized_pickups
-            : []
-          : Array.isArray(data.authorized_pickups)
-            ? data.authorized_pickups
-            : [];
+      const childProfile =
+        (data.child_profile as Record<string, unknown> | undefined) ?? null;
+      const medical = await getChildPrivateMedical(
+        churchRef,
+        childId!,
+        childProfile,
+      );
+      const existing = medical.authorized_pickups;
 
       const idx = existing.findIndex((p) => p.id === pickupId);
       if (idx === -1) throw new Error("PICKUP_NOT_FOUND");
 
       const nextArray = existing.filter((p) => p.id !== pickupId);
 
-      tx.update(targetRef, {
-        [fieldKey]: nextArray,
-        updated_at: new Date().toISOString(),
+      writeChildPrivateMedical(
+        churchRef,
+        childId!,
+        { ...medical, authorized_pickups: nextArray },
+        new Date().toISOString(),
+      );
+    } else {
+      // scope === "household": writes to the household doc's
+      // authorized_pickups array (Admin-SDK/rules-protected). Unchanged.
+      const targetRef = churchRef.collection("households").doc(householdId!);
+      const fieldKey = "authorized_pickups";
+
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(targetRef);
+        if (!snap.exists) {
+          throw new Error("HOUSEHOLD_NOT_FOUND");
+        }
+        const data = snap.data() ?? {};
+        if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
+
+        const existing: PersonAuthorizedPickup[] = Array.isArray(
+          data.authorized_pickups,
+        )
+          ? data.authorized_pickups
+          : [];
+
+        const idx = existing.findIndex((p) => p.id === pickupId);
+        if (idx === -1) throw new Error("PICKUP_NOT_FOUND");
+
+        const nextArray = existing.filter((p) => p.id !== pickupId);
+
+        tx.update(targetRef, {
+          [fieldKey]: nextArray,
+          updated_at: new Date().toISOString(),
+        });
       });
-    });
+    }
 
     void audit({
       church_id: churchId,

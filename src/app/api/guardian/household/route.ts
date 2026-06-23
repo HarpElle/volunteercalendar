@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
+import { getChildPrivateMedicalBatch } from "@/lib/server/child-medical";
 import type { CheckInHousehold, Child, Person, UnifiedHousehold } from "@/lib/types";
 
 /**
@@ -230,34 +231,53 @@ export async function GET(req: NextRequest) {
         .where("household_ids", "array-contains", householdId)
         .where("person_type", "==", "child")
         .get();
-      children = childrenSnap.docs
-        .map((d) => {
-          const data = d.data() as Person & {
-            child_profile?: {
-              grade?: string;
-              allergies?: string | null;
-              medical_notes?: string | null;
-              has_alerts?: boolean;
-            };
+      // Phase 3: allergies/medical_notes now live in the private medical
+      // subdoc. Batch-read them (one getAll), falling back per-child to
+      // the legacy parent child_profile during the migration window.
+      // grade + has_alerts stay on the parent doc.
+      const activeChildDocs = childrenSnap.docs.filter(
+        (d) => (d.data() as Person).status !== "inactive",
+      );
+      const childMedicalFallback = new Map<
+        string,
+        Record<string, unknown> | null | undefined
+      >();
+      for (const d of activeChildDocs) {
+        childMedicalFallback.set(
+          d.id,
+          (d.data() as { child_profile?: Record<string, unknown> })
+            .child_profile,
+        );
+      }
+      const childMedicalById = await getChildPrivateMedicalBatch(
+        churchRef,
+        activeChildDocs.map((d) => d.id),
+        childMedicalFallback,
+      );
+      children = activeChildDocs.map((d) => {
+        const data = d.data() as Person & {
+          child_profile?: {
+            grade?: string;
+            has_alerts?: boolean;
           };
-          if (data.status === "inactive") return null;
-          const cp = data.child_profile ?? {};
-          return {
-            id: d.id,
-            first_name: data.first_name || "",
-            last_name: data.last_name || "",
-            preferred_name: (data as { preferred_name?: string }).preferred_name,
-            grade: cp.grade,
-            // 2026-06-03: surface editable fields so the Family Portal
-            // can pre-populate the edit modal without a second fetch.
-            // Empty string -> null normalization to match what the
-            // PUT endpoint accepts.
-            allergies: cp.allergies ?? null,
-            medical_notes: cp.medical_notes ?? null,
-            has_alerts: cp.has_alerts ?? false,
-          };
-        })
-        .filter(<T>(c: T | null): c is T => c !== null);
+        };
+        const cp = data.child_profile ?? {};
+        const medical = childMedicalById.get(d.id);
+        return {
+          id: d.id,
+          first_name: data.first_name || "",
+          last_name: data.last_name || "",
+          preferred_name: (data as { preferred_name?: string }).preferred_name,
+          grade: cp.grade,
+          // 2026-06-03: surface editable fields so the Family Portal
+          // can pre-populate the edit modal without a second fetch.
+          // Empty string -> null normalization to match what the
+          // PUT endpoint accepts.
+          allergies: medical?.allergies ?? null,
+          medical_notes: medical?.medical_notes ?? null,
+          has_alerts: cp.has_alerts ?? false,
+        };
+      });
     }
 
     // Load recent check-in sessions (last 30 days). The previous

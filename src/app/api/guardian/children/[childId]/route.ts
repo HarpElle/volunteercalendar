@@ -27,6 +27,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { audit, SYSTEM_ACTOR } from "@/lib/server/audit";
+import {
+  getChildPrivateMedical,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 
 interface PutBody {
   token?: unknown;
@@ -208,32 +213,52 @@ export async function PUT(
       }
       childProfileUpdates.grade = v;
     }
+
+    // Phase 3: allergies + medical_notes are private medical fields and
+    // move to the private subdoc — NOT the parent child_profile. Track
+    // whether each is being changed + the new value separately.
+    let allergiesTouched = false;
+    let nextAllergies: string | null = null;
     if ("allergies" in body) {
-      const v =
+      allergiesTouched = true;
+      nextAllergies =
         typeof body.allergies === "string" && body.allergies.trim()
           ? body.allergies.trim().slice(0, 2000)
           : null;
-      childProfileUpdates.allergies = v;
     }
+    let medicalNotesTouched = false;
+    let nextMedicalNotes: string | null = null;
     if ("medical_notes" in body) {
-      const v =
+      medicalNotesTouched = true;
+      nextMedicalNotes =
         typeof body.medical_notes === "string" && body.medical_notes.trim()
           ? body.medical_notes.trim().slice(0, 2000)
           : null;
-      childProfileUpdates.medical_notes = v;
     }
 
-    // Recompute has_alerts if either alerts-relevant field touched.
-    if ("allergies" in childProfileUpdates || "medical_notes" in childProfileUpdates) {
-      const existingCp = (childData.child_profile as Record<string, unknown>) ?? {};
-      const finalAllergies =
-        "allergies" in childProfileUpdates
-          ? childProfileUpdates.allergies
-          : existingCp.allergies;
-      const finalMedical =
-        "medical_notes" in childProfileUpdates
-          ? childProfileUpdates.medical_notes
-          : existingCp.medical_notes;
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const existingCp =
+      (childData.child_profile as Record<string, unknown>) ?? {};
+
+    // Read current private medical once if we need it: either to write
+    // updated allergies/medical_notes (full-object merge) or to fill the
+    // untouched side when recomputing has_alerts. Falls back to the
+    // legacy parent child_profile during the migration window.
+    const medicalTouched = allergiesTouched || medicalNotesTouched;
+    const currentMedical: ChildPrivateMedical | null = medicalTouched
+      ? await getChildPrivateMedical(churchRef, childId, existingCp)
+      : null;
+
+    // Recompute has_alerts (a SAFE parent field) if either
+    // alerts-relevant field touched, using current private values for
+    // whichever side wasn't changed.
+    if (medicalTouched && currentMedical) {
+      const finalAllergies = allergiesTouched
+        ? nextAllergies
+        : currentMedical.allergies;
+      const finalMedical = medicalNotesTouched
+        ? nextMedicalNotes
+        : currentMedical.medical_notes;
       childProfileUpdates.has_alerts = !!(finalAllergies || finalMedical);
     }
 
@@ -243,12 +268,30 @@ export async function PUT(
     updates.updated_at = now;
 
     // Merge child_profile updates as dotted-path fields so we don't
-    // overwrite siblings (default_room_id, authorized_pickups, etc.).
+    // overwrite siblings (default_room_id, etc.). Only SAFE fields
+    // (grade, has_alerts) reach the parent doc — private medical is
+    // written separately below.
     for (const [k, v] of Object.entries(childProfileUpdates)) {
       updates[`child_profile.${k}`] = v;
     }
 
     await childRef.update(updates);
+
+    // Write updated private medical fields to the private subdoc. Full
+    // ChildPrivateMedical object so the helper's merge keeps untouched
+    // fields (date_of_birth, medications, authorized_pickups) intact.
+    let responseMedical: ChildPrivateMedical | null = currentMedical;
+    if (medicalTouched && currentMedical) {
+      const medical: ChildPrivateMedical = {
+        ...currentMedical,
+        allergies: allergiesTouched ? nextAllergies : currentMedical.allergies,
+        medical_notes: medicalNotesTouched
+          ? nextMedicalNotes
+          : currentMedical.medical_notes,
+      };
+      writeChildPrivateMedical(churchRef, childId, medical, now);
+      responseMedical = medical;
+    }
 
     void audit({
       church_id: churchId,
@@ -269,14 +312,20 @@ export async function PUT(
     const refreshed = await childRef.get();
     const r = refreshed.data() ?? {};
     const rcp = (r.child_profile as Record<string, unknown>) ?? {};
+    // allergies/medical_notes come from the private subdoc. When the
+    // request touched them, reuse the object we just wrote (avoids a
+    // read-after-async-write race); otherwise read current values.
+    const medicalForResponse =
+      responseMedical ??
+      (await getChildPrivateMedical(churchRef, childId, existingCp));
     return NextResponse.json({
       id: childId,
       first_name: r.first_name,
       last_name: r.last_name,
       preferred_name: r.preferred_name ?? null,
       grade: rcp.grade ?? null,
-      allergies: rcp.allergies ?? null,
-      medical_notes: rcp.medical_notes ?? null,
+      allergies: medicalForResponse.allergies ?? null,
+      medical_notes: medicalForResponse.medical_notes ?? null,
       has_alerts: rcp.has_alerts ?? false,
     });
   } catch (error) {

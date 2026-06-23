@@ -20,6 +20,7 @@ import {
 } from "@/lib/firebase/auth";
 import { getUserMemberships, createMembership, getDocument, getChurchDocuments } from "@/lib/firebase/firestore";
 import { where } from "firebase/firestore";
+import { purgeStaleFirestoreCacheOnce } from "@/lib/firebase/cache-purge";
 
 // --- State ---
 
@@ -154,6 +155,14 @@ function pickActiveMembership(
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+
+  // Phase 3 (child-medical privacy): one-time purge of any stale Firestore
+  // IndexedDB cache that may still hold pre-migration child docs with inline
+  // medical fields. No-op once the version flag matches; otherwise clears the
+  // cache and reloads. Runs before/independently of the auth flow below.
+  useEffect(() => {
+    void purgeStaleFirestoreCacheOnce();
+  }, []);
 
   useEffect(() => {
     /*

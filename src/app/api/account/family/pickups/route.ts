@@ -43,6 +43,12 @@ import {
 } from "@/lib/server/family-pickups";
 import { audit, userActor } from "@/lib/server/audit";
 import { log } from "@/lib/log";
+import {
+  getChildPrivateMedical,
+  getChildPrivateMedicalBatch,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 import type { PersonAuthorizedPickup } from "@/lib/types";
 
 async function authUid(req: NextRequest): Promise<string | NextResponse> {
@@ -153,6 +159,27 @@ export async function GET(req: NextRequest) {
         return Number.isNaN(t) || t > now;
       });
 
+    // Phase 3: authorized_pickups now lives in the private medical
+    // subdoc. Batch-read all children's private docs (one getAll),
+    // falling back per-child to the legacy parent child_profile during
+    // the migration window.
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const childMedicalFallback = new Map<
+      string,
+      Record<string, unknown> | null | undefined
+    >();
+    for (const cd of childrenSnap.docs) {
+      childMedicalFallback.set(
+        cd.id,
+        cd.data().child_profile as Record<string, unknown> | undefined,
+      );
+    }
+    const childMedicalById = await getChildPrivateMedicalBatch(
+      churchRef,
+      childrenSnap.docs.map((cd) => cd.id),
+      childMedicalFallback,
+    );
+
     // Group children by household.
     const households = Array.from(householdsById.values()).map((h) => ({
       ...h,
@@ -163,10 +190,7 @@ export async function GET(req: NextRequest) {
         })
         .map((cd) => {
           const d = cd.data();
-          const cp = d.child_profile || {};
-          const raw = Array.isArray(cp.authorized_pickups)
-            ? (cp.authorized_pickups as PersonAuthorizedPickup[])
-            : [];
+          const raw = childMedicalById.get(cd.id)?.authorized_pickups ?? [];
           return {
             id: cd.id,
             first_name: d.first_name,
@@ -271,11 +295,8 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    const personRef = adminDb
-      .collection("churches")
-      .doc(churchId)
-      .collection("people")
-      .doc(childId);
+    const churchRef = adminDb.collection("churches").doc(churchId);
+    const personRef = churchRef.collection("people").doc(childId);
 
     const newPickup: PersonAuthorizedPickup = {
       id: randomUUID(),
@@ -287,24 +308,32 @@ export async function POST(req: NextRequest) {
       added_by_user_id: uid,
     };
 
-    await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(personRef);
-      if (!snap.exists) throw new Error("PERSON_VANISHED");
-      const data = snap.data() ?? {};
-      const childProfile = data.child_profile ?? {};
-      const existing: PersonAuthorizedPickup[] = Array.isArray(
-        childProfile.authorized_pickups,
-      )
-        ? childProfile.authorized_pickups
-        : [];
-      const backfilled = existing.map((p) =>
-        p.id ? p : { ...p, id: randomUUID() },
-      );
-      tx.update(personRef, {
-        "child_profile.authorized_pickups": [...backfilled, newPickup],
-        updated_at: new Date().toISOString(),
-      });
-    });
+    // Phase 3: authorized_pickups is a private medical field — it lives
+    // in the private subdoc, not on the parent child_profile. Read
+    // current medical (fallback to legacy parent child_profile during
+    // the migration window), append the new pickup, then write the full
+    // medical object back (the helper merges, preserving the other four
+    // private fields). assertGuardianOfChild above already proved the
+    // child exists + belongs to the caller; re-check existence here to
+    // preserve the prior PERSON_VANISHED guard.
+    const snap = await personRef.get();
+    if (!snap.exists) throw new Error("PERSON_VANISHED");
+    const now = new Date().toISOString();
+    const currentMedical = await getChildPrivateMedical(
+      churchRef,
+      childId,
+      snap.data()?.child_profile as Record<string, unknown> | undefined,
+    );
+    const backfilled = currentMedical.authorized_pickups.map((p) =>
+      p.id ? p : { ...p, id: randomUUID() },
+    );
+    const medical: ChildPrivateMedical = {
+      ...currentMedical,
+      authorized_pickups: [...backfilled, newPickup],
+    };
+    writeChildPrivateMedical(churchRef, childId, medical, now);
+    // Keep the parent doc's updated_at fresh (non-medical bookkeeping).
+    await personRef.update({ updated_at: now });
 
     void audit({
       church_id: churchId,

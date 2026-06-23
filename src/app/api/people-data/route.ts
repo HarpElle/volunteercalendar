@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { stripPrivateMedicalFromChildProfile } from "@/lib/server/child-medical";
 
 /**
  * GET /api/people-data?church_id=xxx
@@ -74,6 +75,19 @@ export async function GET(req: NextRequest) {
       .map((d) => ({
         // Map Person fields to legacy Volunteer shape expected by the People page
         ...d,
+        // Phase 3 defense-in-depth: this list is already filtered to
+        // is_volunteer, so it should not carry child medical data — but if a
+        // volunteer person also has a child_profile, strip the five private
+        // medical keys (date_of_birth/allergies/medical_notes/medications/
+        // authorized_pickups) before returning. Those live in the private
+        // subdoc, never in this volunteer-readable payload.
+        ...(d.child_profile && typeof d.child_profile === "object"
+          ? {
+              child_profile: stripPrivateMedicalFromChildProfile(
+                d.child_profile as Record<string, unknown>,
+              ),
+            }
+          : {}),
         email: d.email ?? "",
         household_id: Array.isArray(d.household_ids) ? (d.household_ids as string[])[0] ?? null : null,
         availability: d.scheduling_profile ?? {

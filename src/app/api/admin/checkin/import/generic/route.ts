@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { randomBytes } from "crypto";
 import type { CheckInHousehold, Child, ChildGrade } from "@/lib/types";
+import {
+  stripPrivateMedicalFromChildProfile,
+  writeChildPrivateMedical,
+  type ChildPrivateMedical,
+} from "@/lib/server/child-medical";
 
 /**
  * POST /api/admin/checkin/import/generic
@@ -252,7 +257,21 @@ export async function POST(req: NextRequest) {
         const hasAlerts = !!(allergies || medicalNotes);
 
         if (useUnified) {
-          await churchRef.collection("people").add({
+          // Phase 3: the five sensitive child-medical fields move to the
+          // private subdoc; the volunteer-readable parent people doc keeps
+          // only the safe summary fields (grade/default_room_id/has_alerts/
+          // photo_url).
+          const safeChildProfile = stripPrivateMedicalFromChildProfile({
+            date_of_birth: birthdate || null,
+            grade: grade || null,
+            photo_url: null,
+            default_room_id: null,
+            has_alerts: hasAlerts,
+            allergies: allergies || null,
+            medical_notes: medicalNotes || null,
+            authorized_pickups: [],
+          });
+          const childRef = await churchRef.collection("people").add({
             church_id,
             person_type: "child",
             first_name: fName,
@@ -273,16 +292,7 @@ export async function POST(req: NextRequest) {
             campus_ids: [],
             household_ids: [householdId],
             scheduling_profile: null,
-            child_profile: {
-              date_of_birth: birthdate || null,
-              grade: grade || null,
-              photo_url: null,
-              default_room_id: null,
-              has_alerts: hasAlerts,
-              allergies: allergies || null,
-              medical_notes: medicalNotes || null,
-              authorized_pickups: [],
-            },
+            child_profile: safeChildProfile,
             stats: null,
             imported_from: "generic",
             background_check: null,
@@ -292,6 +302,15 @@ export async function POST(req: NextRequest) {
             created_at: now,
             updated_at: now,
           });
+
+          const medical: ChildPrivateMedical = {
+            date_of_birth: birthdate || null,
+            allergies: allergies || null,
+            medical_notes: medicalNotes || null,
+            medications: null,
+            authorized_pickups: [],
+          };
+          writeChildPrivateMedical(churchRef, childRef.id, medical, now);
         } else {
           const childId = adminDb.collection("_").doc().id;
           const child: Child = {
