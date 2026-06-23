@@ -73,7 +73,11 @@ export function NotificationModeSection({
         always work; this controls email and SMS only.
       </p>
 
-      <div className="mt-4 space-y-3">
+      <div
+        className="mt-4 space-y-3"
+        role="radiogroup"
+        aria-label="Notification mode"
+      >
         <ModeOption
           value="live"
           label="Live"
@@ -137,15 +141,25 @@ function ModeOption({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-xl border p-4 transition-colors min-h-[44px] ${
+      // Codex 2026-06-23 accessibility note: Jason is color-blind, so
+      // selected-state styling that relies solely on a border-color
+      // shift fails for him. Two non-color cues now compose with the
+      // visual:
+      //   - role="radio" + aria-checked exposes selection to screen
+      //     readers AND assistive tech (NVDA, VoiceOver) without color
+      //   - the "Selected" sr-only text inside the card reinforces it
+      //   - the radio-dot circle has a filled inner state when selected
+      role="radio"
+      aria-checked={selected}
+      className={`w-full text-left rounded-xl border-2 p-4 transition-colors min-h-[44px] ${
         selected
-          ? "border-vc-indigo bg-vc-indigo/5"
+          ? "border-vc-indigo bg-vc-indigo/5 ring-2 ring-vc-indigo/20"
           : "border-vc-border-light bg-white hover:bg-vc-bg-warm"
       }`}
     >
       <div className="flex items-start gap-3">
         <span
-          className={`mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+          className={`mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
             selected
               ? "border-vc-indigo bg-vc-indigo"
               : "border-vc-border-light bg-white"
@@ -157,7 +171,12 @@ function ModeOption({
           )}
         </span>
         <span className="flex-1">
-          <span className="block font-semibold text-vc-indigo">{label}</span>
+          <span className="block font-semibold text-vc-indigo">
+            {label}
+            {selected && (
+              <span className="sr-only"> (selected)</span>
+            )}
+          </span>
           <span className="mt-0.5 block text-sm text-vc-text-secondary">
             {description}
           </span>

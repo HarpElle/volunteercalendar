@@ -120,16 +120,28 @@ export function decideVolunteerVerdict(
   userIdResolved: boolean,
   defaultChannelsIfMissing: string[] = ["email"],
 ): ChannelVerdict {
-  if (!orgGate.live) {
-    // The one mode where in-app inbox still writes. Future "paused"
-    // mode (when added) would BLOCK in-app too.
-    if (orgGate.reason === "in_app_only") return IN_APP_ONLY;
+  // Codex 2026-06-23 retest #3: precedence had org_in_app_only
+  // short-circuiting BEFORE per-user state was evaluated, so a
+  // volunteer with channels=["none"] still got an inbox row when
+  // the org was in in_app_only. Correct precedence:
+  //   1. Hard org block (future "paused")        — total silence
+  //   2. Structural recipient blocks (no link,
+  //      no/inactive membership, opt-out)        — total silence
+  //   3. org_in_app_only override                 — outbound off, inbox on
+  //   4. Per-user channel prefs                   — normal flow
+
+  // 1. Hard pause (future). Total silence — no inbox.
+  if (!orgGate.live && orgGate.reason !== "in_app_only") {
     return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
   }
 
+  // 2. No linked user — no inbox to write to. In `in_app_only` mode
+  //    we also suppress outbound; otherwise the caller can fall
+  //    through to Person-doc contact info.
   if (!userIdResolved) {
-    // No linked user account → no inbox to write to, but caller can
-    // still attempt to email/SMS via Person-doc contact info.
+    if (orgGate.reason === "in_app_only") {
+      return BLOCKED("org_in_app_only");
+    }
     return {
       email: true,
       sms: orgGate.tier !== "free",
@@ -138,7 +150,11 @@ export function decideVolunteerVerdict(
     };
   }
 
+  // 2b. No membership record — same shape as no_user_link.
   if (!membership) {
+    if (orgGate.reason === "in_app_only") {
+      return BLOCKED("org_in_app_only");
+    }
     return {
       email: true,
       sms: orgGate.tier !== "free",
@@ -146,20 +162,30 @@ export function decideVolunteerVerdict(
       reason: "no_membership",
     };
   }
+
+  // 2c. Inactive membership — fully block. in_app_only doesn't
+  //     resurrect a deactivated user.
   if (membership.status !== "active") {
     return BLOCKED(`membership_${membership.status}`);
   }
 
-  // When the user has explicit prefs → honor them. When they don't →
-  // fall back to the caller-provided default (typically the church's
-  // org-wide `default_reminder_channels`). User pref always wins;
-  // the default only fills the gap, never caps an opt-in.
+  // 2d. Explicit user opt-out — fully block including inbox. The user
+  //     said "no" to ALL notifications from this org; in_app_only is
+  //     an org-LEVEL setting and must not undo that personal choice.
+  //     User pref always wins; the default only fills the gap.
   const channels =
     membership.reminder_preferences?.channels ?? defaultChannelsIfMissing;
   if (channels.includes("none")) {
     return BLOCKED("user_opted_out");
   }
 
+  // 3. NOW apply the in_app_only outbound override — confirmed the
+  //    recipient is active + opted-in, so the inbox row should fire.
+  if (orgGate.reason === "in_app_only") {
+    return IN_APP_ONLY;
+  }
+
+  // 4. Org live + active opted-in user — honor explicit channels.
   const wantsEmail = channels.includes("email");
   const wantsSms = channels.includes("sms");
   const smsEligible = orgGate.tier !== "free";
@@ -169,9 +195,7 @@ export function decideVolunteerVerdict(
   return {
     email,
     sms,
-    // Active user with non-"none" prefs → inbox writes too. The user
-    // has chosen what channels they want; the inbox is always part
-    // of the experience.
+    // Active user with non-"none" prefs → inbox writes too.
     inApp: email || sms,
   };
 }
@@ -182,21 +206,22 @@ export function decideSchedulerVerdict(
   notificationType: SchedulerNotificationType,
   urgent: boolean,
 ): ChannelVerdict {
-  if (!orgGate.live) {
-    // Org in_app_only: suppress outbound email/SMS but the scheduler
-    // STILL gets the in-app inbox row so they can see the alert in
-    // the UI. Codex 2026-06-23 verification surfaced this as a bug
-    // in the absence route — the in-app row was being dropped along
-    // with email/SMS. The fix is centralised here so every route
-    // that gates on resolveSchedulerEligibility gets the right answer.
-    if (orgGate.reason === "in_app_only") return IN_APP_ONLY;
+  // Codex 2026-06-23 retest #3 — same precedence rewrite as the
+  // volunteer verdict above. Pre-existing routes that filter
+  // membershipsSnap on status="active" upstream were masking this
+  // bug; fixing both helpers keeps the resolver invariants honest.
+  //   1. Hard org pause (future)                 — total silence
+  //   2. Structural recipient blocks              — total silence
+  //   3. Urgent — bypasses per-user prefs, still
+  //      respects in_app_only (outbound off)
+  //   4. Per-user scheduler prefs / in_app_only
+
+  // 1. Hard pause (future).
+  if (!orgGate.live && orgGate.reason !== "in_app_only") {
     return BLOCKED(`org_${orgGate.reason ?? "paused"}`);
   }
 
-  // Even urgent paths respect membership status (a deactivated
-  // scheduler shouldn't get pinged) and org pause (above). Urgent
-  // only bypasses the per-user CHANNEL preferences, not the
-  // structural eligibility checks.
+  // 2. Structural membership checks. Urgent never overrides these.
   if (!membership) {
     return BLOCKED("no_membership");
   }
@@ -204,21 +229,34 @@ export function decideSchedulerVerdict(
     return BLOCKED(`membership_${membership.status}`);
   }
 
+  // 3. Urgent path. Bypasses per-user channel prefs but respects
+  //    in_app_only (org_in_app_only suppresses outbound regardless
+  //    of urgency — this is the right precedence for demo orgs).
   if (urgent) {
+    if (orgGate.reason === "in_app_only") {
+      return IN_APP_ONLY;
+    }
     const sms = orgGate.tier !== "free";
     return { email: true, sms, inApp: true, reason: "urgent" };
   }
 
+  // 4. Per-user scheduler prefs. Opt-out of this notification type
+  //    blocks the inbox row too — the user explicitly said no.
   const { email, sms } = shouldNotifyScheduler(
     membership,
     notificationType,
     orgGate.tier,
   );
   if (!email && !sms) {
-    // User opted out of this notification type — block inbox writes
-    // too. They've explicitly said they don't want this type at all.
     return BLOCKED("scheduler_prefs_off");
   }
+
+  // 5. NOW apply in_app_only after confirming opt-in — the inbox
+  //    row should actually fire for an opted-in scheduler.
+  if (orgGate.reason === "in_app_only") {
+    return IN_APP_ONLY;
+  }
+
   return { email, sms, inApp: true };
 }
 
