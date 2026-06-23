@@ -291,4 +291,59 @@ describe("decideSchedulerVerdict", () => {
     expect(v.sms).toBe(false);
     expect(v.reason).toBe("scheduler_prefs_off");
   });
+
+  // ── Org precedence over urgent ─────────────────────────────────────
+  // Codex 2026-06-23 retest #2: production Abbott Loop in in_app_only
+  // received 12 urgent absence emails + 12 SMS because the urgent path
+  // re-promoted org-suppressed channels. Precedence must be:
+  //   org/membership state > urgent > per-user channel prefs.
+  // Lock the contract so any future regression in the resolver OR a
+  // route that wraps it surfaces at unit-test time.
+  describe("org_in_app_only takes precedence over urgent (Codex retest #2)", () => {
+    it("urgent + in_app_only returns email=false sms=false inApp=true", () => {
+      const v = decideSchedulerVerdict(IN_APP_ONLY, SCHED_ALL, "absence_alert", true);
+      expect(v).toEqual({
+        email: false,
+        sms: false,
+        inApp: true,
+        reason: "org_in_app_only",
+      });
+    });
+
+    it("non-urgent + in_app_only behaves identically", () => {
+      const v = decideSchedulerVerdict(IN_APP_ONLY, SCHED_ALL, "absence_alert", false);
+      expect(v.email).toBe(false);
+      expect(v.sms).toBe(false);
+      expect(v.inApp).toBe(true);
+    });
+
+    it("urgent + live org bypasses per-user prefs (W12-B contract preserved)", () => {
+      const optedOut = mkMembership({
+        role: "scheduler",
+        scheduler_notification_preferences: {
+          enabled_types: [],
+          channels: { standard: ["none"], urgent: ["none"] },
+          ministry_scope: [],
+        },
+      });
+      const v = decideSchedulerVerdict(LIVE_PAID, optedOut, "absence_alert", true);
+      expect(v.email).toBe(true);
+      expect(v.sms).toBe(true);
+      expect(v.reason).toBe("urgent");
+    });
+
+    it("volunteer in_app_only also yields email=false sms=false inApp=true", () => {
+      const v = decideVolunteerVerdict(
+        IN_APP_ONLY,
+        mkMembership({ reminder_preferences: { channels: ["email", "sms"] } }),
+        true,
+      );
+      expect(v).toEqual({
+        email: false,
+        sms: false,
+        inApp: true,
+        reason: "org_in_app_only",
+      });
+    });
+  });
 });
