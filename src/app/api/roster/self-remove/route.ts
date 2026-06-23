@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { buildSelfRemovalAlertEmail } from "@/lib/utils/emails";
-import { shouldNotifyScheduler } from "@/lib/utils/scheduler-notification-check";
+import { resolveSchedulerEligibility } from "@/lib/server/notification-eligibility";
 import { sendSms } from "@/lib/services/sms";
-import type { Membership } from "@/lib/types";
 import { createUserNotification } from "@/lib/services/user-notifications";
 import { resend } from "@/lib/resend";
 
@@ -144,7 +143,6 @@ export async function POST(req: NextRequest) {
     const churchSnap = await adminDb.doc(`churches/${church_id}`).get();
     const churchData = churchSnap.exists ? churchSnap.data()! : {};
     const churchName = (churchData.name as string) || "Organization";
-    const subscriptionTier = (churchData.subscription_tier as string) || "free";
 
     // Find notification recipients: schedulers for this ministry + all admins/owners
     const membershipsSnap = await adminDb
@@ -174,15 +172,22 @@ export async function POST(req: NextRequest) {
 
       if (!isRecipient) continue;
 
-      // Check scheduler notification preferences
-      const membershipAsType = { id: mDoc.id, ...mData } as Membership;
-      const { email: sendEmail, sms: sendSmsFlag } = shouldNotifyScheduler(
-        membershipAsType,
-        "self_removal",
-        subscriptionTier,
-      );
+      // Codex 2026-06-23 fix: route was using shouldNotifyScheduler
+      // directly, missing the org-level notification_mode check —
+      // an `in_app_only` org could still trigger outbound mail/SMS
+      // here. Now goes through the shared resolver so the org gate
+      // and the eligibility.inApp flag both apply, matching every
+      // other scheduler-notifying route.
+      const eligibility = await resolveSchedulerEligibility({
+        churchId: church_id,
+        userId: mUserId,
+        notificationType: "self_removal",
+      });
 
-      if (!sendEmail && !sendSmsFlag) continue;
+      const sendEmail = eligibility.email;
+      const sendSmsFlag = eligibility.sms;
+
+      if (!sendEmail && !sendSmsFlag && !eligibility.inApp) continue;
 
       // Get recipient profile
       const profileSnap = await adminDb.doc(`users/${mUserId}`).get();
@@ -229,18 +234,23 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Fire-and-forget: in-app self-removal alert notification for scheduler
-      try {
-        await createUserNotification({
-          user_id: mUserId,
-          church_id,
-          type: "self_removal_alert",
-          title: `${volunteerName} removed themselves`,
-          body: `${roleName} on ${serviceDate}`,
-          metadata: { link_href: "/dashboard/schedules" },
-        });
-      } catch (notifErr) {
-        console.error("Self-removal alert user notification failed:", notifErr);
+      // Fire-and-forget: in-app self-removal alert notification for scheduler.
+      // Gate on eligibility.inApp so deactivated schedulers + explicit
+      // opt-outs don't accumulate inbox noise. In `org_in_app_only`
+      // mode this is the only channel that fires.
+      if (eligibility.inApp) {
+        try {
+          await createUserNotification({
+            user_id: mUserId,
+            church_id,
+            type: "self_removal_alert",
+            title: `${volunteerName} removed themselves`,
+            body: `${roleName} on ${serviceDate}`,
+            metadata: { link_href: "/dashboard/schedules" },
+          });
+        } catch (notifErr) {
+          console.error("Self-removal alert user notification failed:", notifErr);
+        }
       }
     }
 

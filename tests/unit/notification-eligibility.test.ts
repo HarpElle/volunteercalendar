@@ -89,7 +89,7 @@ describe("decideVolunteerVerdict", () => {
       mkMembership({ reminder_preferences: { channels: ["email"] } }),
       true,
     );
-    expect(v).toEqual({ email: true, sms: false });
+    expect(v).toEqual({ email: true, sms: false, inApp: true });
   });
 
   it("returns both when channels include email+sms on paid tier", () => {
@@ -98,7 +98,7 @@ describe("decideVolunteerVerdict", () => {
       mkMembership({ reminder_preferences: { channels: ["email", "sms"] } }),
       true,
     );
-    expect(v).toEqual({ email: true, sms: true });
+    expect(v).toEqual({ email: true, sms: true, inApp: true });
   });
 
   it("suppresses SMS on free tier even when channels include sms", () => {
@@ -107,12 +107,12 @@ describe("decideVolunteerVerdict", () => {
       mkMembership({ reminder_preferences: { channels: ["email", "sms"] } }),
       true,
     );
-    expect(v).toEqual({ email: true, sms: false });
+    expect(v).toEqual({ email: true, sms: false, inApp: true });
   });
 
   it("defaults to email when membership has no reminder_preferences", () => {
     const v = decideVolunteerVerdict(LIVE_PAID, mkMembership(), true);
-    expect(v).toEqual({ email: true, sms: false });
+    expect(v).toEqual({ email: true, sms: false, inApp: true });
   });
 
   it("honors defaultChannelsIfMissing when membership has no prefs (Phase 2 hotfix #255)", () => {
@@ -122,7 +122,7 @@ describe("decideVolunteerVerdict", () => {
       true,
       ["email", "sms"],
     );
-    expect(v).toEqual({ email: true, sms: true });
+    expect(v).toEqual({ email: true, sms: true, inApp: true });
   });
 
   it("in_app_only org mode blocks email + SMS (Phase 4a)", () => {
@@ -134,6 +134,29 @@ describe("decideVolunteerVerdict", () => {
     expect(v.email).toBe(false);
     expect(v.sms).toBe(false);
     expect(v.reason).toBe("org_in_app_only");
+  });
+
+  it("in_app_only org mode KEEPS inApp on (Codex 2026-06-23 fix)", () => {
+    const v = decideVolunteerVerdict(IN_APP_ONLY, mkMembership(), true);
+    expect(v.inApp).toBe(true);
+  });
+
+  it("inactive membership blocks inApp too (deactivated user → no inbox noise)", () => {
+    const v = decideVolunteerVerdict(
+      LIVE_PAID,
+      mkMembership({ status: "inactive" }),
+      true,
+    );
+    expect(v.inApp).toBe(false);
+  });
+
+  it("user-opted-out blocks inApp too", () => {
+    const v = decideVolunteerVerdict(
+      LIVE_PAID,
+      mkMembership({ reminder_preferences: { channels: ["none"] } }),
+      true,
+    );
+    expect(v.inApp).toBe(false);
   });
 });
 
@@ -222,6 +245,31 @@ describe("decideSchedulerVerdict", () => {
     expect(v.email).toBe(false);
     expect(v.sms).toBe(false);
     expect(v.reason).toBe("org_in_app_only");
+  });
+
+  it("in_app_only scheduler verdict KEEPS inApp on — urgent or not (Codex 2026-06-23 fix)", () => {
+    const urgent = decideSchedulerVerdict(IN_APP_ONLY, SCHED_ALL, "absence_alert", true);
+    const standard = decideSchedulerVerdict(IN_APP_ONLY, SCHED_ALL, "assignment_change", false);
+    expect(urgent.inApp).toBe(true);
+    expect(standard.inApp).toBe(true);
+  });
+
+  it("scheduler with prefs_off blocks inApp too (user said no to this type)", () => {
+    const offForAbsence = mkMembership({
+      role: "scheduler",
+      scheduler_notification_preferences: {
+        enabled_types: [],
+        channels: { standard: ["email"], urgent: ["email", "sms"] },
+        ministry_scope: [],
+      },
+    });
+    const v = decideSchedulerVerdict(LIVE_PAID, offForAbsence, "absence_alert", false);
+    expect(v.inApp).toBe(false);
+  });
+
+  it("urgent scheduler verdict sets inApp=true on live org", () => {
+    const v = decideSchedulerVerdict(LIVE_PAID, SCHED_ALL, "absence_alert", true);
+    expect(v.inApp).toBe(true);
   });
 
   it("non-urgent blocks when scheduler turned off the type", () => {
