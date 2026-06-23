@@ -149,35 +149,71 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    // Shared "safety" header set — applied to every route. Framing
+    // and CSP are excluded here so we can override them per-route
+    // (see /calendar/public below).
+    const baseSafetyHeaders = [
+      {
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains; preload",
+      },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      {
+        key: "Permissions-Policy",
+        // Allow camera (QR scanning on kiosks), geolocation (proximity check-in
+        // if enabled). Disallow everything else by default.
+        value:
+          "camera=(self), geolocation=(self), microphone=(), payment=(self), usb=(), magnetometer=(), accelerometer=(), gyroscope=()",
+      },
+      // Reporting API endpoint definition — referenced by the `report-to`
+      // CSP directive. Only emitted when we actually have a Sentry DSN to
+      // forward reports to (omit in DSN-less dev/preview).
+      ...(CSP_REPORT_URL
+        ? [
+            {
+              key: "Reporting-Endpoints",
+              value: `${CSP_REPORT_ENDPOINT_NAME}="${CSP_REPORT_URL}"`,
+            },
+          ]
+        : []),
+    ];
+
+    // CSP for the public calendar embed: same as default but with
+    // frame-ancestors loosened to allow any site to iframe it
+    // (intent of the ?embed=true UX). Keeps everything else locked.
+    const embedCspDirectives = {
+      ...cspDirectives,
+      "frame-ancestors": ["*"],
+    };
+    const embedCspString = Object.entries(embedCspDirectives)
+      .map(([key, values]) => (values.length ? `${key} ${values.join(" ")}` : key))
+      .join("; ");
+
     return [
+      // Public calendar embed (Codex F-004): the page advertises a
+      // ?embed=true mode but the global X-Frame-Options: DENY +
+      // CSP frame-ancestors 'none' blocked iframe rendering. Override
+      // BOTH framing headers here. Earlier matches win in Next's
+      // headers() resolution, so this block comes first.
+      {
+        source: "/calendar/public/:path*",
+        headers: [
+          ...baseSafetyHeaders,
+          // Intentionally NO X-Frame-Options — letting any origin frame
+          // a fully-public read-only calendar matches the documented
+          // ?embed=true intent. Auth is on the URL slug, not framing.
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: embedCspString,
+          },
+        ],
+      },
       {
         source: "/:path*",
         headers: [
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=63072000; includeSubDomains; preload",
-          },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          {
-            key: "Permissions-Policy",
-            // Allow camera (QR scanning on kiosks), geolocation (proximity check-in
-            // if enabled). Disallow everything else by default.
-            value:
-              "camera=(self), geolocation=(self), microphone=(), payment=(self), usb=(), magnetometer=(), accelerometer=(), gyroscope=()",
-          },
+          ...baseSafetyHeaders,
           { key: "X-Frame-Options", value: "DENY" }, // belt-and-suspenders w/ frame-ancestors
-          // Reporting API endpoint definition — referenced by the `report-to`
-          // CSP directive. Only emitted when we actually have a Sentry DSN to
-          // forward reports to (omit in DSN-less dev/preview).
-          ...(CSP_REPORT_URL
-            ? [
-                {
-                  key: "Reporting-Endpoints",
-                  value: `${CSP_REPORT_ENDPOINT_NAME}="${CSP_REPORT_URL}"`,
-                },
-              ]
-            : []),
           {
             key: "Content-Security-Policy-Report-Only",
             value: cspString,
