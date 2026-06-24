@@ -213,9 +213,7 @@ export async function GET(req: NextRequest) {
     // Phase 3: the five private medical fields (incl. authorized_pickups)
     // moved out of the parent child_profile into a private subdoc. This
     // roster iterates EVERY checked-in child, so read them in ONE batched
-    // getAll instead of a per-child fetch. Build a fallback Map from each
-    // child's parent child_profile (one batched getAll of the people docs)
-    // so un-migrated children still resolve during the migration window.
+    // getAll instead of a per-child fetch.
     const childIds = [
       ...new Set(
         activeSessions
@@ -225,28 +223,7 @@ export async function GET(req: NextRequest) {
           ),
       ),
     ];
-    const fallbackByPersonId = new Map<
-      string,
-      Record<string, unknown> | null | undefined
-    >();
-    if (childIds.length > 0) {
-      const personSnaps = await adminDb.getAll(
-        ...childIds.map((id) => churchRef.collection("people").doc(id)),
-      );
-      personSnaps.forEach((snap, i) => {
-        const id = childIds[i];
-        const cp = snap.exists
-          ? ((snap.data() as { child_profile?: Record<string, unknown> })
-              ?.child_profile ?? null)
-          : null;
-        fallbackByPersonId.set(id, cp);
-      });
-    }
-    const medicalById = await getChildPrivateMedicalBatch(
-      churchRef,
-      childIds,
-      fallbackByPersonId,
-    );
+    const medicalById = await getChildPrivateMedicalBatch(churchRef, childIds);
 
     // Helper: build the per-child payload. Loads child + household
     // phone, plus the private medical record (incl. authorized_pickups)

@@ -119,12 +119,11 @@ export async function GET(
         (child as Person & { child_profile?: Record<string, unknown> })
           .child_profile ?? {};
 
-      // Phase 3: allergies/medical_notes/medications now live in the private
-      // medical subdoc; dual-read with the parent child_profile as fallback.
+      // Phase 3: allergies/medical_notes/medications live in the private
+      // medical subdoc.
       const medical = await getChildPrivateMedical(
         churchRef,
         session.child_id as string,
-        cp,
       );
 
       // Load household for guardian contact.

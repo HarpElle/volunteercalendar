@@ -173,13 +173,7 @@ export async function PATCH(
       if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
       if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
 
-      const childProfile =
-        (data.child_profile as Record<string, unknown> | undefined) ?? null;
-      const medical = await getChildPrivateMedical(
-        churchRef,
-        childId,
-        childProfile,
-      );
+      const medical = await getChildPrivateMedical(churchRef, childId);
       const { nextArray, next } = applyEdit(medical.authorized_pickups);
       writeChildPrivateMedical(
         churchRef,
@@ -283,13 +277,7 @@ export async function DELETE(
       if (data.church_id !== churchId) throw new Error("CROSS_TENANT");
       if (data.person_type !== "child") throw new Error("NOT_A_CHILD");
 
-      const childProfile =
-        (data.child_profile as Record<string, unknown> | undefined) ?? null;
-      const medical = await getChildPrivateMedical(
-        churchRef,
-        childId!,
-        childProfile,
-      );
+      const medical = await getChildPrivateMedical(churchRef, childId!);
       const existing = medical.authorized_pickups;
 
       const idx = existing.findIndex((p) => p.id === pickupId);

@@ -89,9 +89,8 @@ export async function GET(
       const d = personSnap.data() ?? {};
       if (d.person_type === "child") {
         const cp = (d.child_profile as Record<string, unknown>) ?? {};
-        // Phase 3: allergies/medical_notes now live in the private subdoc;
-        // dual-read with the parent child_profile as the migration fallback.
-        const medical = await getChildPrivateMedical(churchRef, childId, cp);
+        // Phase 3: allergies/medical_notes live in the private subdoc.
+        const medical = await getChildPrivateMedical(churchRef, childId);
         return NextResponse.json({
           id: childId,
           first_name: d.first_name,
@@ -228,7 +227,6 @@ export async function PUT(
         // Phase 3: allergies + medical_notes now live in the private medical
         // subdoc, NOT on the parent child_profile. Compute the new values
         // here but write them via the helper below.
-        const cp = (data.child_profile as Record<string, unknown>) ?? {};
         const allergiesTouched = "allergies" in body;
         const medicalNotesTouched = "medical_notes" in body;
         let newAllergies: string | null = null;
@@ -249,11 +247,10 @@ export async function PUT(
 
         // Recompute has_alerts (a SAFE field that stays on the parent) if
         // either alert-relevant field was touched. Use the current private
-        // medical record (dual-read fallback to parent cp) for untouched
-        // values.
+        // medical record for untouched values.
         let medical: ChildPrivateMedical | null = null;
         if (allergiesTouched || medicalNotesTouched) {
-          medical = await getChildPrivateMedical(churchRef, childId, cp);
+          medical = await getChildPrivateMedical(churchRef, childId);
           const finalAllergies = allergiesTouched
             ? newAllergies
             : medical.allergies;
@@ -305,11 +302,10 @@ export async function PUT(
         const r = refreshed.data() ?? {};
         const rcp = (r.child_profile as Record<string, unknown>) ?? {};
         // Phase 3: read the (just-written) sensitive fields from the private
-        // subdoc, falling back to the refreshed parent cp during migration.
+        // subdoc.
         const refreshedMedical = await getChildPrivateMedical(
           churchRef,
           childId,
-          rcp,
         );
         return NextResponse.json({
           id: childId,

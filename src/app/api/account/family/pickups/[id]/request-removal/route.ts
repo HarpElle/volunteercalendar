@@ -112,14 +112,7 @@ export async function POST(
     // read-modify-write the pending-removal markers on the private subdoc.
     const snap = await personRef.get();
     if (!snap.exists) throw new Error("PERSON_VANISHED");
-    const childProfile =
-      (snap.data()?.child_profile as Record<string, unknown> | undefined) ??
-      null;
-    const medical = await getChildPrivateMedical(
-      churchRef,
-      childId,
-      childProfile,
-    );
+    const medical = await getChildPrivateMedical(churchRef, childId);
     const existing: PersonAuthorizedPickup[] = medical.authorized_pickups;
     const idx = existing.findIndex((p) => p.id === pickupId);
     if (idx === -1) {

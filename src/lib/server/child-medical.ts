@@ -19,12 +19,10 @@
  * goes through here so the storage split lives in exactly one place
  * (same pattern as the notification-eligibility resolver).
  *
- * Migration window: `getChildPrivateMedical` reads the private subdoc
- * first and falls back to the legacy parent `child_profile` so the app
- * keeps working between deploy and the backfill
- * (scripts/migrate-child-private-medical.ts). Once the backfill has
- * deleted the five fields from every parent doc + the audit passes, the
- * fallback never fires; it's removed in a follow-up cleanup PR.
+ * The migration is complete (all orgs backfilled 2026-06-23), so
+ * `getChildPrivateMedical` reads the private subdoc only — the
+ * migration-window parent `child_profile` fallback has been removed.
+ * scripts/migrate-child-private-medical.ts remains for any future org.
  */
 
 import type { firestore } from "firebase-admin";
@@ -98,45 +96,30 @@ export function childPrivateMedicalRef(
 }
 
 /**
- * Read a child's private medical data. Dual-read for the migration
- * window: private subdoc first, else fall back to the legacy parent
- * `child_profile`.
+ * Read a child's private medical data from the private subcollection.
  *
- * Pass `fallbackChildProfile` when the caller already has the parent
- * person doc loaded — avoids a second parent read when the private
- * subdoc is missing (un-migrated child).
+ * (The migration-window parent `child_profile` fallback was removed once
+ * every org was migrated — all 36 children across all orgs, 2026-06-23 —
+ * and all write paths create the private doc. Returns empty when the
+ * private doc is absent.)
  */
 export async function getChildPrivateMedical(
   churchRef: firestore.DocumentReference,
   personId: string,
-  fallbackChildProfile?: Record<string, unknown> | null,
 ): Promise<ChildPrivateMedical> {
   const snap = await childPrivateMedicalRef(churchRef, personId).get();
-  if (snap.exists) return normalizeMedical(snap.data());
-
-  if (fallbackChildProfile !== undefined) {
-    return normalizeMedical(fallbackChildProfile);
-  }
-
-  // No in-hand fallback — fetch the parent doc for the legacy values.
-  const personSnap = await churchRef.collection("people").doc(personId).get();
-  const cp = personSnap.exists
-    ? (personSnap.data()?.child_profile as Record<string, unknown> | undefined)
-    : undefined;
-  return normalizeMedical(cp);
+  return snap.exists ? normalizeMedical(snap.data()) : emptyChildPrivateMedical();
 }
 
 /**
  * Bulk variant for roster-style reads (room rosters, household lists,
- * emergency roster). Reads all private subdocs in one `getAll`, falling
- * back per-child to the supplied legacy `child_profile` map.
+ * emergency roster). Reads all private subdocs in one `getAll`.
  *
  * Returns a Map keyed by personId.
  */
 export async function getChildPrivateMedicalBatch(
   churchRef: firestore.DocumentReference,
   personIds: string[],
-  fallbackByPersonId?: Map<string, Record<string, unknown> | null | undefined>,
 ): Promise<Map<string, ChildPrivateMedical>> {
   const result = new Map<string, ChildPrivateMedical>();
   if (personIds.length === 0) return result;
@@ -146,14 +129,10 @@ export async function getChildPrivateMedicalBatch(
 
   snaps.forEach((snap, i) => {
     const personId = personIds[i];
-    if (snap.exists) {
-      result.set(personId, normalizeMedical(snap.data()));
-    } else {
-      result.set(
-        personId,
-        normalizeMedical(fallbackByPersonId?.get(personId)),
-      );
-    }
+    result.set(
+      personId,
+      snap.exists ? normalizeMedical(snap.data()) : emptyChildPrivateMedical(),
+    );
   });
   return result;
 }

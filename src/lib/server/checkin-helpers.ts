@@ -159,10 +159,9 @@ export async function loadChild(
     const cp = (p.child_profile as Record<string, unknown> | undefined) || {};
     const first_name = (p.first_name as string) || "";
     // Phase 3: medical fields (allergies/medical_notes/medications) now live
-    // in the private subcollection. Dual-read with `cp` as the legacy
-    // fallback so un-migrated children still resolve during the migration
-    // window. Safe fields (has_alerts/default_room_id/grade) stay on parent.
-    const medical = await getChildPrivateMedical(churchRef, childId, cp);
+    // in the private subcollection. Safe fields (has_alerts/default_room_id/
+    // grade) stay on the parent doc.
+    const medical = await getChildPrivateMedical(churchRef, childId);
     return {
       id: personSnap.id,
       first_name,

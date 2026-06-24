@@ -169,12 +169,7 @@ export async function POST(
     // scope reads the array straight off the household doc as before.
     const childMedical =
       scope === "child"
-        ? await getChildPrivateMedical(
-            churchRef,
-            childId,
-            (targetData.child_profile as Record<string, unknown> | undefined) ??
-              null,
-          )
+        ? await getChildPrivateMedical(churchRef, childId)
         : null;
     const existingPickups: PersonAuthorizedPickup[] =
       scope === "child"
@@ -316,11 +311,7 @@ export async function DELETE(
     // medical subdoc; read it here and keep `childMedical` for write-back.
     const childMedical =
       scope === "child"
-        ? await getChildPrivateMedical(
-            churchRef,
-            childId!,
-            (data.child_profile as Record<string, unknown> | undefined) ?? null,
-          )
+        ? await getChildPrivateMedical(churchRef, childId!)
         : null;
     const existing: PersonAuthorizedPickup[] =
       scope === "child"

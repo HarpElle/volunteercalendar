@@ -139,24 +139,9 @@ async function loadUnifiedHousehold(
   );
 
   // Phase 3: child medical fields (DOB/allergies/notes/pickups) now live in
-  // a private subdoc. Batch-read them, falling back per-child to the legacy
-  // parent child_profile during the migration window.
+  // a private subdoc. Batch-read them.
   const childIds = activeChildren.map((c) => c.id);
-  const fallbackByPersonId = new Map<
-    string,
-    Record<string, unknown> | null | undefined
-  >();
-  for (const c of activeChildren) {
-    fallbackByPersonId.set(
-      c.id,
-      (c.data.child_profile as Record<string, unknown>) ?? null,
-    );
-  }
-  const medicalById = await getChildPrivateMedicalBatch(
-    churchRef,
-    childIds,
-    fallbackByPersonId,
-  );
+  const medicalById = await getChildPrivateMedicalBatch(churchRef, childIds);
 
   const children = activeChildren.map((c) => {
     const cp = c.data.child_profile || {};
