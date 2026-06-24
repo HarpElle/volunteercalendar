@@ -78,23 +78,11 @@ export async function GET(req: NextRequest) {
       const snap = await childQuery.get();
 
       // Phase 3: child medical fields (DOB/allergies/notes/pickups) now
-      // live in a private subdoc. Batch-read them, falling back per-child
-      // to the legacy parent child_profile during the migration window.
+      // live in a private subdoc. Batch-read them.
       const personIds = snap.docs.map((doc) => doc.id);
-      const fallbackByPersonId = new Map<
-        string,
-        Record<string, unknown> | null | undefined
-      >();
-      for (const doc of snap.docs) {
-        fallbackByPersonId.set(
-          doc.id,
-          (doc.data().child_profile as Record<string, unknown>) ?? null,
-        );
-      }
       const medicalById = await getChildPrivateMedicalBatch(
         churchRef,
         personIds,
-        fallbackByPersonId,
       );
 
       // Map Person docs to legacy Child shape for admin UI compatibility

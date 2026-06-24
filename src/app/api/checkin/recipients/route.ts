@@ -247,15 +247,8 @@ export async function POST(req: NextRequest) {
       if (!childSnap.exists) continue;
       const childData = childSnap.data() ?? {};
       if (childData.church_id !== churchId) continue;
-      // Phase 3: authorized_pickups moved to the private medical subdoc.
-      // Dual-read with the parent child_profile as the legacy fallback.
-      const childProfile =
-        (childData.child_profile as Record<string, unknown>) ?? {};
-      const medical = await getChildPrivateMedical(
-        churchRef,
-        childId,
-        childProfile,
-      );
+      // Phase 3: authorized_pickups lives in the private medical subdoc.
+      const medical = await getChildPrivateMedical(churchRef, childId);
       const pickups = medical.authorized_pickups;
       const now = Date.now();
       for (const p of pickups) {

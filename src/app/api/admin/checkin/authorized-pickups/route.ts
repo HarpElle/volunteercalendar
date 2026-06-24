@@ -161,13 +161,7 @@ export async function POST(req: NextRequest) {
       if (data.person_type !== "child") {
         throw new Error("NOT_A_CHILD");
       }
-      const childProfile =
-        (data.child_profile as Record<string, unknown> | undefined) ?? null;
-      const medical = await getChildPrivateMedical(
-        churchRef,
-        childId,
-        childProfile,
-      );
+      const medical = await getChildPrivateMedical(churchRef, childId);
       const existing = medical.authorized_pickups;
 
       // Backfill missing `id` on legacy records so subsequent edits can

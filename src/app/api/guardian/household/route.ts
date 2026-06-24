@@ -232,27 +232,14 @@ export async function GET(req: NextRequest) {
         .where("person_type", "==", "child")
         .get();
       // Phase 3: allergies/medical_notes now live in the private medical
-      // subdoc. Batch-read them (one getAll), falling back per-child to
-      // the legacy parent child_profile during the migration window.
-      // grade + has_alerts stay on the parent doc.
+      // subdoc. Batch-read them (one getAll). grade + has_alerts stay on
+      // the parent doc.
       const activeChildDocs = childrenSnap.docs.filter(
         (d) => (d.data() as Person).status !== "inactive",
       );
-      const childMedicalFallback = new Map<
-        string,
-        Record<string, unknown> | null | undefined
-      >();
-      for (const d of activeChildDocs) {
-        childMedicalFallback.set(
-          d.id,
-          (d.data() as { child_profile?: Record<string, unknown> })
-            .child_profile,
-        );
-      }
       const childMedicalById = await getChildPrivateMedicalBatch(
         churchRef,
         activeChildDocs.map((d) => d.id),
-        childMedicalFallback,
       );
       children = activeChildDocs.map((d) => {
         const data = d.data() as Person & {

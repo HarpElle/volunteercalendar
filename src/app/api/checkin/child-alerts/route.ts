@@ -86,10 +86,10 @@ export async function POST(req: NextRequest) {
         const hasAlerts = !!cp.has_alerts;
         const entry: (typeof results)[number] = { id, has_alerts: hasAlerts };
         if (hasAlerts) {
-          // Phase 3: allergies/medical_notes moved to the private medical
-          // subdoc. Dual-read with `cp` as the legacy fallback. has_alerts
-          // stays on the parent child_profile (safe summary field).
-          const medical = await getChildPrivateMedical(churchRef, id, cp);
+          // Phase 3: allergies/medical_notes live in the private medical
+          // subdoc. has_alerts stays on the parent child_profile (safe
+          // summary field).
+          const medical = await getChildPrivateMedical(churchRef, id);
           if (
             typeof medical.allergies === "string" &&
             medical.allergies.trim().length > 0

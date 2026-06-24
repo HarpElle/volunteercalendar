@@ -237,16 +237,13 @@ export async function PUT(
     }
 
     const churchRef = adminDb.collection("churches").doc(churchId);
-    const existingCp =
-      (childData.child_profile as Record<string, unknown>) ?? {};
 
     // Read current private medical once if we need it: either to write
     // updated allergies/medical_notes (full-object merge) or to fill the
-    // untouched side when recomputing has_alerts. Falls back to the
-    // legacy parent child_profile during the migration window.
+    // untouched side when recomputing has_alerts.
     const medicalTouched = allergiesTouched || medicalNotesTouched;
     const currentMedical: ChildPrivateMedical | null = medicalTouched
-      ? await getChildPrivateMedical(churchRef, childId, existingCp)
+      ? await getChildPrivateMedical(churchRef, childId)
       : null;
 
     // Recompute has_alerts (a SAFE parent field) if either
@@ -317,7 +314,7 @@ export async function PUT(
     // read-after-async-write race); otherwise read current values.
     const medicalForResponse =
       responseMedical ??
-      (await getChildPrivateMedical(churchRef, childId, existingCp));
+      (await getChildPrivateMedical(churchRef, childId));
     return NextResponse.json({
       id: childId,
       first_name: r.first_name,
